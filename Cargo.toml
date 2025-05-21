@@ -21,8 +21,8 @@ egui = "0.31.1"
 eframe = "0.31.1"
 egui_extras = { version = "0.31.1", features = ["all_loaders", "image", "svg", "file"] }
 wasm-bindgen-futures = "0.4.50"
-rand = { version = "<0.9.0", features = ["small_rng"] }
-getrandom = { version = "0.2.15", features = ["js"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+rand = "0.9.1"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.50"

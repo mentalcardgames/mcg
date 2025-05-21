@@ -1,12 +1,10 @@
-[build]
-# Configure getrandom to use the js backend
-rustflags = ["--cfg=getrandom_js"]
-
 [target.wasm32-unknown-unknown]
 runner = "wasm-server-runner"
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
 
 # Optimize for size in release mode
 [profile.release]
 opt-level = "s"
 lto = true
 codegen-units = 1
+
