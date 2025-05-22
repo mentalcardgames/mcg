@@ -9,7 +9,7 @@ fi
 
 # Build the package
 echo "Building WASM package..."
-wasm-pack build --target web
+wasm-pack build --target web $@
 
 echo "Build complete! The output is in the ./pkg directory."
 echo "To run the application, start a web server in this directory:"

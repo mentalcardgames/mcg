@@ -60,7 +60,9 @@ mcg/
 ## Development Workflow
 
 1. Make changes to the code
-2. Run `./wasm-build.sh` to rebuild the WASM package and then run `./serve.sh` to start a local web server (if not already running)
+2. Run `./wasm-build.sh --dev` to rebuild the WASM package (dev makes the
+   compilation faster, but the binary bigger) and then run `./serve.sh` to start
+   a local web server (if not already running)
 3. Refresh your browser to see the changes
 
 ## License
