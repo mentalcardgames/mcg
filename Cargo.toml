@@ -1,10 +1,10 @@
 [package]
-name = "mcg_visual_unified"
+name = "mcg"
 version = "0.1.0"
 authors = ["Jan Cichosz <jan.cichosz@web.de>"]
 edition = "2018"
-description = "A unified visual interface for the Mental Card Games project"
-repository = "https://github.com/mentalcardgames/mcg_visual_unified"
+description = "A mental card game implementation for the browser"
+repository = "https://github.com/mentalcardgames/mcg"
 license = "MIT OR Apache-2.0"
 
 [lib]

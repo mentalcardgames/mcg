@@ -1,7 +1,6 @@
-//! MCG Visual Unified - A unified visual interface for Mental Card Games
+//! MCG - A mental  card game implementation for the browser
 //! 
-//! This crate provides both a library for card game visualization and
-//! WebAssembly bindings for running in a browser environment.
+//! This provides a MCG implemetation in wasm with an egui frontend.
 
 pub mod example;
 pub mod game;
@@ -86,7 +85,7 @@ pub fn start_game(
 /// # Examples
 ///
 /// ```
-/// use mcg_visual_unified::sprintln;
+/// use mcg::sprintln;
 ///
 /// // Works the same as println!
 /// sprintln!("Hello, world!");
@@ -118,7 +117,7 @@ macro_rules! sprintln {
 /// # Example (JavaScript)
 ///
 /// ```javascript
-/// import init, {start} from './pkg/mcg_visual_unified.js';
+/// import init, {start} from './pkg/mcg.js';
 ///
 /// async function run() {
 ///     await init();

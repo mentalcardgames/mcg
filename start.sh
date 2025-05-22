@@ -24,7 +24,7 @@ if [ $BUILD_RESULT -eq 0 ]; then
     echo "Build successful! Starting web server..."
     
     # Check if pkg directory contains the expected files
-    if [ ! -f "pkg/mcg_visual_unified_bg.wasm" ] || [ ! -f "pkg/mcg_visual_unified.js" ]; then
+    if [ ! -f "pkg/mcg.wasm" ] || [ ! -f "pkg/mcg.js" ]; then
         echo "Warning: Build completed but WASM output files not found in the pkg directory."
         echo "Attempting to continue anyway..."
     fi
