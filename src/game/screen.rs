@@ -34,6 +34,7 @@ impl ScreenWidget for MainMenu {
         });
     }
 }
+
 impl ScreenWidget for GameSetupScreen {
     fn update(&mut self, next_screen: Rc<RefCell<String>>, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -361,16 +362,10 @@ impl<C: CardConfig + Clone, G> GameSetupScreen<C, G> {
     fn generate_config(&self) -> Option<GameConfig<C>> {
         let directory = Rc::new(self.directory.borrow().clone()?);
         
-        // Create player names based on number of players
-        let player_names = vec![
-            "You".to_string(), "Opponent".to_string(), "Player 3".to_string(), "Player 4".to_string(), 
-            "Player 5".to_string(), "Player 6".to_string(), "Player 7".to_string(), "Player 8".to_string()
-        ];
-        
         let mut players: Vec<(String, SimpleField<SimpleCard, C>)> = (0..self.players)
             .map(|i| {
                 (
-                    player_names.get(i).cloned().unwrap_or_else(|| format!("Player {}", i+1)),
+                    format!("{i}"),
                     SimpleField::new(Rc::clone(&directory))
                         .max_cards(4)
                         .selectable(true)
