@@ -41,9 +41,31 @@ impl ScreenWidget for GameSetupScreen {
             ui.horizontal(|ui| {
                 ui.label("Card Pack:");
                 match self.directory.borrow().as_ref() {
-                    None => ui.label("Standard deck not loaded"),
+                    None => ui.label("Deck not loaded"),
                     Some(dir) => ui.label(format!("Using {}", &dir.path)),
                 }
+            });
+            
+            ui.horizontal(|ui| {
+                ui.label("Theme:");
+                egui::ComboBox::new("theme_selector", "Theme")
+                    .selected_text(crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index])
+                    .show_ui(ui, |ui| {
+                        for (i, theme) in crate::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate() {
+                            // Display a user-friendly name for the theme
+                            let theme_name = match *theme {
+                                "img_cards" => "Standard Cards",
+                                "alt_cards" => "Alternative Cards",
+                                _ => theme,
+                            };
+                            
+                            if ui.selectable_label(self.theme_index == i, theme_name).clicked() {
+                                self.theme_index = i;
+                                let theme_str = crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index];
+                                crate::hardcoded_cards::set_deck_by_theme(&self.directory, theme_str);
+                            }
+                        }
+                    });
             });
             ui.horizontal(|ui| {
                 ui.label("# Players");
@@ -241,9 +263,31 @@ impl ScreenWidget for GameSetupScreen<DirectoryCardType, CardsTestDND> {
             ui.horizontal(|ui| {
                 ui.label("Card Pack:");
                 match self.directory.borrow().as_ref() {
-                    None => ui.label("Alternative deck not loaded"),
+                    None => ui.label("Deck not loaded"),
                     Some(dir) => ui.label(format!("Using {}", &dir.path)),
                 }
+            });
+            
+            ui.horizontal(|ui| {
+                ui.label("Theme:");
+                egui::ComboBox::new("theme_selector_dnd", "Theme")
+                    .selected_text(crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index])
+                    .show_ui(ui, |ui| {
+                        for (i, theme) in crate::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate() {
+                            // Display a user-friendly name for the theme
+                            let theme_name = match *theme {
+                                "img_cards" => "Standard Cards",
+                                "alt_cards" => "Alternative Cards",
+                                _ => theme,
+                            };
+                            
+                            if ui.selectable_label(self.theme_index == i, theme_name).clicked() {
+                                self.theme_index = i;
+                                let theme_str = crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index];
+                                crate::hardcoded_cards::set_deck_by_theme(&self.directory, theme_str);
+                            }
+                        }
+                    });
             });
             ui.horizontal(|ui| {
                 ui.label("# Players");
@@ -347,15 +391,22 @@ impl Default for MainMenu {
 pub struct GameSetupScreen<C: CardConfig = DirectoryCardType, G = Game<C>> {
     pub directory: Rc<RefCell<Option<C>>>,
     players: usize,
+    theme_index: usize,
     pub(crate) game_widget: Weak<RefCell<G>>,
 }
 impl<C: CardConfig + Clone, G> GameSetupScreen<C, G> {
     pub fn new(game_widget: Weak<RefCell<G>>) -> Self {
         let directory = Rc::new(RefCell::new(None));
         let players = 2;
+        // Set the default theme index based on the DEFAULT_THEME
+        let theme_index = crate::hardcoded_cards::AVAILABLE_THEMES
+            .iter()
+            .position(|&t| t == crate::hardcoded_cards::DEFAULT_THEME)
+            .unwrap_or(0);
         Self {
             directory,
             players,
+            theme_index,
             game_widget,
         }
     }

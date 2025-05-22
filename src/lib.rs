@@ -136,8 +136,8 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
             &game_widget,
         ))));
 
-        // Set hardcoded standard deck (img_cards) for the main game
-        hardcoded_cards::set_hardcoded_deck(&game_conf.borrow().directory, false);
+        // Set default theme for the main game
+        hardcoded_cards::set_deck_by_theme(&game_conf.borrow().directory, hardcoded_cards::DEFAULT_THEME);
 
         let dnd_test = Rc::new(RefCell::new(DNDTest::new()));
 
@@ -155,8 +155,8 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
             &game_dnd_widget,
         ))));
 
-        // Set hardcoded alternative deck (alt_cards) for drag and drop game
-        hardcoded_cards::set_hardcoded_deck(&game_dnd_conf.borrow().directory, true);
+        // Set alternative theme for drag and drop game
+        hardcoded_cards::set_deck_by_theme(&game_dnd_conf.borrow().directory, "alt_cards");
         app.register_screen(String::from("game_dnd_setup"), game_dnd_conf)
             .unwrap();
         app.register_screen(String::from("game_dnd"), game_dnd_widget)

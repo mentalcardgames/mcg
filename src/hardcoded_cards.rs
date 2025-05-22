@@ -4,6 +4,11 @@ use egui::Vec2;
 use crate::game::card::DirectoryCardType;
 use crate::sprintln;
 
+// Define available themes - these could be extended or discovered dynamically 
+// at startup if needed
+pub const AVAILABLE_THEMES: &[&str] = &["img_cards", "alt_cards"];
+pub const DEFAULT_THEME: &str = "img_cards";
+
 /// Card filenames that are known to exist in the img_cards directory
 const STANDARD_CARDS: &[&str] = &[
     "1_club.png", "1_diamond.png", "1_heart.png", "1_spade.png",
@@ -43,39 +48,47 @@ const ALT_CARDS: &[&str] = &[
     "card_joker.png", "card_joker_black.png", "card_joker_red.png",
 ];
 
-/// Create a hardcoded DirectoryCardType with standard playing cards
-pub fn create_standard_deck() -> DirectoryCardType {
-    let path = "img_cards".to_string();
-    let img_names: Vec<String> = STANDARD_CARDS.iter().map(|&s| s.to_string()).collect();
-    
-    sprintln!("Created standard deck with {} cards", img_names.len());
-    
-    // Standard card size: 140x190
-    let natural_size = Vec2::new(140.0, 190.0);
-    
-    DirectoryCardType::new(path, img_names, natural_size)
+/// Create a deck based on the specified theme
+pub fn create_deck(theme: &str) -> DirectoryCardType {
+    match theme {
+        "img_cards" => {
+            let path = "img_cards".to_string();
+            let img_names: Vec<String> = STANDARD_CARDS.iter().map(|&s| s.to_string()).collect();
+            
+            sprintln!("Created standard deck with {} cards", img_names.len());
+            
+            // Standard card size: 140x190
+            let natural_size = Vec2::new(140.0, 190.0);
+            
+            DirectoryCardType::new(path, img_names, natural_size)
+        },
+        "alt_cards" => {
+            let path = "alt_cards".to_string();
+            let img_names: Vec<String> = ALT_CARDS.iter().map(|&s| s.to_string()).collect();
+            
+            sprintln!("Created alternative deck with {} cards", img_names.len());
+            
+            // Standard card size: 140x190
+            let natural_size = Vec2::new(140.0, 190.0);
+            
+            DirectoryCardType::new(path, img_names, natural_size)
+        },
+        _ => {
+            sprintln!("Unknown theme: {}, falling back to default theme", theme);
+            create_deck(DEFAULT_THEME)
+        }
+    }
 }
 
-/// Create a hardcoded DirectoryCardType with alternative playing cards
-pub fn create_alt_deck() -> DirectoryCardType {
-    let path = "alt_cards".to_string();
-    let img_names: Vec<String> = ALT_CARDS.iter().map(|&s| s.to_string()).collect();
-    
-    sprintln!("Created alternative deck with {} cards", img_names.len());
-    
-    // Standard card size: 140x190
-    let natural_size = Vec2::new(140.0, 190.0);
-    
-    DirectoryCardType::new(path, img_names, natural_size)
-}
-
-/// Set the hardcoded deck in the provided RefCell
-pub fn set_hardcoded_deck(directory: &Rc<RefCell<Option<DirectoryCardType>>>, use_alt_deck: bool) {
-    let deck = if use_alt_deck {
-        create_alt_deck()
-    } else {
-        create_standard_deck()
-    };
-    
+/// Set the deck by theme name in the provided RefCell
+pub fn set_deck_by_theme(directory: &Rc<RefCell<Option<DirectoryCardType>>>, theme: &str) {
+    let deck = create_deck(theme);
     directory.borrow_mut().replace(deck);
+}
+
+/// Legacy function to maintain compatibility with existing code
+/// Simply forwards to set_deck_by_theme with the appropriate theme
+pub fn set_hardcoded_deck(directory: &Rc<RefCell<Option<DirectoryCardType>>>, use_alt_deck: bool) {
+    let theme = if use_alt_deck { "alt_cards" } else { "img_cards" };
+    set_deck_by_theme(directory, theme);
 }
