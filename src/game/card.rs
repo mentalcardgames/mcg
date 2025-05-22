@@ -12,6 +12,10 @@ use std::slice::Iter;
 use wasm_bindgen_futures::js_sys::Array;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::{spawn_local, JsFuture};
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use web_sys;
 
 pub trait CardEncoding {
     fn t(&self) -> Option<usize>;
@@ -55,6 +59,21 @@ pub enum SimpleCard {
     Masked(Option<usize>),
 }
 
+/// Get the current origin URL (e.g., "http://localhost:8080")
+#[cfg(target_arch = "wasm32")]
+fn get_origin() -> String {
+    let window = web_sys::window().expect("should have a window in this context");
+    let location = window.location();
+    let origin = location.origin().expect("should have an origin in this context");
+    origin
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn get_origin() -> String {
+    // For non-wasm targets, return an empty string (will use relative paths)
+    String::from("")
+}
+
 // TODO make CardEncoding be usable as Idx for Trait Index
 #[allow(non_snake_case)]
 pub trait CardConfig {
@@ -75,8 +94,10 @@ pub trait CardConfig {
 }
 impl CardConfig for DirectoryCardType {
     fn img(&self, t: &impl CardEncoding) -> Image {
+        let origin = get_origin();
         let path = format!(
-            "media/{folder}/{card}",
+            "{origin}/media/{folder}/{card}",
+            origin = origin,
             folder = self.path,
             card = self.img_names[t.t().unwrap_or(0)]
         );
