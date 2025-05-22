@@ -1,5 +1,5 @@
 //! MCG - A mental  card game implementation for the browser
-//! 
+//!
 //! This provides a MCG implemetation in wasm with an egui frontend.
 
 pub mod example;
@@ -36,10 +36,6 @@ extern "C" {
     /// JavaScript console.log binding for debug output
     #[wasm_bindgen(js_namespace = console)]
     pub fn log(s: &str);
-    
-    /// JavaScript function for directory selection in browser
-    /// Returns a Promise that resolves to file information array
-    pub fn openDirectoryPicker() -> Promise;
 }
 
 /// Helper function to start the eframe app with a canvas element
@@ -103,7 +99,7 @@ macro_rules! sprintln {
 
 /// Main entry point for starting the WASM application in a browser
 ///
-/// This function should be called from JavaScript to initialize and run the application 
+/// This function should be called from JavaScript to initialize and run the application
 /// on the provided canvas element.
 ///
 /// # Arguments
@@ -133,18 +129,18 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     let init = Box::new(|cc: &eframe::CreationContext| {
         install_image_loaders(&cc.egui_ctx);
         let mut app = App::default();
-        
+
         // Create game components
         let game_widget = Rc::new(RefCell::new(Game::new()));
         let game_conf = Rc::new(RefCell::new(GameSetupScreen::new(Rc::downgrade(
             &game_widget,
         ))));
-        
+
         // Set hardcoded standard deck (img_cards) for the main game
         hardcoded_cards::set_hardcoded_deck(&game_conf.borrow().directory, false);
-        
+
         let dnd_test = Rc::new(RefCell::new(DNDTest::new()));
-        
+
         // Register main game screens
         app.register_screen(String::from("game"), game_widget)
             .unwrap();
@@ -152,20 +148,20 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
             .unwrap();
         app.register_screen(String::from("dnd_test"), dnd_test)
             .unwrap();
-        
+
         // Register drag and drop game screens
         let game_dnd_widget = Rc::new(RefCell::new(CardsTestDND::new()));
         let game_dnd_conf = Rc::new(RefCell::new(GameSetupScreen::new(Rc::downgrade(
             &game_dnd_widget,
         ))));
-        
+
         // Set hardcoded alternative deck (alt_cards) for drag and drop game
         hardcoded_cards::set_hardcoded_deck(&game_dnd_conf.borrow().directory, true);
         app.register_screen(String::from("game_dnd_setup"), game_dnd_conf)
             .unwrap();
         app.register_screen(String::from("game_dnd"), game_dnd_widget)
             .unwrap();
-        
+
         let game: Box<dyn eframe::App> = Box::new(app);
         Ok(game)
     });

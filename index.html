@@ -1,10 +1,15 @@
-<!DOCTYPE html>
+<!doctype html>
 <head>
     <title>MCG</title>
-    <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
-    <link href="media/rustacean-orig-noshadow.svg" rel="icon" type="image/x-icon">
+    <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
+    <link
+        href="media/rustacean-orig-noshadow.svg"
+        rel="icon"
+        type="image/x-icon"
+    />
     <style>
-        html, body {
+        html,
+        body {
             margin: 0;
             height: 100%;
         }
@@ -16,29 +21,15 @@
     </style>
 </head>
 <body>
-<script>
-    // This function is kept as a stub to avoid breaking the WASM API
-    // but it is not used since we're using hardcoded card decks
-    function openDirectoryPicker() {
-        return new Promise((resolve, reject) => {
-            console.log("Directory picker is disabled - using hardcoded card decks");
-            // Return dummy data with standard card dimensions (width, height)
-            const dummySize = [140, 190];
-            // Also log confirmation to help debug
-            console.log("Using hardcoded card size:", dummySize);
-            resolve([[], dummySize]);
-        });
-    }
-</script>
-<canvas id="mcg_canvas"></canvas>
-<script type="module">
-    import init, {start} from './pkg/mcg.js';
+    <canvas id="mcg_canvas"></canvas>
+    <script type="module">
+        import init, { start } from "./pkg/mcg.js";
 
-    async function run() {
-        await init();
-        start(document.getElementById("mcg_canvas"));
-    }
+        async function run() {
+            await init();
+            start(document.getElementById("mcg_canvas"));
+        }
 
-    run();
-</script>
+        run();
+    </script>
 </body>

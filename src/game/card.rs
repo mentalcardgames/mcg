@@ -1,5 +1,3 @@
-#[cfg(target_arch = "wasm32")]
-use crate::openDirectoryPicker;
 use egui::{Image, Vec2};
 #[allow(unused_imports)]
 use std::cell::RefCell;
@@ -9,11 +7,11 @@ use std::hash::Hash;
 use std::rc::Rc;
 use std::slice::Iter;
 #[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::js_sys::Array;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::{spawn_local, JsFuture};
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use web_sys;
 
@@ -64,7 +62,9 @@ pub enum SimpleCard {
 fn get_origin() -> String {
     let window = web_sys::window().expect("should have a window in this context");
     let location = window.location();
-    let origin = location.origin().expect("should have an origin in this context");
+    let origin = location
+        .origin()
+        .expect("should have an origin in this context");
     origin
 }
 
@@ -127,56 +127,6 @@ pub struct DirectoryCardType {
     pub(crate) natural_size: Vec2,
 }
 impl DirectoryCardType {
-    /// It's assumed the image URL is inside servers /media directory and the
-    /// type order corresponds to the lexicographical.
-    ///
-    /// For real file upload you need to extend the simple python http server to accept uploads.
-    /// Does pythons simple https server already accept POST requests?
-    #[cfg(target_arch = "wasm32")]
-    pub fn new_from_selection(holder: Rc<RefCell<Option<DirectoryCardType>>>) {
-        let type_rc = Rc::clone(&holder);
-        spawn_local(async move {
-            let response = JsFuture::from(openDirectoryPicker()).await;
-            if let Ok(file_info_array) = response {
-                let file_info_array: Array = file_info_array.into();
-                let mut path = String::new();
-                let mut img_names = Vec::new();
-                let img_size = Into::<Array>::into(file_info_array.pop())
-                    .to_vec()
-                    .iter()
-                    .map(|x| x.as_f64().unwrap_or(0.0) as f32)
-                    .collect::<Vec<f32>>();
-                let natural_size = egui::vec2(img_size[0], img_size[1]);
-                let file_info_array: Array = file_info_array.pop().into();
-                for file_info in file_info_array {
-                    let file_info: Array = Array::from(&file_info);
-                    let file_info: Vec<String> = file_info
-                        .iter()
-                        .map(|x| x.as_string().unwrap().clone())
-                        .collect();
-                    let file_name = file_info.first().expect("Every file has a name!").clone();
-                    if path.is_empty() {
-                        path = file_info
-                            .get(1)
-                            .expect("Every file has a path!")
-                            .clone()
-                            .strip_suffix(format!("/{file_name}").as_str())
-                            .unwrap()
-                            .to_string();
-                    }
-                    let file_type = file_info.get(2);
-                    if let Some(file_type) = file_type {
-                        if file_type.starts_with("image") {
-                            img_names.push(file_name);
-                        }
-                    }
-                }
-                img_names.sort();
-                let card_type = Self::new(path, img_names, natural_size);
-                type_rc.borrow_mut().replace(card_type);
-            }
-        });
-    }
     #[allow(non_snake_case)]
     pub fn new(path: String, img_names: Vec<String>, natural_size: Vec2) -> Self {
         let T = img_names.len();

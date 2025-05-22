@@ -33,7 +33,7 @@ This will build the WASM package and start a local web server in one step.
    ```bash
    # Using the provided script:
    ./serve.sh
-   
+
    # Or manually:
    python -m http.server 8080
    # Or with Node.js:
@@ -41,8 +41,6 @@ This will build the WASM package and start a local web server in one step.
    ```
 
 3. Open your browser and navigate to http://localhost:8080/
-
-This will run the application in your browser, allowing you to interact with the card game interface. The application comes with pre-loaded card decks, so you don't need to select a directory of card images.
 
 ### Directory Structure for WASM
 
