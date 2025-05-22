@@ -50,6 +50,9 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+        // Set pixels_per_point to increase DPI scaling (1.5 = 150% scaling)
+        ctx.set_pixels_per_point(1.5);
+        
         let current_screen = match self.screens.get_mut(&self.current_screen.borrow().clone()) {
             Some(screen) => Rc::clone(screen),
             None => Rc::clone(&self.default_screen),
