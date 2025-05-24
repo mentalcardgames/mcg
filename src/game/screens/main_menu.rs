@@ -23,7 +23,7 @@ impl Default for MainMenu {
 }
 
 impl ScreenWidget for MainMenu {
-    fn update(&mut self, next_screen: Rc<RefCell<String>>, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(50.0); // Add top spacing
@@ -35,7 +35,7 @@ impl ScreenWidget for MainMenu {
                     .clicked()
                 {
                     sprintln!("setup started");
-                    *next_screen.borrow_mut() = ScreenType::GameSetup.to_string();
+                    *next_screen.borrow_mut() = ScreenType::GameSetup;
                 };
 
                 ui.add_space(20.0); // Add spacing between buttons
@@ -45,7 +45,7 @@ impl ScreenWidget for MainMenu {
                     .clicked()
                 {
                     sprintln!("game_dnd opened");
-                    *next_screen.borrow_mut() = ScreenType::GameDndSetup.to_string();
+                    *next_screen.borrow_mut() = ScreenType::GameDndSetup;
                 };
 
                 ui.add_space(20.0); // Add spacing between buttons
@@ -55,7 +55,7 @@ impl ScreenWidget for MainMenu {
                     .clicked()
                 {
                     sprintln!("pairing opened");
-                    *next_screen.borrow_mut() = ScreenType::Pairing.to_string();
+                    *next_screen.borrow_mut() = ScreenType::Pairing;
                 };
 
                 ui.add_space(20.0); // Add spacing between buttons
@@ -65,7 +65,7 @@ impl ScreenWidget for MainMenu {
                     .clicked()
                 {
                     sprintln!("settings opened");
-                    *next_screen.borrow_mut() = ScreenType::Settings.to_string();
+                    *next_screen.borrow_mut() = ScreenType::Settings;
                 };
 
                 ui.add_space(20.0); // Add spacing between buttons
@@ -75,7 +75,7 @@ impl ScreenWidget for MainMenu {
                     .clicked()
                 {
                     sprintln!("dnd_test opened");
-                    *next_screen.borrow_mut() = ScreenType::DndTest.to_string();
+                    *next_screen.borrow_mut() = ScreenType::DndTest;
                 };
 
                 ui.add_space(20.0); // Add spacing between buttons
@@ -84,7 +84,7 @@ impl ScreenWidget for MainMenu {
                     .add_sized(button_size, egui::Button::new("Print Screen"))
                     .clicked()
                 {
-                    sprintln!("{}", next_screen.borrow());
+                    sprintln!("{:?}", next_screen.borrow());
                 };
 
                 ui.add_space(50.0); // Add bottom spacing

@@ -23,11 +23,11 @@ pub use game::{GameConfig, DirectoryCardType};
 
 /// Common trait for all screen widgets
 pub trait ScreenWidget {
-    fn update(&mut self, next_screen: Rc<RefCell<String>>, ctx: &Context, frame: &mut Frame);
+    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, frame: &mut Frame);
 }
 
 /// Enum representing all available screen types
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ScreenType {
     Main,
     GameSetup,

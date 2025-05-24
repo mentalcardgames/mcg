@@ -40,11 +40,11 @@ impl Default for DNDTest {
 }
 
 impl ScreenWidget for DNDTest {
-    fn update(&mut self, next_screen: Rc<RefCell<String>>, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             if ui.button("Exit").clicked() {
                 sprintln!("back to main menu");
-                *next_screen.borrow_mut() = ScreenType::Main.to_string();
+                *next_screen.borrow_mut() = ScreenType::Main;
             }
             ui.label("This is a simple example of drag-and-drop in egui.");
             ui.label("Drag items between columns.");

@@ -7,11 +7,7 @@ use std::hash::Hash;
 use std::rc::Rc;
 use std::slice::Iter;
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_futures::js_sys::Array;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_futures::{spawn_local, JsFuture};
+// Removed unused imports
 #[cfg(target_arch = "wasm32")]
 use web_sys;
 

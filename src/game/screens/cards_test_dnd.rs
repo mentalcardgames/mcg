@@ -32,10 +32,10 @@ impl Default for CardsTestDND {
 }
 
 impl ScreenWidget for CardsTestDND {
-    fn update(&mut self, next_screen: Rc<RefCell<String>>, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             if ui.button("Exit").clicked() {
-                *next_screen.borrow_mut() = ScreenType::Main.to_string();
+                *next_screen.borrow_mut() = ScreenType::Main;
             }
             if self.game_config.is_none() {
                 return;

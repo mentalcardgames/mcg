@@ -14,7 +14,7 @@ use eframe::{WebOptions, WebRunner};
 #[cfg(target_arch = "wasm32")]
 use egui_extras::install_image_loaders;
 #[cfg(target_arch = "wasm32")]
-use game::screens::{CardsTestDND, DNDTest, Game, GameSetupScreen, PairingScreen};
+use game::screens::{CardsTestDND, DNDTest, Game, GameSetupScreen, PairingScreen, ScreenType};
 #[cfg(target_arch = "wasm32")]
 use game::App;
 #[cfg(target_arch = "wasm32")]
@@ -143,13 +143,13 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
         let pairing_screen = Rc::new(RefCell::new(PairingScreen::new()));
 
         // Register main game screens
-        app.register_screen(String::from("game"), game_widget)
+        app.register_screen(ScreenType::Game, game_widget)
             .unwrap();
-        app.register_screen(String::from("game_setup"), game_conf)
+        app.register_screen(ScreenType::GameSetup, game_conf)
             .unwrap();
-        app.register_screen(String::from("dnd_test"), dnd_test)
+        app.register_screen(ScreenType::DndTest, dnd_test)
             .unwrap();
-        app.register_screen(String::from("pairing"), pairing_screen)
+        app.register_screen(ScreenType::Pairing, pairing_screen)
             .unwrap();
 
         // Register drag and drop game screens
@@ -160,9 +160,9 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
 
         // Set alternative theme for drag and drop game
         hardcoded_cards::set_deck_by_theme(&game_dnd_conf.borrow().directory, "alt_cards");
-        app.register_screen(String::from("game_dnd_setup"), game_dnd_conf)
+        app.register_screen(ScreenType::GameDndSetup, game_dnd_conf)
             .unwrap();
-        app.register_screen(String::from("game_dnd"), game_dnd_widget)
+        app.register_screen(ScreenType::GameDnd, game_dnd_widget)
             .unwrap();
 
         let game: Box<dyn eframe::App> = Box::new(app);

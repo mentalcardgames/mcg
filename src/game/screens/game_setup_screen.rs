@@ -60,7 +60,7 @@ impl<C: CardConfig + Clone, G> GameSetupScreen<C, G> {
 }
 
 impl ScreenWidget for GameSetupScreen<DirectoryCardType, Game<DirectoryCardType>> {
-    fn update(&mut self, next_screen: Rc<RefCell<String>>, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Card Pack:");
@@ -118,12 +118,12 @@ impl ScreenWidget for GameSetupScreen<DirectoryCardType, Game<DirectoryCardType>
                     let config = self.generate_config();
                     if config.is_some() {
                         game.borrow_mut().game_config = config;
-                        *next_screen.borrow_mut() = ScreenType::Game.to_string();
+                        *next_screen.borrow_mut() = ScreenType::Game;
                     }
                 }
             }
             if ui.button("Back").clicked() {
-                *next_screen.borrow_mut() = ScreenType::Main.to_string();
+                *next_screen.borrow_mut() = ScreenType::Main;
             }
         });
     }
@@ -133,7 +133,7 @@ impl ScreenWidget for GameSetupScreen<DirectoryCardType, Game<DirectoryCardType>
 use super::cards_test_dnd::CardsTestDND;
 
 impl ScreenWidget for GameSetupScreen<DirectoryCardType, CardsTestDND> {
-    fn update(&mut self, next_screen: Rc<RefCell<String>>, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Card Pack:");
@@ -191,12 +191,12 @@ impl ScreenWidget for GameSetupScreen<DirectoryCardType, CardsTestDND> {
                     let config = self.generate_config();
                     if config.is_some() {
                         game.borrow_mut().game_config = config;
-                        *next_screen.borrow_mut() = ScreenType::GameDnd.to_string();
+                        *next_screen.borrow_mut() = ScreenType::GameDnd;
                     }
                 }
             }
             if ui.button("Back").clicked() {
-                *next_screen.borrow_mut() = ScreenType::Main.to_string();
+                *next_screen.borrow_mut() = ScreenType::Main;
             }
         });
     }
