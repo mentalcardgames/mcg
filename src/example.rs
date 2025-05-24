@@ -16,11 +16,11 @@ impl ConventionalCard {
         Default::default()
     }
     pub fn new_random() -> Self {
-        let mut rng = rand::thread_rng();
-        let rank: Rank = rng.gen_range(0..Rank::len()).into();
-        let suit: Suit = rng.gen_range(0..Suit::len()).into();
-        let x = rng.gen_range(0..1000) as f32;
-        let y = rng.gen_range(0..1000) as f32;
+        let mut rng = rand::rng();
+        let rank: Rank = rng.random_range(0..Rank::len()).into();
+        let suit: Suit = rng.random_range(0..Suit::len()).into();
+        let x = rng.random_range(0..1000) as f32;
+        let y = rng.random_range(0..1000) as f32;
         let pos = egui::Pos2::new(x, y);
         ConventionalCard { suit, rank, pos }
     }
