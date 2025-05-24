@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use eframe::Frame;
-use egui::{vec2, Align, Button, Color32, Context, Grid, Layout, RichText, ScrollArea, Ui};
+use egui::{vec2, Align, Button, Color32, Context, Grid, Layout, RichText, ScrollArea};
 
 use super::{ScreenType, ScreenWidget};
 use crate::sprintln;
@@ -147,7 +147,7 @@ impl ScreenWidget for PairingScreen {
                     let player_name_clone = player_name.clone();
                     
                     // Generate emoji hash for the player name
-                    let player_hash = emoji_hash(player_name_clone.as_bytes());
+                    let player_hash = emoji_hash(player_name_clone.as_bytes(), ctx);
                     
                     egui::Window::new(format!("Confirm {}", action_text))
                         .collapsible(false)
@@ -184,7 +184,7 @@ impl ScreenWidget for PairingScreen {
                                             sprintln!(
                                                 "Player {} ({}) is now {}",
                                                 player.name,
-                                                emoji_hash(player.name.as_bytes()),
+                                                emoji_hash(player.name.as_bytes(), ctx),
                                                 if player.paired { "paired" } else { "unpaired" }
                                             );
                                             break;
