@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use eframe::Frame;
-use egui::{vec2, Color32, Context, Grid, RichText};
+use egui::{vec2, Align, Button, Color32, Context, Grid, Layout, RichText, ScrollArea};
 
 use super::{ScreenType, ScreenWidget};
 use crate::sprintln;
@@ -62,75 +62,81 @@ impl Default for PairingScreen {
 impl ScreenWidget for PairingScreen {
     fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(50.0); // Add top spacing
+            ui.heading("Player Pairing");
 
-                // Title
-                ui.heading(RichText::new("Player Pairing").size(32.0).strong());
-                ui.add_space(30.0);
-
-                // Player list in a scrollable area
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    let button_size = vec2(200.0, 40.0); // Consistent button size
-
-                    // Player name and status
-                    Grid::new("pairing").show(ui, |ui| {
-                        for player in &mut self.players {
-                            // Player name with icon
-                            ui.label(RichText::new(format!("👤 {}", player.name)).size(18.0));
-
-                            // Status indicator
-                            let status_text = if player.paired {
-                                RichText::new("● Paired").color(Color32::from_rgb(100, 200, 100))
-                            } else {
-                                RichText::new("○ Unpaired").color(Color32::from_rgb(150, 150, 150))
-                            };
-                            ui.label(status_text);
-
-                            let button_text = if player.paired { "Unpair" } else { "Pair" };
-                            let (button_fill, text_color) = if player.paired {
-                                (Color32::from_rgb(220, 60, 60), Color32::WHITE)
-                            // Red with white text
-                            } else {
-                                (Color32::from_rgb(60, 200, 60), Color32::BLACK)
-                                // Green with black text
-                            };
-
-                            if ui
-                                .add_sized(
-                                    button_size,
-                                    egui::Button::new(
-                                        RichText::new(button_text)
-                                            .color(text_color)
-                                            .size(16.0)
-                                            .strong(),
-                                    )
-                                    .fill(button_fill),
-                                )
-                                .clicked()
-                            {
-                                player.paired = !player.paired;
-                                let status = if player.paired { "paired" } else { "unpaired" };
-                                sprintln!("Player {} {}", player.name, status);
-                            }
-                            ui.end_row();
-                        }
-                    });
-                });
-
-                ui.add_space(30.0);
-
-                // Back button
-                let back_button_size = vec2(200.0, 40.0);
-                if ui
-                    .add_sized(back_button_size, egui::Button::new("Back to Main Menu"))
-                    .clicked()
-                {
+            // Back to Main Menu button
+            ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
+                if ui.button("Back to Main Menu").clicked() {
                     *next_screen.borrow_mut() = ScreenType::Main;
+                    sprintln!("Navigating back to Main Menu");
                 }
-
-                ui.add_space(50.0); // Add bottom spacing
             });
+
+            // Scrollable area for player list
+            ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    // Create a grid layout for our player list
+                    Grid::new("player_grid")
+                        .num_columns(3)
+                        .spacing([20.0, 10.0])
+                        .striped(true)
+                        .show(ui, |ui| {
+                            // Header row
+                            ui.strong("Player");
+                            ui.strong("Status");
+                            ui.strong("Action");
+                            ui.end_row();
+
+                            // Player rows
+                            for player in &mut self.players {
+                                // Column 1: Player icon and name
+                                ui.horizontal(|ui| {
+                                    // Display user icon/emoji
+                                    let icon = if player.paired { "👥" } else { "👤" };
+                                    ui.label(RichText::new(icon).size(24.0));
+                                    ui.label(&player.name);
+                                });
+
+                                // Column 2: Pairing status
+                                let status_text = if player.paired {
+                                    RichText::new("Paired").color(Color32::GREEN)
+                                } else {
+                                    RichText::new("Not Paired").color(Color32::RED)
+                                };
+                                ui.label(status_text);
+
+                                // Column 3: Pairing button
+                                let button_text = if player.paired { "Unpair" } else { "Pair" };
+                                let button_color = if player.paired {
+                                    Color32::from_rgb(255, 180, 180) // Lighter red
+                                } else {
+                                    Color32::from_rgb(180, 255, 180) // Lighter green
+                                };
+
+                                if ui
+                                    .add(
+                                        Button::new(
+                                            RichText::new(button_text).color(Color32::BLACK),
+                                        )
+                                        .fill(button_color)
+                                        .min_size(vec2(80.0, 24.0)),
+                                    )
+                                    .clicked()
+                                {
+                                    // Toggle the pairing status
+                                    player.paired = !player.paired;
+                                    sprintln!(
+                                        "Player {} is now {}",
+                                        player.name,
+                                        if player.paired { "paired" } else { "unpaired" }
+                                    );
+                                }
+
+                                ui.end_row();
+                            }
+                        });
+                });
         });
     }
 }
