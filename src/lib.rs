@@ -14,7 +14,7 @@ use eframe::{WebOptions, WebRunner};
 #[cfg(target_arch = "wasm32")]
 use egui_extras::install_image_loaders;
 #[cfg(target_arch = "wasm32")]
-use game::screen::{CardsTestDND, DNDTest, Game, GameSetupScreen};
+use game::screens::{CardsTestDND, DNDTest, Game, GameSetupScreen, PairingScreen};
 #[cfg(target_arch = "wasm32")]
 use game::App;
 #[cfg(target_arch = "wasm32")]
@@ -140,6 +140,7 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
         hardcoded_cards::set_deck_by_theme(&game_conf.borrow().directory, hardcoded_cards::DEFAULT_THEME);
 
         let dnd_test = Rc::new(RefCell::new(DNDTest::new()));
+        let pairing_screen = Rc::new(RefCell::new(PairingScreen::new()));
 
         // Register main game screens
         app.register_screen(String::from("game"), game_widget)
@@ -147,6 +148,8 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
         app.register_screen(String::from("game_setup"), game_conf)
             .unwrap();
         app.register_screen(String::from("dnd_test"), dnd_test)
+            .unwrap();
+        app.register_screen(String::from("pairing"), pairing_screen)
             .unwrap();
 
         // Register drag and drop game screens

@@ -4,14 +4,15 @@ use std::collections::{hash_map, HashMap};
 use std::rc::Rc;
 pub mod card;
 pub mod field;
-pub mod screen;
-use screen::{MainMenu, ScreenWidget};
+pub mod screens;
+pub mod screen; // Keep for backward compatibility
+use screens::{MainMenu, ScreenWidget};
 
 pub struct App {
     // TODO Make custom struct of this HashMap so that screens can dynamically register other screens
     screens: HashMap<String, Rc<RefCell<dyn ScreenWidget>>>,
     default_screen: Rc<RefCell<dyn ScreenWidget>>,
-    current_screen: Rc<RefCell<String>>,
+    current_screen: Rc<RefCell<String>>, // Note: in future consider using ScreenType enum here instead
 }
 
 impl Default for App {
