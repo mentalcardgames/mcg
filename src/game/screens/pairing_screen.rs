@@ -25,6 +25,8 @@ impl Player {
 /// Pairing screen with a list of players and pairing functionality
 pub struct PairingScreen {
     players: Vec<Player>,
+    confirm_action_player: Option<String>,
+    confirm_action: Option<bool>, // true for pair, false for unpair
 }
 
 impl PairingScreen {
@@ -49,7 +51,11 @@ impl PairingScreen {
             Player::new("Patricia"),
         ];
 
-        Self { players }
+        Self { 
+            players,
+            confirm_action_player: None,
+            confirm_action: None,
+        }
     }
 }
 
@@ -124,19 +130,60 @@ impl ScreenWidget for PairingScreen {
                                     )
                                     .clicked()
                                 {
-                                    // Toggle the pairing status
-                                    player.paired = !player.paired;
-                                    sprintln!(
-                                        "Player {} is now {}",
-                                        player.name,
-                                        if player.paired { "paired" } else { "unpaired" }
-                                    );
+                                    // Set confirmation state
+                                    self.confirm_action_player = Some(player.name.clone());
+                                    self.confirm_action = Some(!player.paired);
                                 }
 
                                 ui.end_row();
                             }
                         });
                 });
+                
+                // Show confirmation popup if needed
+                if let (Some(player_name), Some(pair_action)) = (&self.confirm_action_player, self.confirm_action) {
+                    let action_text = if pair_action { "pair" } else { "unpair" };
+                    let player_name_clone = player_name.clone();
+                    
+                    egui::Window::new(format!("Confirm {}", action_text))
+                        .collapsible(false)
+                        .resizable(false)
+                        .show(ctx, |ui| {
+                            ui.label(format!("Are you sure you want to {} {}?", action_text, player_name_clone));
+                            
+                            ui.horizontal(|ui| {
+                                if ui.button("Cancel").clicked() {
+                                    self.confirm_action_player = None;
+                                    self.confirm_action = None;
+                                }
+                                
+                                let mut perform_action = false;
+                                if ui.button("Confirm").clicked() {
+                                    perform_action = true;
+                                }
+                                
+                                // We need to handle this outside the closure to avoid borrowing issues
+                                if perform_action {
+                                    // Find the player and update their status
+                                    for player in &mut self.players {
+                                        if player.name == player_name_clone {
+                                            player.paired = pair_action;
+                                            sprintln!(
+                                                "Player {} is now {}",
+                                                player.name,
+                                                if player.paired { "paired" } else { "unpaired" }
+                                            );
+                                            break;
+                                        }
+                                    }
+                                    
+                                    // Reset confirmation state
+                                    self.confirm_action_player = None;
+                                    self.confirm_action = None;
+                                }
+                            });
+                        });
+                }
         });
     }
 }
