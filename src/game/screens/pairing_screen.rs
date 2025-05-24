@@ -2,10 +2,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use eframe::Frame;
-use egui::{vec2, Align, Button, Color32, Context, Grid, Layout, RichText, ScrollArea};
+use egui::{vec2, Align, Button, Color32, Context, Grid, Layout, RichText, ScrollArea, Ui};
 
 use super::{ScreenType, ScreenWidget};
 use crate::sprintln;
+use crate::utils::emoji_hash;
 
 /// Represents a player with pairing functionality
 pub struct Player {
@@ -145,10 +146,22 @@ impl ScreenWidget for PairingScreen {
                     let action_text = if pair_action { "pair" } else { "unpair" };
                     let player_name_clone = player_name.clone();
                     
+                    // Generate emoji hash for the player name
+                    let player_hash = emoji_hash(player_name_clone.as_bytes());
+                    
                     egui::Window::new(format!("Confirm {}", action_text))
                         .collapsible(false)
                         .resizable(false)
+                        .min_width(300.0)
                         .show(ctx, |ui| {
+                            ui.vertical_centered(|ui| {
+                                // Display emoji hash prominently
+                                ui.add_space(8.0);
+                                ui.label(RichText::new(&player_hash).size(48.0).strong());
+                                ui.add_space(8.0);
+                            });
+                            
+                            ui.separator();
                             ui.label(format!("Are you sure you want to {} {}?", action_text, player_name_clone));
                             
                             ui.horizontal(|ui| {
@@ -169,8 +182,9 @@ impl ScreenWidget for PairingScreen {
                                         if player.name == player_name_clone {
                                             player.paired = pair_action;
                                             sprintln!(
-                                                "Player {} is now {}",
+                                                "Player {} ({}) is now {}",
                                                 player.name,
+                                                emoji_hash(player.name.as_bytes()),
                                                 if player.paired { "paired" } else { "unpaired" }
                                             );
                                             break;

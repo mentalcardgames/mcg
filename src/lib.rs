@@ -5,7 +5,7 @@
 pub mod example;
 pub mod game;
 pub mod hardcoded_cards;
-mod utils;
+pub mod utils;
 
 #[allow(unused_imports)]
 use eframe::AppCreator;
@@ -37,6 +37,8 @@ extern "C" {
     #[wasm_bindgen(js_namespace = console)]
     pub fn log(s: &str);
 }
+
+
 
 /// Helper function to start the eframe app with a canvas element
 ///
