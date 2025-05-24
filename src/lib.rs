@@ -28,7 +28,7 @@ use wasm_bindgen_futures::spawn_local;
 #[allow(unused_imports)]
 use web_sys::js_sys::Promise;
 #[cfg(target_arch = "wasm32")]
-use web_sys::HtmlCanvasElement;
+use web_sys::{HtmlCanvasElement, window};
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -97,6 +97,60 @@ macro_rules! sprintln {
         #[cfg(not(target_arch = "wasm32"))]
         println!($($arg)*);
     }};
+}
+
+/// Calculate the appropriate DPI scale factor based on screen resolution and device pixel ratio
+///
+/// This function determines an appropriate scaling factor based on the screen resolution
+/// and the device's pixel ratio to ensure UI elements are properly sized.
+///
+/// # Returns
+///
+/// A floating point scale factor to be used with `ctx.set_pixels_per_point()`
+#[cfg(target_arch = "wasm32")]
+pub fn calculate_dpi_scale() -> f32 {
+    let window = window().expect("no global window exists");
+    
+    // Get device pixel ratio (physical pixels per CSS pixel)
+    let device_pixel_ratio = window.device_pixel_ratio() as f32;
+    
+    // Get screen dimensions
+    let screen = window.screen().expect("unable to get screen object");
+    let width = screen.width().unwrap_or(1920) as f32;
+    let height = screen.height().unwrap_or(1080) as f32;
+    
+    // Calculate diagonal resolution in pixels
+    let diagonal = (width * width + height * height).sqrt();
+    
+    // Base scale factor on resolution
+    let base_scale = if diagonal > 3000.0 {
+        // For high-res 4K+ screens
+        1.8
+    } else if diagonal > 2000.0 {
+        // For typical desktop monitors (1440p+)
+        1.4
+    } else if diagonal > 1500.0 {
+        // For laptop screens and smaller monitors
+        1.2
+    } else {
+        // For smaller screens
+        1.0
+    };
+    
+    // Adjust based on device pixel ratio
+    let scale = base_scale * (device_pixel_ratio / 2.0).max(0.75).min(1.5);
+    
+    sprintln!("Screen resolution: {}x{}, diagonal: {}, device pixel ratio: {}, calculated scale: {}", 
+              width, height, diagonal, device_pixel_ratio, scale);
+    
+    scale
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn calculate_dpi_scale() -> f32 {
+    // Default for non-WASM targets
+    // Could be improved for native by getting actual monitor info
+    1.5
 }
 
 /// Main entry point for starting the WASM application in a browser

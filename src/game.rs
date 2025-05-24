@@ -88,6 +88,8 @@ impl App {
             current_screen,
         }
     }
+
+
     #[allow(clippy::result_unit_err)]
     pub fn register_screen(
         &mut self,
@@ -138,8 +140,9 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
-        // Set pixels_per_point to increase DPI scaling (1.5 = 150% scaling)
-        ctx.set_pixels_per_point(1.5);
+        // Set pixels_per_point based on screen resolution using the library function
+        let pixels_per_point = crate::calculate_dpi_scale();
+        ctx.set_pixels_per_point(pixels_per_point);
         
         let screen_type = self.current_screen.borrow().clone();
         let current_screen = match self.screens.get(&screen_type) {
