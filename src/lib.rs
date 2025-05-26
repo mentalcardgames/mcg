@@ -2,6 +2,8 @@
 //!
 //! This provides a MCG implemetation in wasm with an egui frontend.
 
+pub mod articles;
+pub mod communication;
 pub mod example;
 pub mod game;
 pub mod hardcoded_cards;
@@ -14,7 +16,7 @@ use eframe::{WebOptions, WebRunner};
 #[cfg(target_arch = "wasm32")]
 use egui_extras::install_image_loaders;
 #[cfg(target_arch = "wasm32")]
-use game::screens::{CardsTestDND, DNDTest, Game, GameSetupScreen, PairingScreen, ScreenType};
+use game::screens::{ArticlesScreen, CardsTestDND, DNDTest, Game, GameSetupScreen, PairingScreen, ScreenType};
 #[cfg(target_arch = "wasm32")]
 use game::App;
 #[cfg(target_arch = "wasm32")]
@@ -197,6 +199,7 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
 
         let dnd_test = Rc::new(RefCell::new(DNDTest::new()));
         let pairing_screen = Rc::new(RefCell::new(PairingScreen::new()));
+        let articles_screen = Rc::new(RefCell::new(ArticlesScreen::new()));
 
         // Register main game screens
         app.register_screen(ScreenType::Game, game_widget)
@@ -206,6 +209,8 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
         app.register_screen(ScreenType::DndTest, dnd_test)
             .unwrap();
         app.register_screen(ScreenType::Pairing, pairing_screen)
+            .unwrap();
+        app.register_screen(ScreenType::Articles, articles_screen)
             .unwrap();
 
         // Register drag and drop game screens

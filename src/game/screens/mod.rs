@@ -10,6 +10,7 @@ pub mod game_setup_screen;
 pub mod game;
 pub mod dnd_test;
 pub mod cards_test_dnd;
+pub mod articles_screen;
 
 pub use main_menu::MainMenu;
 pub use pairing_screen::{PairingScreen, Player};
@@ -17,6 +18,7 @@ pub use game_setup_screen::GameSetupScreen;
 pub use game::{Game, DNDSelector};
 pub use dnd_test::DNDTest;
 pub use cards_test_dnd::CardsTestDND;
+pub use articles_screen::ArticlesScreen;
 
 // Re-export GameConfig for use in other modules
 pub use game::{GameConfig, DirectoryCardType};
@@ -37,6 +39,7 @@ pub enum ScreenType {
     DndTest,
     GameDndSetup,
     GameDnd,
+    Articles,
 }
 
 impl ScreenType {
@@ -51,6 +54,7 @@ impl ScreenType {
             "dnd_test" => Some(ScreenType::DndTest),
             "game_dnd_setup" => Some(ScreenType::GameDndSetup),
             "game_dnd" => Some(ScreenType::GameDnd),
+            "articles" => Some(ScreenType::Articles),
             _ => None,
         }
     }
@@ -66,6 +70,7 @@ impl ScreenType {
             ScreenType::DndTest => "dnd_test".to_string(),
             ScreenType::GameDndSetup => "game_dnd_setup".to_string(),
             ScreenType::GameDnd => "game_dnd".to_string(),
+            ScreenType::Articles => "articles".to_string(),
         }
     }
 }

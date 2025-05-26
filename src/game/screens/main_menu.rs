@@ -81,6 +81,16 @@ impl ScreenWidget for MainMenu {
                 ui.add_space(20.0); // Add spacing between buttons
 
                 if ui
+                    .add_sized(button_size, egui::Button::new("Articles"))
+                    .clicked()
+                {
+                    sprintln!("articles opened");
+                    *next_screen.borrow_mut() = ScreenType::Articles;
+                };
+
+                ui.add_space(20.0); // Add spacing between buttons
+
+                if ui
                     .add_sized(button_size, egui::Button::new("Print Screen"))
                     .clicked()
                 {
