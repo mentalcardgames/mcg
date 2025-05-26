@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 # Build the WASM package for web deployment
 
 # Ensure we have wasm-pack installed
