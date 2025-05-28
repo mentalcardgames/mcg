@@ -4,9 +4,9 @@ use std::collections::{hash_map, HashMap};
 use std::rc::Rc;
 pub mod card;
 pub mod field;
-pub mod screens;
-pub mod screen; // Keep for backward compatibility
-use screens::{MainMenu, ScreenWidget, ScreenType};
+pub mod screen;
+pub mod screens; // Keep for backward compatibility
+use screens::{MainMenu, ScreenType, ScreenWidget};
 
 pub struct App {
     // Collection of screens indexed by their type
@@ -28,27 +28,31 @@ mod tests {
     #[test]
     fn test_screen_type_implementation() {
         let mut app = App::new(None);
-        
+
         // Test initial state
         assert_eq!(app.current_screen(), ScreenType::Main);
         assert!(app.is_current_screen(ScreenType::Main));
         assert!(!app.is_current_screen(ScreenType::Game));
-        
+
         // Test screen switching
         app.set_screen(ScreenType::Game);
         assert_eq!(app.current_screen(), ScreenType::Game);
         assert!(app.is_current_screen(ScreenType::Game));
         assert!(!app.is_current_screen(ScreenType::Main));
-        
+
         // Test screen registration
         let test_screen = Rc::new(RefCell::new(MainMenu::new()));
-        assert!(app.register_screen(ScreenType::Settings, test_screen).is_ok());
+        assert!(app
+            .register_screen(ScreenType::Settings, test_screen)
+            .is_ok());
         assert!(app.has_screen(ScreenType::Settings));
         assert!(!app.has_screen(ScreenType::Pairing));
-        
+
         // Test duplicate registration fails
         let another_screen = Rc::new(RefCell::new(MainMenu::new()));
-        assert!(app.register_screen(ScreenType::Settings, another_screen).is_err());
+        assert!(app
+            .register_screen(ScreenType::Settings, another_screen)
+            .is_err());
     }
 
     #[test]
@@ -67,11 +71,7 @@ mod tests {
 
         for (screen_type, expected_string) in test_cases {
             assert_eq!(screen_type.to_string(), expected_string);
-            assert_eq!(ScreenType::from_string(expected_string), Some(screen_type));
         }
-
-        // Test invalid string conversion
-        assert_eq!(ScreenType::from_string("invalid_screen"), None);
     }
 }
 
@@ -89,7 +89,6 @@ impl App {
         }
     }
 
-
     #[allow(clippy::result_unit_err)]
     pub fn register_screen(
         &mut self,
@@ -103,12 +102,12 @@ impl App {
             Err(())
         }
     }
-    
+
     /// Set the current screen to display
     pub fn set_screen(&mut self, screen_type: ScreenType) {
         *self.current_screen.borrow_mut() = screen_type;
     }
-    
+
     /// Get the current screen type
     pub fn current_screen(&self) -> ScreenType {
         self.current_screen.borrow().clone()
@@ -143,14 +142,16 @@ impl eframe::App for App {
         // Set pixels_per_point based on screen resolution using the library function
         let pixels_per_point = crate::calculate_dpi_scale();
         ctx.set_pixels_per_point(pixels_per_point);
-        
+
         let screen_type = self.current_screen.borrow().clone();
         let current_screen = match self.screens.get(&screen_type) {
             Some(screen) => Rc::clone(screen),
             None => Rc::clone(&self.default_screen),
         };
-        
-        current_screen.borrow_mut().update(Rc::clone(&self.current_screen), ctx, frame);
+
+        current_screen
+            .borrow_mut()
+            .update(Rc::clone(&self.current_screen), ctx, frame);
         // TODO Create custom screen for text sizes
         // use egui::FontFamily::Proportional;
         // use egui::FontId;

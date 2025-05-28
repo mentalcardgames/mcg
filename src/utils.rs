@@ -144,8 +144,6 @@ pub fn emoji_hash(data: &[u8], ctx: &Context) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Note: Tests requiring an egui context are disabled
     // since we can't easily create a context in unit tests
 }

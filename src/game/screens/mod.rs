@@ -4,24 +4,24 @@ use std::rc::Rc;
 use eframe::Frame;
 use egui::Context;
 
+pub mod articles_screen;
+pub mod cards_test_dnd;
+pub mod dnd_test;
+pub mod game;
+pub mod game_setup_screen;
 pub mod main_menu;
 pub mod pairing_screen;
-pub mod game_setup_screen;
-pub mod game;
-pub mod dnd_test;
-pub mod cards_test_dnd;
-pub mod articles_screen;
 
+pub use articles_screen::ArticlesScreen;
+pub use cards_test_dnd::CardsTestDND;
+pub use dnd_test::DNDTest;
+pub use game::{DNDSelector, Game};
+pub use game_setup_screen::GameSetupScreen;
 pub use main_menu::MainMenu;
 pub use pairing_screen::{PairingScreen, Player};
-pub use game_setup_screen::GameSetupScreen;
-pub use game::{Game, DNDSelector};
-pub use dnd_test::DNDTest;
-pub use cards_test_dnd::CardsTestDND;
-pub use articles_screen::ArticlesScreen;
 
 // Re-export GameConfig for use in other modules
-pub use game::{GameConfig, DirectoryCardType};
+pub use game::{DirectoryCardType, GameConfig};
 
 /// Common trait for all screen widgets
 pub trait ScreenWidget {
@@ -43,22 +43,6 @@ pub enum ScreenType {
 }
 
 impl ScreenType {
-    /// Convert a string to a ScreenType
-    pub fn from_string(s: &str) -> Option<Self> {
-        match s {
-            "main" => Some(ScreenType::Main),
-            "game_setup" => Some(ScreenType::GameSetup),
-            "game" => Some(ScreenType::Game),
-            "pairing" => Some(ScreenType::Pairing),
-            "settings" => Some(ScreenType::Settings),
-            "dnd_test" => Some(ScreenType::DndTest),
-            "game_dnd_setup" => Some(ScreenType::GameDndSetup),
-            "game_dnd" => Some(ScreenType::GameDnd),
-            "articles" => Some(ScreenType::Articles),
-            _ => None,
-        }
-    }
-
     /// Convert a ScreenType to a string
     pub fn to_string(&self) -> String {
         match self {

@@ -2,10 +2,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use eframe::Frame;
-use egui::{Context, vec2};
+use egui::{vec2, Context};
 
+use super::{ScreenType, ScreenWidget};
 use crate::sprintln;
-use super::{ScreenWidget, ScreenType};
 
 /// Main menu screen
 pub struct MainMenu {}
@@ -30,72 +30,43 @@ impl ScreenWidget for MainMenu {
 
                 let button_size = vec2(200.0, 40.0); // Consistent button size
 
-                if ui
-                    .add_sized(button_size, egui::Button::new("Start"))
-                    .clicked()
-                {
-                    sprintln!("setup started");
-                    *next_screen.borrow_mut() = ScreenType::GameSetup;
-                };
+                let buttons = [
+                    ("Start", "setup started", Some(ScreenType::GameSetup)),
+                    (
+                        "Drag & Drop Game",
+                        "game_dnd opened",
+                        Some(ScreenType::GameDndSetup),
+                    ),
+                    ("Pairing", "pairing opened", Some(ScreenType::Pairing)),
+                    ("Settings", "settings opened", Some(ScreenType::Settings)),
+                    (
+                        "Drag & Drop Test",
+                        "dnd_test opened",
+                        Some(ScreenType::DndTest),
+                    ),
+                    ("Articles", "articles opened", Some(ScreenType::Articles)),
+                    ("Print Screen", "", None),
+                ];
 
-                ui.add_space(20.0); // Add spacing between buttons
+                for (i, (label, message, screen_type)) in buttons.iter().enumerate() {
+                    if i > 0 {
+                        ui.add_space(20.0); // Add spacing between buttons
+                    }
 
-                if ui
-                    .add_sized(button_size, egui::Button::new("Drag & Drop Game"))
-                    .clicked()
-                {
-                    sprintln!("game_dnd opened");
-                    *next_screen.borrow_mut() = ScreenType::GameDndSetup;
-                };
-
-                ui.add_space(20.0); // Add spacing between buttons
-
-                if ui
-                    .add_sized(button_size, egui::Button::new("Pairing"))
-                    .clicked()
-                {
-                    sprintln!("pairing opened");
-                    *next_screen.borrow_mut() = ScreenType::Pairing;
-                };
-
-                ui.add_space(20.0); // Add spacing between buttons
-
-                if ui
-                    .add_sized(button_size, egui::Button::new("Settings"))
-                    .clicked()
-                {
-                    sprintln!("settings opened");
-                    *next_screen.borrow_mut() = ScreenType::Settings;
-                };
-
-                ui.add_space(20.0); // Add spacing between buttons
-
-                if ui
-                    .add_sized(button_size, egui::Button::new("Drag & Drop Test"))
-                    .clicked()
-                {
-                    sprintln!("dnd_test opened");
-                    *next_screen.borrow_mut() = ScreenType::DndTest;
-                };
-
-                ui.add_space(20.0); // Add spacing between buttons
-
-                if ui
-                    .add_sized(button_size, egui::Button::new("Articles"))
-                    .clicked()
-                {
-                    sprintln!("articles opened");
-                    *next_screen.borrow_mut() = ScreenType::Articles;
-                };
-
-                ui.add_space(20.0); // Add spacing between buttons
-
-                if ui
-                    .add_sized(button_size, egui::Button::new("Print Screen"))
-                    .clicked()
-                {
-                    sprintln!("{:?}", next_screen.borrow());
-                };
+                    if ui
+                        .add_sized(button_size, egui::Button::new(*label))
+                        .clicked()
+                    {
+                        if *label == "Print Screen" {
+                            sprintln!("{:?}", next_screen.borrow());
+                        } else {
+                            sprintln!("{}", message);
+                            if let Some(screen) = screen_type {
+                                *next_screen.borrow_mut() = screen.clone();
+                            }
+                        }
+                    }
+                }
 
                 ui.add_space(50.0); // Add bottom spacing
             });
