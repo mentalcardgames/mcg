@@ -2,6 +2,7 @@ default:
     just --choose
 
 build-and-serve:
+    #!/usr/bin/env bash
     just build
     if ! pgrep -f "python3 -m http.server"; then
         just serve &
