@@ -227,6 +227,34 @@ impl Camera {
         self.last_qr_result.as_ref()
     }
 
+    pub fn stop(&mut self) {
+        // Stop all media stream tracks
+        if let Some(stream) = &self.stream {
+            let tracks = stream.get_tracks();
+            for i in 0..tracks.length() {
+                if let Ok(track) = tracks.get(i).dyn_into::<web_sys::MediaStreamTrack>() {
+                    track.stop();
+                }
+            }
+        }
+
+        // Clear video element
+        if let Some(video) = &self.video_element {
+            video.set_src_object(None);
+        }
+
+        // Reset all state
+        self.video_element = None;
+        self.canvas_element = None;
+        self.context = None;
+        self.stream = None;
+        self.is_active = false;
+        self.is_video_ready = false;
+        self.frame_texture = None;
+        self.frame_count = 0;
+        self.last_qr_result = None;
+    }
+
     fn process_qr_detection(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
         // Convert egui::Color32 pixels to grayscale for QR detection
         let mut gray_data = Vec::with_capacity(width * height);
@@ -316,7 +344,15 @@ impl ScreenWidget for QrScreen {
                         });
                     }
                 } else {
-                    ui.label("Camera Active");
+                    if ui
+                        .add_sized(vec2(150.0, 30.0), egui::Button::new("Stop Camera"))
+                        .clicked()
+                    {
+                        if let Ok(mut camera) = self.camera.try_borrow_mut() {
+                            camera.stop();
+                            self.camera_started = false;
+                        }
+                    }
                 }
             });
 
