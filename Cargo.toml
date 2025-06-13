@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-wasm-bindgen = "0.2.100"
+wasm-bindgen = { version = "0.2.100", features = ["enable-interning"] }
 console_error_panic_hook = { version = "0.1.7", optional = true }
 web-sys = { version = "0.3.77", features = [
         "HtmlCanvasElement",
@@ -22,6 +22,11 @@ web-sys = { version = "0.3.77", features = [
         "MediaStream",
         "MediaDevices",
         "MediaStreamConstraints",
+        "CanvasRenderingContext2d",
+        "ImageData",
+        "Event",
+        "EventTarget",
+        "console",
     ]}
 egui = "0.31.1"
 eframe = "0.31.1"
