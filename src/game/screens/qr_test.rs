@@ -8,6 +8,8 @@ use web_sys::{
 
 use super::{ScreenType, ScreenWidget};
 
+use rqrr;
+
 pub struct Camera {
     video_element: Option<HtmlVideoElement>,
     canvas_element: Option<HtmlCanvasElement>,
@@ -16,6 +18,8 @@ pub struct Camera {
     is_active: bool,
     is_video_ready: bool,
     frame_texture: Option<TextureHandle>,
+    frame_count: u32,
+    last_qr_result: Option<String>,
 }
 
 impl Camera {
@@ -28,6 +32,8 @@ impl Camera {
             is_active: false,
             is_video_ready: false,
             frame_texture: None,
+            frame_count: 0,
+            last_qr_result: None,
         }
     }
     pub async fn start(&mut self) -> Result<HtmlVideoElement, JsValue> {
@@ -183,8 +189,14 @@ impl Camera {
 
             let color_image = ColorImage {
                 size: [canvas_width as usize, canvas_height as usize],
-                pixels,
+                pixels: pixels.clone(),
             };
+
+            // Increment frame count and process QR detection on every 5th frame
+            self.frame_count += 1;
+            if self.frame_count % 5 == 0 {
+                self.process_qr_detection(&pixels, canvas_width as usize, canvas_height as usize);
+            }
 
             // Update texture
             if let Some(texture) = &mut self.frame_texture {
@@ -209,6 +221,43 @@ impl Camera {
 
     pub fn is_video_ready(&self) -> bool {
         self.is_video_ready
+    }
+
+    pub fn get_last_qr_result(&self) -> Option<&String> {
+        self.last_qr_result.as_ref()
+    }
+
+    fn process_qr_detection(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
+        // Convert egui::Color32 pixels to grayscale for QR detection
+        let mut gray_data = Vec::with_capacity(width * height);
+
+        for pixel in pixels {
+            // Convert RGBA to grayscale using luminance formula
+            let r = pixel.r() as f32;
+            let g = pixel.g() as f32;
+            let b = pixel.b() as f32;
+            let gray = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+            gray_data.push(gray);
+        }
+
+        // Create rqrr PreparedImage using prepare_from_greyscale
+        let mut prepared_image =
+            rqrr::PreparedImage::prepare_from_greyscale(width, height, |x, y| {
+                gray_data[y * width + x]
+            });
+
+        // Detect QR codes
+        let grids = prepared_image.detect_grids();
+
+        for grid in grids {
+            if let Ok((meta, content)) = grid.decode() {
+                let qr_content = content;
+                web_sys::console::log_1(&format!("QR Code detected: {}", qr_content).into());
+                web_sys::console::log_1(&format!("QR Metadata: {:?}", meta).into());
+                self.last_qr_result = Some(qr_content);
+                break; // Only process the first QR code found
+            }
+        }
     }
 }
 
@@ -313,6 +362,25 @@ impl ScreenWidget for QrScreen {
 
             ui.add_space(20.0);
             ui.label("Point your camera at a QR code to scan it");
+
+            // Display QR detection results
+            if let Ok(camera) = self.camera.try_borrow() {
+                if let Some(qr_result) = camera.get_last_qr_result() {
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(10.0);
+                    ui.heading("QR Code Detected:");
+                    ui.horizontal(|ui| {
+                        ui.label("Content:");
+                        ui.monospace(qr_result);
+                    });
+
+                    // Add copy to clipboard functionality
+                    if ui.button("Copy to Clipboard").clicked() {
+                        ui.ctx().copy_text(qr_result.clone());
+                    }
+                }
+            }
         });
     }
 }
