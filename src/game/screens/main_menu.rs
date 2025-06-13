@@ -45,6 +45,7 @@ impl ScreenWidget for MainMenu {
                         Some(ScreenType::DndTest),
                     ),
                     ("Articles", "articles opened", Some(ScreenType::Articles)),
+                    ("QR Test", "qr_test opened", Some(ScreenType::QRScreen)),
                     ("Print Screen", "", None),
                 ];
 
