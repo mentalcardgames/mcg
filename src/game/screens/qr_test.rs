@@ -20,6 +20,7 @@ pub struct Camera {
     frame_texture: Option<TextureHandle>,
     frame_count: u32,
     last_qr_result: Option<String>,
+    facing_mode: String, // "user" for front camera, "environment" for rear camera
 }
 
 impl Camera {
@@ -34,6 +35,7 @@ impl Camera {
             frame_texture: None,
             frame_count: 0,
             last_qr_result: None,
+            facing_mode: "environment".to_string(), // Default to rear camera
         }
     }
     pub async fn start(&mut self) -> Result<HtmlVideoElement, JsValue> {
@@ -70,8 +72,15 @@ impl Camera {
             .media_devices()
             .map_err(|_| JsValue::from_str("MediaDevices not available"))?;
         let constraints = MediaStreamConstraints::new();
-        // Use simple boolean constraint for now to avoid js-sys complexity
-        constraints.set_video(&JsValue::from_bool(true));
+
+        // Create video constraints with facing mode
+        let video_constraints = js_sys::Object::new();
+        js_sys::Reflect::set(
+            &video_constraints,
+            &JsValue::from_str("facingMode"),
+            &JsValue::from_str(&self.facing_mode),
+        )?;
+        constraints.set_video(&video_constraints.into());
         let stream_promise = media_devices.get_user_media_with_constraints(&constraints)?;
         let stream = wasm_bindgen_futures::JsFuture::from(stream_promise).await?;
         let media_stream = stream.dyn_into::<web_sys::MediaStream>()?;
@@ -255,6 +264,19 @@ impl Camera {
         self.last_qr_result = None;
     }
 
+    pub fn flip_camera(&mut self) {
+        // Toggle between front and rear camera
+        self.facing_mode = if self.facing_mode == "user" {
+            "environment".to_string()
+        } else {
+            "user".to_string()
+        };
+    }
+
+    pub fn get_facing_mode(&self) -> &str {
+        &self.facing_mode
+    }
+
     fn process_qr_detection(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
         // Convert egui::Color32 pixels to grayscale for QR detection
         let mut gray_data = Vec::with_capacity(width * height);
@@ -292,13 +314,31 @@ impl Camera {
 pub struct QrScreen {
     camera: Rc<RefCell<Camera>>,
     camera_started: bool,
+    is_mobile: bool,
 }
 
 impl QrScreen {
     pub fn new() -> Self {
+        // Detect if we're on a mobile device with better detection
+        let is_mobile = if let Some(window) = web_sys::window() {
+            // Check for touch support and user agent
+            let has_touch = window.navigator().max_touch_points() > 0;
+            let user_agent = window.navigator().user_agent().unwrap_or_default().to_lowercase();
+            let is_mobile_ua = user_agent.contains("mobile") ||
+                user_agent.contains("android") ||
+                user_agent.contains("iphone") ||
+                user_agent.contains("ipad") ||
+                user_agent.contains("ipod");
+
+            has_touch || is_mobile_ua
+        } else {
+            false
+        };
+
         Self {
             camera: Rc::new(RefCell::new(Camera::new())),
             camera_started: false,
+            is_mobile,
         }
     }
 }
@@ -351,6 +391,48 @@ impl ScreenWidget for QrScreen {
                         if let Ok(mut camera) = self.camera.try_borrow_mut() {
                             camera.stop();
                             self.camera_started = false;
+                        }
+                    }
+
+                    // Add flip camera button for mobile devices
+                    if self.is_mobile {
+                        let facing_mode = if let Ok(camera) = self.camera.try_borrow() {
+                            camera.get_facing_mode().to_string()
+                        } else {
+                            "environment".to_string()
+                        };
+
+                        let (button_text, current_camera) = if facing_mode == "user" {
+                            ("🔄 Switch to Rear", "📷 Front Camera")
+                        } else {
+                            ("🔄 Switch to Front", "📱 Rear Camera")
+                        };
+
+                        // Show current camera indicator
+                        ui.horizontal(|ui| {
+                            ui.label("Current:");
+                            ui.colored_label(egui::Color32::from_rgb(0, 150, 0), current_camera);
+                        });
+
+                        if ui
+                            .add_sized(vec2(150.0, 30.0), egui::Button::new(button_text))
+                            .on_hover_text("Switch between front and rear camera")
+                            .clicked()
+                        {
+                            if let Ok(mut camera) = self.camera.try_borrow_mut() {
+                                camera.stop();
+                                camera.flip_camera();
+
+                                // Restart camera with new facing mode
+                                let camera_ref = self.camera.clone();
+                                wasm_bindgen_futures::spawn_local(async move {
+                                    if let Err(e) = camera_ref.borrow_mut().start().await {
+                                        web_sys::console::log_1(
+                                            &format!("Camera restart error: {:?}", e).into(),
+                                        );
+                                    }
+                                });
+                            }
                         }
                     }
                 }
