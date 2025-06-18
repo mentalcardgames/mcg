@@ -10,6 +10,33 @@ use super::{ScreenType, ScreenWidget};
 
 use rqrr;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CameraFacing {
+    User,        // Front camera
+    Environment, // Rear camera
+}
+
+impl CameraFacing {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CameraFacing::User => "user",
+            CameraFacing::Environment => "environment",
+        }
+    }
+}
+
+impl Default for CameraFacing {
+    fn default() -> Self {
+        CameraFacing::Environment
+    }
+}
+
+impl std::fmt::Display for CameraFacing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 pub struct Camera {
     video_element: Option<HtmlVideoElement>,
     canvas_element: Option<HtmlCanvasElement>,
@@ -20,7 +47,7 @@ pub struct Camera {
     frame_texture: Option<TextureHandle>,
     frame_count: u32,
     last_qr_result: Option<String>,
-    facing_mode: String, // "user" for front camera, "environment" for rear camera
+    facing_mode: CameraFacing,
 }
 
 impl Camera {
@@ -35,7 +62,7 @@ impl Camera {
             frame_texture: None,
             frame_count: 0,
             last_qr_result: None,
-            facing_mode: "environment".to_string(), // Default to rear camera
+            facing_mode: CameraFacing::Environment, // Default to rear camera
         }
     }
     pub async fn start(&mut self) -> Result<HtmlVideoElement, JsValue> {
@@ -78,7 +105,7 @@ impl Camera {
         js_sys::Reflect::set(
             &video_constraints,
             &JsValue::from_str("facingMode"),
-            &JsValue::from_str(&self.facing_mode),
+            &JsValue::from_str(self.facing_mode.as_str()),
         )?;
         constraints.set_video(&video_constraints.into());
         let stream_promise = media_devices.get_user_media_with_constraints(&constraints)?;
@@ -266,15 +293,14 @@ impl Camera {
 
     pub fn flip_camera(&mut self) {
         // Toggle between front and rear camera
-        self.facing_mode = if self.facing_mode == "user" {
-            "environment".to_string()
-        } else {
-            "user".to_string()
+        self.facing_mode = match self.facing_mode {
+            CameraFacing::User => CameraFacing::Environment,
+            CameraFacing::Environment => CameraFacing::User,
         };
     }
 
-    pub fn get_facing_mode(&self) -> &str {
-        &self.facing_mode
+    pub fn get_facing_mode(&self) -> CameraFacing {
+        self.facing_mode
     }
 
     fn process_qr_detection(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
@@ -323,12 +349,16 @@ impl QrScreen {
         let is_mobile = if let Some(window) = web_sys::window() {
             // Check for touch support and user agent
             let has_touch = window.navigator().max_touch_points() > 0;
-            let user_agent = window.navigator().user_agent().unwrap_or_default().to_lowercase();
-            let is_mobile_ua = user_agent.contains("mobile") ||
-                user_agent.contains("android") ||
-                user_agent.contains("iphone") ||
-                user_agent.contains("ipad") ||
-                user_agent.contains("ipod");
+            let user_agent = window
+                .navigator()
+                .user_agent()
+                .unwrap_or_default()
+                .to_lowercase();
+            let is_mobile_ua = user_agent.contains("mobile")
+                || user_agent.contains("android")
+                || user_agent.contains("iphone")
+                || user_agent.contains("ipad")
+                || user_agent.contains("ipod");
 
             has_touch || is_mobile_ua
         } else {
@@ -397,15 +427,15 @@ impl ScreenWidget for QrScreen {
                     // Add flip camera button for mobile devices
                     if self.is_mobile {
                         let facing_mode = if let Ok(camera) = self.camera.try_borrow() {
-                            camera.get_facing_mode().to_string()
+                            camera.get_facing_mode()
                         } else {
-                            "environment".to_string()
+                            CameraFacing::Environment
                         };
 
-                        let (button_text, current_camera) = if facing_mode == "user" {
+                        let (button_text, current_camera) = if facing_mode == CameraFacing::User {
                             ("🔄 Switch to Rear", "📷 Front Camera")
                         } else {
-                            ("🔄 Switch to Front", "📱 Rear Camera")
+                            ("🔄 Switch to Front", "📷 Rear Camera")
                         };
 
                         // Show current camera indicator
