@@ -1,24 +1,21 @@
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
-
 use eframe::Frame;
 use egui::{Context, vec2};
 
 use crate::game::card::{CardConfig, SimpleCard};
 use crate::game::field::{SimpleField, SimpleFieldKind::Stack};
-use super::{ScreenWidget, ScreenType, Game, GameConfig, DirectoryCardType};
+use super::{ScreenWidget, ScreenType, GameConfig, DirectoryCardType, AppInterface};
 
 /// Game setup screen for configuring players and cards
-pub struct GameSetupScreen<C: CardConfig = DirectoryCardType, G = Game<C>> {
-    pub directory: Rc<RefCell<Option<C>>>,
+pub struct GameSetupScreen {
+    pub card_config: Option<DirectoryCardType>,
     pub players: usize,
     pub theme_index: usize,
-    pub(crate) game_widget: Weak<RefCell<G>>,
+    pub is_dnd_variant: bool,
 }
 
-impl<C: CardConfig + Clone, G> GameSetupScreen<C, G> {
-    pub fn new(game_widget: Weak<RefCell<G>>) -> Self {
-        let directory = Rc::new(RefCell::new(None));
+impl GameSetupScreen {
+    pub fn new() -> Self {
+        let card_config = None;
         let players = 2;
         // Set the default theme index based on the DEFAULT_THEME
         let theme_index = crate::hardcoded_cards::AVAILABLE_THEMES
@@ -26,47 +23,62 @@ impl<C: CardConfig + Clone, G> GameSetupScreen<C, G> {
             .position(|&t| t == crate::hardcoded_cards::DEFAULT_THEME)
             .unwrap_or(0);
         Self {
-            directory,
+            card_config,
             players,
             theme_index,
-            game_widget,
+            is_dnd_variant: false,
         }
     }
 
-    pub fn generate_config(&self) -> Option<GameConfig<C>> {
-        let directory = Rc::new(self.directory.borrow().clone()?);
+    pub fn new_dnd() -> Self {
+        let mut screen = Self::new();
+        screen.is_dnd_variant = true;
+        screen
+    }
 
-        let mut players: Vec<(String, SimpleField<SimpleCard, C>)> = (0..self.players)
+    pub fn generate_config(&self) -> Option<GameConfig<DirectoryCardType>> {
+        let card_config = self.card_config.as_ref()?.clone();
+
+        let mut players: Vec<(String, SimpleField<SimpleCard, DirectoryCardType>)> = (0..self.players)
             .map(|i| {
                 (
-                    format!("{i}"),
-                    SimpleField::new(Rc::clone(&directory))
+                    format!("Player {}", i + 1),
+                    SimpleField::new(card_config.clone())
                         .max_cards(4)
                         .selectable(true)
                         .max_card_size(vec2(100.0, 150.0)),
                 )
             })
             .collect();
-        let mut stack = SimpleField::new(Rc::clone(&directory))
+        let mut stack = SimpleField::new(card_config.clone())
             .kind(Stack)
             .max_card_size(vec2(100.0, 150.0));
-        for i in 0..directory.T() {
+        
+        // Distribute cards
+        for i in 0..card_config.T() {
             let card = SimpleCard::Open(i);
-            stack.push(card);
+            stack.push(card.clone());
             players[i % self.players].1.push(SimpleCard::Open(i));
         }
+        
         Some(GameConfig { players, stack })
     }
 }
 
-impl ScreenWidget for GameSetupScreen<DirectoryCardType, Game<DirectoryCardType>> {
-    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
+impl Default for GameSetupScreen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ScreenWidget for GameSetupScreen {
+    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Card Pack:");
-                match self.directory.borrow().as_ref() {
+                match &self.card_config {
                     None => ui.label("Deck not loaded"),
-                    Some(dir) => ui.label(format!("Using {}", &dir.path)),
+                    Some(config) => ui.label(format!("Using {}", &config.path)),
                 }
             });
 
@@ -93,13 +105,14 @@ impl ScreenWidget for GameSetupScreen<DirectoryCardType, Game<DirectoryCardType>
                                 let theme_str =
                                     crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index];
                                 crate::hardcoded_cards::set_deck_by_theme(
-                                    &self.directory,
+                                    &mut self.card_config,
                                     theme_str,
                                 );
                             }
                         }
                     });
             });
+            
             ui.horizontal(|ui| {
                 ui.label("# Players");
                 let drag = egui::DragValue::new(&mut self.players);
@@ -113,90 +126,19 @@ impl ScreenWidget for GameSetupScreen<DirectoryCardType, Game<DirectoryCardType>
                     self.players = self.players.saturating_add(1);
                 }
             });
+            
             if ui.button("Start Game").clicked() {
-                if let Some(game) = self.game_widget.upgrade() {
-                    let config = self.generate_config();
-                    if config.is_some() {
-                        game.borrow_mut().game_config = config;
-                        *next_screen.borrow_mut() = ScreenType::Game;
+                if let Some(config) = self.generate_config() {
+                    if self.is_dnd_variant {
+                        app_interface.queue_event(crate::game::AppEvent::StartDndGame(config));
+                    } else {
+                        app_interface.queue_event(crate::game::AppEvent::StartGame(config));
                     }
                 }
             }
+            
             if ui.button("Back").clicked() {
-                *next_screen.borrow_mut() = ScreenType::Main;
-            }
-        });
-    }
-}
-
-// Implementation for drag-and-drop version
-use super::cards_test_dnd::CardsTestDND;
-
-impl ScreenWidget for GameSetupScreen<DirectoryCardType, CardsTestDND> {
-    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Card Pack:");
-                match self.directory.borrow().as_ref() {
-                    None => ui.label("Deck not loaded"),
-                    Some(dir) => ui.label(format!("Using {}", &dir.path)),
-                }
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Theme:");
-                egui::ComboBox::new("theme_selector_dnd", "Theme")
-                    .selected_text(crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index])
-                    .show_ui(ui, |ui| {
-                        for (i, theme) in
-                            crate::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate()
-                        {
-                            // Display a user-friendly name for the theme
-                            let theme_name = match *theme {
-                                "img_cards" => "Standard Cards",
-                                "alt_cards" => "Alternative Cards",
-                                _ => theme,
-                            };
-
-                            if ui
-                                .selectable_label(self.theme_index == i, theme_name)
-                                .clicked()
-                            {
-                                self.theme_index = i;
-                                let theme_str =
-                                    crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index];
-                                crate::hardcoded_cards::set_deck_by_theme(
-                                    &self.directory,
-                                    theme_str,
-                                );
-                            }
-                        }
-                    });
-            });
-            ui.horizontal(|ui| {
-                ui.label("# Players");
-                let drag = egui::DragValue::new(&mut self.players);
-                ui.add(drag);
-                let dec = egui::Button::new("-").min_size(vec2(30.0, 0.0));
-                if ui.add(dec).clicked() && self.players > 1 {
-                    self.players = self.players.saturating_sub(1);
-                }
-                let inc = egui::Button::new("+").min_size(vec2(30.0, 0.0));
-                if ui.add(inc).clicked() {
-                    self.players = self.players.saturating_add(1);
-                }
-            });
-            if ui.button("Start Game").clicked() {
-                if let Some(game) = self.game_widget.upgrade() {
-                    let config = self.generate_config();
-                    if config.is_some() {
-                        game.borrow_mut().game_config = config;
-                        *next_screen.borrow_mut() = ScreenType::GameDnd;
-                    }
-                }
-            }
-            if ui.button("Back").clicked() {
-                *next_screen.borrow_mut() = ScreenType::Main;
+                app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
             }
         });
     }

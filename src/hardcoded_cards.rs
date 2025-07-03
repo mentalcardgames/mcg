@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 use egui::Vec2;
 use crate::game::card::DirectoryCardType;
 use crate::sprintln;
@@ -80,15 +78,15 @@ pub fn create_deck(theme: &str) -> DirectoryCardType {
     }
 }
 
-/// Set the deck by theme name in the provided RefCell
-pub fn set_deck_by_theme(directory: &Rc<RefCell<Option<DirectoryCardType>>>, theme: &str) {
+/// Set the deck by theme name in the provided Option
+pub fn set_deck_by_theme(card_config: &mut Option<DirectoryCardType>, theme: &str) {
     let deck = create_deck(theme);
-    directory.borrow_mut().replace(deck);
+    *card_config = Some(deck);
 }
 
 /// Legacy function to maintain compatibility with existing code
 /// Simply forwards to set_deck_by_theme with the appropriate theme
-pub fn set_hardcoded_deck(directory: &Rc<RefCell<Option<DirectoryCardType>>>, use_alt_deck: bool) {
+pub fn set_hardcoded_deck(card_config: &mut Option<DirectoryCardType>, use_alt_deck: bool) {
     let theme = if use_alt_deck { "alt_cards" } else { "img_cards" };
-    set_deck_by_theme(directory, theme);
+    set_deck_by_theme(card_config, theme);
 }

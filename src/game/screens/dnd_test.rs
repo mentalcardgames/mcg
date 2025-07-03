@@ -1,11 +1,8 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use eframe::Frame;
 use egui::{Context, Id, Color32, vec2};
 
 use crate::sprintln;
-use super::{ScreenWidget, ScreenType};
+use super::{ScreenWidget, ScreenType, AppInterface};
 
 /// Location for drag and drop operations
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,11 +37,11 @@ impl Default for DNDTest {
 }
 
 impl ScreenWidget for DNDTest {
-    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             if ui.button("Exit").clicked() {
                 sprintln!("back to main menu");
-                *next_screen.borrow_mut() = ScreenType::Main;
+                app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
             }
             ui.label("This is a simple example of drag-and-drop in egui.");
             ui.label("Drag items between columns.");

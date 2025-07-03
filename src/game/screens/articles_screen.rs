@@ -4,7 +4,7 @@ use std::rc::Rc;
 use eframe::Frame;
 use egui::{vec2, Color32, Context, RichText, ScrollArea};
 
-use super::{ScreenType, ScreenWidget};
+use super::{ScreenType, ScreenWidget, AppInterface};
 use crate::articles::{fetch_posts, Post};
 use crate::sprintln;
 
@@ -83,7 +83,7 @@ impl Default for ArticlesScreen {
 }
 
 impl ScreenWidget for ArticlesScreen {
-    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(20.0);
@@ -101,7 +101,7 @@ impl ScreenWidget for ArticlesScreen {
                     .add_sized(vec2(100.0, 30.0), egui::Button::new("Back"))
                     .clicked()
                 {
-                    *next_screen.borrow_mut() = ScreenType::Main;
+                    app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
                 }
 
                 ui.add_space(20.0);

@@ -1,10 +1,7 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use eframe::Frame;
 use egui::{vec2, Context};
 
-use super::{ScreenType, ScreenWidget};
+use super::{ScreenType, ScreenWidget, AppInterface};
 use crate::sprintln;
 
 /// Main menu screen
@@ -23,7 +20,7 @@ impl Default for MainMenu {
 }
 
 impl ScreenWidget for MainMenu {
-    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(50.0); // Add top spacing
@@ -59,11 +56,11 @@ impl ScreenWidget for MainMenu {
                         .clicked()
                     {
                         if *label == "Print Screen" {
-                            sprintln!("{:?}", next_screen.borrow());
+                            sprintln!("Print Screen clicked");
                         } else {
                             sprintln!("{}", message);
                             if let Some(screen) = screen_type {
-                                *next_screen.borrow_mut() = screen.clone();
+                                app_interface.queue_event(crate::game::AppEvent::ChangeScreen(*screen));
                             }
                         }
                     }

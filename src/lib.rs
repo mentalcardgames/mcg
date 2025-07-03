@@ -16,16 +16,7 @@ use eframe::{WebOptions, WebRunner};
 #[cfg(target_arch = "wasm32")]
 use egui_extras::install_image_loaders;
 #[cfg(target_arch = "wasm32")]
-use game::screens::{
-    ArticlesScreen, CardsTestDND, DNDTest, Game, GameSetupScreen, PairingScreen, QrScreen,
-    ScreenType,
-};
-#[cfg(target_arch = "wasm32")]
 use game::App;
-#[cfg(target_arch = "wasm32")]
-use std::cell::RefCell;
-#[cfg(target_arch = "wasm32")]
-use std::rc::Rc;
 #[allow(unused_imports)]
 use wasm_bindgen::prelude::*;
 #[allow(unused_imports)]
@@ -183,49 +174,10 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
     let init = Box::new(|cc: &eframe::CreationContext| {
         install_image_loaders(&cc.egui_ctx);
-        let mut app = App::default();
-
-        // Create game components
-        let game_widget = Rc::new(RefCell::new(Game::new()));
-        let game_conf = Rc::new(RefCell::new(GameSetupScreen::new(Rc::downgrade(
-            &game_widget,
-        ))));
-
-        // Set default theme for the main game
-        hardcoded_cards::set_deck_by_theme(
-            &game_conf.borrow().directory,
-            hardcoded_cards::DEFAULT_THEME,
-        );
-
-        let dnd_test = Rc::new(RefCell::new(DNDTest::new()));
-        let pairing_screen = Rc::new(RefCell::new(PairingScreen::new()));
-        let articles_screen = Rc::new(RefCell::new(ArticlesScreen::new()));
-        let qr_screen = Rc::new(RefCell::new(QrScreen::new()));
-
-        // Register main game screens
-        app.register_screen(ScreenType::Game, game_widget).unwrap();
-        app.register_screen(ScreenType::GameSetup, game_conf)
-            .unwrap();
-        app.register_screen(ScreenType::DndTest, dnd_test).unwrap();
-        app.register_screen(ScreenType::Pairing, pairing_screen)
-            .unwrap();
-        app.register_screen(ScreenType::Articles, articles_screen)
-            .unwrap();
-        app.register_screen(ScreenType::QRScreen, qr_screen)
-            .unwrap();
-
-        // Register drag and drop game screens
-        let game_dnd_widget = Rc::new(RefCell::new(CardsTestDND::new()));
-        let game_dnd_conf = Rc::new(RefCell::new(GameSetupScreen::new(Rc::downgrade(
-            &game_dnd_widget,
-        ))));
-
-        // Set alternative theme for drag and drop game
-        hardcoded_cards::set_deck_by_theme(&game_dnd_conf.borrow().directory, "alt_cards");
-        app.register_screen(ScreenType::GameDndSetup, game_dnd_conf)
-            .unwrap();
-        app.register_screen(ScreenType::GameDnd, game_dnd_widget)
-            .unwrap();
+        
+        // The App::new() constructor now handles all initialization internally
+        // including setting up all screens and their themes
+        let app = App::new();
 
         let game: Box<dyn eframe::App> = Box::new(app);
         Ok(game)

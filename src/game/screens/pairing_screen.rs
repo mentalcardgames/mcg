@@ -1,10 +1,7 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use eframe::Frame;
 use egui::{vec2, Align, Button, Color32, Context, Grid, Layout, RichText, ScrollArea};
 
-use super::{ScreenType, ScreenWidget};
+use super::{ScreenType, ScreenWidget, AppInterface};
 use crate::sprintln;
 use crate::utils::emoji_hash;
 
@@ -67,14 +64,14 @@ impl Default for PairingScreen {
 }
 
 impl ScreenWidget for PairingScreen {
-    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Player Pairing");
 
             // Back to Main Menu button
             ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
                 if ui.button("Back to Main Menu").clicked() {
-                    *next_screen.borrow_mut() = ScreenType::Main;
+                    app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
                     sprintln!("Navigating back to Main Menu");
                 }
             });

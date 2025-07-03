@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use eframe::Frame;
 use egui::Context;
 
@@ -25,13 +22,24 @@ pub use qr_test::QrScreen;
 // Re-export GameConfig for use in other modules
 pub use game::{DirectoryCardType, GameConfig};
 
+/// Interface for screens to interact with the app
+pub struct AppInterface<'a> {
+    pub events: &'a mut Vec<crate::game::AppEvent>,
+}
+
+impl<'a> AppInterface<'a> {
+    pub fn queue_event(&mut self, event: crate::game::AppEvent) {
+        self.events.push(event);
+    }
+}
+
 /// Common trait for all screen widgets
 pub trait ScreenWidget {
-    fn update(&mut self, next_screen: Rc<RefCell<ScreenType>>, ctx: &Context, frame: &mut Frame);
+    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, frame: &mut Frame);
 }
 
 /// Enum representing all available screen types
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScreenType {
     Main,
     GameSetup,

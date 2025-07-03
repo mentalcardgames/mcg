@@ -6,7 +6,7 @@ use web_sys::{
     CanvasRenderingContext2d, HtmlCanvasElement, HtmlVideoElement, MediaStreamConstraints,
 };
 
-use super::{ScreenType, ScreenWidget};
+use super::{ScreenType, ScreenWidget, AppInterface};
 
 use rqrr;
 
@@ -382,7 +382,7 @@ impl Default for QrScreen {
 impl ScreenWidget for QrScreen {
     fn update(
         &mut self,
-        next_screen: std::rc::Rc<std::cell::RefCell<super::ScreenType>>,
+        app_interface: &mut AppInterface,
         ctx: &egui::Context,
         _frame: &mut eframe::Frame,
     ) {
@@ -395,7 +395,7 @@ impl ScreenWidget for QrScreen {
                     .add_sized(vec2(100.0, 30.0), egui::Button::new("Back"))
                     .clicked()
                 {
-                    *next_screen.borrow_mut() = ScreenType::Main;
+                    app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
                 }
 
                 if !self.camera_started {
