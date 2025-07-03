@@ -36,6 +36,7 @@ pub enum SimpleFieldKind {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct SimpleField<E: CardEncoding, C: CardConfig> {
     pub(crate) card_config: Rc<C>,
     pub(crate) cards: Vec<E>,

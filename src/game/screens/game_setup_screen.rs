@@ -1,5 +1,6 @@
 use eframe::Frame;
 use egui::{Context, vec2};
+use std::rc::Rc;
 
 use crate::game::card::{CardConfig, SimpleCard};
 use crate::game::field::{SimpleField, SimpleFieldKind::Stack};
@@ -43,14 +44,14 @@ impl GameSetupScreen {
             .map(|i| {
                 (
                     format!("Player {}", i + 1),
-                    SimpleField::new(card_config.clone())
+                    SimpleField::new(Rc::new(card_config.clone()))
                         .max_cards(4)
                         .selectable(true)
                         .max_card_size(vec2(100.0, 150.0)),
                 )
             })
             .collect();
-        let mut stack = SimpleField::new(card_config.clone())
+        let mut stack = SimpleField::new(Rc::new(card_config.clone()))
             .kind(Stack)
             .max_card_size(vec2(100.0, 150.0));
         

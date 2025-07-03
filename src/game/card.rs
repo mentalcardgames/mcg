@@ -44,7 +44,7 @@ impl CardEncoding for SimpleCard {
     }
 }
 
-#[derive(Hash, Debug)]
+#[derive(Hash, Debug, Clone)]
 pub enum SimpleCard {
     /// You are supposed to ensure your card isn't outside its type bounds!
     /// e.g. assert!(t < T)
