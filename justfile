@@ -1,6 +1,12 @@
 default:
     just --choose
 
+server:
+    cargo run --bin mcg-server
+
+web:
+    ./start.sh
+
 build-and-serve:
     #!/usr/bin/env bash
     just build

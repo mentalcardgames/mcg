@@ -27,6 +27,7 @@ pub struct App {
     articles_screen: screens::ArticlesScreen,
     qr_screen: screens::QrScreen,
     dnd_test: screens::DNDTest,
+    poker_online: screens::PokerOnlineScreen,
     
     // Event queue for handling screen transitions
     pending_events: Vec<AppEvent>,
@@ -67,6 +68,7 @@ impl App {
             articles_screen: screens::ArticlesScreen::new(),
             qr_screen: screens::QrScreen::new(),
             dnd_test: screens::DNDTest::new(),
+            poker_online: screens::PokerOnlineScreen::new(),
             pending_events: Vec::new(),
         }
     }
@@ -151,6 +153,9 @@ impl eframe::App for App {
             }
             ScreenType::DndTest => {
                 self.dnd_test.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::PokerOnline => {
+                self.poker_online.update(&mut app_interface, ctx, frame);
             }
             ScreenType::Settings => {
                 // Settings screen not implemented yet

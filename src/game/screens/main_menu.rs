@@ -43,6 +43,7 @@ impl ScreenWidget for MainMenu {
                     ),
                     ("Articles", "articles opened", Some(ScreenType::Articles)),
                     ("QR Test", "qr_test opened", Some(ScreenType::QRScreen)),
+                    ("Poker Online", "poker online opened", Some(ScreenType::PokerOnline)),
                     ("Print Screen", "", None),
                 ];
 

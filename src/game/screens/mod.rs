@@ -9,6 +9,7 @@ pub mod game_setup_screen;
 pub mod main_menu;
 pub mod pairing_screen;
 pub mod qr_test;
+pub mod poker_online;
 
 pub use articles_screen::ArticlesScreen;
 pub use cards_test_dnd::CardsTestDND;
@@ -18,6 +19,7 @@ pub use game_setup_screen::GameSetupScreen;
 pub use main_menu::MainMenu;
 pub use pairing_screen::{PairingScreen, Player};
 pub use qr_test::QrScreen;
+pub use poker_online::PokerOnlineScreen;
 
 // Re-export GameConfig for use in other modules
 pub use game::{DirectoryCardType, GameConfig};
@@ -51,6 +53,7 @@ pub enum ScreenType {
     GameDnd,
     Articles,
     QRScreen,
+    PokerOnline,
 }
 
 impl ScreenType {
@@ -67,6 +70,7 @@ impl ScreenType {
             ScreenType::GameDnd => "game_dnd".to_string(),
             ScreenType::Articles => "articles".to_string(),
             ScreenType::QRScreen => "qr".to_string(),
+            ScreenType::PokerOnline => "poker_online".to_string(),
         }
     }
 }

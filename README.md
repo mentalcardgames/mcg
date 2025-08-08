@@ -12,23 +12,18 @@ A mental card game implementation in the browser.
 
 ## Running the WASM Frontend
 
-To run the WASM frontend in a browser:
 
 ### Option 1: One-step build and serve
 
 ```bash
 ./start.sh
 ```
-
 This will build the WASM package and start a local web server in one step.
 
 ### Option 2: Manual steps
-
 1. Build the WASM package:
    ```bash
    ./wasm-build.sh
-   ```
-
 2. Start a simple HTTP server to serve the files:
    ```bash
    # Using the provided script:

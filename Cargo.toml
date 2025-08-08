@@ -28,6 +28,9 @@ web-sys = { version = "0.3.77", features = [
         "Event",
         "EventTarget",
         "console",
+    "WebSocket",
+    "MessageEvent",
+    "CloseEvent",
     ]}
 egui = "0.31.1"
 eframe = "0.31.1"
@@ -38,11 +41,22 @@ rand = "0.9.1"
 sha2 = "0.10.8"
 hex = "0.4.3"
 num-bigint = "0.4.4"
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 js-sys = "0.3"
 rqrr = "0.8"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest = { version = "0.11", default-features = false, features = ["json"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+# Server-only dependencies (used by the bin target below), gated to native builds
+axum = { version = "0.7", features = ["ws", "macros"] }
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+futures = "0.3"
+thiserror = "1.0"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.50"
@@ -57,3 +71,7 @@ codegen-units = 1
 # optimize and enable better dead code elimination.
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-Oz", "--enable-mutable-globals"]
+
+[[bin]]
+name = "mcg-server"
+path = "src/bin/server.rs"
