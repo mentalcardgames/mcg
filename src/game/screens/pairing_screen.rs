@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{vec2, Align, Button, Color32, Context, Grid, Layout, RichText, ScrollArea};
 
-use super::{ScreenType, ScreenWidget, AppInterface};
+use super::{ScreenType, ScreenWidget, AppInterface, back_button};
 use crate::sprintln;
 use crate::utils::emoji_hash;
 
@@ -70,8 +70,7 @@ impl ScreenWidget for PairingScreen {
 
             // Back to Main Menu button
             ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
-                if ui.button("Back to Main Menu").clicked() {
-                    app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
+                if back_button(ui, app_interface, ScreenType::Main, "Back to Main Menu") {
                     sprintln!("Navigating back to Main Menu");
                 }
             });

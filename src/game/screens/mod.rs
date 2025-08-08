@@ -70,3 +70,20 @@ impl ScreenType {
         }
     }
 }
+
+/// Reusable "Back" button helper.
+///
+/// Renders a button with the given label. When clicked, it enqueues a ChangeScreen event
+/// to switch to the provided target screen. Returns true if clicked.
+pub fn back_button(
+    ui: &mut egui::Ui,
+    app_interface: &mut AppInterface,
+    to: ScreenType,
+    label: &str,
+) -> bool {
+    let clicked = ui.button(label).clicked();
+    if clicked {
+        app_interface.queue_event(crate::game::AppEvent::ChangeScreen(to));
+    }
+    clicked
+}

@@ -4,7 +4,7 @@ use egui::Context;
 use crate::sprintln;
 use crate::game::card::{CardConfig, SimpleCard};
 use crate::game::field::{SimpleField, FieldWidget};
-use super::{ScreenWidget, ScreenType, AppInterface};
+use super::{ScreenWidget, ScreenType, AppInterface, back_button};
 
 /// Main game screen for playing cards
 pub struct Game<C: CardConfig> {
@@ -83,9 +83,8 @@ pub type DirectoryCardType = crate::game::card::DirectoryCardType;
 impl ScreenWidget for Game<DirectoryCardType> {
     fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if ui.button("Exit").clicked() {
+            if back_button(ui, app_interface, ScreenType::Main, "Exit") {
                 sprintln!("back to main menu");
-                app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
             }
 
             if let Some(config) = &self.game_config {

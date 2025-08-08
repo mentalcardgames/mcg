@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::game::card::{CardConfig, SimpleCard};
 use crate::game::field::{SimpleField, SimpleFieldKind::Stack};
-use super::{ScreenWidget, ScreenType, GameConfig, DirectoryCardType, AppInterface};
+use super::{ScreenWidget, ScreenType, GameConfig, DirectoryCardType, AppInterface, back_button};
 
 /// Game setup screen for configuring players and cards
 pub struct GameSetupScreen {
@@ -138,9 +138,7 @@ impl ScreenWidget for GameSetupScreen {
                 }
             }
             
-            if ui.button("Back").clicked() {
-                app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
-            }
+            back_button(ui, app_interface, ScreenType::Main, "Back");
         });
     }
 }

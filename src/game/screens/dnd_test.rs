@@ -2,7 +2,7 @@ use eframe::Frame;
 use egui::{Context, Id, Color32, vec2};
 
 use crate::sprintln;
-use super::{ScreenWidget, ScreenType, AppInterface};
+use super::{ScreenWidget, ScreenType, AppInterface, back_button};
 
 /// Location for drag and drop operations
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,9 +39,8 @@ impl Default for DNDTest {
 impl ScreenWidget for DNDTest {
     fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if ui.button("Exit").clicked() {
+            if back_button(ui, app_interface, ScreenType::Main, "Exit") {
                 sprintln!("back to main menu");
-                app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
             }
             ui.label("This is a simple example of drag-and-drop in egui.");
             ui.label("Drag items between columns.");

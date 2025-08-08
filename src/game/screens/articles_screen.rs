@@ -2,7 +2,7 @@ use eframe::Frame;
 use egui::{vec2, Color32, Context, RichText, ScrollArea};
 use std::sync::mpsc::{self, Sender, Receiver};
 
-use super::{ScreenType, ScreenWidget, AppInterface};
+use super::{ScreenType, ScreenWidget, AppInterface, back_button};
 use crate::articles::{fetch_posts, Post};
 
 #[derive(Debug)]
@@ -181,12 +181,7 @@ impl ScreenWidget for ArticlesScreen {
                 ui.add_space(20.0);
 
                 // Back button
-                if ui
-                    .add_sized(vec2(100.0, 30.0), egui::Button::new("Back"))
-                    .clicked()
-                {
-                    app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
-                }
+                back_button(ui, app_interface, ScreenType::Main, "Back");
 
                 ui.add_space(20.0);
 

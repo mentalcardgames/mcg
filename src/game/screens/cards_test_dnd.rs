@@ -1,12 +1,9 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use eframe::Frame;
 use egui::Context;
 
 use crate::sprintln;
 use crate::game::field::FieldWidget;
-use super::{ScreenWidget, ScreenType, GameConfig, DirectoryCardType, DNDSelector};
+use super::{ScreenWidget, ScreenType, GameConfig, DirectoryCardType, DNDSelector, back_button};
 use crate::game::AppInterface;
 
 /// Drag and drop card test screen
@@ -41,9 +38,7 @@ impl Default for CardsTestDND {
 impl ScreenWidget for CardsTestDND {
     fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if ui.button("Exit").clicked() {
-                app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
-            }
+            back_button(ui, app_interface, ScreenType::Main, "Exit");
             if self.game_config.is_none() {
                 return;
             }

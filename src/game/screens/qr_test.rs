@@ -7,6 +7,7 @@ use web_sys::{
 };
 
 use super::{ScreenType, ScreenWidget, AppInterface};
+use super::back_button;
 
 use rqrr;
 
@@ -391,12 +392,7 @@ impl ScreenWidget for QrScreen {
             ui.add_space(20.0);
 
             ui.horizontal(|ui| {
-                if ui
-                    .add_sized(vec2(100.0, 30.0), egui::Button::new("Back"))
-                    .clicked()
-                {
-                    app_interface.queue_event(crate::game::AppEvent::ChangeScreen(ScreenType::Main));
-                }
+                back_button(ui, app_interface, ScreenType::Main, "Back");
 
                 if !self.camera_started {
                     if ui
