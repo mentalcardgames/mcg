@@ -1,21 +1,22 @@
 default:
-    just --choose
+  @just --list
 
+# Build the WASM package for web
+# Usage: just build [-- --dev]
+build *ARGS:
+  wasm-pack build --target web {{ARGS}}
+
+# Serve the current directory on a local web server
+# Usage: just serve [PORT]
+serve PORT="8080":
+  python3 -m http.server {{PORT}}
+
+# Build then serve in one step
+# Usage: just start [PORT] [-- --dev]
+start PORT="8080" *ARGS:
+  just build {{ARGS}}
+  just serve {{PORT}}
+
+# Run the native demo server
 server:
-    cargo run --bin mcg-server
-
-web:
-    ./start.sh
-
-build-and-serve:
-    #!/usr/bin/env bash
-    just build
-    if ! pgrep -f "python3 -m http.server"; then
-        just serve &
-    fi
-
-build:
-    bash wasm-build.sh --dev
-
-serve:
-    python3 -m http.server 8080
+  cargo run --bin mcg-server

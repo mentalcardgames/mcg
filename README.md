@@ -13,29 +13,22 @@ A mental card game implementation in the browser.
 ## Running the WASM Frontend
 
 
-### Option 1: One-step build and serve
+### Build and serve with just
+
+Use the included Justfile (install `just` from your package manager).
 
 ```bash
-./start.sh
+# Build the WASM package
+just build
+
+# Serve the current directory on http://localhost:8080
+just serve
+
+# Build then serve in one step (optional args passed to wasm-pack)
+just start 8080 -- --dev
 ```
-This will build the WASM package and start a local web server in one step.
 
-### Option 2: Manual steps
-1. Build the WASM package:
-   ```bash
-   ./wasm-build.sh
-2. Start a simple HTTP server to serve the files:
-   ```bash
-   # Using the provided script:
-   ./serve.sh
-
-   # Or manually:
-   python -m http.server 8080
-   # Or with Node.js:
-   # npx http-server -p 8080
-   ```
-
-3. Open your browser and navigate to http://localhost:8080/
+Then open your browser and navigate to http://localhost:8080/
 
 ### Directory Structure for WASM
 
@@ -53,8 +46,8 @@ mcg/
 ## Development Workflow
 
 1. Make changes to the code
-2. Run `./wasm-build.sh --dev` to rebuild the WASM package (dev makes the
-   compilation faster, but the binary bigger) and then run `./serve.sh` to start
+2. Run `just build -- --dev` to rebuild the WASM package (dev makes the
+   compilation faster, but the binary bigger) and then run `just serve` to start
    a local web server (if not already running)
 3. Refresh your browser to see the changes
 
