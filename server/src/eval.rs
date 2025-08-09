@@ -35,16 +35,63 @@ pub fn evaluate_best_hand(hole: [u8; 2], community: &[u8]) -> HandRank {
     best_rank_from_seven(&cards)
 }
 
-/// Naive best-five-card selection for presentation (not used for ranking).
-/// Currently: returns the top 5 community cards by rank value as an approximation.
-pub fn pick_best_five(_hole: [u8; 2], community: &[u8], _rank: &HandRank) -> [u8; 5] {
-    let mut cc = community.to_vec();
-    cc.sort_unstable_by(|a, b| rank_value_high(card_rank(*b)).cmp(&rank_value_high(card_rank(*a))));
-    let mut out = [0u8; 5];
-    for i in 0..5.min(cc.len()) {
-        out[i] = cc[i];
+/// Compute and return the exact best 5-card combination for presentation.
+/// Enumerates all 5-card combinations from the available cards (2 hole + up to 5 community),
+/// evaluates each with the same ranking logic, and returns the highest-ranked subset.
+/// If fewer than 5 cards are available (early streets), returns the highest-ranked available cards.
+pub fn pick_best_five(hole: [u8; 2], community: &[u8], _rank: &HandRank) -> [u8; 5] {
+    // Build list of available cards (2 hole + up to 5 community)
+    let mut all = Vec::with_capacity(7);
+    all.push(hole[0]);
+    all.push(hole[1]);
+    for &c in community {
+        all.push(c);
     }
-    out
+
+    // If fewer than 5 cards are available (pre-flop/early streets), just take the highest ones
+    if all.len() < 5 {
+        all.sort_unstable_by(|a, b| {
+            rank_value_high(card_rank(*b)).cmp(&rank_value_high(card_rank(*a)))
+        });
+        let mut out = [0u8; 5];
+        for i in 0..all.len().min(5) {
+            out[i] = all[i];
+        }
+        return out;
+    }
+
+    // Enumerate all 5-card combinations and select the one with the highest rank
+    let n = all.len();
+    let mut best_rank: Option<HandRank> = None;
+    let mut best_combo: [u8; 5] = [0; 5];
+
+    for i in 0..(n - 4) {
+        for j in (i + 1)..(n - 3) {
+            for k in (j + 1)..(n - 2) {
+                for l in (k + 1)..(n - 1) {
+                    for m in (l + 1)..n {
+                        let subset = [all[i], all[j], all[k], all[l], all[m]];
+                        // Reuse the 7-card evaluator on exactly 5 cards
+                        let rank = best_rank_from_seven(&subset.to_vec());
+                        match &best_rank {
+                            None => {
+                                best_rank = Some(rank);
+                                best_combo = subset;
+                            }
+                            Some(r) => {
+                                if rank > *r {
+                                    best_rank = Some(rank);
+                                    best_combo = subset;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    best_combo
 }
 
 // ===== Internal helpers =====
