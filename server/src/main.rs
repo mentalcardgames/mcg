@@ -11,7 +11,9 @@ use futures::StreamExt;
 use rand::seq::SliceRandom;
 use tokio::sync::RwLock;
 
-use mcg_shared::{ClientMsg, GameStatePublic, PlayerAction, PlayerPublic, ServerMsg, Stage};
+use mcg_shared::{
+    ActionEvent, ClientMsg, GameStatePublic, PlayerAction, PlayerPublic, ServerMsg, Stage,
+};
 
 #[derive(Clone, Debug)]
 struct Player {
@@ -24,37 +26,41 @@ struct Player {
 
 #[derive(Clone, Debug)]
 struct Game {
-    players: Vec<Player>, // 0: human, 1: bot
-    deck: VecDeque<u8>,   // 0..52
+    players: Vec<Player>,
+    deck: VecDeque<u8>,
     community: Vec<u8>,
     pot: u32,
     to_act: usize,
     stage: Stage,
     sb: u32,
     bb: u32,
+    pending_to_act: Vec<usize>,
+    recent_actions: Vec<ActionEvent>,
+    winner_ids: Vec<usize>,
 }
 
 impl Game {
-    fn new(human_name: String) -> Self {
+    fn new(human_name: String, bot_count: usize) -> Self {
         let mut deck: Vec<u8> = (0..52).collect();
         deck.shuffle(&mut rand::rng());
         let deck = VecDeque::from(deck);
-        let players = vec![
-            Player {
-                id: 0,
-                name: human_name,
+        let mut players = Vec::with_capacity(1 + bot_count);
+        players.push(Player {
+            id: 0,
+            name: human_name,
+            stack: 1000,
+            cards: [0, 0],
+            has_folded: false,
+        });
+        for i in 0..bot_count {
+            players.push(Player {
+                id: i + 1,
+                name: format!("Bot {}", i + 1),
                 stack: 1000,
                 cards: [0, 0],
                 has_folded: false,
-            },
-            Player {
-                id: 1,
-                name: "Bot".into(),
-                stack: 1000,
-                cards: [0, 0],
-                has_folded: false,
-            },
-        ];
+            });
+        }
         let mut g = Self {
             players,
             deck,
@@ -64,6 +70,9 @@ impl Game {
             stage: Stage::Preflop,
             sb: 5,
             bb: 10,
+            pending_to_act: Vec::new(),
+            recent_actions: Vec::new(),
+            winner_ids: Vec::new(),
         };
         g.deal();
         g
@@ -88,6 +97,9 @@ impl Game {
         self.pot = self.sb + self.bb; // blinds auto-posted for simplicity
         self.to_act = 0; // hero acts first for demo simplicity
         self.stage = Stage::Preflop;
+        self.recent_actions.clear();
+        self.winner_ids.clear();
+        self.init_round();
         println!("[BLINDS] SB {} BB {} -> pot {}", self.sb, self.bb, self.pot);
     }
 
@@ -114,6 +126,9 @@ impl Game {
             to_act: self.to_act,
             stage: self.stage,
             you_id: viewer_id,
+            bot_count: self.players.len().saturating_sub(1),
+            recent_actions: self.recent_actions.clone(),
+            winner_ids: self.winner_ids.clone(),
         }
     }
 
@@ -125,51 +140,109 @@ impl Game {
             "[ACTION] {}: {:?} (stage: {:?})",
             self.players[actor].name, action, self.stage
         );
+        // record action for clients
+        self.recent_actions.push(ActionEvent {
+            player_id: actor,
+            action: action.clone(),
+        });
         match action {
             PlayerAction::Fold => {
                 self.players[actor].has_folded = true;
-                self.stage = Stage::Showdown;
-                println!(
-                    "[STATE] {} folds. Moving to Showdown",
-                    self.players[actor].name
-                );
+                println!("[STATE] {} folds.", self.players[actor].name);
             }
             PlayerAction::CheckCall => {
-                self.advance_stage();
+                println!("[ACTION] {} chooses Check/Call", self.players[actor].name);
             }
             PlayerAction::Bet(amount) => {
                 let a = amount.min(self.players[actor].stack);
                 self.players[actor].stack -= a;
                 self.pot += a;
-                self.advance_stage();
                 println!(
                     "[BET] {} bets {} -> pot {}",
                     self.players[actor].name, a, self.pot
                 );
             }
         }
-        if self.stage != Stage::Showdown {
-            self.bot_act();
+        // remove actor from pending list for this round
+        if let Some(pos) = self.pending_to_act.iter().position(|&i| i == actor) {
+            self.pending_to_act.remove(pos);
+        }
+        // check if only one player remains -> showdown
+        let active_left: Vec<usize> = self
+            .players
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| (!p.has_folded).then_some(i))
+            .collect();
+        if active_left.len() <= 1 {
+            self.stage = Stage::Showdown;
+            self.determine_winners();
+            return;
+        }
+        // choose next actor or advance stage if round complete
+        if let Some(&next) = self.pending_to_act.first() {
+            self.to_act = next;
+        } else {
+            self.advance_stage();
+            if self.stage == Stage::Showdown {
+                self.determine_winners();
+            } else {
+                self.init_round();
+            }
         }
     }
 
-    fn bot_act(&mut self) {
+    fn random_bot_action(&self, bot_index: usize) -> PlayerAction {
         use rand::Rng;
         let mut rng = rand::rng();
         let r: u8 = rng.random_range(0..100);
         if r < 70 {
-            println!("[BOT] {} chooses Check/Call", self.players[1].name);
-            self.advance_stage();
+            PlayerAction::CheckCall
         } else {
-            let a = (self.bb).min(self.players[1].stack);
-            self.players[1].stack -= a;
-            self.pot += a;
-            self.advance_stage();
-            println!(
-                "[BOT] {} bets {} -> pot {}",
-                self.players[1].name, a, self.pot
-            );
+            let a = self.bb.min(self.players[bot_index].stack);
+            if a == 0 {
+                PlayerAction::CheckCall
+            } else {
+                PlayerAction::Bet(a)
+            }
         }
+    }
+    fn play_out_bots(&mut self) {
+        // Let all bots act in order until it is the human's turn again or showdown
+        while self.stage != Stage::Showdown && self.to_act != 0 {
+            let actor = self.to_act;
+            // Safety check
+            if actor == 0 || actor >= self.players.len() || self.players[actor].has_folded {
+                break;
+            }
+            let action = self.random_bot_action(actor);
+            println!("[BOT] {}: {:?}", self.players[actor].name, action);
+            self.apply_player_action(actor, action);
+        }
+    }
+    fn init_round(&mut self) {
+        self.pending_to_act.clear();
+        for i in 0..self.players.len() {
+            if !self.players[i].has_folded {
+                self.pending_to_act.push(i);
+            }
+        }
+        if let Some(&first) = self.pending_to_act.first() {
+            self.to_act = first;
+        }
+    }
+    fn determine_winners(&mut self) {
+        // Simplified: all players who haven't folded share the pot
+        self.winner_ids = self
+            .players
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| (!p.has_folded).then_some(i))
+            .collect();
+        println!(
+            "[SHOWDOWN] Winners: {:?} (pot: {})",
+            self.winner_ids, self.pot
+        );
     }
 
     fn advance_stage(&mut self) {
@@ -214,11 +287,25 @@ struct Lobby {
 #[derive(Clone, Default)]
 struct AppState {
     lobby: Arc<RwLock<Lobby>>,
+    bot_count: usize,
 }
 
 #[tokio::main]
 async fn main() {
-    let state = AppState::default();
+    // Parse simple CLI argument: --bots <N>
+    let mut bots: usize = 1;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--bots" {
+            if let Some(n) = args.next() {
+                if let Ok(v) = n.parse::<usize>() {
+                    bots = v;
+                }
+            }
+        }
+    }
+    let mut state = AppState::default();
+    state.bot_count = bots;
     let app = Router::new()
         .route(
             "/health",
@@ -257,8 +344,18 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     {
         let mut lobby = state.lobby.write().await;
         if lobby.game.is_none() {
-            lobby.game = Some(Game::new(name.clone()));
-            println!("[GAME] Created new game for {} vs Bot", name);
+            lobby.game = Some(Game::new(name.clone(), state.bot_count));
+            println!(
+                "[GAME] Created new game for {} with {} bot(s)",
+                name, state.bot_count
+            );
+            // Kick off initial bot actions so the client sees immediate activity
+            if let Some(game) = &mut lobby.game {
+                if game.players.len() > 1 {
+                    game.to_act = 1;
+                    game.play_out_bots();
+                }
+            }
         }
     }
 
@@ -287,7 +384,9 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                             {
                                 let mut lobby = state.lobby.write().await;
                                 if let Some(game) = &mut lobby.game {
-                                    game.apply_player_action(0, a);
+                                    game.apply_player_action(0, a.clone());
+                                    // Let all bots act until it's the human's turn or showdown
+                                    game.play_out_bots();
                                 }
                             }
                             if let Some(gs) = current_state_public(&state, you_id).await {
@@ -300,6 +399,13 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                         }
                         ClientMsg::RequestState => {
                             println!("[WS] State requested by {}", name);
+                            {
+                                // Let bots play until it's the human's turn (or showdown)
+                                let mut lobby = state.lobby.write().await;
+                                if let Some(game) = &mut lobby.game {
+                                    game.play_out_bots();
+                                }
+                            }
                             if let Some(gs) = current_state_public(&state, you_id).await {
                                 let _ = socket
                                     .send(Message::Text(

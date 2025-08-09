@@ -187,6 +187,8 @@ impl ScreenWidget for PokerOnlineScreen {
                 ui.add_space(16.0);
                 if let Some(s) = &self.state {
                     ui.label(stage_badge(s.stage));
+                    ui.add_space(8.0);
+                    ui.label(format!("Bots: {}", s.bot_count));
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("Connect").clicked() {
@@ -205,6 +207,24 @@ impl ScreenWidget for PokerOnlineScreen {
             }
             ui.separator();
             if let Some(state) = &self.state {
+                if state.stage == Stage::Showdown {
+                    let you_won = state.winner_ids.contains(&state.you_id);
+                    if you_won {
+                        ui.colored_label(Color32::LIGHT_GREEN, "You won!");
+                    } else {
+                        ui.colored_label(Color32::LIGHT_RED, "You lost.");
+                    }
+                    let winners: Vec<String> = state
+                        .players
+                        .iter()
+                        .filter(|p| state.winner_ids.contains(&p.id))
+                        .map(|p| p.name.clone())
+                        .collect();
+                    if !winners.is_empty() {
+                        ui.label(format!("Winners: {}", winners.join(", ")));
+                    }
+                    ui.add_space(8.0);
+                }
                 ui.columns(2, |cols| {
                     cols[0].group(|ui| {
                         ui.horizontal(|ui| {
@@ -221,6 +241,23 @@ impl ScreenWidget for PokerOnlineScreen {
                                 card_chip(ui, c);
                             }
                         });
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.label(RichText::new("Recent actions:").strong());
+                        egui::ScrollArea::vertical()
+                            .max_height(120.0)
+                            .show(ui, |ui| {
+                                for ev in state.recent_actions.iter().rev().take(10) {
+                                    let name = state
+                                        .players
+                                        .iter()
+                                        .find(|p| p.id == ev.player_id)
+                                        .map(|p| p.name.as_str())
+                                        .unwrap_or("Player");
+                                    let action_txt = action_text(&ev.action);
+                                    ui.label(format!("{} {}", name, action_txt));
+                                }
+                            });
                     });
                     cols[1].group(|ui| {
                         for p in &state.players {
@@ -232,6 +269,11 @@ impl ScreenWidget for PokerOnlineScreen {
                                 ui.label(RichText::new(&p.name).strong());
                                 if p.has_folded {
                                     ui.colored_label(Color32::LIGHT_RED, "(folded)");
+                                }
+                                if state.stage == Stage::Showdown
+                                    && state.winner_ids.contains(&p.id)
+                                {
+                                    ui.colored_label(Color32::YELLOW, "WINNER");
                                 }
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
@@ -281,7 +323,8 @@ impl ScreenWidget for PokerOnlineScreen {
 }
 fn card_chip(ui: &mut egui::Ui, c: u8) {
     let (text, color) = card_text_and_color(c);
-    let b = egui::widgets::Button::new(RichText::new(text).color(color));
+    let b = egui::widgets::Button::new(RichText::new(text).color(color).size(28.0))
+        .min_size(egui::vec2(48.0, 40.0));
     ui.add(b);
 }
 fn card_text_and_color(c: u8) -> (String, Color32) {
@@ -297,6 +340,13 @@ fn card_text_and_color(c: u8) -> (String, Color32) {
         _ => Color32::WHITE,
     };
     (text, color)
+}
+fn action_text(a: &PlayerAction) -> String {
+    match a {
+        PlayerAction::Fold => "folds".into(),
+        PlayerAction::CheckCall => "checks / calls".into(),
+        PlayerAction::Bet(n) => format!("bets {}", n),
+    }
 }
 fn stage_badge(stage: Stage) -> egui::WidgetText {
     let (txt, color) = match stage {

@@ -19,6 +19,12 @@ pub enum PlayerAction {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActionEvent {
+    pub player_id: usize,
+    pub action: PlayerAction,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerPublic {
     pub id: usize,
     pub name: String,
@@ -35,6 +41,12 @@ pub struct GameStatePublic {
     pub to_act: usize,
     pub stage: Stage,
     pub you_id: usize,
+    #[serde(default)]
+    pub bot_count: usize,
+    #[serde(default)]
+    pub recent_actions: Vec<ActionEvent>,
+    #[serde(default)]
+    pub winner_ids: Vec<usize>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
