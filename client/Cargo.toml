@@ -31,6 +31,8 @@ web-sys = { version = "0.3.77", features = [
   "WebSocket",
   "MessageEvent",
   "CloseEvent",
+  "Window",
+  "Screen",
 ] }
 egui = "0.31.1"
 eframe = "0.31.1"

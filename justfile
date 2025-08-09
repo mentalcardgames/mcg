@@ -15,18 +15,18 @@ build PROFILE="release":
     #!/usr/bin/env bash
     set -euo pipefail
     wasm_pack="{{wasm_pack}}"
-    case "${PROFILE}" in
+    profile="{{PROFILE}}"
+    case "$profile" in
       release)
-        "$wasm_pack" build --target web --out-dir ../pkg --features wasm --release
+        CARGO_PROFILE_RELEASE_OPT_LEVEL=3 "$wasm_pack" build --target web --out-dir ../pkg --features wasm
         ;;
       profiling)
-        # If --profiling isn't supported, fall back to debug
-        "$wasm_pack" build --target web --out-dir ../pkg --features wasm --profiling \
-          || "$wasm_pack" build --target web --out-dir ../pkg --features wasm
+        # Profiling build (same as debug for now since --profiling flag is not supported)
+        "$wasm_pack" build --target web --out-dir ../pkg --features wasm
         ;;
       *)
         # dev (debug) build
-        "$wasm_pack" build --target web --out-dir ../pkg --features wasm
+        "$wasm_pack" build --target web --dev --out-dir ../pkg --features wasm
         ;;
     esac
 

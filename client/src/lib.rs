@@ -17,8 +17,7 @@ use game::App;
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
-#[cfg(target_arch = "wasm32")]
-use web_sys::js_sys::Promise;
+
 #[cfg(target_arch = "wasm32")]
 use web_sys::{window, HtmlCanvasElement};
 
