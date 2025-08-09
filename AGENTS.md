@@ -1,116 +1,47 @@
-# AGENTS Architecture and Guidelines
+# MCG (Mental Card Game) - Project Context for Qwen Code
 
-This repository is a workspace split into server, client, and shared code to enable reuse and clear boundaries. The previous OpenCode.md has been renamed to AGENTS.md.
+## Project Overview
 
-## Repository Layout
+This repository contains the implementation of a "Mental Card Game" (MCG), primarily designed to run in a web browser using WebAssembly (WASM). The core application is written in Rust and uses the `egui` library for its user interface. The project also includes a separate WebSocket-based backend server for multiplayer functionality, demonstrably used for a poker game.
 
-.
-├─ AGENTS.md
-├─ Cargo.toml                 # Cargo workspace manifest
-├─ wasm-build.sh              # Wrapper script; forwards to scripts/wasm-build.sh
-├─ scripts/
-│  └─ wasm-build.sh           # WASM build/serve entry point
-├─ shared/                    # Rust library used by server and client WASM
-│  ├─ Cargo.toml
-│  └─ src/
-├─ server/                    # Rust server (e.g., Axum/Actix/Tonic)
-│  ├─ Cargo.toml
-│  └─ src/
-└─ client/
-   ├─ wasm/                   # Rust -> WASM crate (wasm-bindgen/wasm-pack)
-│  │  ├─ Cargo.toml
-│  │  └─ src/lib.rs
-   └─ webapp/                 # JS/TS frontend (e.g., Vite)
-      ├─ package.json
-      └─ src/
+The project is structured as a Cargo workspace with three main crates:
+- `client/`: The main WASM frontend application using `egui` and `eframe`. This is the core of the MCG experience.
+- `server/`: An `axum`-based WebSocket server to facilitate multiplayer games.
+- `shared/`: Data types and structures shared between the client and server, defining the communication protocol.
 
-Top-level Cargo.toml declares a workspace with members: server, shared, client/wasm.
+The build process uses `wasm-pack` to compile the Rust client code into WASM, which is then loaded by an `index.html` file in the browser. Media assets for card images are stored in the `media/` directory.
 
-## Build / Run / Test
+## Building and Running
 
-- Build everything (Rust workspace):
-  - cargo build --workspace
-- Test everything (Rust workspace):
-  - cargo test --workspace
-  - Run a specific test: cargo test -p <crate> <test_name_pattern>
-- WASM package:
-  - Build: ./wasm-build.sh
-  - Dev (watch/serve): ./wasm-build.sh --dev
-- Server (dev):
-  - cargo run -p server
-- Client webapp:
-  - Install deps: npm ci --prefix client/webapp
-  - Dev server: npm run dev --prefix client/webapp
-  - Production build: npm run build --prefix client/webapp
+The project uses `just` as its command runner. Key commands are defined in the `justfile`.
 
-Notes:
-- ./wasm-build.sh is kept for compatibility and delegates to scripts/wasm-build.sh.
-- Ensure scripts/wasm-build.sh outputs the WASM pkg where the webapp expects (e.g., client/webapp/src/wasm/pkg or a node package consumed by the webapp).
+### WASM Frontend (Client)
 
-## Workspace Configuration
+1.  **Build WASM Package:**
+    *   `just build`: Builds the WASM package in release mode.
+    *   `just build dev`: Builds the WASM package in development mode (faster compilation, larger output).
+    *   This outputs the necessary files (like `mcg.js` and `mcg_bg.wasm`) to the `pkg/` directory.
 
-Top-level Cargo.toml (excerpt):
-[workspace]
-members = ["server", "shared", "client/wasm"]
+2.  **Serve Frontend:**
+    *   `just serve`: Starts a simple HTTP server (using Python's built-in server) to serve the `index.html`, `pkg/`, and `media/` directories on `http://localhost:8080`.
+    *   `just start`: Combines `just build` and `just serve`.
+    *   `just start dev`: Combines `just build dev` and `just serve`.
 
-server/Cargo.toml (excerpt):
-[dependencies]
-shared = { path = "../shared" }
+3.  **Run in Browser:**
+    *   After building and serving, navigate to `http://localhost:8080` in your browser.
 
-client/wasm/Cargo.toml (excerpt):
-[dependencies]
-wasm-bindgen = "0.2"
-shared = { path = "../../shared", default-features = false, features = ["wasm"] }
+### Native Backend (Server)
 
-shared/Cargo.toml (excerpt):
-[lib]
-crate-type = ["rlib"]
+1.  **Run Server:**
+    *   `just server`: Runs the native `mcg-server` binary, which starts the WebSocket server (typically on `127.0.0.1:3000`). It supports a `--bots <N>` CLI argument to specify the number of AI bots to include in the game.
 
-[features]
-default = ["std"]
-wasm = []
+## Development Conventions
 
-In shared/src/lib.rs, gate std-specific code as needed:
-#[cfg(feature = "std")]
-mod std_only;
-
-#[cfg(feature = "wasm")]
-mod wasm_compat;
-
-## Imports and Code Style
-
-- Imports:
-  - Use explicit imports.
-  - Group use statements by external crates separately from local modules.
-  - Example (server/src/lib.rs):
-    use axum::{routing::get, Router};
-    use shared::types::AgentId;
-    use crate::handlers::health;
-
-- Formatting:
-  - Indentation uses spaces consistently across the project.
-  - Wrap chained calls and scoped let-statements neatly and readably.
-
-- Linting:
-  - Rust: cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
-  - Web: npm run lint --prefix client/webapp
-
-## Data and API Sharing
-
-- Shared types live in shared and are imported by server and client/wasm.
-- Avoid std-only types in shared when compiling for WASM; prefer alloc-compatible data structures under the "wasm" feature.
-
-## WASM Build Pipeline
-
-- scripts/wasm-build.sh should:
-  - Use wasm-pack build --release (or --dev) in client/wasm
-  - Output pkg to a location the webapp imports (e.g., client/webapp/src/wasm/pkg or as a local npm package)
-- The webapp imports the generated package:
-  import init, { run } from "./wasm/pkg/agents_wasm.js";
-  await init();
-
-## Conventions
-
-- Keep feature flags minimal and documented in shared.
-- Prefer small, composable modules with explicit public surfaces.
-- Keep external interfaces stable; changes in shared should maintain backward compatibility when possible.
+*   **Language:** Rust is the primary language for all components (client, server, shared).
+*   **Workspace:** The project utilizes a Cargo workspace to manage the `client`, `server`, and `shared` crates.
+*   **WASM:** The client is built for the `wasm32-unknown-unknown` target using `wasm-pack`.
+*   **UI Framework:** The `egui` crate is used for creating the user interface.
+*   **Build Tool:** The `just` command runner is used to define and execute common development tasks.
+*   **Frontend Entry Point:** The `index.html` file in the repository root serves as the main entry point for the web application.
+*   **Asset Structure:** WASM output goes to `pkg/`, and media assets go to `media/`. This structure is expected by `index.html`.
+*   **Shared Code:** Data structures defining the game state and communication protocol are placed in the `shared` crate to ensure consistency between client and server.
