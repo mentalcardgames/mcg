@@ -31,6 +31,7 @@ pub struct PokerOnlineScreen {
     state: Option<GameStatePublic>,
     name: String,
     server_address: String,
+    desired_bots: usize,
     inbox: Rc<RefCell<Vec<ServerMsg>>>,
     error_inbox: Rc<RefCell<Vec<String>>>,
     show_error_popup: bool,
@@ -57,6 +58,7 @@ impl PokerOnlineScreen {
             inbox: Rc::new(RefCell::new(Vec::new())),
             error_inbox: Rc::new(RefCell::new(Vec::new())),
             show_error_popup: false,
+            desired_bots: 1,
         }
     }
     fn draw_error_popup(&mut self, ctx: &Context) {
@@ -240,6 +242,19 @@ impl ScreenWidget for PokerOnlineScreen {
                 ui.label("Server:");
                 ui.text_edit_singleline(&mut self.server_address)
                     .on_hover_text("Server address (IP:PORT)");
+                ui.separator();
+                ui.label("Bots:");
+                let mut bots_u32: u32 = self.desired_bots as u32;
+                if ui.add(egui::DragValue::new(&mut bots_u32).range(0..=8)).changed() {
+                    self.desired_bots = bots_u32 as usize;
+                }
+                if ui
+                    .add(egui::Button::new("Reset Game"))
+                    .on_hover_text("Reset the table with the chosen number of bots")
+                    .clicked()
+                {
+                    self.send(&ClientMsg::ResetGame { bots: self.desired_bots });
+                }
             });
             if let Some(err) = &self.last_error {
                 ui.colored_label(Color32::RED, err);

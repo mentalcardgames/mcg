@@ -186,6 +186,25 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                                     .await;
                             }
                         }
+                        ClientMsg::ResetGame { bots } => {
+                            println!("[WS] ResetGame requested by {}: bots={} ", name, bots);
+                            {
+                                let mut lobby = state.lobby.write().await;
+                                lobby.game = Some(Game::new(name.clone(), bots));
+                                if let Some(game) = &mut lobby.game {
+                                    if game.players.len() > 1 && game.to_act != 0 {
+                                        game.play_out_bots();
+                                    }
+                                }
+                            }
+                            if let Some(gs) = current_state_public(&state, you_id).await {
+                                let _ = socket
+                                    .send(Message::Text(
+                                        serde_json::to_string(&ServerMsg::State(gs)).unwrap(),
+                                    ))
+                                    .await;
+                            }
+                        }
                         ClientMsg::Join { .. } => {}
                     }
                 }

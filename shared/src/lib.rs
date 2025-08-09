@@ -116,6 +116,7 @@ pub enum ClientMsg {
     Action(PlayerAction),
     RequestState,
     NextHand,
+    ResetGame { bots: usize },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
