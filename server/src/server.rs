@@ -84,11 +84,12 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                 "[GAME] Created new game for {} with {} bot(s)",
                 name, state.bot_count
             );
-            // Let bots act if it's their turn
-            if let Some(game) = &mut lobby.game {
-                if game.players.len() > 1 && game.to_act != 0 {
-                    game.play_out_bots();
-                }
+        }
+        // Regardless of whether we just created the game or reused an existing one,
+        // let bots act if it's their turn so the human isn't stuck on connect.
+        if let Some(game) = &mut lobby.game {
+            if game.players.len() > 1 && game.to_act != 0 {
+                game.play_out_bots();
             }
         }
     }
