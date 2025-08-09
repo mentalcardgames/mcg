@@ -11,9 +11,11 @@ The project is structured as a Cargo workspace with three main crates:
 
 The build process uses `wasm-pack` to compile the Rust client code into WASM, which is then loaded by an `index.html` file in the browser. Media assets for card images are stored in the `media/` directory.
 
-## Building and Running
+## P2P Architecture
 
-The project uses `just` as its command runner. Key commands are defined in the `justfile`.
+This application is aimed to be peer to peer (p2p) in the future. Each player gets their own server and the servers communicate with each other. P2p is hard to do in wasm, that is why each node is split into a frontend and backend, but the individual nodes are peer to peer. Do not build functionality which would allow multiple players to use the same backend, that is not the intended use case. You are allowed to build things which make the use case of multiple players using the same backend impossible.
+
+## Building and Running
 
 ### WASM Frontend (Client)
 
@@ -34,6 +36,10 @@ The project uses `just` as its command runner. Key commands are defined in the `
 
 1.  **Run Server:**
     *   `just server`: Runs the native `mcg-server` binary, which starts the WebSocket server (typically on `127.0.0.1:3000`). It supports a `--bots <N>` CLI argument to specify the number of AI bots to include in the game.
+
+2.  **Run Server in Background (for AI agents):**
+    *   `just server-bg`: Runs the server in the background, allowing AI agents to test functionality without blocking their main thread.
+    *   `just kill-server`: Terminates the background server process.
 
 ## Development Conventions
 

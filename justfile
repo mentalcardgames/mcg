@@ -47,3 +47,11 @@ start PORT="8080" PROFILE="release":
 # Run the native server for the poker demo
 server:
     cargo run -p mcg-server
+
+# Run the server in the background for AI agent testing
+server-bg:
+    cargo run -p mcg-server &
+
+# Kill the background server process
+kill-server:
+    pkill -f "mcg-server" || true

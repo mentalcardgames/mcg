@@ -30,9 +30,10 @@ pub(crate) struct Lobby {
 }
 
 pub fn build_router(state: AppState) -> Router {
-    let serve_dir = ServeDir::new("../pkg").append_index_html_on_directories(true);
-    let serve_media = ServeDir::new("../media").append_index_html_on_directories(true);
-    let serve_root = ServeDir::new("../").append_index_html_on_directories(true);
+    // Serve static files from the project root. Assumes process CWD is repo root.
+    let serve_dir = ServeDir::new("pkg").append_index_html_on_directories(true);
+    let serve_media = ServeDir::new("media").append_index_html_on_directories(true);
+    let serve_root = ServeDir::new(".").append_index_html_on_directories(true);
 
     Router::new()
         .route(
@@ -42,6 +43,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/ws", get(ws_handler))
         .nest_service("/pkg", serve_dir)
         .nest_service("/media", serve_media)
+        // Serve index.html at root
         .nest_service("/", serve_root)
         .with_state(state)
 }
