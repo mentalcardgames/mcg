@@ -24,6 +24,64 @@ pub struct ActionEvent {
     pub action: PlayerAction,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BlindKind {
+    SmallBlind,
+    BigBlind,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ActionKind {
+    Fold,
+    Check,
+    Call(u32),
+    Bet(u32),
+    Raise { to: u32, by: u32 },
+    PostBlind { kind: BlindKind, amount: u32 },
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HandRankCategory {
+    HighCard,
+    Pair,
+    TwoPair,
+    ThreeKind,
+    Straight,
+    Flush,
+    FullHouse,
+    FourKind,
+    StraightFlush,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct HandRank {
+    pub category: HandRankCategory,
+    pub tiebreakers: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HandResult {
+    pub player_id: usize,
+    pub rank: HandRank,
+    pub best_five: [u8; 5],
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum LogEvent {
+    Action(ActionKind),
+    StageChanged(Stage),
+    DealtHole { player_id: usize },
+    DealtCommunity { cards: Vec<u8> },
+    Showdown { hand_results: Vec<HandResult> },
+    PotAwarded { winners: Vec<usize>, amount: u32 },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LogEntry {
+    pub player_id: Option<usize>,
+    pub event: LogEvent,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerPublic {
     pub id: usize,
@@ -47,6 +105,8 @@ pub struct GameStatePublic {
     pub recent_actions: Vec<ActionEvent>,
     #[serde(default)]
     pub winner_ids: Vec<usize>,
+    #[serde(default)]
+    pub action_log: Vec<LogEntry>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
