@@ -37,6 +37,14 @@ impl PokerOnlineScreen {
             last_info: None,
             state: None,
             name: "Player".to_string(),
+            #[cfg(target_arch = "wasm32")]
+            server_address: {
+                let window = web_sys::window().expect("no global window exists");
+                let location = window.location();
+                let hostname = location.hostname().unwrap_or("127.0.0.1".into());
+                format!("{}:3000", hostname)
+            },
+            #[cfg(not(target_arch = "wasm32"))]
             server_address: "127.0.0.1:3000".to_string(),
             inbox: Rc::new(RefCell::new(Vec::new())),
             error_inbox: Rc::new(RefCell::new(Vec::new())),

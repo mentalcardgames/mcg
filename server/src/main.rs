@@ -1,9 +1,13 @@
+//! Main entry point for the MCG poker server.
+
+mod server;
+mod game;
 mod eval;
-mod net;
 
 use std::net::SocketAddr;
+use server::AppState;
 
-/// Minimal server entrypoint: parse CLI args and run the server using the net module.
+/// Minimal server entrypoint: parse CLI args and run the server.
 ///
 /// Usage:
 ///   mcg-server --bots <N>
@@ -30,12 +34,12 @@ async fn main() {
     }
 
     // Initialize shared state for the server
-    let mut state = net::AppState::default();
+    let mut state = AppState::default();
     state.bot_count = bots;
 
     // Bind address
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
     // Run the server
-    net::run_server(addr, state).await;
+    server::run_server(addr, state).await;
 }

@@ -107,7 +107,7 @@ fn best_rank_from_seven(cards: &[u8]) -> HandRank {
 
     // Straight flush
     if let Some(fs) = flush_suit {
-        let mut values = ranks_as_values_unique(&suit_cards[fs as usize]);
+        let values = ranks_as_values_unique(&suit_cards[fs as usize]);
         if let Some(high) = straight_high(&values) {
             return HandRank {
                 category: HandRankCategory::StraightFlush,
@@ -156,7 +156,7 @@ fn best_rank_from_seven(cards: &[u8]) -> HandRank {
     }
 
     // Straight
-    let mut values = ranks_as_values_unique(cards);
+    let values = ranks_as_values_unique(cards);
     if let Some(high) = straight_high(&values) {
         return HandRank {
             category: HandRankCategory::Straight,
