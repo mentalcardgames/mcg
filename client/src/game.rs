@@ -3,7 +3,7 @@ pub mod card;
 pub mod field;
 pub mod screen;
 pub mod screens;
-use screens::{MainMenu, ScreenType, ScreenWidget, AppInterface};
+use screens::{AppInterface, MainMenu, ScreenType, ScreenWidget};
 
 /// Events that can be sent between screens
 #[derive(Debug, Clone)]
@@ -28,13 +28,15 @@ pub struct App {
     qr_screen: screens::QrScreen,
     dnd_test: screens::DNDTest,
     poker_online: screens::PokerOnlineScreen,
-    
+
     // Event queue for handling screen transitions
     pending_events: Vec<AppEvent>,
 }
 
 impl Default for App {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl App {
@@ -42,19 +44,16 @@ impl App {
         // Initialize game components
         let mut game_setup = screens::GameSetupScreen::new();
         let mut game_dnd_setup = screens::GameSetupScreen::new_dnd();
-        
+
         // Set default theme for the main game
         crate::hardcoded_cards::set_deck_by_theme(
             &mut game_setup.card_config,
             crate::hardcoded_cards::DEFAULT_THEME,
         );
-        
+
         // Set alternative theme for drag and drop game
-        crate::hardcoded_cards::set_deck_by_theme(
-            &mut game_dnd_setup.card_config,
-            "alt_cards",
-        );
-        
+        crate::hardcoded_cards::set_deck_by_theme(&mut game_dnd_setup.card_config, "alt_cards");
+
         Self {
             current_screen: ScreenType::Main,
             main_menu: MainMenu::new(),
@@ -81,17 +80,31 @@ impl App {
         let events = std::mem::take(&mut self.pending_events);
         for event in events {
             match event {
-                AppEvent::ChangeScreen(screen_type) => { self.current_screen = screen_type; }
-                AppEvent::StartGame(config) => { self.game.set_config(config); self.current_screen = ScreenType::Game; }
-                AppEvent::StartDndGame(config) => { self.game_dnd.set_config(config); self.current_screen = ScreenType::GameDnd; }
-                AppEvent::ExitGame => { self.current_screen = ScreenType::Main; }
+                AppEvent::ChangeScreen(screen_type) => {
+                    self.current_screen = screen_type;
+                }
+                AppEvent::StartGame(config) => {
+                    self.game.set_config(config);
+                    self.current_screen = ScreenType::Game;
+                }
+                AppEvent::StartDndGame(config) => {
+                    self.game_dnd.set_config(config);
+                    self.current_screen = ScreenType::GameDnd;
+                }
+                AppEvent::ExitGame => {
+                    self.current_screen = ScreenType::Main;
+                }
             }
         }
     }
 
     /// Get the current screen type
-    pub fn current_screen(&self) -> ScreenType { self.current_screen }
-    pub fn is_current_screen(&self, screen_type: ScreenType) -> bool { self.current_screen == screen_type }
+    pub fn current_screen(&self) -> ScreenType {
+        self.current_screen
+    }
+    pub fn is_current_screen(&self, screen_type: ScreenType) -> bool {
+        self.current_screen == screen_type
+    }
 }
 
 impl eframe::App for App {
@@ -105,28 +118,54 @@ impl eframe::App for App {
 
         // Prepare event queue for screens
         let mut events = Vec::new();
-        let mut app_interface = AppInterface { events: &mut events };
+        let mut app_interface = AppInterface {
+            events: &mut events,
+        };
 
         // Update the current screen
         match self.current_screen {
-            ScreenType::Main => { self.main_menu.update(&mut app_interface, ctx, frame); }
-            ScreenType::GameSetup => { self.game_setup.update(&mut app_interface, ctx, frame); }
-            ScreenType::GameDndSetup => { self.game_dnd_setup.update(&mut app_interface, ctx, frame); }
-            ScreenType::Game => { self.game.update(&mut app_interface, ctx, frame); }
-            ScreenType::GameDnd => { self.game_dnd.update(&mut app_interface, ctx, frame); }
-            ScreenType::Pairing => { self.pairing_screen.update(&mut app_interface, ctx, frame); }
-            ScreenType::Articles => { self.articles_screen.update(&mut app_interface, ctx, frame); }
-            ScreenType::QRScreen => { self.qr_screen.update(&mut app_interface, ctx, frame); }
-            ScreenType::DndTest => { self.dnd_test.update(&mut app_interface, ctx, frame); }
-            ScreenType::PokerOnline => { self.poker_online.update(&mut app_interface, ctx, frame); }
+            ScreenType::Main => {
+                self.main_menu.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::GameSetup => {
+                self.game_setup.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::GameDndSetup => {
+                self.game_dnd_setup.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::Game => {
+                self.game.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::GameDnd => {
+                self.game_dnd.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::Pairing => {
+                self.pairing_screen.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::Articles => {
+                self.articles_screen.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::QRScreen => {
+                self.qr_screen.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::DndTest => {
+                self.dnd_test.update(&mut app_interface, ctx, frame);
+            }
+            ScreenType::PokerOnline => {
+                self.poker_online.update(&mut app_interface, ctx, frame);
+            }
             ScreenType::Settings => {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.label("Settings screen not implemented");
-                    if ui.button("Back").clicked() { app_interface.queue_event(AppEvent::ChangeScreen(ScreenType::Main)); }
+                    if ui.button("Back").clicked() {
+                        app_interface.queue_event(AppEvent::ChangeScreen(ScreenType::Main));
+                    }
                 });
             }
         }
 
-        for event in events { self.queue_event(event); }
+        for event in events {
+            self.queue_event(event);
+        }
     }
 }

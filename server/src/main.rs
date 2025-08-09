@@ -11,7 +11,7 @@ use futures::StreamExt;
 use rand::seq::SliceRandom;
 use tokio::sync::RwLock;
 
-use mcg_shared::{ClientMsg, ServerMsg, PlayerAction, GameStatePublic, PlayerPublic, Stage};
+use mcg_shared::{ClientMsg, GameStatePublic, PlayerAction, PlayerPublic, ServerMsg, Stage};
 
 #[derive(Clone, Debug)]
 struct Player {
@@ -40,8 +40,20 @@ impl Game {
         deck.shuffle(&mut rand::rng());
         let deck = VecDeque::from(deck);
         let players = vec![
-            Player { id: 0, name: human_name, stack: 1000, cards: [0, 0], has_folded: false },
-            Player { id: 1, name: "Bot".into(), stack: 1000, cards: [0, 0], has_folded: false },
+            Player {
+                id: 0,
+                name: human_name,
+                stack: 1000,
+                cards: [0, 0],
+                has_folded: false,
+            },
+            Player {
+                id: 1,
+                name: "Bot".into(),
+                stack: 1000,
+                cards: [0, 0],
+                has_folded: false,
+            },
         ];
         let mut g = Self {
             players,
@@ -60,7 +72,10 @@ impl Game {
     fn deal(&mut self) {
         println!("[DEAL] Shuffling and dealing new hand");
         for p in &mut self.players {
-            p.cards = [self.deck.pop_front().unwrap(), self.deck.pop_front().unwrap()];
+            p.cards = [
+                self.deck.pop_front().unwrap(),
+                self.deck.pop_front().unwrap(),
+            ];
             p.has_folded = false;
             println!(
                 "[DEAL] {} gets {} {}",
@@ -84,7 +99,11 @@ impl Game {
                 id: p.id,
                 name: p.name.clone(),
                 stack: p.stack,
-                cards: if p.id == viewer_id { Some(p.cards) } else { None },
+                cards: if p.id == viewer_id {
+                    Some(p.cards)
+                } else {
+                    None
+                },
                 has_folded: p.has_folded,
             })
             .collect();
@@ -110,7 +129,10 @@ impl Game {
             PlayerAction::Fold => {
                 self.players[actor].has_folded = true;
                 self.stage = Stage::Showdown;
-                println!("[STATE] {} folds. Moving to Showdown", self.players[actor].name);
+                println!(
+                    "[STATE] {} folds. Moving to Showdown",
+                    self.players[actor].name
+                );
             }
             PlayerAction::CheckCall => {
                 self.advance_stage();
@@ -143,7 +165,10 @@ impl Game {
             self.players[1].stack -= a;
             self.pot += a;
             self.advance_stage();
-            println!("[BOT] {} bets {} -> pot {}", self.players[1].name, a, self.pot);
+            println!(
+                "[BOT] {} bets {} -> pot {}",
+                self.players[1].name, a, self.pot
+            );
         }
     }
 
@@ -182,16 +207,23 @@ impl Game {
 }
 
 #[derive(Clone, Default)]
-struct Lobby { game: Option<Game> }
+struct Lobby {
+    game: Option<Game>,
+}
 
 #[derive(Clone, Default)]
-struct AppState { lobby: Arc<RwLock<Lobby>> }
+struct AppState {
+    lobby: Arc<RwLock<Lobby>>,
+}
 
 #[tokio::main]
 async fn main() {
     let state = AppState::default();
     let app = Router::new()
-        .route("/health", get(|| async { Json(serde_json::json!({"ok": true})) }))
+        .route(
+            "/health",
+            get(|| async { Json(serde_json::json!({"ok": true})) }),
+        )
         .route("/ws", get(ws_handler))
         .with_state(state);
 
@@ -239,7 +271,9 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
 
     if let Some(gs) = current_state_public(&state, you_id).await {
         let _ = socket
-            .send(Message::Text(serde_json::to_string(&ServerMsg::State(gs)).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&ServerMsg::State(gs)).unwrap(),
+            ))
             .await;
     }
 
@@ -293,7 +327,9 @@ async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameSta
 fn card_str(c: u8) -> String {
     let rank_idx = (c % 13) as usize;
     let suit_idx = (c / 13) as usize;
-    let ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K"];    
+    let ranks = [
+        "A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K",
+    ];
     let suits = ['♣', '♦', '♥', '♠'];
     format!("{}{}", ranks[rank_idx], suits[suit_idx])
 }

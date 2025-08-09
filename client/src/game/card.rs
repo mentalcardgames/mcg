@@ -12,17 +12,34 @@ use web_sys;
 pub trait CardEncoding {
     fn t(&self) -> Option<usize>;
     fn is_masked(&self) -> bool;
-    fn is_open(&self) -> bool { !self.is_masked() }
+    fn is_open(&self) -> bool {
+        !self.is_masked()
+    }
     fn mask(self) -> Self;
     fn open(self) -> Self;
 }
 impl CardEncoding for SimpleCard {
     fn t(&self) -> Option<usize> {
-        match self { SimpleCard::Open(t) => Some(*t), SimpleCard::Masked(_) => None }
+        match self {
+            SimpleCard::Open(t) => Some(*t),
+            SimpleCard::Masked(_) => None,
+        }
     }
-    fn is_masked(&self) -> bool { matches!(self, SimpleCard::Masked(_)) }
-    fn mask(self) -> Self { match self { SimpleCard::Open(t) => Self::Masked(Some(t)), _ => self } }
-    fn open(self) -> Self { match self { SimpleCard::Masked(Some(t)) => Self::Open(t), _ => self } }
+    fn is_masked(&self) -> bool {
+        matches!(self, SimpleCard::Masked(_))
+    }
+    fn mask(self) -> Self {
+        match self {
+            SimpleCard::Open(t) => Self::Masked(Some(t)),
+            _ => self,
+        }
+    }
+    fn open(self) -> Self {
+        match self {
+            SimpleCard::Masked(Some(t)) => Self::Open(t),
+            _ => self,
+        }
+    }
 }
 
 #[derive(Hash, Debug, Clone)]
@@ -35,11 +52,15 @@ pub enum SimpleCard {
 fn get_origin() -> String {
     let window = web_sys::window().expect("should have a window in this context");
     let location = window.location();
-    let origin = location.origin().expect("should have an origin in this context");
+    let origin = location
+        .origin()
+        .expect("should have an origin in this context");
     origin
 }
 #[cfg(not(target_arch = "wasm32"))]
-fn get_origin() -> String { String::from("") }
+fn get_origin() -> String {
+    String::from("")
+}
 
 #[allow(non_snake_case)]
 pub trait CardConfig {
@@ -47,7 +68,12 @@ pub trait CardConfig {
     fn T(&self) -> usize;
     fn w(&self) -> u32;
     fn natural_size(&self) -> Vec2;
-    fn draw_at(&self, ui: &mut egui::Ui, t: &impl CardEncoding, pos: egui::Pos2) -> egui::InnerResponse<egui::Response> {
+    fn draw_at(
+        &self,
+        ui: &mut egui::Ui,
+        t: &impl CardEncoding,
+        pos: egui::Pos2,
+    ) -> egui::InnerResponse<egui::Response> {
         let area = egui::Area::new(ui.next_auto_id()).current_pos(pos);
         area.show(ui.ctx(), |ui| ui.add(self.img(t)))
     }
@@ -61,11 +87,19 @@ impl CardConfig for DirectoryCardType {
             folder = self.path,
             card = self.img_names[t.t().unwrap_or(0)]
         );
-        Image::new(path).show_loading_spinner(true).maintain_aspect_ratio(true)
+        Image::new(path)
+            .show_loading_spinner(true)
+            .maintain_aspect_ratio(true)
     }
-    fn T(&self) -> usize { self.T }
-    fn w(&self) -> u32 { self.w }
-    fn natural_size(&self) -> Vec2 { self.natural_size }
+    fn T(&self) -> usize {
+        self.T
+    }
+    fn w(&self) -> u32 {
+        self.w
+    }
+    fn natural_size(&self) -> Vec2 {
+        self.natural_size
+    }
 }
 
 #[derive(Clone)]
@@ -82,9 +116,17 @@ impl DirectoryCardType {
     pub fn new(path: String, img_names: Vec<String>, natural_size: Vec2) -> Self {
         let T = img_names.len();
         let w = T.next_power_of_two().ilog2();
-        Self { path, img_names, T, w, natural_size }
+        Self {
+            path,
+            img_names,
+            T,
+            w,
+            natural_size,
+        }
     }
-    pub fn all_images(&self) -> Iter<String> { self.img_names.iter() }
+    pub fn all_images(&self) -> Iter<String> {
+        self.img_names.iter()
+    }
 }
 impl Debug for DirectoryCardType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
