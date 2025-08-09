@@ -9,59 +9,9 @@ use axum::{
 };
 use futures::StreamExt;
 use rand::seq::SliceRandom;
-use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-enum ClientMsg {
-    Join { name: String },
-    Action(PlayerAction),
-    RequestState,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-enum ServerMsg {
-    Welcome { you: usize },
-    State(GameStatePublic),
-    Error(String),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-enum PlayerAction {
-    Fold,
-    CheckCall,
-    Bet(u32),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct GameStatePublic {
-    players: Vec<PlayerPublic>,
-    community: Vec<u8>,
-    pot: u32,
-    to_act: usize,
-    stage: Stage,
-    you_id: usize,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct PlayerPublic {
-    id: usize,
-    name: String,
-    stack: u32,
-    cards: Option<[u8; 2]>, // only set for the viewer
-    has_folded: bool,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-enum Stage {
-    Preflop,
-    Flop,
-    Turn,
-    River,
-    Showdown,
-}
+use mcg_shared::{ClientMsg, ServerMsg, PlayerAction, GameStatePublic, PlayerPublic, Stage};
 
 #[derive(Clone, Debug)]
 struct Player {
@@ -87,8 +37,8 @@ struct Game {
 impl Game {
     fn new(human_name: String) -> Self {
         let mut deck: Vec<u8> = (0..52).collect();
-    deck.shuffle(&mut rand::rng());
-    let deck = VecDeque::from(deck);
+        deck.shuffle(&mut rand::rng());
+        let deck = VecDeque::from(deck);
         let players = vec![
             Player { id: 0, name: human_name, stack: 1000, cards: [0, 0], has_folded: false },
             Player { id: 1, name: "Bot".into(), stack: 1000, cards: [0, 0], has_folded: false },
@@ -163,7 +113,6 @@ impl Game {
                 println!("[STATE] {} folds. Moving to Showdown", self.players[actor].name);
             }
             PlayerAction::CheckCall => {
-                // Simplified: just advance stage and bot mirrors
                 self.advance_stage();
             }
             PlayerAction::Bet(amount) => {
@@ -177,19 +126,16 @@ impl Game {
                 );
             }
         }
-        // Bot acts automatically after player in this demo
         if self.stage != Stage::Showdown {
             self.bot_act();
         }
     }
 
     fn bot_act(&mut self) {
-        // Toy bot: random choice between check/call and small bet
-    use rand::Rng;
-    let mut rng = rand::rng();
-    let r: u8 = rng.random_range(0..100);
+        use rand::Rng;
+        let mut rng = rand::rng();
+        let r: u8 = rng.random_range(0..100);
         if r < 70 {
-            // check/call
             println!("[BOT] {} chooses Check/Call", self.players[1].name);
             self.advance_stage();
         } else {
@@ -204,7 +150,6 @@ impl Game {
     fn advance_stage(&mut self) {
         match self.stage {
             Stage::Preflop => {
-                // Burn one (ignored) + 3 community cards
                 self.community.push(self.deck.pop_front().unwrap());
                 self.community.push(self.deck.pop_front().unwrap());
                 self.community.push(self.deck.pop_front().unwrap());
@@ -232,19 +177,15 @@ impl Game {
             }
             Stage::Showdown => {}
         }
-        self.to_act = 0; // always return to player for simplicity
+        self.to_act = 0;
     }
 }
 
 #[derive(Clone, Default)]
-struct Lobby {
-    game: Option<Game>,
-}
+struct Lobby { game: Option<Game> }
 
 #[derive(Clone, Default)]
-struct AppState {
-    lobby: Arc<RwLock<Lobby>>,
-}
+struct AppState { lobby: Arc<RwLock<Lobby>> }
 
 #[tokio::main]
 async fn main() {
@@ -265,7 +206,6 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
-    // Expect a Join message first
     let name = match socket.next().await {
         Some(Ok(Message::Text(t))) => match serde_json::from_str::<ClientMsg>(&t) {
             Ok(ClientMsg::Join { name }) => name,
@@ -297,7 +237,6 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
         ))
         .await;
 
-    // After join, push current state
     if let Some(gs) = current_state_public(&state, you_id).await {
         let _ = socket
             .send(Message::Text(serde_json::to_string(&ServerMsg::State(gs)).unwrap()))
@@ -337,25 +276,24 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                         }
                         ClientMsg::Join { .. } => {}
                     }
-                 }
-             }
-             Ok(Message::Close(_)) | Err(_) => break,
-             _ => {}
-         }
-     }
-    println!("[DISCONNECT] {} disconnected", name);
- }
- 
- async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameStatePublic> {
-     let lobby = state.lobby.read().await;
-     lobby.game.as_ref().map(|g| g.public_for(you_id))
- }
-
-    // Pretty format a 0..51 card as rank+symbol, e.g. A♣, T♦, Q♥, 9♠
-    fn card_str(c: u8) -> String {
-        let rank_idx = (c % 13) as usize;
-        let suit_idx = (c / 13) as usize;
-        let ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K"];    
-        let suits = ['♣', '♦', '♥', '♠'];
-        format!("{}{}", ranks[rank_idx], suits[suit_idx])
+                }
+            }
+            Ok(Message::Close(_)) | Err(_) => break,
+            _ => {}
+        }
     }
+    println!("[DISCONNECT] {} disconnected", name);
+}
+
+async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameStatePublic> {
+    let lobby = state.lobby.read().await;
+    lobby.game.as_ref().map(|g| g.public_for(you_id))
+}
+
+fn card_str(c: u8) -> String {
+    let rank_idx = (c % 13) as usize;
+    let suit_idx = (c / 13) as usize;
+    let ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K"];    
+    let suits = ['♣', '♦', '♥', '♠'];
+    format!("{}{}", ranks[rank_idx], suits[suit_idx])
+}

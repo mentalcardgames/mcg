@@ -15,20 +15,35 @@ A mental card game implementation in the browser.
 
 ### Build and serve with just
 
-Use the included Justfile (install `just` from your package manager).
+Use the included justfile (install `just` from your package manager).
 
 ```bash
-# Build the WASM package
+# Build the WASM package (release)
 just build
+
+# Or build in dev mode (faster, larger wasm)
+just build dev
 
 # Serve the current directory on http://localhost:8080
 just serve
 
-# Build then serve in one step (optional args passed to wasm-pack)
-just start 8080 -- --dev
+# Build then serve in one step
+just start
+# Or: just start dev
+# Or: just start 8080 dev
 ```
 
 Then open your browser and navigate to http://localhost:8080/
+
+## Workspace layout
+
+This repo is a Cargo workspace with three crates:
+
+- client/ — WASM/egui frontend and all UI/game/screens code.
+- server/ — Axum-based WebSocket backend for the poker demo.
+- shared/ — Data types shared by client and server (protocol and communication).
+
+The old root crate has been removed; the top-level `src/` is empty and no longer used.
 
 ### Directory Structure for WASM
 
@@ -46,7 +61,7 @@ mcg/
 ## Development Workflow
 
 1. Make changes to the code
-2. Run `just build -- --dev` to rebuild the WASM package (dev makes the
+2. Run `just build dev` to rebuild the WASM package (dev makes the
    compilation faster, but the binary bigger) and then run `just serve` to start
    a local web server (if not already running)
 3. Refresh your browser to see the changes

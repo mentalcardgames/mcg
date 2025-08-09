@@ -2,12 +2,9 @@ use egui::Vec2;
 use crate::game::card::DirectoryCardType;
 use crate::sprintln;
 
-// Define available themes - these could be extended or discovered dynamically 
-// at startup if needed
 pub const AVAILABLE_THEMES: &[&str] = &["img_cards", "alt_cards"];
 pub const DEFAULT_THEME: &str = "img_cards";
 
-/// Card filenames that are known to exist in the img_cards directory
 const STANDARD_CARDS: &[&str] = &[
     "1_club.png", "1_diamond.png", "1_heart.png", "1_spade.png",
     "2_club.png", "2_diamond.png", "2_heart.png", "2_spade.png",
@@ -25,7 +22,6 @@ const STANDARD_CARDS: &[&str] = &[
     "card_back.png",
 ];
 
-/// Card filenames that are known to exist in the alt_cards directory
 const ALT_CARDS: &[&str] = &[
     "card_clubs_1.png", "card_clubs_2.png", "card_clubs_3.png", "card_clubs_4.png",
     "card_clubs_5.png", "card_clubs_6.png", "card_clubs_7.png", "card_clubs_8.png",
@@ -46,47 +42,30 @@ const ALT_CARDS: &[&str] = &[
     "card_joker.png", "card_joker_black.png", "card_joker_red.png",
 ];
 
-/// Create a deck based on the specified theme
 pub fn create_deck(theme: &str) -> DirectoryCardType {
     match theme {
         "img_cards" => {
             let path = "img_cards".to_string();
             let img_names: Vec<String> = STANDARD_CARDS.iter().map(|&s| s.to_string()).collect();
-            
             sprintln!("Created standard deck with {} cards", img_names.len());
-            
-            // Standard card size: 140x190
             let natural_size = Vec2::new(140.0, 190.0);
-            
             DirectoryCardType::new(path, img_names, natural_size)
         },
         "alt_cards" => {
             let path = "alt_cards".to_string();
             let img_names: Vec<String> = ALT_CARDS.iter().map(|&s| s.to_string()).collect();
-            
             sprintln!("Created alternative deck with {} cards", img_names.len());
-            
-            // Standard card size: 140x190
             let natural_size = Vec2::new(140.0, 190.0);
-            
             DirectoryCardType::new(path, img_names, natural_size)
         },
-        _ => {
-            sprintln!("Unknown theme: {}, falling back to default theme", theme);
-            create_deck(DEFAULT_THEME)
-        }
+        _ => { sprintln!("Unknown theme: {}, falling back to default theme", theme); create_deck(DEFAULT_THEME) }
     }
 }
 
-/// Set the deck by theme name in the provided Option
 pub fn set_deck_by_theme(card_config: &mut Option<DirectoryCardType>, theme: &str) {
-    let deck = create_deck(theme);
-    *card_config = Some(deck);
+    let deck = create_deck(theme); *card_config = Some(deck);
 }
 
-/// Legacy function to maintain compatibility with existing code
-/// Simply forwards to set_deck_by_theme with the appropriate theme
 pub fn set_hardcoded_deck(card_config: &mut Option<DirectoryCardType>, use_alt_deck: bool) {
-    let theme = if use_alt_deck { "alt_cards" } else { "img_cards" };
-    set_deck_by_theme(card_config, theme);
+    let theme = if use_alt_deck { "alt_cards" } else { "img_cards" }; set_deck_by_theme(card_config, theme);
 }
