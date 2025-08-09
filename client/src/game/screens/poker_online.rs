@@ -16,10 +16,17 @@ use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
 use super::{AppInterface, ScreenWidget};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ErrorKind {
+    Connection,
+    Game,
+}
+
 pub struct PokerOnlineScreen {
     #[cfg(target_arch = "wasm32")]
     ws: Option<WebSocket>,
     last_error: Option<String>,
+    last_error_kind: Option<ErrorKind>,
     last_info: Option<String>,
     state: Option<GameStatePublic>,
     name: String,
@@ -34,6 +41,7 @@ impl PokerOnlineScreen {
             #[cfg(target_arch = "wasm32")]
             ws: None,
             last_error: None,
+            last_error_kind: None,
             last_info: None,
             state: None,
             name: "Player".to_string(),
@@ -56,7 +64,12 @@ impl PokerOnlineScreen {
             return;
         }
         let mut open = true;
-        egui::Window::new("Connection error")
+        let title = match self.last_error_kind {
+            Some(ErrorKind::Game) => "Game error",
+            Some(ErrorKind::Connection) => "Connection error",
+            None => "Error",
+        };
+        egui::Window::new(title)
             .collapsible(false)
             .resizable(false)
             .open(&mut open)
@@ -146,13 +159,15 @@ impl PokerOnlineScreen {
             }
             Err(err) => {
                 self.last_error = Some(format!("WS connect error: {err:?}"));
+        self.last_error_kind = Some(ErrorKind::Connection);
                 self.show_error_popup = true;
             }
         }
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn connect(&mut self, _ctx: &Context) {
-        self.last_error = Some("Online mode is unavailable on native builds".into());
+    self.last_error = Some("Online mode is unavailable on native builds".into());
+    self.last_error_kind = Some(ErrorKind::Game);
     }
     #[cfg(target_arch = "wasm32")]
     fn send(&self, msg: &ClientMsg) {
@@ -180,6 +195,7 @@ impl ScreenWidget for PokerOnlineScreen {
                     ServerMsg::Welcome { .. } => {
                         self.last_info = Some("Connected".into());
                         self.last_error = None;
+            self.last_error_kind = None;
                         self.show_error_popup = false;
                     }
                     ServerMsg::State(gs) => {
@@ -188,6 +204,7 @@ impl ScreenWidget for PokerOnlineScreen {
                     }
                     ServerMsg::Error(err) => {
                         self.last_error = Some(err);
+            self.last_error_kind = Some(ErrorKind::Game);
                         self.show_error_popup = true;
                     }
                 }
@@ -197,6 +214,7 @@ impl ScreenWidget for PokerOnlineScreen {
             let mut errs = self.error_inbox.borrow_mut();
             for e in errs.drain(..) {
                 self.last_error = Some(e);
+        self.last_error_kind = Some(ErrorKind::Connection);
                 self.show_error_popup = true;
             }
         }

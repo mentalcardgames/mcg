@@ -115,19 +115,36 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                     match cm {
                         ClientMsg::Action(a) => {
                             println!("[WS] Action from {}: {:?}", name, a);
+                            let mut ok = false;
                             {
                                 let mut lobby = state.lobby.write().await;
                                 if let Some(game) = &mut lobby.game {
-                                    game.apply_player_action(0, a.clone());
-                                    game.play_out_bots();
+                                    match game.apply_player_action(0, a.clone()) {
+                                        Ok(()) => {
+                                            ok = true;
+                                            game.play_out_bots();
+                                        }
+                                        Err(msg) => {
+                                            let _ = socket
+                                                .send(Message::Text(
+                                                    serde_json::to_string(&ServerMsg::Error(msg.to_string()))
+                                                        .unwrap(),
+                                                ))
+                                                .await;
+                                        }
+                                    }
                                 }
                             }
+                            // Always send latest state so client stays in sync
                             if let Some(gs) = current_state_public(&state, you_id).await {
                                 let _ = socket
                                     .send(Message::Text(
                                         serde_json::to_string(&ServerMsg::State(gs)).unwrap(),
                                     ))
                                     .await;
+                            }
+                            if ok {
+                                // no-op; reserved for any post-success hooks
                             }
                         }
                         ClientMsg::RequestState => {
