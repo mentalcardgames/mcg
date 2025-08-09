@@ -1,12 +1,15 @@
 //! Core poker game logic.
 
-use std::collections::VecDeque;
-use rand::seq::SliceRandom;
 use crate::eval::{card_str, evaluate_best_hand, pick_best_five};
 use mcg_shared::{
     ActionEvent, ActionKind, BlindKind, GameStatePublic, HandResult, LogEntry, LogEvent,
     PlayerAction, PlayerPublic, Stage,
 };
+use rand::seq::SliceRandom;
+use std::collections::VecDeque;
+
+const MAX_RECENT_ACTIONS: usize = 50;
+const MAX_LOG_ENTRIES: usize = 200;
 
 #[derive(Clone, Debug)]
 pub struct Player {
@@ -72,7 +75,7 @@ impl Game {
 
         let mut g = Self {
             players,
-            deck: VecDeque::from(deck),
+            deck: VecDeque::from(deck.clone()),
             community: vec![],
 
             pot: 0,
@@ -91,7 +94,56 @@ impl Game {
             action_log: Vec::new(),
             winner_ids: Vec::new(),
         };
-        g.start_new_hand();
+        g.start_new_hand_from_deck(deck);
+        g
+    }
+
+    #[cfg(test)]
+    pub fn new_with_seed(human_name: String, bot_count: usize, seed: u64) -> Self {
+        let deck = shuffled_deck_with_seed(seed);
+
+        let mut players = Vec::with_capacity(1 + bot_count);
+        players.push(Player {
+            id: 0,
+            name: human_name,
+            stack: 1000,
+            cards: [0, 0],
+            has_folded: false,
+            all_in: false,
+        });
+        for i in 0..bot_count {
+            players.push(Player {
+                id: i + 1,
+                name: format!("Bot {}", i + 1),
+                stack: 1000,
+                cards: [0, 0],
+                has_folded: false,
+                all_in: false,
+            });
+        }
+
+        let mut g = Self {
+            players,
+            deck: VecDeque::new(),
+            community: vec![],
+
+            pot: 0,
+            stage: Stage::Preflop,
+            dealer_idx: 0,
+            to_act: 0,
+            current_bet: 0,
+            min_raise: 0,
+            round_bets: vec![],
+
+            sb: 5,
+            bb: 10,
+
+            pending_to_act: Vec::new(),
+            recent_actions: Vec::new(),
+            action_log: Vec::new(),
+            winner_ids: Vec::new(),
+        };
+        g.start_new_hand_from_deck(deck);
         g
     }
 
@@ -138,7 +190,9 @@ impl Game {
             player_id: actor,
             action: action.clone(),
         });
+        self.cap_logs();
 
+        let prev_current_bet = self.current_bet;
         match action {
             PlayerAction::Fold => {
                 self.players[actor].has_folded = true;
@@ -182,7 +236,9 @@ impl Game {
                     self.round_bets[actor] += add;
                     self.pot += add;
                     self.current_bet = self.round_bets[actor];
-                    self.min_raise = self.bb.max(add);
+                    // In NLH, the minimum raise size for subsequent raises equals the size of the last bet/raise.
+                    // For an open bet, set it to the bet amount (which is at least BB).
+                    self.min_raise = add;
                     if self.players[actor].stack == 0 {
                         self.players[actor].all_in = true;
                     }
@@ -191,14 +247,14 @@ impl Game {
                         event: LogEvent::Action(ActionKind::Bet(add)),
                     });
                 } else {
-                    // Raise
+                    // Raise by x (to current_bet + x)
+                    let need = self.current_bet.saturating_sub(self.round_bets[actor]);
                     let target_to = self.current_bet + x;
-                    let add = target_to
-                        .saturating_sub(self.round_bets[actor])
-                        .min(self.players[actor].stack);
-                    if add == 0 {
-                        // treat as call if cannot raise
-                        let need = self.current_bet.saturating_sub(self.round_bets[actor]);
+                    let required = target_to.saturating_sub(self.round_bets[actor]);
+                    let add = required.min(self.players[actor].stack);
+
+                    if add <= need {
+                        // Not enough to raise; treat as call (possibly all-in)
                         let pay = need.min(self.players[actor].stack);
                         self.players[actor].stack -= pay;
                         self.round_bets[actor] += pay;
@@ -211,12 +267,15 @@ impl Game {
                             event: LogEvent::Action(ActionKind::Call(pay)),
                         });
                     } else {
+                        // Valid raise
                         self.players[actor].stack -= add;
                         self.round_bets[actor] += add;
                         self.pot += add;
-                        let by = add;
-                        self.current_bet = self.round_bets[actor];
-                        self.min_raise = self.min_raise.max(by);
+                        let new_to = self.round_bets[actor];
+                        let by = new_to.saturating_sub(prev_current_bet);
+                        self.current_bet = new_to;
+                        // Set min_raise to the size of this (last legal) raise
+                        self.min_raise = by;
                         if self.players[actor].stack == 0 {
                             self.players[actor].all_in = true;
                         }
@@ -229,6 +288,24 @@ impl Game {
                         });
                     }
                 }
+            }
+        }
+
+        // If bet/raise increased the current bet, rebuild the pending_to_act order
+        if self.current_bet > prev_current_bet {
+            let n = self.players.len();
+            self.pending_to_act.clear();
+            for i in 1..=n {
+                let idx = (actor + i) % n;
+                if !self.players[idx].has_folded
+                    && !self.players[idx].all_in
+                    && self.round_bets[idx] < self.current_bet
+                {
+                    self.pending_to_act.push(idx);
+                }
+            }
+            if let Some(&nxt) = self.pending_to_act.first() {
+                self.to_act = nxt;
             }
         }
 
@@ -259,6 +336,10 @@ impl Game {
         // Shuffle fresh deck
         let mut deck: Vec<u8> = (0..52).collect();
         deck.shuffle(&mut rand::rng());
+        self.start_new_hand_from_deck(deck);
+    }
+
+    fn start_new_hand_from_deck(&mut self, deck: Vec<u8>) {
         self.deck = VecDeque::from(deck);
 
         // Deal hole cards
@@ -295,12 +376,17 @@ impl Game {
 
         // Emit logs for dealing after the loop to avoid borrow conflicts
         self.action_log.extend(dealt_logs.into_iter());
+        self.cap_logs();
 
-        // Post blinds (SB at dealer+1, BB at dealer+2)
+        // Post blinds
         let n = self.players.len();
         if n > 1 {
-            let sb_idx = (self.dealer_idx + 1) % n;
-            let bb_idx = (self.dealer_idx + 2) % n;
+            // In heads-up, dealer posts SB and acts first preflop; otherwise SB=dealer+1, BB=dealer+2
+            let (sb_idx, bb_idx) = if n == 2 {
+                (self.dealer_idx, (self.dealer_idx + 1) % n)
+            } else {
+                ((self.dealer_idx + 1) % n, (self.dealer_idx + 2) % n)
+            };
             self.post_blind(sb_idx, BlindKind::SmallBlind, self.sb);
             self.post_blind(bb_idx, BlindKind::BigBlind, self.bb);
             self.current_bet = self.bb;
@@ -378,7 +464,13 @@ impl Game {
         let start = match self.stage {
             Stage::Preflop => {
                 if n > 1 {
-                    (self.dealer_idx + 3) % n // left of BB
+                    if n == 2 {
+                        // Heads-up: dealer (SB) acts first preflop
+                        self.dealer_idx
+                    } else {
+                        // 3+ players: first to act is left of BB
+                        (self.dealer_idx + 3) % n
+                    }
                 } else {
                     self.dealer_idx
                 }
@@ -511,6 +603,7 @@ impl Game {
 
     fn log(&mut self, entry: LogEntry) {
         self.action_log.push(entry);
+        self.cap_logs();
     }
 
     fn random_bot_action(&self, bot_index: usize) -> PlayerAction {
@@ -551,5 +644,88 @@ impl Game {
             println!("[BOT] {}: {:?}", self.players[actor].name, action);
             self.apply_player_action(actor, action);
         }
+    }
+}
+
+fn shuffled_deck_with_seed(seed: u64) -> Vec<u8> {
+    // Simple LCG for deterministic shuffling in tests
+    fn lcg(next: &mut u64) -> u32 {
+        // Constants from Numerical Recipes
+        *next = next.wrapping_mul(1664525).wrapping_add(1013904223);
+        (*next >> 16) as u32
+    }
+    let mut deck: Vec<u8> = (0..52).collect();
+    let mut s = seed;
+    // Fisher-Yates
+    for i in (1..deck.len()).rev() {
+        let r = lcg(&mut s) as usize % (i + 1);
+        deck.swap(i, r);
+    }
+    deck
+}
+
+impl Game {
+    fn cap_logs(&mut self) {
+        if self.recent_actions.len() > MAX_RECENT_ACTIONS {
+            let start = self.recent_actions.len() - MAX_RECENT_ACTIONS;
+            self.recent_actions.drain(0..start);
+        }
+        if self.action_log.len() > MAX_LOG_ENTRIES {
+            let start = self.action_log.len() - MAX_LOG_ENTRIES;
+            self.action_log.drain(0..start);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basic_game_flow() {
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 42);
+        // Preflop with blinds posted
+        assert_eq!(game.stage, Stage::Preflop);
+        assert_eq!(game.current_bet, 10);
+        assert_eq!(game.min_raise, 10);
+
+        // Player calls (calls BB of 10)
+        game.apply_player_action(0, PlayerAction::CheckCall);
+
+        // Next to act should not be the player again immediately
+        assert_ne!(game.to_act, 0);
+    }
+
+    #[test]
+    fn test_valid_raises() {
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 123);
+        // Heads-up preflop: player (SB/dealer) acts first, raises to 30 (BB=10, raise=20)
+        game.apply_player_action(0, PlayerAction::Bet(20));
+        assert_eq!(game.current_bet, 30);
+
+        // Bot needs to call the raise (contribute 20 more to match 30 total)
+        game.apply_player_action(1, PlayerAction::CheckCall);
+
+        // Betting round should be complete, should advance to Flop
+        assert_eq!(game.stage, Stage::Flop);
+    }
+
+    #[test]
+    fn test_betting_round_completion() {
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 999);
+        // Heads-up preflop: player (SB/dealer) acts first, calls to match BB
+        game.apply_player_action(0, PlayerAction::CheckCall);
+        // Bot (BB) checks/calls to match 30 total (here to match 10 total)
+        game.apply_player_action(1, PlayerAction::CheckCall);
+        // Betting round should be complete
+        assert_eq!(game.stage, Stage::Flop);
+    }
+
+    #[test]
+    fn test_player_folding() {
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 7);
+        // Player folds immediately preflop
+        game.apply_player_action(0, PlayerAction::Fold);
+        assert_eq!(game.stage, Stage::Showdown);
     }
 }

@@ -1,11 +1,11 @@
 //! Main entry point for the MCG poker server.
 
-mod server;
-mod game;
 mod eval;
+mod game;
+mod server;
 
-use std::net::SocketAddr;
 use server::AppState;
+use std::net::SocketAddr;
 
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///

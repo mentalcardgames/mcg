@@ -64,7 +64,10 @@ impl PokerOnlineScreen {
                 if let Some(err) = &self.last_error {
                     ui.label(err);
                 } else {
-                    ui.label(format!("Failed to connect to server at {}. Is it running?", self.server_address));
+                    ui.label(format!(
+                        "Failed to connect to server at {}. Is it running?",
+                        self.server_address
+                    ));
                 }
                 ui.add_space(8.0);
                 if ui.button("Close").clicked() {
@@ -107,9 +110,10 @@ impl PokerOnlineScreen {
                     let ctx = ctx.clone();
                     let server_address = self.server_address.clone();
                     Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
-                        err_inbox.borrow_mut().push(
-                            format!("Failed to connect to server at {}.", server_address),
-                        );
+                        err_inbox.borrow_mut().push(format!(
+                            "Failed to connect to server at {}.",
+                            server_address
+                        ));
                         ctx.request_repaint();
                     })
                 };
@@ -123,7 +127,10 @@ impl PokerOnlineScreen {
                         let code = e.code();
                         let reason = e.reason();
                         let msg = if reason.is_empty() {
-                            format!("Connection closed (code {}). Is the server running at {}?", code, server_address)
+                            format!(
+                                "Connection closed (code {}). Is the server running at {}?",
+                                code, server_address
+                            )
                         } else {
                             format!("Connection closed (code {}): {}", code, reason)
                         };
@@ -280,7 +287,11 @@ impl ScreenWidget for PokerOnlineScreen {
                             .join("\n");
                         ui.horizontal(|ui| {
                             ui.label(RichText::new("Recent actions:").strong());
-                            if ui.button("Copy").on_hover_text("Copy recent actions").clicked() {
+                            if ui
+                                .button("Copy")
+                                .on_hover_text("Copy recent actions")
+                                .clicked()
+                            {
                                 ui.ctx().copy_text(recent_copy_text.clone());
                             }
                         });
