@@ -260,7 +260,30 @@ impl ScreenWidget for PokerOnlineScreen {
                         });
                         ui.add_space(8.0);
                         ui.separator();
-                        ui.label(RichText::new("Recent actions:").strong());
+                        // Header + Copy button for Recent actions
+                        let recent_copy_text: String = state
+                            .recent_actions
+                            .iter()
+                            .rev()
+                            .take(10)
+                            .map(|ev| {
+                                let name = state
+                                    .players
+                                    .iter()
+                                    .find(|p| p.id == ev.player_id)
+                                    .map(|p| p.name.as_str())
+                                    .unwrap_or("Player");
+                                let action_txt = action_text(&ev.action);
+                                format!("{} {}", name, action_txt)
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Recent actions:").strong());
+                            if ui.button("Copy").on_hover_text("Copy recent actions").clicked() {
+                                ui.ctx().copy_text(recent_copy_text.clone());
+                            }
+                        });
                         egui::ScrollArea::vertical()
                             .id_salt("recent_actions_scroll")
                             .max_height(120.0)
@@ -278,7 +301,21 @@ impl ScreenWidget for PokerOnlineScreen {
                             });
                         ui.add_space(8.0);
                         ui.separator();
-                        ui.label(RichText::new("Action log:").strong());
+                        // Header + Copy button for Action log
+                        let action_log_copy_text: String = state
+                            .action_log
+                            .iter()
+                            .rev()
+                            .take(50)
+                            .map(|entry| log_entry_text(entry, &state.players))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Action log:").strong());
+                            if ui.button("Copy").on_hover_text("Copy full log").clicked() {
+                                ui.ctx().copy_text(action_log_copy_text.clone());
+                            }
+                        });
                         egui::ScrollArea::vertical()
                             .id_salt("action_log_scroll")
                             .max_height(180.0)
