@@ -115,6 +115,7 @@ pub enum ClientMsg {
     Join { name: String },
     Action(PlayerAction),
     RequestState,
+    NextHand,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

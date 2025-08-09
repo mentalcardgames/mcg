@@ -681,6 +681,29 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                                     .await;
                             }
                         }
+                        ClientMsg::NextHand => {
+                            println!("[WS] NextHand requested by {}", name);
+                            {
+                                let mut lobby = state.lobby.write().await;
+                                if let Some(game) = &mut lobby.game {
+                                    let n = game.players.len();
+                                    if n > 0 {
+                                        game.dealer_idx = (game.dealer_idx + 1) % n;
+                                    }
+                                    game.start_new_hand();
+                                    if game.to_act != 0 {
+                                        game.play_out_bots();
+                                    }
+                                }
+                            }
+                            if let Some(gs) = current_state_public(&state, you_id).await {
+                                let _ = socket
+                                    .send(Message::Text(
+                                        serde_json::to_string(&ServerMsg::State(gs)).unwrap(),
+                                    ))
+                                    .await;
+                            }
+                        }
                         ClientMsg::Join { .. } => {}
                     }
                 }

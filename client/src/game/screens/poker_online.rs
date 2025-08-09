@@ -326,6 +326,12 @@ impl ScreenWidget for PokerOnlineScreen {
                         self.send(&ClientMsg::Action(PlayerAction::Fold));
                     }
                     ui.separator();
+                    if state.stage == Stage::Showdown {
+                        if ui.add(egui::Button::new("Next Hand")).clicked() {
+                            self.send(&ClientMsg::NextHand);
+                        }
+                        ui.add_space(8.0);
+                    }
                     if ui.add(egui::Button::new("Refresh")).clicked() {
                         self.send(&ClientMsg::RequestState);
                     }
