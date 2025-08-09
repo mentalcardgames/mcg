@@ -1,6 +1,9 @@
 use eframe::Frame;
 use egui::{Color32, Context, RichText};
-use mcg_shared::{ClientMsg, GameStatePublic, PlayerAction, ServerMsg, Stage};
+use mcg_shared::{
+    ActionKind, BlindKind, ClientMsg, GameStatePublic, LogEntry, LogEvent, PlayerAction,
+    PlayerPublic, ServerMsg, Stage,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -258,6 +261,16 @@ impl ScreenWidget for PokerOnlineScreen {
                                     ui.label(format!("{} {}", name, action_txt));
                                 }
                             });
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.label(RichText::new("Action log:").strong());
+                        egui::ScrollArea::vertical()
+                            .max_height(180.0)
+                            .show(ui, |ui| {
+                                for entry in state.action_log.iter().rev().take(50) {
+                                    ui.label(log_entry_text(entry, &state.players));
+                                }
+                            });
                     });
                     cols[1].group(|ui| {
                         for p in &state.players {
@@ -346,6 +359,112 @@ fn action_text(a: &PlayerAction) -> String {
         PlayerAction::Fold => "folds".into(),
         PlayerAction::CheckCall => "checks / calls".into(),
         PlayerAction::Bet(n) => format!("bets {}", n),
+    }
+}
+
+fn action_kind_text(kind: &ActionKind) -> String {
+    match kind {
+        ActionKind::Fold => "folds".into(),
+        ActionKind::Check => "checks".into(),
+        ActionKind::Call(n) => format!("calls {}", n),
+        ActionKind::Bet(n) => format!("bets {}", n),
+        ActionKind::Raise { to, by } => format!("raises to {} (+{})", to, by),
+        ActionKind::PostBlind { kind, amount } => match kind {
+            BlindKind::SmallBlind => format!("posts small blind {}", amount),
+            BlindKind::BigBlind => format!("posts big blind {}", amount),
+        },
+    }
+}
+
+fn stage_text(stage: Stage) -> &'static str {
+    match stage {
+        Stage::Preflop => "Preflop",
+        Stage::Flop => "Flop",
+        Stage::Turn => "Turn",
+        Stage::River => "River",
+        Stage::Showdown => "Showdown",
+    }
+}
+
+fn category_text(cat: &mcg_shared::HandRankCategory) -> &'static str {
+    match cat {
+        mcg_shared::HandRankCategory::HighCard => "High Card",
+        mcg_shared::HandRankCategory::Pair => "Pair",
+        mcg_shared::HandRankCategory::TwoPair => "Two Pair",
+        mcg_shared::HandRankCategory::ThreeKind => "Three of a Kind",
+        mcg_shared::HandRankCategory::Straight => "Straight",
+        mcg_shared::HandRankCategory::Flush => "Flush",
+        mcg_shared::HandRankCategory::FullHouse => "Full House",
+        mcg_shared::HandRankCategory::FourKind => "Four of a Kind",
+        mcg_shared::HandRankCategory::StraightFlush => "Straight Flush",
+    }
+}
+
+fn name_of(players: &[PlayerPublic], id: usize) -> String {
+    players
+        .iter()
+        .find(|p| p.id == id)
+        .map(|p| p.name.clone())
+        .unwrap_or_else(|| format!("Player {}", id))
+}
+
+fn card_text(c: u8) -> String {
+    card_text_and_color(c).0
+}
+
+fn log_entry_text(entry: &LogEntry, players: &[PlayerPublic]) -> String {
+    match &entry.event {
+        LogEvent::Action(kind) => {
+            let who = entry
+                .player_id
+                .map(|id| name_of(players, id))
+                .unwrap_or_else(|| "Table".to_string());
+            format!("{} {}", who, action_kind_text(kind))
+        }
+        LogEvent::StageChanged(s) => format!("Stage → {}", stage_text(*s)),
+        LogEvent::DealtHole { player_id } => {
+            let who = name_of(players, *player_id);
+            format!("Dealt hole cards to {}", who)
+        }
+        LogEvent::DealtCommunity { cards } => match cards.len() {
+            3 => format!(
+                "Flop: {} {} {}",
+                card_text(cards[0]),
+                card_text(cards[1]),
+                card_text(cards[2])
+            ),
+            4 => format!("Turn: {}", card_text(cards[3])),
+            5 => format!("River: {}", card_text(cards[4])),
+            _ => format!(
+                "Community: {}",
+                cards
+                    .iter()
+                    .map(|&c| card_text(c))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+        },
+        LogEvent::Showdown { hand_results } => {
+            let mut parts = Vec::new();
+            for hr in hand_results {
+                let who = name_of(players, hr.player_id);
+                let cat = category_text(&hr.rank.category);
+                parts.push(format!("{}: {}", who, cat));
+            }
+            if parts.is_empty() {
+                "Showdown".to_string()
+            } else {
+                format!("Showdown — {}", parts.join(", "))
+            }
+        }
+        LogEvent::PotAwarded { winners, amount } => {
+            let names = winners
+                .iter()
+                .map(|&id| name_of(players, id))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("Pot {} awarded to {}", amount, names)
+        }
     }
 }
 fn stage_badge(stage: Stage) -> egui::WidgetText {
