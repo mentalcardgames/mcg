@@ -248,6 +248,7 @@ impl ScreenWidget for PokerOnlineScreen {
                         ui.separator();
                         ui.label(RichText::new("Recent actions:").strong());
                         egui::ScrollArea::vertical()
+                            .id_salt("recent_actions_scroll")
                             .max_height(120.0)
                             .show(ui, |ui| {
                                 for ev in state.recent_actions.iter().rev().take(10) {
@@ -265,6 +266,7 @@ impl ScreenWidget for PokerOnlineScreen {
                         ui.separator();
                         ui.label(RichText::new("Action log:").strong());
                         egui::ScrollArea::vertical()
+                            .id_salt("action_log_scroll")
                             .max_height(180.0)
                             .show(ui, |ui| {
                                 for entry in state.action_log.iter().rev().take(50) {
