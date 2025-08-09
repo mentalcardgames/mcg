@@ -23,6 +23,7 @@ pub struct PokerOnlineScreen {
     last_info: Option<String>,
     state: Option<GameStatePublic>,
     name: String,
+    server_address: String,
     inbox: Rc<RefCell<Vec<ServerMsg>>>,
     error_inbox: Rc<RefCell<Vec<String>>>,
     show_error_popup: bool,
@@ -36,6 +37,7 @@ impl PokerOnlineScreen {
             last_info: None,
             state: None,
             name: "Player".to_string(),
+            server_address: "127.0.0.1:3000".to_string(),
             inbox: Rc::new(RefCell::new(Vec::new())),
             error_inbox: Rc::new(RefCell::new(Vec::new())),
             show_error_popup: false,
@@ -54,7 +56,7 @@ impl PokerOnlineScreen {
                 if let Some(err) = &self.last_error {
                     ui.label(err);
                 } else {
-                    ui.label("Failed to connect to server. Is it running on port 3000?");
+                    ui.label(format!("Failed to connect to server at {}. Is it running?", self.server_address));
                 }
                 ui.add_space(8.0);
                 if ui.button("Close").clicked() {
@@ -67,10 +69,7 @@ impl PokerOnlineScreen {
     }
     #[cfg(target_arch = "wasm32")]
     fn connect(&mut self, ctx: &Context) {
-        let window = web_sys::window().unwrap();
-        let loc = window.location();
-        let host = loc.hostname().unwrap_or("127.0.0.1".into());
-        let ws_url = format!("ws://{host}:3000/ws");
+        let ws_url = format!("ws://{}/ws", self.server_address);
         match WebSocket::new(&ws_url) {
             Ok(ws) => {
                 let join = serde_json::to_string(&ClientMsg::Join {
@@ -98,9 +97,10 @@ impl PokerOnlineScreen {
                 let onerror = {
                     let err_inbox = Rc::clone(&self.error_inbox);
                     let ctx = ctx.clone();
+                    let server_address = self.server_address.clone();
                     Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
                         err_inbox.borrow_mut().push(
-                            "Failed to connect to server. Is it running on port 3000?".into(),
+                            format!("Failed to connect to server at {}.", server_address),
                         );
                         ctx.request_repaint();
                     })
@@ -110,11 +110,12 @@ impl PokerOnlineScreen {
                 let onclose = {
                     let err_inbox = Rc::clone(&self.error_inbox);
                     let ctx = ctx.clone();
+                    let server_address = self.server_address.clone();
                     Closure::<dyn FnMut(CloseEvent)>::new(move |e: CloseEvent| {
                         let code = e.code();
                         let reason = e.reason();
                         let msg = if reason.is_empty() {
-                            format!("Connection closed (code {}). Is the server running?", code)
+                            format!("Connection closed (code {}). Is the server running at {}?", code, server_address)
                         } else {
                             format!("Connection closed (code {}): {}", code, reason)
                         };
@@ -201,6 +202,11 @@ impl ScreenWidget for PokerOnlineScreen {
                         .on_hover_text("Your nickname");
                     ui.label("Name:");
                 });
+            });
+            ui.horizontal(|ui| {
+                ui.label("Server:");
+                ui.text_edit_singleline(&mut self.server_address)
+                    .on_hover_text("Server address (IP:PORT)");
             });
             if let Some(err) = &self.last_error {
                 ui.colored_label(Color32::RED, err);

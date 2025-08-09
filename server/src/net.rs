@@ -12,6 +12,7 @@ use axum::{
 use futures::StreamExt;
 use rand::seq::SliceRandom;
 use tokio::sync::RwLock;
+use tower_http::services::ServeDir;
 
 use crate::eval::{card_str, evaluate_best_hand, pick_best_five};
 use mcg_shared::{
@@ -19,18 +20,21 @@ use mcg_shared::{
     PlayerAction, PlayerPublic, ServerMsg, Stage,
 };
 
+#[cfg(test)]
+mod poker_tests;
+
 #[derive(Clone, Debug)]
-struct Player {
-    id: usize,
-    name: String,
-    stack: u32,
-    cards: [u8; 2],
-    has_folded: bool,
-    all_in: bool,
+pub struct Player {
+    pub id: usize,
+    pub name: String,
+    pub stack: u32,
+    pub cards: [u8; 2],
+    pub has_folded: bool,
+    pub all_in: bool,
 }
 
 #[derive(Clone, Debug)]
-struct Game {
+pub struct Game {
     // Table
     players: Vec<Player>,
     deck: VecDeque<u8>,
@@ -57,7 +61,7 @@ struct Game {
 }
 
 impl Game {
-    fn new(human_name: String, bot_count: usize) -> Self {
+    pub fn new(human_name: String, bot_count: usize) -> Self {
         let mut deck: Vec<u8> = (0..52).collect();
         deck.shuffle(&mut rand::rng());
 
@@ -218,7 +222,7 @@ impl Game {
         }
     }
 
-    fn apply_player_action(&mut self, actor: usize, action: PlayerAction) {
+    pub fn apply_player_action(&mut self, actor: usize, action: PlayerAction) {
         if actor != self.to_act || self.players[actor].has_folded || self.players[actor].all_in {
             return;
         }
@@ -306,7 +310,7 @@ impl Game {
                         self.players[actor].stack -= add;
                         self.round_bets[actor] += add;
                         self.pot += add;
-                        let by = (self.round_bets[actor] - self.current_bet).max(add);
+                        let by = add;
                         self.current_bet = self.round_bets[actor];
                         self.min_raise = self.min_raise.max(by);
                         if self.players[actor].stack == 0 {
@@ -342,8 +346,15 @@ impl Game {
                 return;
             }
             self.init_round_for_stage();
-        } else if let Some(&nxt) = self.pending_to_act.first() {
-            self.to_act = nxt;
+        } else {
+            if let Some(&nxt) = self.pending_to_act.first() {
+                self.to_act = nxt;
+            } else {
+                // Pending list is empty but betting round is not complete
+                // This happens when a player raises and others need to respond
+                // In a 2-player game, it's the other player's turn
+                self.to_act = if actor == 0 { 1 } else { 0 };
+            }
         }
     }
 
@@ -419,8 +430,11 @@ impl Game {
 
     fn init_round_for_stage(&mut self) {
         self.round_bets.fill(0);
-        self.current_bet = 0;
-        self.min_raise = self.bb;
+        // Don't reset current_bet and min_raise for preflop since blinds have been posted
+        if self.stage != Stage::Preflop {
+            self.current_bet = 0;
+            self.min_raise = self.bb;
+        }
 
         let n = self.players.len();
         let start = match self.stage {
@@ -574,12 +588,19 @@ pub struct AppState {
 }
 
 pub fn build_router(state: AppState) -> Router {
+    let serve_dir = ServeDir::new("./pkg").append_index_html_on_directories(true);
+    let serve_media = ServeDir::new("./media").append_index_html_on_directories(true);
+    let serve_root = ServeDir::new("./").append_index_html_on_directories(true);
+
     Router::new()
         .route(
             "/health",
             get(|| async { Json(serde_json::json!({ "ok": true })) }),
         )
         .route("/ws", get(ws_handler))
+        .nest_service("/pkg", serve_dir)
+        .nest_service("/media", serve_media)
+        .nest_service("/", serve_root)
         .with_state(state)
 }
 
