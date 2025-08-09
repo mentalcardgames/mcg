@@ -128,8 +128,10 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                                         Err(msg) => {
                                             let _ = socket
                                                 .send(Message::Text(
-                                                    serde_json::to_string(&ServerMsg::Error(msg.to_string()))
-                                                        .unwrap(),
+                                                    serde_json::to_string(&ServerMsg::Error(
+                                                        msg.to_string(),
+                                                    ))
+                                                    .unwrap(),
                                                 ))
                                                 .await;
                                         }

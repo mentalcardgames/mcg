@@ -178,7 +178,11 @@ impl Game {
         }
     }
 
-    pub fn apply_player_action(&mut self, actor: usize, action: PlayerAction) -> Result<(), &'static str> {
+    pub fn apply_player_action(
+        &mut self,
+        actor: usize,
+        action: PlayerAction,
+    ) -> Result<(), &'static str> {
         if actor != self.to_act {
             return Err("Not your turn");
         }
@@ -690,7 +694,8 @@ mod tests {
         assert_eq!(game.min_raise, 10);
 
         // Player calls (calls BB of 10)
-    game.apply_player_action(0, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(0, PlayerAction::CheckCall)
+            .unwrap();
 
         // Next to act should not be the player again immediately
         assert_ne!(game.to_act, 0);
@@ -700,11 +705,12 @@ mod tests {
     fn test_valid_raises() {
         let mut game = Game::new_with_seed("Player".to_string(), 1, 123);
         // Heads-up preflop: player (SB/dealer) acts first, raises to 30 (BB=10, raise=20)
-    game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
+        game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
         assert_eq!(game.current_bet, 30);
 
         // Bot needs to call the raise (contribute 20 more to match 30 total)
-    game.apply_player_action(1, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(1, PlayerAction::CheckCall)
+            .unwrap();
 
         // Betting round should be complete, should advance to Flop
         assert_eq!(game.stage, Stage::Flop);
@@ -714,9 +720,11 @@ mod tests {
     fn test_betting_round_completion() {
         let mut game = Game::new_with_seed("Player".to_string(), 1, 999);
         // Heads-up preflop: player (SB/dealer) acts first, calls to match BB
-    game.apply_player_action(0, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(0, PlayerAction::CheckCall)
+            .unwrap();
         // Bot (BB) checks/calls to match 30 total (here to match 10 total)
-    game.apply_player_action(1, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(1, PlayerAction::CheckCall)
+            .unwrap();
         // Betting round should be complete
         assert_eq!(game.stage, Stage::Flop);
     }
@@ -725,7 +733,7 @@ mod tests {
     fn test_player_folding() {
         let mut game = Game::new_with_seed("Player".to_string(), 1, 7);
         // Player folds immediately preflop
-    game.apply_player_action(0, PlayerAction::Fold).unwrap();
+        game.apply_player_action(0, PlayerAction::Fold).unwrap();
         assert_eq!(game.stage, Stage::Showdown);
     }
 
@@ -736,9 +744,10 @@ mod tests {
         let sb = game.to_act;
         let bb = (sb + 1) % 2;
         // SB raises by 10 (to 20 total)
-    game.apply_player_action(sb, PlayerAction::Bet(10)).unwrap();
+        game.apply_player_action(sb, PlayerAction::Bet(10)).unwrap();
         // BB calls 10 to 20
-    game.apply_player_action(bb, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(bb, PlayerAction::CheckCall)
+            .unwrap();
         // After preflop: pot should be 40 (5 + 10 + 15 + 10). We can't read pot reliably after later
         // but continue play and assert final PotAwarded amount after river equals 100.
 
@@ -746,22 +755,28 @@ mod tests {
         assert_eq!(game.stage, Stage::Flop);
         let flop_first = (game.dealer_idx + 1) % 2;
         let flop_second = (flop_first + 1) % 2;
-    game.apply_player_action(flop_first, PlayerAction::Bet(10)).unwrap();
-    game.apply_player_action(flop_second, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(flop_first, PlayerAction::Bet(10))
+            .unwrap();
+        game.apply_player_action(flop_second, PlayerAction::CheckCall)
+            .unwrap();
 
         // Turn: same pattern
         assert_eq!(game.stage, Stage::Turn);
         let turn_first = (game.dealer_idx + 1) % 2;
         let turn_second = (turn_first + 1) % 2;
-    game.apply_player_action(turn_first, PlayerAction::Bet(10)).unwrap();
-    game.apply_player_action(turn_second, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(turn_first, PlayerAction::Bet(10))
+            .unwrap();
+        game.apply_player_action(turn_second, PlayerAction::CheckCall)
+            .unwrap();
 
         // River: same pattern
         assert_eq!(game.stage, Stage::River);
         let river_first = (game.dealer_idx + 1) % 2;
         let river_second = (river_first + 1) % 2;
-    game.apply_player_action(river_first, PlayerAction::Bet(10)).unwrap();
-    game.apply_player_action(river_second, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(river_first, PlayerAction::Bet(10))
+            .unwrap();
+        game.apply_player_action(river_second, PlayerAction::CheckCall)
+            .unwrap();
 
         // Showdown should occur and PotAwarded should equal 100 (not 115)
         assert_eq!(game.stage, Stage::Showdown);

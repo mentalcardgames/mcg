@@ -1,8 +1,8 @@
 use eframe::Frame;
-use egui::{vec2, Context};
+use egui::vec2;
 use std::rc::Rc;
 
-use super::{back_button, AppInterface, DirectoryCardType, GameConfig, ScreenType, ScreenWidget};
+use super::{AppInterface, DirectoryCardType, GameConfig, ScreenWidget};
 use crate::game::card::{CardConfig, SimpleCard};
 use crate::game::field::{SimpleField, SimpleFieldKind::Stack};
 
@@ -63,66 +63,61 @@ impl Default for GameSetupScreen {
     }
 }
 impl ScreenWidget for GameSetupScreen {
-    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Card Pack:");
-                match &self.card_config {
-                    None => ui.label("Deck not loaded"),
-                    Some(config) => ui.label(format!("Using {}", &config.path)),
-                };
-            });
-            ui.horizontal(|ui| {
-                ui.label("Theme:");
-                egui::ComboBox::new("theme_selector", "Theme")
-                    .selected_text(crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index])
-                    .show_ui(ui, |ui| {
-                        for (i, theme) in
-                            crate::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate()
+    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+        ui.horizontal(|ui| {
+            ui.label("Card Pack:");
+            match &self.card_config {
+                None => ui.label("Deck not loaded"),
+                Some(config) => ui.label(format!("Using {}", &config.path)),
+            };
+        });
+        ui.horizontal(|ui| {
+            ui.label("Theme:");
+            egui::ComboBox::new("theme_selector", "Theme")
+                .selected_text(crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index])
+                .show_ui(ui, |ui| {
+                    for (i, theme) in crate::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate() {
+                        let theme_name = match *theme {
+                            "img_cards" => "Standard Cards",
+                            "alt_cards" => "Alternative Cards",
+                            _ => theme,
+                        };
+                        if ui
+                            .selectable_label(self.theme_index == i, theme_name)
+                            .clicked()
                         {
-                            let theme_name = match *theme {
-                                "img_cards" => "Standard Cards",
-                                "alt_cards" => "Alternative Cards",
-                                _ => theme,
-                            };
-                            if ui
-                                .selectable_label(self.theme_index == i, theme_name)
-                                .clicked()
-                            {
-                                self.theme_index = i;
-                                let theme_str =
-                                    crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index];
-                                crate::hardcoded_cards::set_deck_by_theme(
-                                    &mut self.card_config,
-                                    theme_str,
-                                );
-                            }
+                            self.theme_index = i;
+                            let theme_str =
+                                crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index];
+                            crate::hardcoded_cards::set_deck_by_theme(
+                                &mut self.card_config,
+                                theme_str,
+                            );
                         }
-                    });
-            });
-            ui.horizontal(|ui| {
-                ui.label("# Players");
-                let drag = egui::DragValue::new(&mut self.players);
-                ui.add(drag);
-                let dec = egui::Button::new("-").min_size(vec2(30.0, 0.0));
-                if ui.add(dec).clicked() && self.players > 1 {
-                    self.players = self.players.saturating_sub(1);
-                }
-                let inc = egui::Button::new("+").min_size(vec2(30.0, 0.0));
-                if ui.add(inc).clicked() {
-                    self.players = self.players.saturating_add(1);
-                }
-            });
-            if ui.button("Start Game").clicked() {
-                if let Some(config) = self.generate_config() {
-                    if self.is_dnd_variant {
-                        app_interface.queue_event(crate::game::AppEvent::StartDndGame(config));
-                    } else {
-                        app_interface.queue_event(crate::game::AppEvent::StartGame(config));
                     }
+                });
+        });
+        ui.horizontal(|ui| {
+            ui.label("# Players");
+            let drag = egui::DragValue::new(&mut self.players);
+            ui.add(drag);
+            let dec = egui::Button::new("-").min_size(vec2(30.0, 0.0));
+            if ui.add(dec).clicked() && self.players > 1 {
+                self.players = self.players.saturating_sub(1);
+            }
+            let inc = egui::Button::new("+").min_size(vec2(30.0, 0.0));
+            if ui.add(inc).clicked() {
+                self.players = self.players.saturating_add(1);
+            }
+        });
+        if ui.button("Start Game").clicked() {
+            if let Some(config) = self.generate_config() {
+                if self.is_dnd_variant {
+                    app_interface.queue_event(crate::game::AppEvent::StartDndGame(config));
+                } else {
+                    app_interface.queue_event(crate::game::AppEvent::StartGame(config));
                 }
             }
-            back_button(ui, app_interface, ScreenType::Main, "Back");
-        });
+        }
     }
 }

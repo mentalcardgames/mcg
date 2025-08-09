@@ -1,8 +1,8 @@
 use eframe::Frame;
-use egui::{vec2, Color32, Context, RichText, ScrollArea};
+use egui::{vec2, Color32, RichText, ScrollArea};
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use super::{back_button, AppInterface, ScreenType, ScreenWidget};
+use super::{AppInterface, ScreenWidget};
 use crate::articles::{fetch_posts, Post};
 
 #[derive(Debug)]
@@ -91,7 +91,7 @@ impl ArticlesScreen {
             }
         });
     }
-    fn render_initial_ui(&mut self, ui: &mut egui::Ui, ctx: &Context) {
+    fn render_initial_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         if ui
             .add_sized(vec2(150.0, 40.0), egui::Button::new("Fetch Posts"))
             .clicked()
@@ -139,49 +139,48 @@ impl Default for ArticlesScreen {
     }
 }
 impl ScreenWidget for ArticlesScreen {
-    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(20.0);
-                ui.heading("Posts from JSONPlaceholder");
-                ui.add_space(10.0);
-                ui.label(
-                    RichText::new("Real REST API: https://jsonplaceholder.typicode.com/posts/")
-                        .color(Color32::GRAY),
-                );
-                ui.add_space(20.0);
-                back_button(ui, app_interface, ScreenType::Main, "Back");
-                ui.add_space(20.0);
-                while let Ok(message) = self.message_receiver.try_recv() {
-                    match message {
-                        Message::PostsLoaded(posts) => {
-                            self.state.loading_state = LoadingState::Loaded(posts);
-                        }
-                        Message::PostsLoadError(e) => {
-                            self.state.loading_state = LoadingState::Error(e);
-                        }
+    fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+        let ctx = ui.ctx().clone();
+        ui.vertical_centered(|ui| {
+            ui.add_space(20.0);
+            ui.heading("Posts from JSONPlaceholder");
+            ui.add_space(10.0);
+            ui.label(
+                RichText::new("Real REST API: https://jsonplaceholder.typicode.com/posts/")
+                    .color(Color32::GRAY),
+            );
+            ui.add_space(20.0);
+            // Global Back button is provided by the layout
+            ui.add_space(20.0);
+            while let Ok(message) = self.message_receiver.try_recv() {
+                match message {
+                    Message::PostsLoaded(posts) => {
+                        self.state.loading_state = LoadingState::Loaded(posts);
                     }
+                    Message::PostsLoadError(e) => {
+                        self.state.loading_state = LoadingState::Error(e);
+                    }
+                }
+                ctx.request_repaint();
+            }
+            match &self.state.loading_state {
+                LoadingState::NotStarted => {
+                    self.render_initial_ui(ui, &ctx);
+                }
+                LoadingState::Loading => {
+                    self.render_loading_ui(ui);
                     ctx.request_repaint();
                 }
-                match &self.state.loading_state {
-                    LoadingState::NotStarted => {
-                        self.render_initial_ui(ui, ctx);
-                    }
-                    LoadingState::Loading => {
-                        self.render_loading_ui(ui);
-                        ctx.request_repaint();
-                    }
-                    LoadingState::Loaded(posts) => {
-                        let posts = posts.clone();
-                        self.render_posts_list(ui, &posts);
-                    }
-                    LoadingState::Error(error) => {
-                        let error = error.clone();
-                        self.render_error_ui(ui, &error);
-                    }
+                LoadingState::Loaded(posts) => {
+                    let posts = posts.clone();
+                    self.render_posts_list(ui, &posts);
                 }
-                ui.add_space(50.0);
-            });
+                LoadingState::Error(error) => {
+                    let error = error.clone();
+                    self.render_error_ui(ui, &error);
+                }
+            }
+            ui.add_space(50.0);
         });
     }
 }

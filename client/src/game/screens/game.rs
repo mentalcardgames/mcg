@@ -1,10 +1,9 @@
 use eframe::Frame;
-use egui::Context;
 
-use super::{back_button, AppInterface, ScreenType, ScreenWidget};
+use super::{AppInterface, ScreenWidget};
 use crate::game::card::{CardConfig, SimpleCard};
 use crate::game::field::{FieldWidget, SimpleField};
-use crate::sprintln;
+// use crate::sprintln;
 
 pub struct Game<C: CardConfig> {
     pub game_config: Option<GameConfig<C>>,
@@ -73,55 +72,50 @@ impl<C: CardConfig> GameConfig<C> {
 pub type DirectoryCardType = crate::game::card::DirectoryCardType;
 
 impl ScreenWidget for Game<DirectoryCardType> {
-    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, _frame: &mut Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            if back_button(ui, app_interface, ScreenType::Main, "Exit") {
-                sprintln!("back to main menu");
-            }
+    fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+        if let Some(config) = &self.game_config {
+            ui.horizontal(|ui| {
+                ui.label("Image Directory:");
+                ui.label(format!("{:?}", &config.stack.card_config.path));
+            });
+            let images = config.stack.card_config.img_names.clone();
+            let images_len = config.stack.card_config.img_names.len();
+            let player_names: Vec<String> = config
+                .players
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect();
+            let players_len = config.players.len();
+            let _ = config;
+            ui.horizontal(|ui| {
+                ui.label("Images:");
+                egui::ComboBox::from_id_salt("Image Name preview").show_index(
+                    ui,
+                    &mut self.image_idx,
+                    images_len,
+                    |i| &images[i],
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("Player:");
+                egui::ComboBox::from_id_salt("Display Player Fields").show_index(
+                    ui,
+                    &mut self.player_idx,
+                    players_len,
+                    |i| &player_names[i],
+                );
+            });
             if let Some(config) = &self.game_config {
                 ui.horizontal(|ui| {
-                    ui.label("Image Directory:");
-                    ui.label(format!("{:?}", &config.stack.card_config.path));
+                    ui.add(config.stack.draw());
+                    if self.player_idx < config.players.len() {
+                        ui.add(config.players[self.player_idx].1.draw());
+                    }
                 });
-                let images = config.stack.card_config.img_names.clone();
-                let images_len = config.stack.card_config.img_names.len();
-                let player_names: Vec<String> = config
-                    .players
-                    .iter()
-                    .map(|(name, _)| name.clone())
-                    .collect();
-                let players_len = config.players.len();
-                let _ = config;
-                ui.horizontal(|ui| {
-                    ui.label("Images:");
-                    egui::ComboBox::from_id_salt("Image Name preview").show_index(
-                        ui,
-                        &mut self.image_idx,
-                        images_len,
-                        |i| &images[i],
-                    );
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Player:");
-                    egui::ComboBox::from_id_salt("Display Player Fields").show_index(
-                        ui,
-                        &mut self.player_idx,
-                        players_len,
-                        |i| &player_names[i],
-                    );
-                });
-                if let Some(config) = &self.game_config {
-                    ui.horizontal(|ui| {
-                        ui.add(config.stack.draw());
-                        if self.player_idx < config.players.len() {
-                            ui.add(config.players[self.player_idx].1.draw());
-                        }
-                    });
-                }
-            } else {
-                ui.label("No game configuration loaded");
             }
-        });
+        } else {
+            ui.label("No game configuration loaded");
+        }
     }
 }
 

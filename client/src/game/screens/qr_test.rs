@@ -10,8 +10,7 @@ use web_sys::{
     CanvasRenderingContext2d, HtmlCanvasElement, HtmlVideoElement, MediaStreamConstraints,
 };
 
-use super::back_button;
-use super::{AppInterface, ScreenType, ScreenWidget};
+use super::{AppInterface, ScreenWidget};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CameraFacing {
@@ -306,138 +305,136 @@ impl Default for QrScreen {
 }
 
 impl ScreenWidget for QrScreen {
-    fn update(
+    fn ui(
         &mut self,
-        app_interface: &mut AppInterface,
-        ctx: &egui::Context,
+        _app_interface: &mut AppInterface,
+        ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("QR Scanner");
-            ui.add_space(20.0);
-            ui.horizontal(|ui| {
-                back_button(ui, app_interface, ScreenType::Main, "Back");
-                if !self.camera_started {
-                    if ui
-                        .add_sized(vec2(150.0, 30.0), egui::Button::new("Start Camera"))
-                        .clicked()
+        let ctx = ui.ctx().clone();
+        ui.heading("QR Scanner");
+        ui.add_space(20.0);
+        ui.horizontal(|ui| {
+            if !self.camera_started {
+                if ui
+                    .add_sized(vec2(150.0, 30.0), egui::Button::new("Start Camera"))
+                    .clicked()
+                {
+                    #[cfg(target_arch = "wasm32")]
                     {
+                        let camera_ref = self.camera.clone();
+                        self.camera_started = true;
+                        wasm_bindgen_futures::spawn_local(async move {
+                            let _ = camera_ref.borrow_mut().start().await;
+                        });
+                    }
+                }
+            } else {
+                if ui
+                    .add_sized(vec2(150.0, 30.0), egui::Button::new("Stop Camera"))
+                    .clicked()
+                {
+                    #[cfg(target_arch = "wasm32")]
+                    if let Ok(mut camera) = self.camera.try_borrow_mut() {
+                        camera.stop();
+                    }
+                    self.camera_started = false;
+                }
+                if self.is_mobile {
+                    let facing_mode = {
                         #[cfg(target_arch = "wasm32")]
                         {
-                            let camera_ref = self.camera.clone();
-                            self.camera_started = true;
-                            wasm_bindgen_futures::spawn_local(async move {
-                                let _ = camera_ref.borrow_mut().start().await;
-                            });
+                            if let Ok(camera) = self.camera.try_borrow() {
+                                camera.get_facing_mode()
+                            } else {
+                                CameraFacing::Environment
+                            }
                         }
-                    }
-                } else {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            CameraFacing::Environment
+                        }
+                    };
+                    let (button_text, current_camera) = if facing_mode == CameraFacing::User {
+                        ("🔄 Switch to Rear", "📷 Front Camera")
+                    } else {
+                        ("🔄 Switch to Front", "📷 Rear Camera")
+                    };
+                    ui.horizontal(|ui| {
+                        ui.label("Current:");
+                        ui.colored_label(egui::Color32::from_rgb(0, 150, 0), current_camera);
+                    });
                     if ui
-                        .add_sized(vec2(150.0, 30.0), egui::Button::new("Stop Camera"))
+                        .add_sized(vec2(150.0, 30.0), egui::Button::new(button_text))
+                        .on_hover_text("Switch between front and rear camera")
                         .clicked()
                     {
                         #[cfg(target_arch = "wasm32")]
                         if let Ok(mut camera) = self.camera.try_borrow_mut() {
                             camera.stop();
+                            camera.flip_camera();
+                            let camera_ref = self.camera.clone();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                let _ = camera_ref.borrow_mut().start().await;
+                            });
                         }
-                        self.camera_started = false;
-                    }
-                    if self.is_mobile {
-                        let facing_mode = {
-                            #[cfg(target_arch = "wasm32")]
-                            {
-                                if let Ok(camera) = self.camera.try_borrow() {
-                                    camera.get_facing_mode()
-                                } else {
-                                    CameraFacing::Environment
-                                }
-                            }
-                            #[cfg(not(target_arch = "wasm32"))]
-                            {
-                                CameraFacing::Environment
-                            }
-                        };
-                        let (button_text, current_camera) = if facing_mode == CameraFacing::User {
-                            ("🔄 Switch to Rear", "📷 Front Camera")
-                        } else {
-                            ("🔄 Switch to Front", "📷 Rear Camera")
-                        };
-                        ui.horizontal(|ui| {
-                            ui.label("Current:");
-                            ui.colored_label(egui::Color32::from_rgb(0, 150, 0), current_camera);
-                        });
-                        if ui
-                            .add_sized(vec2(150.0, 30.0), egui::Button::new(button_text))
-                            .on_hover_text("Switch between front and rear camera")
-                            .clicked()
-                        {
-                            #[cfg(target_arch = "wasm32")]
-                            if let Ok(mut camera) = self.camera.try_borrow_mut() {
-                                camera.stop();
-                                camera.flip_camera();
-                                let camera_ref = self.camera.clone();
-                                wasm_bindgen_futures::spawn_local(async move {
-                                    let _ = camera_ref.borrow_mut().start().await;
-                                });
-                            }
-                        }
-                    }
-                }
-            });
-            ui.add_space(20.0);
-            if self.camera_started {
-                #[cfg(target_arch = "wasm32")]
-                {
-                    if let Ok(mut camera) = self.camera.try_borrow_mut() {
-                        let _ = camera.capture_frame(ctx);
-                        if let Some(texture) = camera.get_texture() {
-                            ui.add(
-                                egui::Image::from_texture(texture)
-                                    .max_size(vec2(640.0, 480.0))
-                                    .corner_radius(egui::CornerRadius::same(5)),
-                            );
-                        } else if camera.is_video_ready() {
-                            ui.label("Processing video frames...");
-                        } else {
-                            ui.label("Waiting for camera to initialize...");
-                        }
-                    } else {
-                        ui.label("Camera busy...");
-                    }
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    ui.label("Camera not available on native build");
-                }
-                ctx.request_repaint();
-            } else {
-                ui.allocate_ui_with_layout(
-                    vec2(640.0, 480.0),
-                    egui::Layout::centered_and_justified(egui::Direction::TopDown),
-                    |ui| {
-                        ui.label("Camera preview will appear here");
-                        ui.label("Click 'Start Camera' to begin");
-                    },
-                );
-            }
-            ui.add_space(20.0);
-            ui.label("Point your camera at a QR code to scan it");
-            #[cfg(target_arch = "wasm32")]
-            if let Ok(camera) = self.camera.try_borrow() {
-                if let Some(qr_result) = camera.get_last_qr_result() {
-                    ui.add_space(10.0);
-                    ui.separator();
-                    ui.add_space(10.0);
-                    ui.heading("QR Code Detected:");
-                    ui.horizontal(|ui| {
-                        ui.label("Content:");
-                        ui.monospace(qr_result);
-                    });
-                    if ui.button("Copy to Clipboard").clicked() {
-                        ui.ctx().copy_text(qr_result.clone());
                     }
                 }
             }
         });
+        ui.add_space(20.0);
+        if self.camera_started {
+            #[cfg(target_arch = "wasm32")]
+            {
+                if let Ok(mut camera) = self.camera.try_borrow_mut() {
+                    let _ = camera.capture_frame(&ctx);
+                    if let Some(texture) = camera.get_texture() {
+                        ui.add(
+                            egui::Image::from_texture(texture)
+                                .max_size(vec2(640.0, 480.0))
+                                .corner_radius(egui::CornerRadius::same(5)),
+                        );
+                    } else if camera.is_video_ready() {
+                        ui.label("Processing video frames...");
+                    } else {
+                        ui.label("Waiting for camera to initialize...");
+                    }
+                } else {
+                    ui.label("Camera busy...");
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                ui.label("Camera not available on native build");
+            }
+            ctx.request_repaint();
+        } else {
+            ui.allocate_ui_with_layout(
+                vec2(640.0, 480.0),
+                egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                |ui| {
+                    ui.label("Camera preview will appear here");
+                    ui.label("Click 'Start Camera' to begin");
+                },
+            );
+        }
+        ui.add_space(20.0);
+        ui.label("Point your camera at a QR code to scan it");
+        #[cfg(target_arch = "wasm32")]
+        if let Ok(camera) = self.camera.try_borrow() {
+            if let Some(qr_result) = camera.get_last_qr_result() {
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(10.0);
+                ui.heading("QR Code Detected:");
+                ui.horizontal(|ui| {
+                    ui.label("Content:");
+                    ui.monospace(qr_result);
+                });
+                if ui.button("Copy to Clipboard").clicked() {
+                    ui.ctx().copy_text(qr_result.clone());
+                }
+            }
+        }
     }
 }

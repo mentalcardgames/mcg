@@ -122,47 +122,37 @@ impl eframe::App for App {
             events: &mut events,
         };
 
-        // Update the current screen
-        match self.current_screen {
-            ScreenType::Main => {
-                self.main_menu.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::GameSetup => {
-                self.game_setup.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::GameDndSetup => {
-                self.game_dnd_setup.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::Game => {
-                self.game.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::GameDnd => {
-                self.game_dnd.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::Pairing => {
-                self.pairing_screen.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::Articles => {
-                self.articles_screen.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::QRScreen => {
-                self.qr_screen.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::DndTest => {
-                self.dnd_test.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::PokerOnline => {
-                self.poker_online.update(&mut app_interface, ctx, frame);
-            }
-            ScreenType::Settings => {
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.label("Settings screen not implemented");
-                    if ui.button("Back").clicked() {
-                        app_interface.queue_event(AppEvent::ChangeScreen(ScreenType::Main));
-                    }
+        // Root layout: fixed top bar + central panel content
+        let show_top_bar = self.current_screen != ScreenType::Main;
+        if show_top_bar {
+            egui::TopBottomPanel::top("global_top_bar")
+                .exact_height(40.0)
+                .show_separator_line(false)
+                .frame(egui::Frame::default())
+                .show(ctx, |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Back").clicked() {
+                            app_interface.queue_event(AppEvent::ChangeScreen(ScreenType::Main));
+                        }
+                        ui.strong(self.current_screen.to_string());
+                    });
                 });
-            }
         }
+        egui::CentralPanel::default().show(ctx, |ui| match self.current_screen {
+            ScreenType::Main => self.main_menu.ui(&mut app_interface, ui, frame),
+            ScreenType::GameSetup => self.game_setup.ui(&mut app_interface, ui, frame),
+            ScreenType::GameDndSetup => self.game_dnd_setup.ui(&mut app_interface, ui, frame),
+            ScreenType::Game => self.game.ui(&mut app_interface, ui, frame),
+            ScreenType::GameDnd => self.game_dnd.ui(&mut app_interface, ui, frame),
+            ScreenType::Pairing => self.pairing_screen.ui(&mut app_interface, ui, frame),
+            ScreenType::Articles => self.articles_screen.ui(&mut app_interface, ui, frame),
+            ScreenType::QRScreen => self.qr_screen.ui(&mut app_interface, ui, frame),
+            ScreenType::DndTest => self.dnd_test.ui(&mut app_interface, ui, frame),
+            ScreenType::PokerOnline => self.poker_online.ui(&mut app_interface, ui, frame),
+            ScreenType::Settings => {
+                ui.label("Settings screen not implemented");
+            }
+        });
 
         for event in events {
             self.queue_event(event);

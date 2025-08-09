@@ -1,5 +1,4 @@
 use eframe::Frame;
-use egui::Context;
 
 pub mod articles_screen;
 pub mod cards_test_dnd;
@@ -33,7 +32,8 @@ impl<'a> AppInterface<'a> {
 }
 
 pub trait ScreenWidget {
-    fn update(&mut self, app_interface: &mut AppInterface, ctx: &Context, frame: &mut Frame);
+    // Render the screen into the given Ui. Root controls panels/layout.
+    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, frame: &mut Frame);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -66,17 +66,4 @@ impl ScreenType {
             ScreenType::PokerOnline => "poker_online".into(),
         }
     }
-}
-
-pub fn back_button(
-    ui: &mut egui::Ui,
-    app_interface: &mut AppInterface,
-    to: ScreenType,
-    label: &str,
-) -> bool {
-    let clicked = ui.button(label).clicked();
-    if clicked {
-        app_interface.queue_event(crate::game::AppEvent::ChangeScreen(to));
-    }
-    clicked
 }
