@@ -440,22 +440,15 @@ impl Game {
     }
 
     fn is_betting_round_complete(&self) -> bool {
-        // Complete if every non-folded, non-all-in player has matched current_bet
-        for (i, p) in self.players.iter().enumerate() {
-            if p.has_folded || p.all_in {
-                continue;
-            }
-            if self.round_bets[i] != self.current_bet {
-                return false;
-            }
-        }
-        true
+        // A betting round ends when no one is left to act for this street.
+        self.pending_to_act.is_empty()
     }
 
     fn init_round_for_stage(&mut self) {
-        self.round_bets.fill(0);
-        // Don't reset current_bet and min_raise for preflop since blinds have been posted
+        // For streets after preflop, reset round contributions and betting state.
+        // For preflop, do NOT zero round_bets: blinds were already posted into round_bets.
         if self.stage != Stage::Preflop {
+            self.round_bets.fill(0);
             self.current_bet = 0;
             self.min_raise = self.bb;
         }
@@ -727,5 +720,48 @@ mod tests {
         // Player folds immediately preflop
         game.apply_player_action(0, PlayerAction::Fold);
         assert_eq!(game.stage, Stage::Showdown);
+    }
+
+    #[test]
+    fn test_pot_totals_no_double_count() {
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 555);
+        // Heads-up preflop: SB acts first; raise to 20 total (BB=10 -> +10 raise)
+        let sb = game.to_act;
+        let bb = (sb + 1) % 2;
+        // SB raises by 10 (to 20 total)
+        game.apply_player_action(sb, PlayerAction::Bet(10));
+        // BB calls 10 to 20
+        game.apply_player_action(bb, PlayerAction::CheckCall);
+        // After preflop: pot should be 40 (5 + 10 + 15 + 10). We can't read pot reliably after later
+        // but continue play and assert final PotAwarded amount after river equals 100.
+
+        // Flop: first to act is dealer+1 (BB). Bet 10, call 10.
+        assert_eq!(game.stage, Stage::Flop);
+        let flop_first = (game.dealer_idx + 1) % 2;
+        let flop_second = (flop_first + 1) % 2;
+        game.apply_player_action(flop_first, PlayerAction::Bet(10));
+        game.apply_player_action(flop_second, PlayerAction::CheckCall);
+
+        // Turn: same pattern
+        assert_eq!(game.stage, Stage::Turn);
+        let turn_first = (game.dealer_idx + 1) % 2;
+        let turn_second = (turn_first + 1) % 2;
+        game.apply_player_action(turn_first, PlayerAction::Bet(10));
+        game.apply_player_action(turn_second, PlayerAction::CheckCall);
+
+        // River: same pattern
+        assert_eq!(game.stage, Stage::River);
+        let river_first = (game.dealer_idx + 1) % 2;
+        let river_second = (river_first + 1) % 2;
+        game.apply_player_action(river_first, PlayerAction::Bet(10));
+        game.apply_player_action(river_second, PlayerAction::CheckCall);
+
+        // Showdown should occur and PotAwarded should equal 100 (not 115)
+        assert_eq!(game.stage, Stage::Showdown);
+        let last = game.action_log.iter().rev().find_map(|e| match &e.event {
+            LogEvent::PotAwarded { amount, .. } => Some(*amount),
+            _ => None,
+        });
+        assert_eq!(last, Some(100));
     }
 }
