@@ -42,16 +42,16 @@ impl ScreenWidget for MainMenu {
                             Some(ScreenType::GameDndSetup),
                         ),
                         ("📱 Pairing", "pairing opened", Some(ScreenType::Pairing)),
-                        ("⚙️ Settings", "settings opened", Some(ScreenType::Settings)),
-                        ("🖱️ DND Test", "dnd_test opened", Some(ScreenType::DndTest)),
+                        ("🛠 Settings", "settings opened", Some(ScreenType::Settings)), // Gear alternative
+                        ("✋ DND Test", "dnd_test opened", Some(ScreenType::DndTest)), // Raised hand for DND Test
                         ("📚 Articles", "articles opened", Some(ScreenType::Articles)),
-                        ("🔍 QR Test", "qr_test opened", Some(ScreenType::QRScreen)),
+                        ("🔎 QR Test", "qr_test opened", Some(ScreenType::QRScreen)), // Magnifier alternative
                         (
-                            "🃏 Poker Online",
+                            "🃏 Poker Online", // Joker alternative
                             "poker online opened",
                             Some(ScreenType::PokerOnline),
                         ),
-                        ("🖨️ Print Screen", "Print Screen clicked", None),
+                        ("📝 Print Screen", "Print Screen clicked", None), // Memo/paper alternative
                     ];
 
                     for (label, message, screen_type) in buttons.iter() {
@@ -64,7 +64,7 @@ impl ScreenWidget for MainMenu {
                             )
                             .clicked()
                         {
-                            if *label == "🖨️ Print Screen" {
+                            if *label == "📝 Print Screen" {
                                 eprintln!("Print Screen clicked");
                             } else {
                                 eprintln!("{}", message);
