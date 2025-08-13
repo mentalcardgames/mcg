@@ -3,8 +3,9 @@ pub mod card;
 pub mod field;
 pub mod screen;
 pub mod screens;
+#[cfg(target_arch = "wasm32")]
 use crate::router::Router;
-use screens::{AppInterface, MainMenu, ScreenType, ScreenWidget};
+use screens::{AppInterface, MainMenu, Routable, ScreenType, ScreenWidget};
 
 /// Events that can be sent between screens
 #[derive(Debug, Clone)]
@@ -29,6 +30,7 @@ pub struct App {
     qr_screen: screens::QrScreen,
     dnd_test: screens::DNDTest,
     poker_online: screens::PokerOnlineScreen,
+    example_screen: screens::ExampleScreen,
 
     // Router for URL handling
     #[cfg(target_arch = "wasm32")]
@@ -84,6 +86,7 @@ impl App {
             qr_screen: screens::QrScreen::new(),
             dnd_test: screens::DNDTest::new(),
             poker_online: screens::PokerOnlineScreen::new(),
+            example_screen: screens::ExampleScreen::new(),
             #[cfg(target_arch = "wasm32")]
             router,
             pending_events: Vec::new(),
@@ -174,7 +177,7 @@ impl App {
                     ui.with_layout(
                         egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
                         |ui| {
-                            ui.strong(self.current_screen.to_string());
+                            ui.strong(self.current_screen.display_name());
                         },
                     );
                 });
@@ -201,8 +204,8 @@ impl eframe::App for App {
         };
 
         // Root layout: fixed top bar + central panel content
-        let show_top_bar = self.current_screen != ScreenType::Main;
-        if show_top_bar {
+        // Always show top bar except for Main screen
+        if self.current_screen != ScreenType::Main {
             self.render_top_bar(ctx, &mut app_interface);
         }
         egui::CentralPanel::default().show(ctx, |ui| match self.current_screen {
@@ -216,9 +219,7 @@ impl eframe::App for App {
             ScreenType::QRScreen => self.qr_screen.ui(&mut app_interface, ui, frame),
             ScreenType::DndTest => self.dnd_test.ui(&mut app_interface, ui, frame),
             ScreenType::PokerOnline => self.poker_online.ui(&mut app_interface, ui, frame),
-            ScreenType::Settings => {
-                ui.label("Settings screen not implemented");
-            }
+            ScreenType::Example => self.example_screen.ui(&mut app_interface, ui, frame),
         });
 
         for event in events {

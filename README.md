@@ -10,6 +10,68 @@ A mental card game implementation in the browser.
 - Screen management system
 - WASM compatibility for web deployment
 
+## Adding New Screens
+
+To add a new screen to the application:
+
+1. **Add screen type and metadata** in `client/src/game/screens/mod.rs`:
+   ```rust
+   // Add to ScreenType enum
+   MyNewScreen,
+   
+   // Add metadata in metadata() method
+   ScreenType::MyNewScreen => ScreenMetadata {
+       display_name: "My New Screen",
+       icon: "🆕",
+       url_path: "/my-new-screen",
+       description: "Description of what this screen does",
+       show_in_menu: true,  // Show in main menu?
+   },
+   
+   // Add to all_screens() method
+   ScreenType::MyNewScreen,
+   
+   // Add to create_screen() method
+   ScreenType::MyNewScreen => MyNewScreen::create(),
+   ```
+
+2. **Create screen implementation** (e.g., `my_new_screen.rs`):
+   ```rust
+   use super::{AppInterface, ScreenWidget, ScreenFactory};
+   
+   pub struct MyNewScreen { /* state */ }
+   
+   impl ScreenWidget for MyNewScreen {
+       fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+           // Your UI code here
+       }
+   }
+   
+   impl ScreenFactory for MyNewScreen {
+       fn create() -> Box<dyn ScreenWidget> {
+           Box::new(MyNewScreen::new())
+       }
+   }
+   ```
+
+3. **Register in App** in `client/src/game.rs`:
+   ```rust
+   // Add field to App struct
+   my_new_screen: MyNewScreen,
+   
+   // Add to App::new()
+   my_new_screen: MyNewScreen::new(),
+   
+   // Add to match in update()
+   ScreenType::MyNewScreen => self.my_new_screen.ui(&mut app_interface, ui, frame),
+   ```
+
+The screen will automatically:
+- Appear in the main menu (if `show_in_menu: true`)
+- Handle URL routing at the specified path
+- Show the top bar with back button
+- Work with browser forward/back buttons
+
 ## Running the WASM Frontend
 
 

@@ -52,15 +52,15 @@ pub fn build_router(state: AppState) -> Router {
 
 pub async fn run_server(addr: SocketAddr, state: AppState) {
     let app = build_router(state.clone());
-    println!("🌐 MCG Server running at http://{}", addr);
+
+    let display_addr = if addr.ip().to_string() == "127.0.0.1" {
+        format!("localhost:{}", addr.port())
+    } else {
+        addr.to_string()
+    };
+
+    println!("🌐 MCG Server running at http://{}", display_addr);
     println!("📱 Open your browser and navigate to the above URL");
-    println!("🎮 Available routes:");
-    println!("   • http://{}/           - Main menu", addr);
-    println!("   • http://{}/pairing    - Pairing screen", addr);
-    println!("   • http://{}/game       - Game screen", addr);
-    println!("   • http://{}/articles   - Articles screen", addr);
-    println!("   • http://{}/poker-online - Poker online", addr);
-    println!("   • And more...");
     println!();
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

@@ -6,7 +6,6 @@ mod server;
 
 use server::AppState;
 use std::net::{SocketAddr, TcpListener};
-use tokio::net::TcpListener as TokioTcpListener;
 
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///

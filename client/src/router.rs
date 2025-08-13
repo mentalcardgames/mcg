@@ -1,107 +1,20 @@
 //! Client-side routing for MCG WASM application
 
-use crate::game::screens::ScreenType;
+use crate::game::screens::{Routable, ScreenType};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{window, History, Location, PopStateEvent};
+use web_sys::{window, History, Location};
 
 /// Router for managing client-side navigation and URL synchronization
 pub struct Router {
-    /// Current route parsed from URL
-    current_route: Route,
+    /// Current screen type parsed from URL
+    current_screen: ScreenType,
     /// Browser history API
     history: History,
     /// Browser location API
     location: Location,
     /// Callback closure for popstate events
     _popstate_callback: Closure<dyn FnMut(web_sys::Event)>,
-}
-
-/// Represents different routes in the application
-#[derive(Debug, Clone, PartialEq)]
-pub enum Route {
-    Home,
-    GameSetup,
-    Game,
-    Pairing,
-    Settings,
-    DndTest,
-    GameDndSetup,
-    GameDnd,
-    Articles,
-    QRScreen,
-    PokerOnline,
-}
-
-impl Route {
-    /// Convert route to URL path
-    pub fn to_path(&self) -> &'static str {
-        match self {
-            Route::Home => "/",
-            Route::GameSetup => "/game-setup",
-            Route::Game => "/game",
-            Route::Pairing => "/pairing",
-            Route::Settings => "/settings",
-            Route::DndTest => "/dnd-test",
-            Route::GameDndSetup => "/game-dnd-setup",
-            Route::GameDnd => "/game-dnd",
-            Route::Articles => "/articles",
-            Route::QRScreen => "/qr",
-            Route::PokerOnline => "/poker-online",
-        }
-    }
-
-    /// Parse URL path to route
-    pub fn from_path(path: &str) -> Route {
-        match path {
-            "/" | "" => Route::Home,
-            "/game-setup" => Route::GameSetup,
-            "/game" => Route::Game,
-            "/pairing" => Route::Pairing,
-            "/settings" => Route::Settings,
-            "/dnd-test" => Route::DndTest,
-            "/game-dnd-setup" => Route::GameDndSetup,
-            "/game-dnd" => Route::GameDnd,
-            "/articles" => Route::Articles,
-            "/qr" => Route::QRScreen,
-            "/poker-online" => Route::PokerOnline,
-            _ => Route::Home, // Default fallback
-        }
-    }
-
-    /// Convert route to screen type
-    pub fn to_screen_type(&self) -> ScreenType {
-        match self {
-            Route::Home => ScreenType::Main,
-            Route::GameSetup => ScreenType::GameSetup,
-            Route::Game => ScreenType::Game,
-            Route::Pairing => ScreenType::Pairing,
-            Route::Settings => ScreenType::Settings,
-            Route::DndTest => ScreenType::DndTest,
-            Route::GameDndSetup => ScreenType::GameDndSetup,
-            Route::GameDnd => ScreenType::GameDnd,
-            Route::Articles => ScreenType::Articles,
-            Route::QRScreen => ScreenType::QRScreen,
-            Route::PokerOnline => ScreenType::PokerOnline,
-        }
-    }
-
-    /// Convert screen type to route
-    pub fn from_screen_type(screen_type: ScreenType) -> Route {
-        match screen_type {
-            ScreenType::Main => Route::Home,
-            ScreenType::GameSetup => Route::GameSetup,
-            ScreenType::Game => Route::Game,
-            ScreenType::Pairing => Route::Pairing,
-            ScreenType::Settings => Route::Settings,
-            ScreenType::DndTest => Route::DndTest,
-            ScreenType::GameDndSetup => Route::GameDndSetup,
-            ScreenType::GameDnd => Route::GameDnd,
-            ScreenType::Articles => Route::Articles,
-            ScreenType::QRScreen => Route::QRScreen,
-            ScreenType::PokerOnline => Route::PokerOnline,
-        }
-    }
 }
 
 impl Router {
@@ -111,13 +24,12 @@ impl Router {
         let history = window.history()?;
         let location = window.location();
 
-        // Parse initial route from current URL
-        let current_route = Self::parse_current_route(&location)?;
+        // Parse initial screen from current URL
+        let current_screen = Self::parse_current_screen(&location)?;
 
         // Create popstate event listener
         let popstate_callback = Closure::wrap(Box::new(move |_event: web_sys::Event| {
             // The popstate event will be handled by checking the URL in update()
-            crate::sprintln!("Popstate event received");
         }) as Box<dyn FnMut(web_sys::Event)>);
 
         // Add event listener for browser back/forward buttons
@@ -127,64 +39,47 @@ impl Router {
         )?;
 
         Ok(Router {
-            current_route,
+            current_screen,
             history,
             location,
             _popstate_callback: popstate_callback,
         })
     }
 
-    /// Parse the current route from browser location
-    fn parse_current_route(location: &Location) -> Result<Route, JsValue> {
+    /// Parse the current screen from browser location
+    fn parse_current_screen(location: &Location) -> Result<ScreenType, JsValue> {
         let pathname = location.pathname()?;
-        Ok(Route::from_path(&pathname))
+        Ok(Routable::from_url_path(&pathname).unwrap_or(ScreenType::Main))
     }
 
-    /// Get the current route
-    pub fn current_route(&self) -> &Route {
-        &self.current_route
+    /// Get the current screen type
+    pub fn current_screen_type(&self) -> ScreenType {
+        self.current_screen
     }
 
-    /// Navigate to a new route
-    pub fn navigate_to(&mut self, route: Route) -> Result<(), JsValue> {
-        if route != self.current_route {
-            let path = route.to_path();
+    /// Navigate to a screen type
+    pub fn navigate_to_screen(&mut self, screen_type: ScreenType) -> Result<(), JsValue> {
+        if screen_type != self.current_screen {
+            let path = screen_type.url_path();
 
             // Update browser history
             self.history
                 .push_state_with_url(&JsValue::NULL, "", Some(path))?;
 
-            self.current_route = route;
-            crate::sprintln!("Navigated to: {}", path);
+            self.current_screen = screen_type;
         }
         Ok(())
     }
 
-    /// Navigate to a route by screen type
-    pub fn navigate_to_screen(&mut self, screen_type: ScreenType) -> Result<(), JsValue> {
-        let route = Route::from_screen_type(screen_type);
-        self.navigate_to(route)
-    }
-
-    /// Check if the URL has changed and update current route
-    /// Returns true if the route changed
+    /// Check if the URL has changed and update current screen
+    /// Returns true if the screen changed
     pub fn check_for_url_changes(&mut self) -> Result<bool, JsValue> {
-        let new_route = Self::parse_current_route(&self.location)?;
-        if new_route != self.current_route {
-            crate::sprintln!(
-                "Route changed from {:?} to {:?}",
-                self.current_route,
-                new_route
-            );
-            self.current_route = new_route;
+        let new_screen = Self::parse_current_screen(&self.location)?;
+        if new_screen != self.current_screen {
+            self.current_screen = new_screen;
             return Ok(true);
         }
         Ok(false)
-    }
-
-    /// Get the screen type for the current route
-    pub fn current_screen_type(&self) -> ScreenType {
-        self.current_route.to_screen_type()
     }
 }
 
@@ -193,7 +88,7 @@ impl Default for Router {
     fn default() -> Self {
         // This should only be used in tests or fallback scenarios
         Self::new().unwrap_or_else(|_| Router {
-            current_route: Route::Home,
+            current_screen: ScreenType::Main,
             history: unsafe { std::mem::zeroed() },
             location: unsafe { std::mem::zeroed() },
             _popstate_callback: Closure::wrap(Box::new(|_| {}) as Box<dyn FnMut(web_sys::Event)>),

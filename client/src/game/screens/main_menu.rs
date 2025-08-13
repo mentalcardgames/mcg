@@ -1,12 +1,16 @@
 use eframe::Frame;
 use egui::{vec2, FontId, RichText};
 
-use super::{AppInterface, ScreenType, ScreenWidget};
+use super::{AppInterface, ScreenRegistry, ScreenWidget};
 
-pub struct MainMenu {}
+pub struct MainMenu {
+    screen_registry: ScreenRegistry,
+}
 impl MainMenu {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            screen_registry: ScreenRegistry::new(),
+        }
     }
 }
 impl Default for MainMenu {
@@ -38,46 +42,21 @@ impl ScreenWidget for MainMenu {
                         ui.spacing_mut().item_spacing = vec2(20.0, 20.0);
 
                         let button_size = vec2(180.0, 80.0);
-                        let buttons = [
-                            ("🎮 Start", "setup started", Some(ScreenType::GameSetup)),
-                            (
-                                "🎯 Drag & Drop",
-                                "game_dnd opened",
-                                Some(ScreenType::GameDndSetup),
-                            ),
-                            ("📱 Pairing", "pairing opened", Some(ScreenType::Pairing)),
-                            ("🛠 Settings", "settings opened", Some(ScreenType::Settings)), // Gear alternative
-                            ("✋ DND Test", "dnd_test opened", Some(ScreenType::DndTest)), // Raised hand for DND Test
-                            ("📚 Articles", "articles opened", Some(ScreenType::Articles)),
-                            ("🔎 QR Test", "qr_test opened", Some(ScreenType::QRScreen)), // Magnifier alternative
-                            (
-                                "🃏 Poker Online", // Joker alternative
-                                "poker online opened",
-                                Some(ScreenType::PokerOnline),
-                            ),
-                            ("📝 Print Screen", "Print Screen clicked", None), // Memo/paper alternative
-                        ];
 
-                        for (label, message, screen_type) in buttons.iter() {
-                            if ui
-                                .add_sized(
-                                    button_size,
-                                    egui::Button::new(
-                                        RichText::new(*label).font(FontId::proportional(16.0)),
-                                    ),
-                                )
-                                .clicked()
-                            {
-                                if *label == "📝 Print Screen" {
-                                    eprintln!("Print Screen clicked");
-                                } else {
-                                    eprintln!("{}", message);
-                                    if let Some(screen) = screen_type {
-                                        app_interface.queue_event(
-                                            crate::game::AppEvent::ChangeScreen(*screen),
-                                        );
-                                    }
-                                }
+                        // Generate buttons from screen registry
+                        let menu_screens = self.screen_registry.get_menu_screens();
+                        for screen_type in menu_screens {
+                            let metadata = self.screen_registry.get_metadata(screen_type);
+                            let label = format!("{} {}", metadata.icon, metadata.display_name);
+
+                            let button = egui::Button::new(
+                                RichText::new(&label).font(FontId::proportional(16.0)),
+                            );
+
+                            if ui.add_sized(button_size, button).clicked() {
+                                eprintln!("{} opened", metadata.display_name);
+                                app_interface
+                                    .queue_event(crate::game::AppEvent::ChangeScreen(screen_type));
                             }
                         }
                     });
