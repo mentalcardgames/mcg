@@ -7,6 +7,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         State,
     },
+    http::{StatusCode, Uri},
     response::IntoResponse,
     routing::get,
     Json, Router,
@@ -33,7 +34,6 @@ pub fn build_router(state: AppState) -> Router {
     // Serve static files from the project root. Assumes process CWD is repo root.
     let serve_dir = ServeDir::new("pkg").append_index_html_on_directories(true);
     let serve_media = ServeDir::new("media").append_index_html_on_directories(true);
-    let serve_root = ServeDir::new(".").append_index_html_on_directories(true);
 
     Router::new()
         .route(
@@ -43,14 +43,25 @@ pub fn build_router(state: AppState) -> Router {
         .route("/ws", get(ws_handler))
         .nest_service("/pkg", serve_dir)
         .nest_service("/media", serve_media)
-        // Serve index.html at root
-        .nest_service("/", serve_root)
+        // Serve index.html for the root route
+        .route("/", get(serve_index))
+        // Fallback handler for SPA routing - serve index.html for all other routes
+        .fallback(spa_handler)
         .with_state(state)
 }
 
 pub async fn run_server(addr: SocketAddr, state: AppState) {
     let app = build_router(state.clone());
-    println!("[START] Server running at http://{}", addr);
+    println!("🌐 MCG Server running at http://{}", addr);
+    println!("📱 Open your browser and navigate to the above URL");
+    println!("🎮 Available routes:");
+    println!("   • http://{}/           - Main menu", addr);
+    println!("   • http://{}/pairing    - Pairing screen", addr);
+    println!("   • http://{}/game       - Game screen", addr);
+    println!("   • http://{}/articles   - Articles screen", addr);
+    println!("   • http://{}/poker-online - Poker online", addr);
+    println!("   • And more...");
+    println!();
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
@@ -222,4 +233,33 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
 async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameStatePublic> {
     let lobby = state.lobby.read().await;
     lobby.game.as_ref().map(|g| g.public_for(you_id))
+}
+
+/// Serve index.html file
+async fn serve_index() -> impl IntoResponse {
+    match tokio::fs::read_to_string("index.html").await {
+        Ok(content) => (StatusCode::OK, [("content-type", "text/html")], content).into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "index.html not found").into_response(),
+    }
+}
+
+/// SPA fallback handler - serves index.html for client-side routing
+async fn spa_handler(uri: Uri) -> impl IntoResponse {
+    let path = uri.path();
+
+    // Don't serve index.html for API routes or asset requests
+    if path.starts_with("/api")
+        || path.starts_with("/pkg")
+        || path.starts_with("/media")
+        || path.starts_with("/ws")
+        || path.starts_with("/health")
+    {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    // For all other routes, serve index.html to enable client-side routing
+    match tokio::fs::read_to_string("index.html").await {
+        Ok(content) => (StatusCode::OK, [("content-type", "text/html")], content).into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "index.html not found").into_response(),
+    }
 }

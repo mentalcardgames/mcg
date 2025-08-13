@@ -3,6 +3,7 @@
 pub mod articles;
 pub mod game;
 pub mod hardcoded_cards;
+pub mod router;
 pub mod utils;
 
 #[allow(unused_imports)]

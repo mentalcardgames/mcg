@@ -42,7 +42,8 @@ impl PokerOnlineScreen {
                 let window = web_sys::window().expect("no global window exists");
                 let location = window.location();
                 let hostname = location.hostname().unwrap_or("127.0.0.1".into());
-                format!("{}:3000", hostname)
+                let port = location.port().unwrap_or("3000".into());
+                format!("{}:{}", hostname, port)
             },
             #[cfg(not(target_arch = "wasm32"))]
             server_address: "127.0.0.1:3000".to_string(),

@@ -5,7 +5,8 @@ mod game;
 mod server;
 
 use server::AppState;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpListener};
+use tokio::net::TcpListener as TokioTcpListener;
 
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///
@@ -37,9 +38,32 @@ async fn main() {
     let mut state = AppState::default();
     state.bot_count = bots;
 
-    // Bind address
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    // Find first available port starting from 3000
+    let port = find_available_port(3000).expect("Could not find an available port");
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+
+    println!("🚀 Starting server on port {}", port);
+    if port != 3000 {
+        println!(
+            "⚠️  Port 3000 was not available, using port {} instead",
+            port
+        );
+    }
 
     // Run the server
     server::run_server(addr, state).await;
+}
+
+/// Find the first available port starting from the given port number
+fn find_available_port(start_port: u16) -> Result<u16, std::io::Error> {
+    for port in start_port..start_port + 100 {
+        match TcpListener::bind(("127.0.0.1", port)) {
+            Ok(_) => return Ok(port),
+            Err(_) => continue,
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AddrInUse,
+        "No available ports found in range",
+    ))
 }

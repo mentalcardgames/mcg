@@ -3,6 +3,7 @@ pub mod card;
 pub mod field;
 pub mod screen;
 pub mod screens;
+use crate::router::Router;
 use screens::{AppInterface, MainMenu, ScreenType, ScreenWidget};
 
 /// Events that can be sent between screens
@@ -29,6 +30,10 @@ pub struct App {
     dnd_test: screens::DNDTest,
     poker_online: screens::PokerOnlineScreen,
 
+    // Router for URL handling
+    #[cfg(target_arch = "wasm32")]
+    router: Option<Router>,
+
     // Event queue for handling screen transitions
     pending_events: Vec<AppEvent>,
 }
@@ -54,8 +59,21 @@ impl App {
         // Set alternative theme for drag and drop game
         crate::hardcoded_cards::set_deck_by_theme(&mut game_dnd_setup.card_config, "alt_cards");
 
+        // Initialize router for WASM targets
+        #[cfg(target_arch = "wasm32")]
+        let router = Router::new().ok();
+
+        #[cfg(target_arch = "wasm32")]
+        let current_screen = router
+            .as_ref()
+            .map(|r| r.current_screen_type())
+            .unwrap_or(ScreenType::Main);
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let current_screen = ScreenType::Main;
+
         Self {
-            current_screen: ScreenType::Main,
+            current_screen,
             main_menu: MainMenu::new(),
             game_setup,
             game_dnd_setup,
@@ -66,6 +84,8 @@ impl App {
             qr_screen: screens::QrScreen::new(),
             dnd_test: screens::DNDTest::new(),
             poker_online: screens::PokerOnlineScreen::new(),
+            #[cfg(target_arch = "wasm32")]
+            router,
             pending_events: Vec::new(),
         }
     }
@@ -81,18 +101,48 @@ impl App {
         for event in events {
             match event {
                 AppEvent::ChangeScreen(screen_type) => {
-                    self.current_screen = screen_type;
+                    self.change_screen(screen_type);
                 }
                 AppEvent::StartGame(config) => {
                     self.game.set_config(config);
-                    self.current_screen = ScreenType::Game;
+                    self.change_screen(ScreenType::Game);
                 }
                 AppEvent::StartDndGame(config) => {
                     self.game_dnd.set_config(config);
-                    self.current_screen = ScreenType::GameDnd;
+                    self.change_screen(ScreenType::GameDnd);
                 }
                 AppEvent::ExitGame => {
-                    self.current_screen = ScreenType::Main;
+                    self.change_screen(ScreenType::Main);
+                }
+            }
+        }
+    }
+
+    /// Change screen and update URL
+    fn change_screen(&mut self, screen_type: ScreenType) {
+        if self.current_screen != screen_type {
+            self.current_screen = screen_type;
+
+            // Update URL if router is available
+            #[cfg(target_arch = "wasm32")]
+            if let Some(ref mut router) = self.router {
+                if let Err(e) = router.navigate_to_screen(screen_type) {
+                    crate::sprintln!("Failed to navigate to screen: {:?}", e);
+                }
+            }
+        }
+    }
+
+    /// Check for URL changes and update screen accordingly
+    fn check_url_changes(&mut self) {
+        #[cfg(target_arch = "wasm32")]
+        if let Some(ref mut router) = self.router {
+            if let Ok(changed) = router.check_for_url_changes() {
+                if changed {
+                    let new_screen = router.current_screen_type();
+                    if new_screen != self.current_screen {
+                        self.current_screen = new_screen;
+                    }
                 }
             }
         }
@@ -138,7 +188,10 @@ impl eframe::App for App {
         let pixels_per_point = crate::calculate_dpi_scale();
         ctx.set_pixels_per_point(pixels_per_point);
 
-        // Process any pending events first
+        // Check for URL changes first
+        self.check_url_changes();
+
+        // Process any pending events
         self.process_events();
 
         // Prepare event queue for screens

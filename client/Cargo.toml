@@ -17,26 +17,36 @@ path = "src/lib.rs"
 wasm-bindgen = { version = "0.2.100", features = ["enable-interning"] }
 console_error_panic_hook = { version = "0.1.7", optional = true }
 web-sys = { version = "0.3.77", features = [
-  "HtmlCanvasElement",
-  "HtmlVideoElement",
-  "MediaStream",
-  "MediaStreamTrack",
-  "MediaDevices",
-  "MediaStreamConstraints",
-  "CanvasRenderingContext2d",
-  "ImageData",
-  "Event",
-  "EventTarget",
-  "console",
-  "WebSocket",
-  "MessageEvent",
-  "CloseEvent",
-  "Window",
-  "Screen",
+    "HtmlCanvasElement",
+    "HtmlVideoElement",
+    "MediaStream",
+    "MediaStreamTrack",
+    "MediaDevices",
+    "MediaStreamConstraints",
+    "CanvasRenderingContext2d",
+    "ImageData",
+    "Event",
+    "EventTarget",
+    "console",
+    "WebSocket",
+    "MessageEvent",
+    "CloseEvent",
+    "Window",
+    "Screen",
+    "Location",
+    "History",
+    "Url",
+    "PopStateEvent",
+    "EventListener",
 ] }
 egui = "0.31.1"
 eframe = "0.31.1"
-egui_extras = { version = "0.31.1", features = ["all_loaders", "image", "svg", "file"] }
+egui_extras = { version = "0.31.1", features = [
+    "all_loaders",
+    "image",
+    "svg",
+    "file",
+] }
 wasm-bindgen-futures = "0.4.50"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 rand = "0.9.1"

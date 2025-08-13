@@ -30,23 +30,20 @@ build PROFILE="release":
         ;;
     esac
 
-# Serve the repository root on a local web server (serves index.html + pkg/)
-# Usage: just serve [PORT]
-serve PORT="8080":
-    python3 -m http.server {{PORT}}
-
-# Build then serve in one step
-# Usage: just start [PORT] [PROFILE]
+# Build then serve using the Rust server in one step
+# Usage: just start [PROFILE] [BOTS]
 # Examples:
-#   just start                # release on port 8080
-#   just start 8080 dev       # dev build on port 8080
-start PORT="8080" PROFILE="release":
+#   just start                # release build with 1 bot
+#   just start dev            # dev build with 1 bot
+#   just start release 3      # release build with 3 bots
+start PROFILE="release" BOTS="1":
     just build {{PROFILE}}
-    just serve {{PORT}}
+    just server {{BOTS}}
 
-# Run the native server for the poker demo
-server:
-    cargo run -p mcg-server
+# Run the native server (serves frontend + WebSocket backend)
+# Usage: just server [BOTS]
+server BOTS="1":
+    cargo run -p mcg-server -- --bots {{BOTS}}
 
 # Run the server in the background for AI agent testing
 server-bg:
