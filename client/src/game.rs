@@ -107,6 +107,31 @@ impl App {
     }
 }
 
+impl App {
+    fn render_top_bar(&mut self, ctx: &Context, app_interface: &mut AppInterface) {
+        egui::TopBottomPanel::top("global_top_bar")
+            .exact_height(40.0)
+            .show_separator_line(false)
+            .frame(egui::Frame::default())
+            .show(ctx, |ui| {
+                ui.horizontal_centered(|ui| {
+                    ui.add_space(16.0);
+                    let back_button = egui::Button::new("⬅ Back").min_size(egui::vec2(110.0, 32.0));
+                    if ui.add(back_button).clicked() {
+                        app_interface.queue_event(AppEvent::ChangeScreen(ScreenType::Main));
+                    }
+                    ui.add_space(16.0);
+                    ui.with_layout(
+                        egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+                        |ui| {
+                            ui.strong(self.current_screen.to_string());
+                        },
+                    );
+                });
+            });
+    }
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         // Set pixels_per_point based on screen resolution
@@ -125,18 +150,7 @@ impl eframe::App for App {
         // Root layout: fixed top bar + central panel content
         let show_top_bar = self.current_screen != ScreenType::Main;
         if show_top_bar {
-            egui::TopBottomPanel::top("global_top_bar")
-                .exact_height(40.0)
-                .show_separator_line(false)
-                .frame(egui::Frame::default())
-                .show(ctx, |ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Back").clicked() {
-                            app_interface.queue_event(AppEvent::ChangeScreen(ScreenType::Main));
-                        }
-                        ui.strong(self.current_screen.to_string());
-                    });
-                });
+            self.render_top_bar(ctx, &mut app_interface);
         }
         egui::CentralPanel::default().show(ctx, |ui| match self.current_screen {
             ScreenType::Main => self.main_menu.ui(&mut app_interface, ui, frame),
