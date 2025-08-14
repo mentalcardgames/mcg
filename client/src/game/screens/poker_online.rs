@@ -214,8 +214,8 @@ impl PokerOnlineScreen {
                             .find(|p| p.id == ev.player_id)
                             .map(|p| p.name.as_str())
                             .unwrap_or("Player");
-                        let action_txt = action_text(&ev.action);
-                        ui.label(format!("{} {}", name, action_txt));
+                        let (action_txt, color) = action_text(&ev.action);
+                        ui.colored_label(color, format!("{} {}", name, action_txt));
                     }
                 });
             ui.add_space(8.0);
@@ -226,7 +226,7 @@ impl PokerOnlineScreen {
                 .max_height(180.0)
                 .show(ui, |ui| {
                     for entry in state.action_log.iter().rev().take(50) {
-                        ui.label(log_entry_text(entry, &state.players));
+                        log_entry_row(ui, entry, &state.players);
                     }
                 });
         });
@@ -431,28 +431,38 @@ fn card_text_and_color(c: u8) -> (String, Color32) {
     };
     (text, color)
 }
-fn action_text(a: &PlayerAction) -> String {
+fn action_text(a: &PlayerAction) -> (String, Color32) {
     match a {
-        PlayerAction::Fold => "folds".into(),
-        PlayerAction::CheckCall => "checks / calls".into(),
-        PlayerAction::Bet(n) => format!("bets {}", n),
+        PlayerAction::Fold => ("🟥 folds".into(), Color32::from_rgb(220, 80, 80)),
+        PlayerAction::CheckCall => ("⏭ check/call".into(), Color32::from_rgb(120, 160, 220)),
+        PlayerAction::Bet(n) => (format!("💰 bets {}", n), Color32::from_rgb(240, 200, 80)),
     }
 }
 
-fn action_kind_text(kind: &ActionKind) -> String {
+fn action_kind_text(kind: &ActionKind) -> (String, Color32) {
     match kind {
-        ActionKind::Fold => "folds".into(),
-        ActionKind::Check => "checks".into(),
-        ActionKind::Call(n) => format!("calls {}", n),
-        ActionKind::Bet(n) => format!("bets {}", n),
-        ActionKind::Raise { to, by } => format!("raises to {} (+{})", to, by),
+        ActionKind::Fold => ("🟥 folds".into(), Color32::from_rgb(220, 80, 80)),
+        ActionKind::Check => ("⏭ checks".into(), Color32::from_rgb(120, 160, 220)),
+        ActionKind::Call(n) => (format!("📞 calls {}", n), Color32::from_rgb(120, 160, 220)),
+        ActionKind::Bet(n) => (format!("💰 bets {}", n), Color32::from_rgb(240, 200, 80)),
+        ActionKind::Raise { to, by } => (
+            format!("⬆️ raises to {} (+{})", to, by),
+            Color32::from_rgb(250, 160, 60),
+        ),
         ActionKind::PostBlind { kind, amount } => match kind {
-            BlindKind::SmallBlind => format!("posts small blind {}", amount),
-            BlindKind::BigBlind => format!("posts big blind {}", amount),
+            BlindKind::SmallBlind => (
+                format!("🟤 posts small blind {}", amount),
+                Color32::from_rgb(170, 120, 60),
+            ),
+            BlindKind::BigBlind => (
+                format!("⚫ posts big blind {}", amount),
+                Color32::from_rgb(120, 120, 120),
+            ),
         },
     }
 }
 
+#[allow(dead_code)]
 fn stage_text(stage: Stage) -> &'static str {
     match stage {
         Stage::Preflop => "Preflop",
@@ -489,61 +499,6 @@ fn card_text(c: u8) -> String {
     card_text_and_color(c).0
 }
 
-fn log_entry_text(entry: &LogEntry, players: &[PlayerPublic]) -> String {
-    match &entry.event {
-        LogEvent::Action(kind) => {
-            let who = entry
-                .player_id
-                .map(|id| name_of(players, id))
-                .unwrap_or_else(|| "Table".to_string());
-            format!("{} {}", who, action_kind_text(kind))
-        }
-        LogEvent::StageChanged(s) => format!("Stage → {}", stage_text(*s)),
-        LogEvent::DealtHole { player_id } => {
-            let who = name_of(players, *player_id);
-            format!("Dealt hole cards to {}", who)
-        }
-        LogEvent::DealtCommunity { cards } => match cards.len() {
-            3 => format!(
-                "Flop: {} {} {}",
-                card_text(cards[0]),
-                card_text(cards[1]),
-                card_text(cards[2])
-            ),
-            4 => format!("Turn: {}", card_text(cards[3])),
-            5 => format!("River: {}", card_text(cards[4])),
-            _ => format!(
-                "Community: {}",
-                cards
-                    .iter()
-                    .map(|&c| card_text(c))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
-        },
-        LogEvent::Showdown { hand_results } => {
-            let mut parts = Vec::new();
-            for hr in hand_results {
-                let who = name_of(players, hr.player_id);
-                let cat = category_text(&hr.rank.category);
-                parts.push(format!("{}: {}", who, cat));
-            }
-            if parts.is_empty() {
-                "Showdown".to_string()
-            } else {
-                format!("Showdown — {}", parts.join(", "))
-            }
-        }
-        LogEvent::PotAwarded { winners, amount } => {
-            let names = winners
-                .iter()
-                .map(|&id| name_of(players, id))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("Pot {} awarded to {}", amount, names)
-        }
-    }
-}
 fn stage_badge(stage: Stage) -> egui::WidgetText {
     let (txt, color) = match stage {
         Stage::Preflop => ("Preflop", Color32::from_rgb(100, 150, 255)),
@@ -553,4 +508,91 @@ fn stage_badge(stage: Stage) -> egui::WidgetText {
         Stage::Showdown => ("Showdown", Color32::from_rgb(180, 100, 220)),
     };
     RichText::new(txt).color(color).strong().into()
+}
+
+fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic]) {
+    match &entry.event {
+        LogEvent::Action(kind) => {
+            let who = entry
+                .player_id
+                .map(|id| name_of(players, id))
+                .unwrap_or_else(|| "Table".to_string());
+            let (txt, color) = action_kind_text(kind);
+            ui.colored_label(color, format!("{} {}", who, txt));
+        }
+        LogEvent::StageChanged(s) => {
+            ui.add_space(6.0);
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("🕒").strong());
+                ui.label(stage_badge(*s));
+            });
+            ui.separator();
+            ui.add_space(6.0);
+        }
+        LogEvent::DealtHole { player_id } => {
+            let who = name_of(players, *player_id);
+            ui.colored_label(Color32::from_rgb(150, 150, 150), format!("🂠 Dealt hole cards to {}", who));
+        }
+        LogEvent::DealtCommunity { cards } => {
+            match cards.len() {
+                3 => {
+                    ui.colored_label(
+                        Color32::from_rgb(100, 200, 120),
+                        format!("🃏 Flop: {} {} {}", card_text(cards[0]), card_text(cards[1]), card_text(cards[2])),
+                    );
+                }
+                4 => {
+                    ui.colored_label(
+                        Color32::from_rgb(230, 180, 80),
+                        format!("🃏 Turn: {}", card_text(cards[3])),
+                    );
+                }
+                5 => {
+                    ui.colored_label(
+                        Color32::from_rgb(220, 120, 120),
+                        format!("🃏 River: {}", card_text(cards[4])),
+                    );
+                }
+                _ => {
+                    ui.colored_label(
+                        Color32::from_rgb(120, 120, 120),
+                        format!(
+                            "🃏 Community: {}",
+                            cards
+                                .iter()
+                                .map(|&c| card_text(c))
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        ),
+                    );
+                }
+            }
+        },
+        LogEvent::Showdown { hand_results } => {
+            let mut parts = Vec::new();
+            for hr in hand_results {
+                let who = name_of(players, hr.player_id);
+                let cat = category_text(&hr.rank.category);
+                parts.push(format!("{}: {}", who, cat));
+            }
+            let text = if parts.is_empty() {
+                "🏁 Showdown".to_string()
+            } else {
+                format!("🏁 Showdown — {}", parts.join(", "))
+            };
+            ui.colored_label(Color32::from_rgb(180, 100, 220), text);
+        }
+        LogEvent::PotAwarded { winners, amount } => {
+            let names = winners
+                .iter()
+                .map(|&id| name_of(players, id))
+                .collect::<Vec<_>>()
+                .join(", ");
+            ui.colored_label(
+                Color32::from_rgb(240, 200, 80),
+                format!("🏆 Pot {} awarded to {}", amount, names),
+            );
+        }
+    }
 }
