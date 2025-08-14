@@ -15,6 +15,7 @@ use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
 use super::{AppInterface, ScreenWidget};
+use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
     #[cfg(target_arch = "wasm32")]
@@ -28,6 +29,7 @@ pub struct PokerOnlineScreen {
     inbox: Rc<RefCell<Vec<ServerMsg>>>,
     error_inbox: Rc<RefCell<Vec<String>>>,
     show_error_popup: bool,
+    scanner: QrScannerPopup,
 }
 impl PokerOnlineScreen {
     pub fn new() -> Self {
@@ -52,6 +54,7 @@ impl PokerOnlineScreen {
             inbox: Rc::new(RefCell::new(Vec::new())),
             error_inbox: Rc::new(RefCell::new(Vec::new())),
             show_error_popup: false,
+            scanner: QrScannerPopup::new(),
         }
     }
 
@@ -157,6 +160,7 @@ impl PokerOnlineScreen {
                     ui.label("Server:");
                     ui.text_edit_singleline(&mut self.server_address)
                         .on_hover_text("Server address (IP:PORT)");
+                    self.scanner.button_and_popup(ui, ctx, &mut self.server_address);
                 });
                 ui.horizontal(|ui| {
                     ui.label("Bots:");
@@ -185,6 +189,7 @@ impl PokerOnlineScreen {
                 ui.label("Server:");
                 ui.text_edit_singleline(&mut self.server_address)
                     .on_hover_text("Server address (IP:PORT)");
+                self.scanner.button_and_popup(ui, ctx, &mut self.server_address);
                 ui.add_space(12.0);
                 ui.label("Bots:");
                 ui.add(

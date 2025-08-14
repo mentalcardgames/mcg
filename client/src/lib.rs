@@ -1,10 +1,14 @@
 //! Client-side (WASM) library for the MCG app.
 
+#[cfg(not(target_arch = "wasm32"))]
+compile_error!("The 'client' crate is WASM-only. Build it with target wasm32-unknown-unknown (e.g., via wasm-pack or just tasks).");
+
 pub mod articles;
 pub mod game;
 pub mod hardcoded_cards;
 pub mod router;
 pub mod utils;
+pub mod qr_scanner;
 
 #[allow(unused_imports)]
 use eframe::AppCreator;

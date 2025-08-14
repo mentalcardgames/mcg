@@ -92,9 +92,3 @@ impl Default for Router {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-impl Default for Router {
-    fn default() -> Self {
-        panic!("Router is only available on WASM targets");
-    }
-}
