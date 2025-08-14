@@ -16,6 +16,12 @@ pub enum AppEvent {
     ExitGame,
 }
 
+/// Global settings for the application
+#[derive(Clone)]
+pub struct Settings {
+    pub dpi: f32,
+}
+
 /// Application state that owns all screen data
 pub struct App {
     // Screen management
@@ -31,6 +37,11 @@ pub struct App {
     dnd_test: screens::DNDTest,
     poker_online: screens::PokerOnlineScreen,
     example_screen: screens::ExampleScreen,
+
+    // Global settings
+    settings_open: bool,
+    settings: Settings,
+    pending_settings: Settings,
 
     // Router for URL handling
     #[cfg(target_arch = "wasm32")]
@@ -91,6 +102,10 @@ impl App {
             dnd_test: screens::DNDTest::new(),
             poker_online: screens::PokerOnlineScreen::new(),
             example_screen: screens::ExampleScreen::new(),
+            // Settings defaults
+            settings_open: false,
+            settings: Settings { dpi: crate::calculate_dpi_scale() },
+            pending_settings: Settings { dpi: crate::calculate_dpi_scale() },
             #[cfg(target_arch = "wasm32")]
             router,
             #[cfg(not(target_arch = "wasm32"))]
@@ -169,33 +184,87 @@ impl App {
 impl App {
     fn render_top_bar(&mut self, ctx: &Context, app_interface: &mut AppInterface) {
         egui::TopBottomPanel::top("global_top_bar")
-            .exact_height(40.0)
             .show_separator_line(false)
             .frame(egui::Frame::default())
             .show(ctx, |ui| {
-                ui.horizontal_centered(|ui| {
-                    ui.add_space(16.0);
-                    let back_button = egui::Button::new("⬅ Back").min_size(egui::vec2(110.0, 32.0));
-                    if ui.add(back_button).clicked() {
-                        app_interface.queue_event(AppEvent::ChangeScreen(ScreenType::Main));
-                    }
-                    ui.add_space(16.0);
-                    ui.with_layout(
-                        egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
-                        |ui| {
-                            ui.strong(self.current_screen.display_name());
-                        },
-                    );
+                egui::menu::bar(ui, |ui| {
+                    // Stable three-region layout: left (back), center (title), right (settings)
+                    let avail = ui.available_width();
+                    let left_w = 120.0;   // space for back button + margin
+                    let right_w = 140.0;  // space for settings + margin
+                    let center_w = (avail - left_w - right_w).max(0.0);
+                    let row_h = ui.spacing().interact_size.y;
+
+                    // Left region
+                    ui.allocate_ui_with_layout(egui::vec2(left_w, row_h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.add_space(8.0);
+                        let back_button = egui::Button::new("⬅ Back").min_size(egui::vec2(100.0, 28.0));
+                        if ui.add(back_button).clicked() {
+                            app_interface.queue_event(AppEvent::ChangeScreen(ScreenType::Main));
+                        }
+                    });
+
+                    // Center region (title perfectly centered)
+                    ui.allocate_ui_with_layout(egui::vec2(center_w, row_h), egui::Layout::centered_and_justified(egui::Direction::LeftToRight), |ui| {
+                        ui.strong(self.current_screen.display_name());
+                    });
+
+                    // Right region
+                    ui.allocate_ui_with_layout(egui::vec2(right_w, row_h), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(8.0);
+                        if ui.button("⚙ Settings").on_hover_text("Open global settings").clicked() {
+                            self.pending_settings = self.settings.clone();
+                            self.settings_open = true;
+                        }
+                    });
                 });
             });
+
+        // Settings popup window
+        if self.settings_open {
+            let mut open = true;
+            egui::Window::new("Settings")
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.heading("Global Settings");
+                    ui.add_space(8.0);
+
+                    // DPI slider only (reset sets to calculated default)
+                    ui.add(egui::Slider::new(&mut self.pending_settings.dpi, 0.75..=2.0).text("UI scale (DPI)"));
+                    if ui.button("Reset to default").clicked() {
+                        self.pending_settings.dpi = crate::calculate_dpi_scale();
+                    }
+
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        // Apply: apply changes but keep window open
+                        if ui.button("Apply").clicked() {
+                            self.settings = self.pending_settings.clone();
+                            ctx.set_pixels_per_point(self.settings.dpi);
+                        }
+                        // OK: apply and close
+                        if ui.button("OK").clicked() {
+                            self.settings = self.pending_settings.clone();
+                            ctx.set_pixels_per_point(self.settings.dpi);
+                            self.settings_open = false;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            // Discard changes and close
+                            self.settings_open = false;
+                        }
+                    });
+                });
+            if !open { self.settings_open = false; }
+        }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
-        // Set pixels_per_point based on screen resolution
-        let pixels_per_point = crate::calculate_dpi_scale();
-        ctx.set_pixels_per_point(pixels_per_point);
+        // Apply current settings DPI
+        ctx.set_pixels_per_point(self.settings.dpi);
 
         // Check for URL changes first
         self.check_url_changes();
