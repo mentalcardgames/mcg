@@ -1,11 +1,10 @@
 //! Client-side (WASM) library for the MCG app.
 
-#[cfg(not(target_arch = "wasm32"))]
-compile_error!("The 'client' crate is WASM-only. Build it with target wasm32-unknown-unknown (e.g., via wasm-pack or just tasks).");
 
 pub mod articles;
 pub mod game;
 pub mod hardcoded_cards;
+#[cfg(target_arch = "wasm32")]
 pub mod router;
 pub mod utils;
 pub mod qr_scanner;
@@ -61,6 +60,9 @@ pub fn start_game(
     });
     Ok(())
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn start_game(_canvas: (), _init: AppCreator<'static>) -> Result<(), ()> { Ok(()) }
 
 #[cfg(target_arch = "wasm32")]
 pub fn calculate_dpi_scale() -> f32 {

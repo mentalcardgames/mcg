@@ -43,12 +43,21 @@ start PROFILE="release" BOTS="1":
 # Run the native server (serves frontend + WebSocket backend)
 # Usage: just server [BOTS]
 server BOTS="1":
-    cargo run -p mcg-server -- --bots {{BOTS}}
+    cargo run -p mcg-server --bin mcg-server -- --bots {{BOTS}}
 
 # Run the server in the background for AI agent testing
 server-bg:
-    cargo run -p mcg-server &
+    cargo run -p mcg-server --bin mcg-server &
 
 # Kill the background server process
 kill-server:
     pkill -f "mcg-server" || true
+
+# Run the headless CLI with arbitrary arguments
+# Usage examples:
+#   just cli join
+#   just cli -- --server http://localhost:3000 state
+#   just cli -- action bet --amount 20
+#   just cli -- reset --bots 3
+cli +ARGS:
+    cargo run -p mcg-server --bin mcg-cli -- {{ARGS}}

@@ -18,6 +18,9 @@ use tower_http::services::ServeDir;
 
 use crate::game::Game;
 use mcg_shared::{ClientMsg, GameStatePublic, ServerMsg};
+use mcg_server::pretty::{format_state_human, format_event_human, format_table_header};
+use std::io::IsTerminal;
+use owo_colors::OwoColorize;
 
 #[derive(Clone, Default)]
 pub struct AppState {
@@ -28,6 +31,7 @@ pub struct AppState {
 #[derive(Clone, Default)]
 pub(crate) struct Lobby {
     game: Option<Game>,
+    last_printed_log_len: usize,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -81,7 +85,8 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
         },
         _ => return,
     };
-    println!("[CONNECT] New player: {}", name);
+    let hello = format!("{} {}", "[CONNECT]".bold().green(), name.bold());
+    println!("{}", hello);
 
     ensure_game_started(&state, &name).await;
 
@@ -100,7 +105,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             _ => {}
         }
     }
-    println!("[DISCONNECT] {} disconnected", name);
+    println!("{} {}", "[DISCONNECT]".bold().red(), name.bold());
 }
 
 async fn ensure_game_started(state: &AppState, name: &str) {
@@ -122,6 +127,18 @@ async fn send_ws(socket: &mut WebSocket, msg: &ServerMsg) {
 
 async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: usize) {
     if let Some(gs) = current_state_public(state, you_id).await {
+        // Only print newly added events since the last print, to avoid repeating "Preflop"
+        let mut lobby = state.lobby.write().await;
+        let already = lobby.last_printed_log_len;
+        let total = gs.action_log.len();
+        if total > already {
+            for e in gs.action_log.iter().skip(already) {
+                let line = mcg_server::pretty::format_event_human(e, &gs.players, gs.you_id, std::io::stdout().is_terminal());
+                println!("{}", line);
+            }
+            lobby.last_printed_log_len = total;
+        }
+        drop(lobby);
         send_ws(socket, &ServerMsg::State(gs)).await;
     }
 }
@@ -212,6 +229,12 @@ async fn process_client_msg(
                         game.dealer_idx = (game.dealer_idx + 1) % n;
                     }
                     game.start_new_hand();
+                    // After starting a new hand, print a table header banner once
+                    let sb = game.sb; let bb = game.bb;
+                    let gs = game.public_for(you_id);
+                    lobby.last_printed_log_len = gs.action_log.len();
+                    let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+                    println!("{}", header);
                 }
             }
             send_state_to(socket, state, you_id).await;
@@ -222,6 +245,13 @@ async fn process_client_msg(
             {
                 let mut lobby = state.lobby.write().await;
                 lobby.game = Some(Game::new(name.to_string(), bots));
+                if let Some(game) = &mut lobby.game {
+                    let sb = game.sb; let bb = game.bb;
+                    let gs = game.public_for(you_id);
+                    lobby.last_printed_log_len = gs.action_log.len();
+                    let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+                    println!("{}", header);
+                }
             }
             send_state_to(socket, state, you_id).await;
             drive_bots_with_delays(socket, state, you_id, 500, 1500).await;

@@ -35,6 +35,8 @@ pub struct App {
     // Router for URL handling
     #[cfg(target_arch = "wasm32")]
     router: Option<Router>,
+    #[cfg(not(target_arch = "wasm32"))]
+    router: Option<()>,
 
     // Event queue for handling screen transitions
     pending_events: Vec<AppEvent>,
@@ -72,6 +74,8 @@ impl App {
             .unwrap_or(ScreenType::Main);
 
         #[cfg(not(target_arch = "wasm32"))]
+        let router: Option<()> = None;
+        #[cfg(not(target_arch = "wasm32"))]
         let current_screen = ScreenType::Main;
 
         Self {
@@ -88,6 +92,8 @@ impl App {
             poker_online: screens::PokerOnlineScreen::new(),
             example_screen: screens::ExampleScreen::new(),
             #[cfg(target_arch = "wasm32")]
+            router,
+            #[cfg(not(target_arch = "wasm32"))]
             router,
             pending_events: Vec::new(),
         }
