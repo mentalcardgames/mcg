@@ -1,4 +1,10 @@
 //! Core poker game logic.
+//! 
+//! Layering note: this module defines the pure domain/game engine for
+//! no-limit Texas Hold'em used by the server. It contains no network or
+//! persistence code. The Axum server imports and drives this engine while
+//! remaining responsible for I/O. Keeping game rules and state transitions
+//! here allows isolated testing and future reuse.
 
 use crate::eval::{card_str, evaluate_best_hand, pick_best_five};
 use mcg_shared::{
@@ -46,6 +52,15 @@ pub struct Game {
     pub recent_actions: Vec<ActionEvent>,
     pub action_log: Vec<LogEntry>,
     pub winner_ids: Vec<usize>,
+}
+
+/// Internal outcome when attempting a raise over a non-zero current bet.
+#[derive(Debug, Clone, Copy)]
+enum RaiseOutcome {
+    /// The requested raise is invalid or insufficient; treat as a call (or all-in call).
+    Call { pay: u32 },
+    /// A legal raise, specifying the amount added this action and the raise size ("by").
+    Raise { add: u32, by: u32 },
 }
 
 impl Game {
@@ -178,6 +193,55 @@ impl Game {
         }
     }
 
+    /// Compute the normalized add amount for an open bet (when current_bet == 0).
+    /// Ensures the total bet is at least the big blind and not more than
+    /// the player's total available chips (round contribution + stack).
+    fn compute_open_bet_add(&self, actor: usize, desired_total: u32) -> (u32, u32) {
+        let bet_to = desired_total
+            .max(self.bb)
+            .min(self.players[actor].stack + self.round_bets[actor]);
+        let add = bet_to
+            .saturating_sub(self.round_bets[actor])
+            .min(self.players[actor].stack);
+        (add, bet_to)
+    }
+
+    /// Decide how to resolve a raise attempt over a non-zero current bet.
+    /// Returns either Call(pay) for insufficient/illegal raises (including
+    /// all-in that doesn't meet the minimum raise), or Raise{add, by} for a
+    /// legal raise that updates the last legal raise size.
+    fn decide_raise_outcome(
+        &self,
+        actor: usize,
+        raise_by: u32,
+        prev_current_bet: u32,
+    ) -> RaiseOutcome {
+        let need = self.current_bet.saturating_sub(self.round_bets[actor]);
+        let target_to = self.current_bet + raise_by;
+        let required = target_to.saturating_sub(self.round_bets[actor]);
+        let add = required.min(self.players[actor].stack);
+
+        if add <= need {
+            // Not enough to raise; treat as call (possibly all-in)
+            let pay = need.min(self.players[actor].stack);
+            return RaiseOutcome::Call { pay };
+        }
+
+        // Validate minimum raise size: must cover a call and increase by at least self.min_raise
+        let required_add = prev_current_bet
+            .saturating_sub(self.round_bets[actor])
+            + self.min_raise;
+        if add < required_add {
+            let pay = need.min(self.players[actor].stack);
+            return RaiseOutcome::Call { pay };
+        }
+
+        let new_to = self.round_bets[actor] + add;
+        let by = new_to.saturating_sub(prev_current_bet);
+        RaiseOutcome::Raise { add, by }
+    }
+
+    /// Apply a player action, enforcing betting rules and advancing the game flow.
     pub fn apply_player_action(
         &mut self,
         actor: usize,
@@ -236,12 +300,7 @@ impl Game {
             PlayerAction::Bet(x) => {
                 if self.current_bet == 0 {
                     // Open bet
-                    let bet_to = x
-                        .max(self.bb)
-                        .min(self.players[actor].stack + self.round_bets[actor]);
-                    let add = bet_to
-                        .saturating_sub(self.round_bets[actor])
-                        .min(self.players[actor].stack);
+                    let (add, _bet_to) = self.compute_open_bet_add(actor, x);
                     self.players[actor].stack -= add;
                     self.round_bets[actor] += add;
                     self.pot += add;
@@ -258,44 +317,40 @@ impl Game {
                     });
                 } else {
                     // Raise by x (to current_bet + x)
-                    let need = self.current_bet.saturating_sub(self.round_bets[actor]);
-                    let target_to = self.current_bet + x;
-                    let required = target_to.saturating_sub(self.round_bets[actor]);
-                    let add = required.min(self.players[actor].stack);
-
-                    if add <= need {
-                        // Not enough to raise; treat as call (possibly all-in)
-                        let pay = need.min(self.players[actor].stack);
-                        self.players[actor].stack -= pay;
-                        self.round_bets[actor] += pay;
-                        self.pot += pay;
-                        if pay < need {
-                            self.players[actor].all_in = true;
+                    match self.decide_raise_outcome(actor, x, prev_current_bet) {
+                        RaiseOutcome::Call { pay } => {
+                            let need = self.current_bet.saturating_sub(self.round_bets[actor]);
+                            let pay = pay.min(need).min(self.players[actor].stack);
+                            self.players[actor].stack -= pay;
+                            self.round_bets[actor] += pay;
+                            self.pot += pay;
+                            if pay < need {
+                                self.players[actor].all_in = true;
+                            }
+                            self.log(LogEntry {
+                                player_id: Some(actor),
+                                event: LogEvent::Action(ActionKind::Call(pay)),
+                            });
                         }
-                        self.log(LogEntry {
-                            player_id: Some(actor),
-                            event: LogEvent::Action(ActionKind::Call(pay)),
-                        });
-                    } else {
-                        // Valid raise
-                        self.players[actor].stack -= add;
-                        self.round_bets[actor] += add;
-                        self.pot += add;
-                        let new_to = self.round_bets[actor];
-                        let by = new_to.saturating_sub(prev_current_bet);
-                        self.current_bet = new_to;
-                        // Set min_raise to the size of this (last legal) raise
-                        self.min_raise = by;
-                        if self.players[actor].stack == 0 {
-                            self.players[actor].all_in = true;
+                        RaiseOutcome::Raise { add, by } => {
+                            self.players[actor].stack -= add;
+                            self.round_bets[actor] += add;
+                            self.pot += add;
+                            let new_to = self.round_bets[actor];
+                            self.current_bet = new_to;
+                            // Set min_raise to the size of this (last legal) raise
+                            self.min_raise = by;
+                            if self.players[actor].stack == 0 {
+                                self.players[actor].all_in = true;
+                            }
+                            self.log(LogEntry {
+                                player_id: Some(actor),
+                                event: LogEvent::Action(ActionKind::Raise {
+                                    to: self.current_bet,
+                                    by,
+                                }),
+                            });
                         }
-                        self.log(LogEntry {
-                            player_id: Some(actor),
-                            event: LogEvent::Action(ActionKind::Raise {
-                                to: self.current_bet,
-                                by,
-                            }),
-                        });
                     }
                 }
             }
@@ -350,6 +405,9 @@ impl Game {
         self.start_new_hand_from_deck(deck);
     }
 
+    /// Initialize a new hand using the provided deck order.
+    /// This resets round state, deals hole cards, posts blinds and
+    /// establishes the first player to act according to heads-up vs 3+ rules.
     fn start_new_hand_from_deck(&mut self, deck: Vec<u8>) {
         self.deck = VecDeque::from(deck);
 
@@ -415,6 +473,7 @@ impl Game {
         });
     }
 
+    /// Post a small/big blind, capping to available stack and marking all-in when necessary.
     fn post_blind(&mut self, idx: usize, kind: BlindKind, amount: u32) {
         let a = amount.min(self.players[idx].stack);
         self.players[idx].stack -= a;
@@ -450,11 +509,14 @@ impl Game {
         }
     }
 
+    /// A betting round ends when no one is left to act for this street.
     fn is_betting_round_complete(&self) -> bool {
-        // A betting round ends when no one is left to act for this street.
         self.pending_to_act.is_empty()
     }
 
+    /// Initialize per-street state and who acts first for each stage.
+    /// For post-flop streets, round contributions are reset and the minimum
+    /// future raise size starts at the big blind.
     fn init_round_for_stage(&mut self) {
         // For streets after preflop, reset round contributions and betting state.
         // For preflop, do NOT zero round_bets: blinds were already posted into round_bets.
@@ -492,6 +554,7 @@ impl Game {
         self.to_act = *self.pending_to_act.first().unwrap_or(&self.dealer_idx);
     }
 
+    /// Deal community cards and advance the hand's stage, emitting appropriate logs.
     fn advance_stage(&mut self) {
         match self.stage {
             Stage::Preflop => {
@@ -546,6 +609,10 @@ impl Game {
         });
     }
 
+    /// Resolve showdown by evaluating all non-folded hands, splitting the pot on ties
+    /// and logging the results. Pot is distributed chip-by-chip for any remainder to
+    /// the earliest winners in table order, which is sufficient for a single main pot
+    /// (side-pots are not modeled in this simplified demo).
     fn finish_showdown(&mut self) {
         // Evaluate all non-folded players
         let mut results: Vec<HandResult> = Vec::new();
@@ -669,6 +736,9 @@ fn shuffled_deck_with_seed(seed: u64) -> Vec<u8> {
 }
 
 impl Game {
+    /// Cap in-memory logs to bounded sizes to avoid unbounded growth when
+    /// the server runs for long sessions. This protects both serialization
+    /// payload size and UI performance when rendering histories.
     fn cap_logs(&mut self) {
         if self.recent_actions.len() > MAX_RECENT_ACTIONS {
             let start = self.recent_actions.len() - MAX_RECENT_ACTIONS;
@@ -785,5 +855,126 @@ mod tests {
             _ => None,
         });
         assert_eq!(last, Some(100));
+    }
+
+    #[test]
+    fn test_min_raise_enforcement() {
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 42);
+        
+        // Preflop: player raises to 30 (BB=10, so raise is +20, min_raise becomes 20)
+        game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
+        assert_eq!(game.current_bet, 30);
+        assert_eq!(game.min_raise, 20); // The size of the last raise
+        
+        // Bot now needs to call the raise
+        game.apply_player_action(1, PlayerAction::CheckCall).unwrap();
+        
+        // Flop: betting round starts with current_bet reset to 0
+        assert_eq!(game.stage, Stage::Flop);
+        
+        // Check who should be first to act on flop (dealer+1 position)
+        let flop_first = (game.dealer_idx + 1) % 2;
+        assert_eq!(flop_first, 1); // Bot should be first to act on flop
+        
+        // On flop, current_bet is reset to 0, so Bet(20) is an open bet to 20 total
+        game.apply_player_action(1, PlayerAction::Bet(20)).unwrap();
+        assert_eq!(game.current_bet, 20);
+        assert_eq!(game.min_raise, 20); // Min raise set to bet amount
+        
+        // Player must now call the open bet of 20
+        game.apply_player_action(0, PlayerAction::CheckCall).unwrap();
+        
+        // After both players act, should advance to Turn and reset current_bet to 0
+        assert_eq!(game.stage, Stage::Turn);
+        assert_eq!(game.current_bet, 0);
+        
+        // On Turn, current_bet is reset to 0 again
+        // Who is first to act on Turn?
+        let turn_first = (game.dealer_idx + 1) % 2;
+        assert_eq!(turn_first, 1); // Bot should be first
+        
+        // Bot makes another open bet of 20
+        game.apply_player_action(1, PlayerAction::Bet(20)).unwrap();
+        assert_eq!(game.current_bet, 20);
+        assert_eq!(game.min_raise, 20); // Min raise set to bet amount
+    }
+
+    #[test]
+    fn test_small_raise_treated_as_call() {
+        let mut game = Game::new_with_seed("Player".to_string(), 2, 123);
+        
+        // Preflop: player1 raises to 30 (+20 from BB=10)
+        game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
+        assert_eq!(game.current_bet, 30);
+        assert_eq!(game.min_raise, 20);
+        
+        // Player2 (bot 1) calls to 30
+        game.apply_player_action(1, PlayerAction::CheckCall).unwrap();
+        // Player3 (bot 2) calls to 30 to complete preflop
+        game.apply_player_action(2, PlayerAction::CheckCall).unwrap();
+        assert_eq!(game.stage, Stage::Flop);
+        
+        // On flop, first to act is dealer+1
+        let flop_first = (game.dealer_idx + 1) % 3;
+        let old_pot = game.pot;
+        // Tries to open bet with 5 (should be minimum BB=10)
+        game.apply_player_action(flop_first, PlayerAction::Bet(5)).unwrap();
+        // Should be treated as minimum open bet of 10 (BB)
+        assert_eq!(game.current_bet, 10); // Minimum open bet should be BB
+        assert!(game.pot > old_pot); // Pot should increase
+    }
+
+    #[test]
+    fn test_all_in_small_raise_treated_as_call() {
+        let mut game = Game::new_with_seed("Player".to_string(), 2, 456);
+        
+        // Preflop: player1 raises to 30 (BB=10, +20)
+        game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
+        assert_eq!(game.current_bet, 30);
+        assert_eq!(game.min_raise, 20);
+        
+        // Complete preflop: both bots call to 30
+        game.apply_player_action(1, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(2, PlayerAction::CheckCall).unwrap();
+        assert_eq!(game.stage, Stage::Flop);
+        
+        // On flop, first to act is dealer+1 -> bot 1
+        let flop_first = (game.dealer_idx + 1) % 3;
+        let pot_before = game.pot;
+        // Tries to open bet with 5 (minimum should be BB=10)
+        game.apply_player_action(flop_first, PlayerAction::Bet(5)).unwrap();
+        // Should be treated as open bet of minimum BB=10
+        assert_eq!(game.current_bet, 10); // Should be minimum open bet
+        assert_eq!(game.players[flop_first].all_in, false); // Should not be all-in with healthy stack
+        assert!(game.pot > pot_before); // Pot should increase
+    }
+
+    #[test]
+    fn test_after_all_in_correct_behavior() {
+        let mut game = Game::new_with_seed("Player".to_string(), 3, 789);
+        
+        // Preflop: the first to act is left of the BB in 4-handed
+        let n = game.players.len();
+        let preflop_first = game.to_act;
+        game.apply_player_action(preflop_first, PlayerAction::Bet(30)).unwrap();
+        assert_eq!(game.current_bet, 40);
+        assert_eq!(game.min_raise, 30);
+        
+        // All remaining players act preflop in order and call to 40
+        for i in 1..n {
+            let idx = (preflop_first + i) % n;
+            game.apply_player_action(idx, PlayerAction::CheckCall).unwrap();
+        }
+        assert_eq!(game.stage, Stage::Flop);
+        
+        // On flop, first to act is dealer+1
+        let flop_first = (game.dealer_idx + 1) % n;
+        assert_eq!(game.to_act, flop_first);
+        // Tries to open bet with 5 (minimum should be BB=10)
+        game.apply_player_action(flop_first, PlayerAction::Bet(5)).unwrap();
+        assert_eq!(game.players[flop_first].all_in, false);
+        assert_eq!(game.current_bet, 10); // Should be minimum open bet
+        
+        // Other players should be able to normally call or raise after open bet
     }
 }
