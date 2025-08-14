@@ -112,11 +112,6 @@ async fn ensure_game_started(state: &AppState, name: &str) {
             name, state.bot_count
         );
     }
-    if let Some(game) = &mut lobby.game {
-        if game.players.len() > 1 && game.to_act != 0 {
-            game.play_out_bots();
-        }
-    }
 }
 
 async fn send_ws(socket: &mut WebSocket, msg: &ServerMsg) {
@@ -128,6 +123,50 @@ async fn send_ws(socket: &mut WebSocket, msg: &ServerMsg) {
 async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: usize) {
     if let Some(gs) = current_state_public(state, you_id).await {
         send_ws(socket, &ServerMsg::State(gs)).await;
+    }
+}
+
+async fn drive_bots_with_delays(
+    socket: &mut WebSocket,
+    state: &AppState,
+    you_id: usize,
+    min_ms: u64,
+    max_ms: u64,
+) {
+    loop {
+        // Perform a single bot action if it's their turn
+        let did_act = {
+            let mut lobby = state.lobby.write().await;
+            if let Some(game) = &mut lobby.game {
+                if game.stage != mcg_shared::Stage::Showdown && game.to_act != you_id {
+                    let actor = game.to_act;
+                    // Choose a simple bot action using the same logic as random_bot_action
+                    let need = game.current_bet.saturating_sub(game.round_bets[actor]);
+                    let action = if need == 0 { mcg_shared::PlayerAction::Bet(game.bb) } else { mcg_shared::PlayerAction::CheckCall };
+                    let _ = game.apply_player_action(actor, action);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+
+        // Send updated state to client
+        send_state_to(socket, state, you_id).await;
+
+        if !did_act {
+            break;
+        }
+        // Sleep a pseudo-random-ish delay between actions without holding non-Send state
+        let now_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos() as u64;
+        let span = max_ms.saturating_sub(min_ms);
+        let delay = min_ms + (now_ns % span.max(1));
+        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
     }
 }
 
@@ -147,25 +186,21 @@ async fn process_client_msg(
                 if let Some(game) = &mut lobby.game {
                     if let Err(e) = game.apply_player_action(0, a.clone()) {
                         err = Some(e.to_string());
-                    } else {
-                        game.play_out_bots();
                     }
                 }
             }
             if let Some(e) = err {
                 send_ws(socket, &ServerMsg::Error(e)).await;
             }
+            // Always send latest state then drive bots stepwise with delays
             send_state_to(socket, state, you_id).await;
+            drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
         }
         ClientMsg::RequestState => {
             println!("[WS] State requested by {}", name);
-            {
-                let mut lobby = state.lobby.write().await;
-                if let Some(game) = &mut lobby.game {
-                    game.play_out_bots();
-                }
-            }
+            // Send latest then drive bots if it's their turn
             send_state_to(socket, state, you_id).await;
+            drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
         }
         ClientMsg::NextHand => {
             println!("[WS] NextHand requested by {}", name);
@@ -177,25 +212,19 @@ async fn process_client_msg(
                         game.dealer_idx = (game.dealer_idx + 1) % n;
                     }
                     game.start_new_hand();
-                    if game.to_act != 0 {
-                        game.play_out_bots();
-                    }
                 }
             }
             send_state_to(socket, state, you_id).await;
+            drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
         }
         ClientMsg::ResetGame { bots } => {
             println!("[WS] ResetGame requested by {}: bots={} ", name, bots);
             {
                 let mut lobby = state.lobby.write().await;
                 lobby.game = Some(Game::new(name.to_string(), bots));
-                if let Some(game) = &mut lobby.game {
-                    if game.players.len() > 1 && game.to_act != 0 {
-                        game.play_out_bots();
-                    }
-                }
             }
             send_state_to(socket, state, you_id).await;
+            drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
         }
         ClientMsg::Join { .. } => {}
     }

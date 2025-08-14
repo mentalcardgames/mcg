@@ -254,7 +254,7 @@ impl PokerOnlineScreen {
                 .max_height(200.0)
                 .show(ui, |ui| {
                     for entry in state.action_log.iter().rev().take(100) {
-                        log_entry_row(ui, entry, &state.players);
+                        log_entry_row(ui, entry, &state.players, state.you_id);
                     }
                 });
         });
@@ -537,14 +537,13 @@ fn stage_badge(stage: Stage) -> egui::WidgetText {
     RichText::new(txt).color(color).strong().into()
 }
 
-fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic]) {
+fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic], you_id: usize) {
     match &entry.event {
         LogEvent::Action(kind) => {
-            let you_id = players.iter().find(|p| p.name == "You").map(|p| p.id);
             let who_id = entry.player_id;
             let who_name = who_id.map(|id| name_of(players, id)).unwrap_or_else(|| "Table".to_string());
             let (txt, color) = action_kind_text(kind);
-            let is_you = who_id.is_some() && Some(who_id.unwrap()) == you_id;
+            let is_you = who_id == Some(you_id);
             let label = if is_you {
                 RichText::new(format!("{} {}", who_name, txt)).color(color).strong()
             } else {

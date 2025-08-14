@@ -675,45 +675,7 @@ impl Game {
         self.cap_logs();
     }
 
-    fn random_bot_action(&self, bot_index: usize) -> PlayerAction {
-        use rand::Rng;
-        let mut rng = rand::rng();
-        let need = self.current_bet.saturating_sub(self.round_bets[bot_index]);
-        if need == 0 {
-            let r: u8 = rng.random_range(0..100);
-            if r < 70 {
-                PlayerAction::CheckCall
-            } else {
-                PlayerAction::Bet(self.bb)
-            }
-        } else {
-            let r: u8 = rng.random_range(0..100);
-            if r < 60 {
-                PlayerAction::CheckCall
-            } else if r < 80 {
-                PlayerAction::Fold
-            } else {
-                PlayerAction::Bet(self.bb)
-            }
-        }
-    }
 
-    pub fn play_out_bots(&mut self) {
-        // Let bots act until it's human's turn or showdown
-        while self.stage != Stage::Showdown && self.to_act != 0 {
-            let actor = self.to_act;
-            if actor == 0
-                || actor >= self.players.len()
-                || self.players[actor].has_folded
-                || self.players[actor].all_in
-            {
-                break;
-            }
-            let action = self.random_bot_action(actor);
-            println!("[BOT] {}: {:?}", self.players[actor].name, action);
-            let _ = self.apply_player_action(actor, action);
-        }
-    }
 }
 
 #[cfg(test)]
