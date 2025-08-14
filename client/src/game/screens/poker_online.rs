@@ -24,6 +24,7 @@ pub struct PokerOnlineScreen {
     state: Option<GameStatePublic>,
     name: String,
     server_address: String,
+    bots: usize,
     inbox: Rc<RefCell<Vec<ServerMsg>>>,
     error_inbox: Rc<RefCell<Vec<String>>>,
     show_error_popup: bool,
@@ -47,6 +48,7 @@ impl PokerOnlineScreen {
             },
             #[cfg(not(target_arch = "wasm32"))]
             server_address: "127.0.0.1:3000".to_string(),
+            bots: 1,
             inbox: Rc::new(RefCell::new(Vec::new())),
             error_inbox: Rc::new(RefCell::new(Vec::new())),
             show_error_popup: false,
@@ -133,6 +135,24 @@ impl PokerOnlineScreen {
             ui.label("Server:");
             ui.text_edit_singleline(&mut self.server_address)
                 .on_hover_text("Server address (IP:PORT)");
+            ui.add_space(12.0);
+            ui.label("Bots:");
+            ui.add(
+                egui::DragValue::new(&mut self.bots)
+                    .range(0..=8)
+                    .speed(0.1)
+                    .suffix(" bots"),
+            );
+            if ui
+                .add(egui::Button::new("Reset Game"))
+                .on_hover_text("Reset the game with the chosen number of bots")
+                .clicked()
+            {
+                self.send(&ClientMsg::ResetGame { bots: self.bots });
+                // Clear any local status; server will push the new state
+                self.last_info = Some(format!("Reset requested ({} bots)", self.bots));
+                self.last_error = None;
+            }
         });
         if let Some(err) = &self.last_error {
             ui.colored_label(Color32::RED, err);
