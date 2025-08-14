@@ -239,23 +239,6 @@ impl ScreenType {
             ScreenType::Example,
         ]
     }
-
-    /// Legacy string conversion for compatibility
-    pub fn to_string(&self) -> String {
-        match self {
-            ScreenType::Main => "main".into(),
-            ScreenType::GameSetup => "game_setup".into(),
-            ScreenType::Game => "game".into(),
-            ScreenType::Pairing => "pairing".into(),
-            ScreenType::DndTest => "dnd_test".into(),
-            ScreenType::GameDndSetup => "game_dnd_setup".into(),
-            ScreenType::GameDnd => "game_dnd".into(),
-            ScreenType::Articles => "articles".into(),
-            ScreenType::QRScreen => "qr".into(),
-            ScreenType::PokerOnline => "poker_online".into(),
-            ScreenType::Example => "example".into(),
-        }
-    }
 }
 
 /// Screen registry for managing screen instances and metadata

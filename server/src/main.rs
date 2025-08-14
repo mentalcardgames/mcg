@@ -34,8 +34,10 @@ async fn main() {
     }
 
     // Initialize shared state for the server
-    let mut state = AppState::default();
-    state.bot_count = bots;
+    let state = AppState {
+        bot_count: bots,
+        ..Default::default()
+    };
 
     // Find first available port starting from 3000
     let port = find_available_port(3000).expect("Could not find an available port");

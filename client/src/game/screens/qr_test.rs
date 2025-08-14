@@ -12,9 +12,10 @@ use web_sys::{
 
 use super::{AppInterface, ScreenWidget};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CameraFacing {
     User,
+    #[default]
     Environment,
 }
 impl CameraFacing {
@@ -23,11 +24,6 @@ impl CameraFacing {
             CameraFacing::User => "user",
             CameraFacing::Environment => "environment",
         }
-    }
-}
-impl Default for CameraFacing {
-    fn default() -> Self {
-        CameraFacing::Environment
     }
 }
 impl std::fmt::Display for CameraFacing {
@@ -53,6 +49,11 @@ pub struct Camera {
     frame_count: u32,
     last_qr_result: Option<String>,
     facing_mode: CameraFacing,
+}
+impl Default for Camera {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl Camera {
     pub fn new() -> Self {

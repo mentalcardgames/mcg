@@ -52,6 +52,7 @@ impl PokerOnlineScreen {
             show_error_popup: false,
         }
     }
+
     fn draw_error_popup(&mut self, ctx: &egui::Context) {
         if !self.show_error_popup {
             return;
@@ -79,6 +80,199 @@ impl PokerOnlineScreen {
             self.show_error_popup = false;
         }
     }
+
+    fn process_incoming_messages(&mut self) {
+        {
+            let mut msgs = self.inbox.borrow_mut();
+            for msg in msgs.drain(..) {
+                match msg {
+                    ServerMsg::Welcome { .. } => {
+                        self.last_info = Some("Connected".into());
+                        self.last_error = None;
+                        self.show_error_popup = false;
+                    }
+                    ServerMsg::State(gs) => {
+                        self.state = Some(gs);
+                        self.last_info = None;
+                    }
+                    ServerMsg::Error(err) => {
+                        self.last_error = Some(err);
+                        self.show_error_popup = true;
+                    }
+                }
+            }
+        }
+        {
+            let mut errs = self.error_inbox.borrow_mut();
+            for e in errs.drain(..) {
+                self.last_error = Some(e);
+                self.show_error_popup = true;
+            }
+        }
+    }
+
+    fn render_header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.horizontal(|ui| {
+            ui.heading("Poker Online");
+            ui.add_space(16.0);
+            if let Some(s) = &self.state {
+                ui.label(stage_badge(s.stage));
+                ui.add_space(8.0);
+                ui.label(format!("Bots: {}", s.bot_count));
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Connect").clicked() {
+                    self.connect(ctx);
+                }
+                ui.text_edit_singleline(&mut self.name)
+                    .on_hover_text("Your nickname");
+                ui.label("Name:");
+            });
+        });
+        ui.horizontal(|ui| {
+            ui.label("Server:");
+            ui.text_edit_singleline(&mut self.server_address)
+                .on_hover_text("Server address (IP:PORT)");
+        });
+        if let Some(err) = &self.last_error {
+            ui.colored_label(Color32::RED, err);
+        }
+        if let Some(info) = &self.last_info {
+            ui.label(RichText::new(info));
+        }
+        ui.separator();
+    }
+
+    fn render_showdown_banner(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
+        if state.stage == Stage::Showdown {
+            let you_won = state.winner_ids.contains(&state.you_id);
+            if you_won {
+                ui.colored_label(Color32::LIGHT_GREEN, "You won!");
+            } else {
+                ui.colored_label(Color32::LIGHT_RED, "You lost.");
+            }
+            let winners: Vec<String> = state
+                .players
+                .iter()
+                .filter(|p| state.winner_ids.contains(&p.id))
+                .map(|p| p.name.clone())
+                .collect();
+            if !winners.is_empty() {
+                ui.label(format!("Winners: {}", winners.join(", ")));
+            }
+            ui.add_space(8.0);
+        }
+    }
+
+    fn render_left_panel(ui: &mut egui::Ui, state: &GameStatePublic) {
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Pot:").strong());
+                ui.monospace(format!(" {}", state.pot));
+            });
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Board:").strong());
+                if state.community.is_empty() {
+                    ui.label("—");
+                }
+                for &c in &state.community {
+                    card_chip(ui, c);
+                }
+            });
+            ui.add_space(8.0);
+            ui.separator();
+            ui.label(RichText::new("Recent actions:").strong());
+            egui::ScrollArea::vertical()
+                .id_salt("recent_actions_scroll")
+                .max_height(120.0)
+                .show(ui, |ui| {
+                    for ev in state.recent_actions.iter().rev().take(10) {
+                        let name = state
+                            .players
+                            .iter()
+                            .find(|p| p.id == ev.player_id)
+                            .map(|p| p.name.as_str())
+                            .unwrap_or("Player");
+                        let action_txt = action_text(&ev.action);
+                        ui.label(format!("{} {}", name, action_txt));
+                    }
+                });
+            ui.add_space(8.0);
+            ui.separator();
+            ui.label(RichText::new("Action log:").strong());
+            egui::ScrollArea::vertical()
+                .id_salt("action_log_scroll")
+                .max_height(180.0)
+                .show(ui, |ui| {
+                    for entry in state.action_log.iter().rev().take(50) {
+                        ui.label(log_entry_text(entry, &state.players));
+                    }
+                });
+        });
+    }
+
+    fn render_right_panel(ui: &mut egui::Ui, state: &GameStatePublic) {
+        ui.group(|ui| {
+            for p in &state.players {
+                let me = p.id == state.you_id;
+                ui.horizontal(|ui| {
+                    if me {
+                        ui.colored_label(Color32::LIGHT_GREEN, "You");
+                    }
+                    ui.label(RichText::new(&p.name).strong());
+                    if p.has_folded {
+                        ui.colored_label(Color32::LIGHT_RED, "(folded)");
+                    }
+                    if state.stage == Stage::Showdown && state.winner_ids.contains(&p.id) {
+                        ui.colored_label(Color32::YELLOW, "WINNER");
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.monospace(format!("stack: {}", p.stack));
+                    });
+                });
+                if me {
+                    if let Some(cards) = p.cards {
+                        ui.horizontal(|ui| {
+                            ui.add_space(12.0);
+                            card_chip(ui, cards[0]);
+                            card_chip(ui, cards[1]);
+                        });
+                    }
+                }
+                ui.add_space(8.0);
+            }
+        });
+    }
+
+    fn render_action_row(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
+        ui.horizontal(|ui| {
+            if ui.add(egui::Button::new("Check / Call")).clicked() {
+                self.send(&ClientMsg::Action(PlayerAction::CheckCall));
+            }
+            if ui
+                .add(egui::Button::new("Bet 10"))
+                .on_hover_text("Place a small bet")
+                .clicked()
+            {
+                self.send(&ClientMsg::Action(PlayerAction::Bet(10)));
+            }
+            if ui.add(egui::Button::new("Fold")).clicked() {
+                self.send(&ClientMsg::Action(PlayerAction::Fold));
+            }
+            ui.separator();
+            if state.stage == Stage::Showdown {
+                if ui.add(egui::Button::new("Next Hand")).clicked() {
+                    self.send(&ClientMsg::NextHand);
+                }
+                ui.add_space(8.0);
+            }
+            if ui.add(egui::Button::new("Refresh")).clicked() {
+                self.send(&ClientMsg::RequestState);
+            }
+        });
+    }
+
     #[cfg(target_arch = "wasm32")]
     fn connect(&mut self, ctx: &egui::Context) {
         let ws_url = format!("ws://{}/ws", self.server_address);
@@ -151,10 +345,12 @@ impl PokerOnlineScreen {
             }
         }
     }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn connect(&mut self, _ctx: &egui::Context) {
         self.last_error = Some("Online mode is unavailable on native builds".into());
     }
+
     #[cfg(target_arch = "wasm32")]
     fn send(&self, msg: &ClientMsg) {
         if let Some(ws) = &self.ws {
@@ -163,199 +359,33 @@ impl PokerOnlineScreen {
             }
         }
     }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn send(&self, _msg: &ClientMsg) {}
 }
+
 impl Default for PokerOnlineScreen {
     fn default() -> Self {
         Self::new()
     }
 }
+
 impl ScreenWidget for PokerOnlineScreen {
     fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
         self.draw_error_popup(&ctx);
-        {
-            let mut msgs = self.inbox.borrow_mut();
-            for msg in msgs.drain(..) {
-                match msg {
-                    ServerMsg::Welcome { .. } => {
-                        self.last_info = Some("Connected".into());
-                        self.last_error = None;
-                        self.show_error_popup = false;
-                    }
-                    ServerMsg::State(gs) => {
-                        self.state = Some(gs);
-                        self.last_info = None;
-                    }
-                    ServerMsg::Error(err) => {
-                        self.last_error = Some(err);
-                        self.show_error_popup = true;
-                    }
-                }
-            }
-        }
-        {
-            let mut errs = self.error_inbox.borrow_mut();
-            for e in errs.drain(..) {
-                self.last_error = Some(e);
-                self.show_error_popup = true;
-            }
-        }
-        ui.horizontal(|ui| {
-            ui.heading("Poker Online");
-            ui.add_space(16.0);
-            if let Some(s) = &self.state {
-                ui.label(stage_badge(s.stage));
-                ui.add_space(8.0);
-                ui.label(format!("Bots: {}", s.bot_count));
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Connect").clicked() {
-                    self.connect(&ctx);
-                }
-                ui.text_edit_singleline(&mut self.name)
-                    .on_hover_text("Your nickname");
-                ui.label("Name:");
-            });
-        });
-        ui.horizontal(|ui| {
-            ui.label("Server:");
-            ui.text_edit_singleline(&mut self.server_address)
-                .on_hover_text("Server address (IP:PORT)");
-        });
-        if let Some(err) = &self.last_error {
-            ui.colored_label(Color32::RED, err);
-        }
-        if let Some(info) = &self.last_info {
-            ui.label(RichText::new(info));
-        }
-        ui.separator();
+        self.process_incoming_messages();
+
+        self.render_header(ui, &ctx);
+
         if let Some(state) = &self.state {
-            if state.stage == Stage::Showdown {
-                let you_won = state.winner_ids.contains(&state.you_id);
-                if you_won {
-                    ui.colored_label(Color32::LIGHT_GREEN, "You won!");
-                } else {
-                    ui.colored_label(Color32::LIGHT_RED, "You lost.");
-                }
-                let winners: Vec<String> = state
-                    .players
-                    .iter()
-                    .filter(|p| state.winner_ids.contains(&p.id))
-                    .map(|p| p.name.clone())
-                    .collect();
-                if !winners.is_empty() {
-                    ui.label(format!("Winners: {}", winners.join(", ")));
-                }
-                ui.add_space(8.0);
-            }
+            self.render_showdown_banner(ui, state);
             ui.columns(2, |cols| {
-                cols[0].group(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("Pot:").strong());
-                        ui.monospace(format!(" {}", state.pot));
-                    });
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("Board:").strong());
-                        if state.community.is_empty() {
-                            ui.label("—");
-                        }
-                        for &c in &state.community {
-                            card_chip(ui, c);
-                        }
-                    });
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.label(RichText::new("Recent actions:").strong());
-                    egui::ScrollArea::vertical()
-                        .id_salt("recent_actions_scroll")
-                        .max_height(120.0)
-                        .show(ui, |ui| {
-                            for ev in state.recent_actions.iter().rev().take(10) {
-                                let name = state
-                                    .players
-                                    .iter()
-                                    .find(|p| p.id == ev.player_id)
-                                    .map(|p| p.name.as_str())
-                                    .unwrap_or("Player");
-                                let action_txt = action_text(&ev.action);
-                                ui.label(format!("{} {}", name, action_txt));
-                            }
-                        });
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.label(RichText::new("Action log:").strong());
-                    egui::ScrollArea::vertical()
-                        .id_salt("action_log_scroll")
-                        .max_height(180.0)
-                        .show(ui, |ui| {
-                            for entry in state.action_log.iter().rev().take(50) {
-                                ui.label(log_entry_text(entry, &state.players));
-                            }
-                        });
-                });
-                cols[1].group(|ui| {
-                    for p in &state.players {
-                        let me = p.id == state.you_id;
-                        ui.horizontal(|ui| {
-                            if me {
-                                ui.colored_label(Color32::LIGHT_GREEN, "You");
-                            }
-                            ui.label(RichText::new(&p.name).strong());
-                            if p.has_folded {
-                                ui.colored_label(Color32::LIGHT_RED, "(folded)");
-                            }
-                            if state.stage == Stage::Showdown && state.winner_ids.contains(&p.id) {
-                                ui.colored_label(Color32::YELLOW, "WINNER");
-                            }
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    ui.monospace(format!("stack: {}", p.stack));
-                                },
-                            );
-                        });
-                        if me {
-                            if let Some(cards) = p.cards {
-                                ui.horizontal(|ui| {
-                                    ui.add_space(12.0);
-                                    card_chip(ui, cards[0]);
-                                    card_chip(ui, cards[1]);
-                                });
-                            }
-                        }
-                        ui.add_space(8.0);
-                    }
-                });
+                Self::render_left_panel(&mut cols[0], state);
+                Self::render_right_panel(&mut cols[1], state);
             });
             ui.separator();
-            ui.horizontal(|ui| {
-                if ui.add(egui::Button::new("Check / Call")).clicked() {
-                    self.send(&ClientMsg::Action(PlayerAction::CheckCall));
-                }
-                if ui
-                    .add(egui::Button::new("Bet 10"))
-                    .on_hover_text("Place a small bet")
-                    .clicked()
-                {
-                    self.send(&ClientMsg::Action(PlayerAction::Bet(10)));
-                }
-                if ui.add(egui::Button::new("Fold")).clicked() {
-                    self.send(&ClientMsg::Action(PlayerAction::Fold));
-                }
-                ui.separator();
-                if state.stage == Stage::Showdown {
-                    if ui.add(egui::Button::new("Next Hand")).clicked() {
-                        self.send(&ClientMsg::NextHand);
-                    }
-                    ui.add_space(8.0);
-                }
-                if ui.add(egui::Button::new("Refresh")).clicked() {
-                    self.send(&ClientMsg::RequestState);
-                }
-            });
+            self.render_action_row(ui, state);
         } else {
             ui.label("No state yet. Click Connect to start a session.");
         }

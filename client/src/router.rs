@@ -86,7 +86,9 @@ impl Router {
 #[cfg(target_arch = "wasm32")]
 impl Default for Router {
     fn default() -> Self {
-        Self::new().unwrap_or_else(|_| panic!("Failed to create router: This should only be used in tests"))
+        Self::new().unwrap_or_else(|_| {
+            panic!("Failed to create router: This should only be used in tests")
+        })
     }
 }
 

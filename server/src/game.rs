@@ -1,5 +1,5 @@
 //! Core poker game logic.
-//! 
+//!
 //! Layering note: this module defines the pure domain/game engine for
 //! no-limit Texas Hold'em used by the server. It contains no network or
 //! persistence code. The Axum server imports and drives this engine while
@@ -228,9 +228,7 @@ impl Game {
         }
 
         // Validate minimum raise size: must cover a call and increase by at least self.min_raise
-        let required_add = prev_current_bet
-            .saturating_sub(self.round_bets[actor])
-            + self.min_raise;
+        let required_add = prev_current_bet.saturating_sub(self.round_bets[actor]) + self.min_raise;
         if add < required_add {
             let pay = need.min(self.players[actor].stack);
             return RaiseOutcome::Call { pay };
@@ -444,7 +442,7 @@ impl Game {
         self.winner_ids.clear();
 
         // Emit logs for dealing after the loop to avoid borrow conflicts
-        self.action_log.extend(dealt_logs.into_iter());
+        self.action_log.extend(dealt_logs);
         self.cap_logs();
 
         // Post blinds
@@ -718,6 +716,7 @@ impl Game {
     }
 }
 
+#[cfg(test)]
 fn shuffled_deck_with_seed(seed: u64) -> Vec<u8> {
     // Simple LCG for deterministic shuffling in tests
     fn lcg(next: &mut u64) -> u32 {
@@ -860,39 +859,41 @@ mod tests {
     #[test]
     fn test_min_raise_enforcement() {
         let mut game = Game::new_with_seed("Player".to_string(), 1, 42);
-        
+
         // Preflop: player raises to 30 (BB=10, so raise is +20, min_raise becomes 20)
         game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
         assert_eq!(game.current_bet, 30);
         assert_eq!(game.min_raise, 20); // The size of the last raise
-        
+
         // Bot now needs to call the raise
-        game.apply_player_action(1, PlayerAction::CheckCall).unwrap();
-        
+        game.apply_player_action(1, PlayerAction::CheckCall)
+            .unwrap();
+
         // Flop: betting round starts with current_bet reset to 0
         assert_eq!(game.stage, Stage::Flop);
-        
+
         // Check who should be first to act on flop (dealer+1 position)
         let flop_first = (game.dealer_idx + 1) % 2;
         assert_eq!(flop_first, 1); // Bot should be first to act on flop
-        
+
         // On flop, current_bet is reset to 0, so Bet(20) is an open bet to 20 total
         game.apply_player_action(1, PlayerAction::Bet(20)).unwrap();
         assert_eq!(game.current_bet, 20);
         assert_eq!(game.min_raise, 20); // Min raise set to bet amount
-        
+
         // Player must now call the open bet of 20
-        game.apply_player_action(0, PlayerAction::CheckCall).unwrap();
-        
+        game.apply_player_action(0, PlayerAction::CheckCall)
+            .unwrap();
+
         // After both players act, should advance to Turn and reset current_bet to 0
         assert_eq!(game.stage, Stage::Turn);
         assert_eq!(game.current_bet, 0);
-        
+
         // On Turn, current_bet is reset to 0 again
         // Who is first to act on Turn?
         let turn_first = (game.dealer_idx + 1) % 2;
         assert_eq!(turn_first, 1); // Bot should be first
-        
+
         // Bot makes another open bet of 20
         game.apply_player_action(1, PlayerAction::Bet(20)).unwrap();
         assert_eq!(game.current_bet, 20);
@@ -902,23 +903,26 @@ mod tests {
     #[test]
     fn test_small_raise_treated_as_call() {
         let mut game = Game::new_with_seed("Player".to_string(), 2, 123);
-        
+
         // Preflop: player1 raises to 30 (+20 from BB=10)
         game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
         assert_eq!(game.current_bet, 30);
         assert_eq!(game.min_raise, 20);
-        
+
         // Player2 (bot 1) calls to 30
-        game.apply_player_action(1, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(1, PlayerAction::CheckCall)
+            .unwrap();
         // Player3 (bot 2) calls to 30 to complete preflop
-        game.apply_player_action(2, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(2, PlayerAction::CheckCall)
+            .unwrap();
         assert_eq!(game.stage, Stage::Flop);
-        
+
         // On flop, first to act is dealer+1
         let flop_first = (game.dealer_idx + 1) % 3;
         let old_pot = game.pot;
         // Tries to open bet with 5 (should be minimum BB=10)
-        game.apply_player_action(flop_first, PlayerAction::Bet(5)).unwrap();
+        game.apply_player_action(flop_first, PlayerAction::Bet(5))
+            .unwrap();
         // Should be treated as minimum open bet of 10 (BB)
         assert_eq!(game.current_bet, 10); // Minimum open bet should be BB
         assert!(game.pot > old_pot); // Pot should increase
@@ -927,54 +931,60 @@ mod tests {
     #[test]
     fn test_all_in_small_raise_treated_as_call() {
         let mut game = Game::new_with_seed("Player".to_string(), 2, 456);
-        
+
         // Preflop: player1 raises to 30 (BB=10, +20)
         game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
         assert_eq!(game.current_bet, 30);
         assert_eq!(game.min_raise, 20);
-        
+
         // Complete preflop: both bots call to 30
-        game.apply_player_action(1, PlayerAction::CheckCall).unwrap();
-        game.apply_player_action(2, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(1, PlayerAction::CheckCall)
+            .unwrap();
+        game.apply_player_action(2, PlayerAction::CheckCall)
+            .unwrap();
         assert_eq!(game.stage, Stage::Flop);
-        
+
         // On flop, first to act is dealer+1 -> bot 1
         let flop_first = (game.dealer_idx + 1) % 3;
         let pot_before = game.pot;
         // Tries to open bet with 5 (minimum should be BB=10)
-        game.apply_player_action(flop_first, PlayerAction::Bet(5)).unwrap();
+        game.apply_player_action(flop_first, PlayerAction::Bet(5))
+            .unwrap();
         // Should be treated as open bet of minimum BB=10
         assert_eq!(game.current_bet, 10); // Should be minimum open bet
-        assert_eq!(game.players[flop_first].all_in, false); // Should not be all-in with healthy stack
+        assert!(!game.players[flop_first].all_in); // Should not be all-in with healthy stack
         assert!(game.pot > pot_before); // Pot should increase
     }
 
     #[test]
     fn test_after_all_in_correct_behavior() {
         let mut game = Game::new_with_seed("Player".to_string(), 3, 789);
-        
+
         // Preflop: the first to act is left of the BB in 4-handed
         let n = game.players.len();
         let preflop_first = game.to_act;
-        game.apply_player_action(preflop_first, PlayerAction::Bet(30)).unwrap();
+        game.apply_player_action(preflop_first, PlayerAction::Bet(30))
+            .unwrap();
         assert_eq!(game.current_bet, 40);
         assert_eq!(game.min_raise, 30);
-        
+
         // All remaining players act preflop in order and call to 40
         for i in 1..n {
             let idx = (preflop_first + i) % n;
-            game.apply_player_action(idx, PlayerAction::CheckCall).unwrap();
+            game.apply_player_action(idx, PlayerAction::CheckCall)
+                .unwrap();
         }
         assert_eq!(game.stage, Stage::Flop);
-        
+
         // On flop, first to act is dealer+1
         let flop_first = (game.dealer_idx + 1) % n;
         assert_eq!(game.to_act, flop_first);
         // Tries to open bet with 5 (minimum should be BB=10)
-        game.apply_player_action(flop_first, PlayerAction::Bet(5)).unwrap();
-        assert_eq!(game.players[flop_first].all_in, false);
+        game.apply_player_action(flop_first, PlayerAction::Bet(5))
+            .unwrap();
+        assert!(!game.players[flop_first].all_in);
         assert_eq!(game.current_bet, 10); // Should be minimum open bet
-        
+
         // Other players should be able to normally call or raise after open bet
     }
 }

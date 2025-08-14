@@ -95,21 +95,20 @@ impl ArticlesScreen {
         if ui
             .add_sized(vec2(150.0, 40.0), egui::Button::new("Fetch Posts"))
             .clicked()
+            && self.state.start_fetch()
         {
-            if self.state.start_fetch() {
-                let sender = self.message_sender.clone();
-                wasm_bindgen_futures::spawn_local(async move {
-                    match fetch_posts().await {
-                        Ok(posts) => {
-                            let _ = sender.send(Message::PostsLoaded(posts));
-                        }
-                        Err(e) => {
-                            let _ = sender.send(Message::PostsLoadError(e));
-                        }
+            let sender = self.message_sender.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                match fetch_posts().await {
+                    Ok(posts) => {
+                        let _ = sender.send(Message::PostsLoaded(posts));
                     }
-                });
-                ctx.request_repaint();
-            }
+                    Err(e) => {
+                        let _ = sender.send(Message::PostsLoadError(e));
+                    }
+                }
+            });
+            ctx.request_repaint();
         }
         ui.add_space(20.0);
         ui.label("Click the button to fetch posts from JSONPlaceholder API.");

@@ -54,9 +54,8 @@ pub fn pick_best_five(hole: [u8; 2], community: &[u8], _rank: &HandRank) -> [u8;
             rank_value_high(card_rank(*b)).cmp(&rank_value_high(card_rank(*a)))
         });
         let mut out = [0u8; 5];
-        for i in 0..all.len().min(5) {
-            out[i] = all[i];
-        }
+        let n = all.len().min(5);
+        out[..n].copy_from_slice(&all[..n]);
         return out;
     }
 
@@ -72,7 +71,7 @@ pub fn pick_best_five(hole: [u8; 2], community: &[u8], _rank: &HandRank) -> [u8;
                     for m in (l + 1)..n {
                         let subset = [all[i], all[j], all[k], all[l], all[m]];
                         // Reuse the 7-card evaluator on exactly 5 cards
-                        let rank = best_rank_from_seven(&subset.to_vec());
+                        let rank = best_rank_from_seven(subset.as_ref());
                         match &best_rank {
                             None => {
                                 best_rank = Some(rank);
@@ -256,7 +255,7 @@ fn straight_high(values_unique_sorted_asc: &Vec<u8>) -> Option<u8> {
                 // v..v+4 is a straight; high card is last_v (or v+4), but since we're descending,
                 // when we hit run_len==5, the high is v+4; continue to keep the highest found.
                 let high = (v + 4) as u8;
-                if best.map_or(true, |b| high > b) {
+                if best.is_none_or(|b| high > b) {
                     best = Some(high);
                 }
             }
@@ -274,7 +273,7 @@ fn straight_high(values_unique_sorted_asc: &Vec<u8>) -> Option<u8> {
     best
 }
 
-fn find_n_of_a_kind(counts: &[u8; 15], n: u8, all_values: &Vec<u8>) -> Option<(u8, u8)> {
+fn find_n_of_a_kind(counts: &[u8; 15], n: u8, all_values: &[u8]) -> Option<(u8, u8)> {
     // (rank, top kicker) with rank in 2..14
     let mut rank = None;
     for v in (2..=14).rev() {
@@ -318,7 +317,7 @@ fn find_full_house(counts: &[u8; 15]) -> Option<(u8, u8)> {
 
 fn find_n_kind_with_kickers(
     counts: &[u8; 15],
-    all_values: &Vec<u8>,
+    all_values: &[u8],
     n: u8,
     kicker_count: usize,
 ) -> Option<(u8, Vec<u8>)> {
@@ -343,7 +342,7 @@ fn find_n_kind_with_kickers(
     None
 }
 
-fn find_two_pair(counts: &[u8; 15], all_values: &Vec<u8>) -> Option<(u8, u8, u8)> {
+fn find_two_pair(counts: &[u8; 15], all_values: &[u8]) -> Option<(u8, u8, u8)> {
     let mut pairs = vec![];
     for v in (2..=14).rev() {
         if counts[v] >= 2 {

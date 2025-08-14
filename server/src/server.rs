@@ -75,11 +75,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
         Some(Ok(Message::Text(t))) => match serde_json::from_str::<ClientMsg>(&t) {
             Ok(ClientMsg::Join { name }) => name,
             _ => {
-                let _ = socket
-                    .send(Message::Text(
-                        serde_json::to_string(&ServerMsg::Error("Expected Join".into())).unwrap(),
-                    ))
-                    .await;
+                send_ws(&mut socket, &ServerMsg::Error("Expected Join".into())).await;
                 return;
             }
         },
@@ -87,140 +83,17 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     };
     println!("[CONNECT] New player: {}", name);
 
-    {
-        let mut lobby = state.lobby.write().await;
-        if lobby.game.is_none() {
-            lobby.game = Some(Game::new(name.clone(), state.bot_count));
-            println!(
-                "[GAME] Created new game for {} with {} bot(s)",
-                name, state.bot_count
-            );
-        }
-        // Regardless of whether we just created the game or reused an existing one,
-        // let bots act if it's their turn so the human isn't stuck on connect.
-        if let Some(game) = &mut lobby.game {
-            if game.players.len() > 1 && game.to_act != 0 {
-                game.play_out_bots();
-            }
-        }
-    }
+    ensure_game_started(&state, &name).await;
 
     let you_id = 0usize;
-    let _ = socket
-        .send(Message::Text(
-            serde_json::to_string(&ServerMsg::Welcome { you: you_id }).unwrap(),
-        ))
-        .await;
-
-    if let Some(gs) = current_state_public(&state, you_id).await {
-        let _ = socket
-            .send(Message::Text(
-                serde_json::to_string(&ServerMsg::State(gs)).unwrap(),
-            ))
-            .await;
-    }
+    send_ws(&mut socket, &ServerMsg::Welcome { you: you_id }).await;
+    send_state_to(&mut socket, &state, you_id).await;
 
     while let Some(msg) = socket.next().await {
         match msg {
             Ok(Message::Text(txt)) => {
                 if let Ok(cm) = serde_json::from_str::<ClientMsg>(&txt) {
-                    match cm {
-                        ClientMsg::Action(a) => {
-                            println!("[WS] Action from {}: {:?}", name, a);
-                            let mut ok = false;
-                            {
-                                let mut lobby = state.lobby.write().await;
-                                if let Some(game) = &mut lobby.game {
-                                    match game.apply_player_action(0, a.clone()) {
-                                        Ok(()) => {
-                                            ok = true;
-                                            game.play_out_bots();
-                                        }
-                                        Err(msg) => {
-                                            let _ = socket
-                                                .send(Message::Text(
-                                                    serde_json::to_string(&ServerMsg::Error(
-                                                        msg.to_string(),
-                                                    ))
-                                                    .unwrap(),
-                                                ))
-                                                .await;
-                                        }
-                                    }
-                                }
-                            }
-                            // Always send latest state so client stays in sync
-                            if let Some(gs) = current_state_public(&state, you_id).await {
-                                let _ = socket
-                                    .send(Message::Text(
-                                        serde_json::to_string(&ServerMsg::State(gs)).unwrap(),
-                                    ))
-                                    .await;
-                            }
-                            if ok {
-                                // no-op; reserved for any post-success hooks
-                            }
-                        }
-                        ClientMsg::RequestState => {
-                            println!("[WS] State requested by {}", name);
-                            {
-                                let mut lobby = state.lobby.write().await;
-                                if let Some(game) = &mut lobby.game {
-                                    game.play_out_bots();
-                                }
-                            }
-                            if let Some(gs) = current_state_public(&state, you_id).await {
-                                let _ = socket
-                                    .send(Message::Text(
-                                        serde_json::to_string(&ServerMsg::State(gs)).unwrap(),
-                                    ))
-                                    .await;
-                            }
-                        }
-                        ClientMsg::NextHand => {
-                            println!("[WS] NextHand requested by {}", name);
-                            {
-                                let mut lobby = state.lobby.write().await;
-                                if let Some(game) = &mut lobby.game {
-                                    let n = game.players.len();
-                                    if n > 0 {
-                                        game.dealer_idx = (game.dealer_idx + 1) % n;
-                                    }
-                                    game.start_new_hand();
-                                    if game.to_act != 0 {
-                                        game.play_out_bots();
-                                    }
-                                }
-                            }
-                            if let Some(gs) = current_state_public(&state, you_id).await {
-                                let _ = socket
-                                    .send(Message::Text(
-                                        serde_json::to_string(&ServerMsg::State(gs)).unwrap(),
-                                    ))
-                                    .await;
-                            }
-                        }
-                        ClientMsg::ResetGame { bots } => {
-                            println!("[WS] ResetGame requested by {}: bots={} ", name, bots);
-                            {
-                                let mut lobby = state.lobby.write().await;
-                                lobby.game = Some(Game::new(name.clone(), bots));
-                                if let Some(game) = &mut lobby.game {
-                                    if game.players.len() > 1 && game.to_act != 0 {
-                                        game.play_out_bots();
-                                    }
-                                }
-                            }
-                            if let Some(gs) = current_state_public(&state, you_id).await {
-                                let _ = socket
-                                    .send(Message::Text(
-                                        serde_json::to_string(&ServerMsg::State(gs)).unwrap(),
-                                    ))
-                                    .await;
-                            }
-                        }
-                        ClientMsg::Join { .. } => {}
-                    }
+                    process_client_msg(&name, &state, &mut socket, cm, you_id).await;
                 }
             }
             Ok(Message::Close(_)) | Err(_) => break,
@@ -228,6 +101,104 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
         }
     }
     println!("[DISCONNECT] {} disconnected", name);
+}
+
+async fn ensure_game_started(state: &AppState, name: &str) {
+    let mut lobby = state.lobby.write().await;
+    if lobby.game.is_none() {
+        lobby.game = Some(Game::new(name.to_string(), state.bot_count));
+        println!(
+            "[GAME] Created new game for {} with {} bot(s)",
+            name, state.bot_count
+        );
+    }
+    if let Some(game) = &mut lobby.game {
+        if game.players.len() > 1 && game.to_act != 0 {
+            game.play_out_bots();
+        }
+    }
+}
+
+async fn send_ws(socket: &mut WebSocket, msg: &ServerMsg) {
+    let _ = socket
+        .send(Message::Text(serde_json::to_string(msg).unwrap()))
+        .await;
+}
+
+async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: usize) {
+    if let Some(gs) = current_state_public(state, you_id).await {
+        send_ws(socket, &ServerMsg::State(gs)).await;
+    }
+}
+
+async fn process_client_msg(
+    name: &str,
+    state: &AppState,
+    socket: &mut WebSocket,
+    cm: ClientMsg,
+    you_id: usize,
+) {
+    match cm {
+        ClientMsg::Action(a) => {
+            println!("[WS] Action from {}: {:?}", name, a);
+            let mut err: Option<String> = None;
+            {
+                let mut lobby = state.lobby.write().await;
+                if let Some(game) = &mut lobby.game {
+                    if let Err(e) = game.apply_player_action(0, a.clone()) {
+                        err = Some(e.to_string());
+                    } else {
+                        game.play_out_bots();
+                    }
+                }
+            }
+            if let Some(e) = err {
+                send_ws(socket, &ServerMsg::Error(e)).await;
+            }
+            send_state_to(socket, state, you_id).await;
+        }
+        ClientMsg::RequestState => {
+            println!("[WS] State requested by {}", name);
+            {
+                let mut lobby = state.lobby.write().await;
+                if let Some(game) = &mut lobby.game {
+                    game.play_out_bots();
+                }
+            }
+            send_state_to(socket, state, you_id).await;
+        }
+        ClientMsg::NextHand => {
+            println!("[WS] NextHand requested by {}", name);
+            {
+                let mut lobby = state.lobby.write().await;
+                if let Some(game) = &mut lobby.game {
+                    let n = game.players.len();
+                    if n > 0 {
+                        game.dealer_idx = (game.dealer_idx + 1) % n;
+                    }
+                    game.start_new_hand();
+                    if game.to_act != 0 {
+                        game.play_out_bots();
+                    }
+                }
+            }
+            send_state_to(socket, state, you_id).await;
+        }
+        ClientMsg::ResetGame { bots } => {
+            println!("[WS] ResetGame requested by {}: bots={} ", name, bots);
+            {
+                let mut lobby = state.lobby.write().await;
+                lobby.game = Some(Game::new(name.to_string(), bots));
+                if let Some(game) = &mut lobby.game {
+                    if game.players.len() > 1 && game.to_act != 0 {
+                        game.play_out_bots();
+                    }
+                }
+            }
+            send_state_to(socket, state, you_id).await;
+        }
+        ClientMsg::Join { .. } => {}
+    }
 }
 
 async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameStatePublic> {
