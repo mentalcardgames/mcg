@@ -248,7 +248,19 @@ impl PokerOnlineScreen {
             });
             ui.add_space(8.0);
             ui.separator();
-            ui.label(RichText::new("Action log:").strong());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Action log:").strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .add(egui::Button::new("Copy to clipboard"))
+                        .on_hover_text("Copy a structured summary of the current game and full action log")
+                        .clicked()
+                    {
+                        let clip = format_game_for_clipboard(state);
+                        ui.ctx().copy_text(clip);
+                    }
+                });
+            });
             egui::ScrollArea::vertical()
                 .id_salt("action_log_scroll")
                 .max_height(200.0)
@@ -535,6 +547,114 @@ fn stage_badge(stage: Stage) -> egui::WidgetText {
         Stage::Showdown => ("Showdown", Color32::from_rgb(180, 100, 220)),
     };
     RichText::new(txt).color(color).strong().into()
+}
+
+fn stage_to_str(stage: Stage) -> &'static str {
+    match stage {
+        Stage::Preflop => "Preflop",
+        Stage::Flop => "Flop",
+        Stage::Turn => "Turn",
+        Stage::River => "River",
+        Stage::Showdown => "Showdown",
+    }
+}
+
+fn format_game_for_clipboard(state: &GameStatePublic) -> String {
+    let mut out = String::new();
+    // Summary
+    out.push_str("Game summary\n");
+    out.push_str(&format!("Stage: {}\n", stage_to_str(state.stage)));
+    out.push_str(&format!("Pot: {}\n", state.pot));
+    if let Some(p) = state.players.iter().find(|p| p.id == state.you_id) {
+        if let Some(cards) = p.cards {
+            out.push_str(&format!("Your hole cards: {}, {}\n", card_text(cards[0]), card_text(cards[1])));
+        } else {
+            out.push_str("Your hole cards: (hidden)\n");
+        }
+    }
+    out.push('\n');
+
+    // Players
+    out.push_str("Players\n");
+    for (idx, p) in state.players.iter().enumerate() {
+        let you = if p.id == state.you_id { " (you)" } else { "" };
+        let folded = if p.has_folded { ", folded:true" } else { "" };
+        let to_act = if state.stage != Stage::Showdown && state.to_act == idx { ", to_act:true" } else { "" };
+        out.push_str(&format!("- id:{}, name:{}, stack:{}{}{}{}\n", p.id, p.name, p.stack, you, folded, to_act));
+        if p.id == state.you_id {
+            if let Some(cards) = p.cards {
+                out.push_str(&format!("  hole: {}, {}\n", card_text(cards[0]), card_text(cards[1])));
+            }
+        }
+    }
+    out.push('\n');
+
+    // Board
+    out.push_str("Board\n");
+    if state.community.is_empty() {
+        out.push_str("- (no community cards yet)\n");
+    } else {
+        let board = state.community.iter().map(|&c| card_text(c)).collect::<Vec<_>>().join(", ");
+        out.push_str(&format!("- {}\n", board));
+    }
+    out.push('\n');
+
+    // Action log (chronological)
+    out.push_str("Action log (chronological)\n");
+    for entry in &state.action_log {
+        match &entry.event {
+            LogEvent::Action(kind) => {
+                let who_name = entry.player_id.map(|id| name_of(&state.players, id)).unwrap_or_else(|| "Table".to_string());
+                match kind {
+                    ActionKind::Fold => out.push_str(&format!("- {} folds\n", who_name)),
+                    ActionKind::Check => out.push_str(&format!("- {} checks\n", who_name)),
+                    ActionKind::Call(n) => out.push_str(&format!("- {} calls {}\n", who_name, n)),
+                    ActionKind::Bet(n) => out.push_str(&format!("- {} bets {}\n", who_name, n)),
+                    ActionKind::Raise { to, by } => out.push_str(&format!("- {} raises to {} (+{})\n", who_name, to, by)),
+                    ActionKind::PostBlind { kind, amount } => match kind {
+                        BlindKind::SmallBlind => out.push_str(&format!("- {} posts small blind {}\n", who_name, amount)),
+                        BlindKind::BigBlind => out.push_str(&format!("- {} posts big blind {}\n", who_name, amount)),
+                    },
+                }
+            }
+            LogEvent::StageChanged(s) => {
+                out.push_str(&format!("== Stage: {} ==\n", stage_to_str(*s)));
+            }
+            LogEvent::DealtHole { player_id } => {
+                let who = name_of(&state.players, *player_id);
+                out.push_str(&format!("- Dealt hole cards to {}\n", who));
+            }
+            LogEvent::DealtCommunity { cards } => {
+                match cards.len() {
+                    3 => out.push_str(&format!("- Flop: {}, {}, {}\n", card_text(cards[0]), card_text(cards[1]), card_text(cards[2]))),
+                    4 => out.push_str(&format!("- Turn: {}\n", card_text(cards[3]))),
+                    5 => out.push_str(&format!("- River: {}\n", card_text(cards[4]))),
+                    _ => {
+                        let s = cards.iter().map(|&c| card_text(c)).collect::<Vec<_>>().join(", ");
+                        out.push_str(&format!("- Community: {}\n", s));
+                    }
+                }
+            }
+            LogEvent::Showdown { hand_results } => {
+                if hand_results.is_empty() {
+                    out.push_str("- Showdown\n");
+                } else {
+                    for hr in hand_results {
+                        let who = name_of(&state.players, hr.player_id);
+                        let cat = category_text(&hr.rank.category);
+                        let best = hr.best_five.iter().map(|&c| card_text(c)).collect::<Vec<_>>().join(", ");
+                        out.push_str(&format!("- Showdown: {} -> {} [{}]\n", who, cat, best));
+                    }
+                }
+            }
+            LogEvent::PotAwarded { winners, amount } => {
+                let names = winners.iter().map(|&id| name_of(&state.players, id)).collect::<Vec<_>>().join(", ");
+                out.push_str(&format!("- Pot {} awarded to {}\n", amount, names));
+            }
+        }
+    }
+
+    out
 }
 
 fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic], you_id: usize) {
