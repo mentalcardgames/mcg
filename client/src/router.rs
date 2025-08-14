@@ -86,13 +86,7 @@ impl Router {
 #[cfg(target_arch = "wasm32")]
 impl Default for Router {
     fn default() -> Self {
-        // This should only be used in tests or fallback scenarios
-        Self::new().unwrap_or_else(|_| Router {
-            current_screen: ScreenType::Main,
-            history: unsafe { std::mem::zeroed() },
-            location: unsafe { std::mem::zeroed() },
-            _popstate_callback: Closure::wrap(Box::new(|_| {}) as Box<dyn FnMut(web_sys::Event)>),
-        })
+        Self::new().unwrap_or_else(|_| panic!("Failed to create router: This should only be used in tests"))
     }
 }
 
