@@ -114,6 +114,7 @@ impl PokerOnlineScreen {
     }
 
     fn render_header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        // Title row with current stage badge
         ui.horizontal(|ui| {
             ui.heading("Poker Online");
             ui.add_space(16.0);
@@ -122,38 +123,16 @@ impl PokerOnlineScreen {
                 ui.add_space(8.0);
                 ui.label(format!("Bots: {}", s.bot_count));
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Connect").clicked() {
-                    self.connect(ctx);
-                }
-                ui.text_edit_singleline(&mut self.name)
-                    .on_hover_text("Your nickname");
-                ui.label("Name:");
+        });
+
+        // Collapsible connection & session controls
+        let default_open = self.state.is_none();
+        egui::CollapsingHeader::new("Connection & session")
+            .default_open(default_open)
+            .show(ui, |ui| {
+                Self::render_connection_controls(self, ui, ctx);
             });
-        });
-        ui.horizontal(|ui| {
-            ui.label("Server:");
-            ui.text_edit_singleline(&mut self.server_address)
-                .on_hover_text("Server address (IP:PORT)");
-            ui.add_space(12.0);
-            ui.label("Bots:");
-            ui.add(
-                egui::DragValue::new(&mut self.bots)
-                    .range(0..=8)
-                    .speed(0.1)
-                    .suffix(" bots"),
-            );
-            if ui
-                .add(egui::Button::new("Reset Game"))
-                .on_hover_text("Reset the game with the chosen number of bots")
-                .clicked()
-            {
-                self.send(&ClientMsg::ResetGame { bots: self.bots });
-                // Clear any local status; server will push the new state
-                self.last_info = Some(format!("Reset requested ({} bots)", self.bots));
-                self.last_error = None;
-            }
-        });
+
         if let Some(err) = &self.last_error {
             ui.colored_label(Color32::RED, err);
         }
@@ -161,6 +140,73 @@ impl PokerOnlineScreen {
             ui.label(RichText::new(info));
         }
         ui.separator();
+    }
+
+    fn render_connection_controls(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let narrow = ui.available_width() < 700.0;
+        if narrow {
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Name:");
+                    ui.text_edit_singleline(&mut self.name).on_hover_text("Your nickname");
+                    if ui.button("Connect").clicked() {
+                        self.connect(ctx);
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Server:");
+                    ui.text_edit_singleline(&mut self.server_address)
+                        .on_hover_text("Server address (IP:PORT)");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Bots:");
+                    ui.add(
+                        egui::DragValue::new(&mut self.bots)
+                            .range(0..=8)
+                            .speed(0.1)
+                            .suffix(" bots"),
+                    );
+                    if ui
+                        .add(egui::Button::new("Reset Game"))
+                        .on_hover_text("Reset the game with the chosen number of bots")
+                        .clicked()
+                    {
+                        self.send(&ClientMsg::ResetGame { bots: self.bots });
+                        self.last_info = Some(format!("Reset requested ({} bots)", self.bots));
+                        self.last_error = None;
+                    }
+                });
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.label("Name:");
+                ui.text_edit_singleline(&mut self.name).on_hover_text("Your nickname");
+                ui.add_space(12.0);
+                ui.label("Server:");
+                ui.text_edit_singleline(&mut self.server_address)
+                    .on_hover_text("Server address (IP:PORT)");
+                ui.add_space(12.0);
+                ui.label("Bots:");
+                ui.add(
+                    egui::DragValue::new(&mut self.bots)
+                        .range(0..=8)
+                        .speed(0.1)
+                        .suffix(" bots"),
+                );
+                if ui
+                    .add(egui::Button::new("Reset Game"))
+                    .on_hover_text("Reset the game with the chosen number of bots")
+                    .clicked()
+                {
+                    self.send(&ClientMsg::ResetGame { bots: self.bots });
+                    self.last_info = Some(format!("Reset requested ({} bots)", self.bots));
+                    self.last_error = None;
+                }
+                if ui.button("Connect").clicked() {
+                    self.connect(ctx);
+                }
+            });
+        }
     }
 
     fn render_showdown_banner(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
@@ -184,7 +230,7 @@ impl PokerOnlineScreen {
         }
     }
 
-    fn render_left_panel(ui: &mut egui::Ui, state: &GameStatePublic) {
+    fn render_table_panel(ui: &mut egui::Ui, state: &GameStatePublic) {
         ui.group(|ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Pot:").strong());
@@ -202,41 +248,28 @@ impl PokerOnlineScreen {
             });
             ui.add_space(8.0);
             ui.separator();
-            ui.label(RichText::new("Recent actions:").strong());
-            egui::ScrollArea::vertical()
-                .id_salt("recent_actions_scroll")
-                .max_height(120.0)
-                .show(ui, |ui| {
-                    for ev in state.recent_actions.iter().rev().take(10) {
-                        let name = state
-                            .players
-                            .iter()
-                            .find(|p| p.id == ev.player_id)
-                            .map(|p| p.name.as_str())
-                            .unwrap_or("Player");
-                        let (action_txt, color) = action_text(&ev.action);
-                        ui.colored_label(color, format!("{} {}", name, action_txt));
-                    }
-                });
-            ui.add_space(8.0);
-            ui.separator();
             ui.label(RichText::new("Action log:").strong());
             egui::ScrollArea::vertical()
                 .id_salt("action_log_scroll")
-                .max_height(180.0)
+                .max_height(200.0)
                 .show(ui, |ui| {
-                    for entry in state.action_log.iter().rev().take(50) {
+                    for entry in state.action_log.iter().rev().take(100) {
                         log_entry_row(ui, entry, &state.players);
                     }
                 });
         });
     }
 
-    fn render_right_panel(ui: &mut egui::Ui, state: &GameStatePublic) {
+    fn render_players_panel(ui: &mut egui::Ui, state: &GameStatePublic) {
         ui.group(|ui| {
-            for p in &state.players {
+            for (idx, p) in state.players.iter().enumerate() {
                 let me = p.id == state.you_id;
                 ui.horizontal(|ui| {
+                    if state.to_act == idx && state.stage != Stage::Showdown {
+                        ui.colored_label(Color32::from_rgb(255, 215, 0), "●");
+                    } else {
+                        ui.label("  ");
+                    }
                     if me {
                         ui.colored_label(Color32::LIGHT_GREEN, "You");
                     }
@@ -263,6 +296,20 @@ impl PokerOnlineScreen {
                 ui.add_space(8.0);
             }
         });
+    }
+
+    fn render_panels(ui: &mut egui::Ui, state: &GameStatePublic) {
+        let narrow = ui.available_width() < 700.0;
+        if narrow {
+            Self::render_table_panel(ui, state);
+            ui.add_space(8.0);
+            Self::render_players_panel(ui, state);
+        } else {
+            ui.columns(2, |cols| {
+                Self::render_table_panel(&mut cols[0], state);
+                Self::render_players_panel(&mut cols[1], state);
+            });
+        }
     }
 
     fn render_action_row(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
@@ -400,10 +447,7 @@ impl ScreenWidget for PokerOnlineScreen {
 
         if let Some(state) = &self.state {
             self.render_showdown_banner(ui, state);
-            ui.columns(2, |cols| {
-                Self::render_left_panel(&mut cols[0], state);
-                Self::render_right_panel(&mut cols[1], state);
-            });
+            Self::render_panels(ui, state);
             ui.separator();
             self.render_action_row(ui, state);
         } else {
@@ -431,13 +475,6 @@ fn card_text_and_color(c: u8) -> (String, Color32) {
     };
     (text, color)
 }
-fn action_text(a: &PlayerAction) -> (String, Color32) {
-    match a {
-        PlayerAction::Fold => ("🟥 folds".into(), Color32::from_rgb(220, 80, 80)),
-        PlayerAction::CheckCall => ("⏭ check/call".into(), Color32::from_rgb(120, 160, 220)),
-        PlayerAction::Bet(n) => (format!("💰 bets {}", n), Color32::from_rgb(240, 200, 80)),
-    }
-}
 
 fn action_kind_text(kind: &ActionKind) -> (String, Color32) {
     match kind {
@@ -446,7 +483,7 @@ fn action_kind_text(kind: &ActionKind) -> (String, Color32) {
         ActionKind::Call(n) => (format!("📞 calls {}", n), Color32::from_rgb(120, 160, 220)),
         ActionKind::Bet(n) => (format!("💰 bets {}", n), Color32::from_rgb(240, 200, 80)),
         ActionKind::Raise { to, by } => (
-            format!("⬆️ raises to {} (+{})", to, by),
+            format!("▲ raises to {} (+{})", to, by),
             Color32::from_rgb(250, 160, 60),
         ),
         ActionKind::PostBlind { kind, amount } => match kind {
@@ -462,16 +499,6 @@ fn action_kind_text(kind: &ActionKind) -> (String, Color32) {
     }
 }
 
-#[allow(dead_code)]
-fn stage_text(stage: Stage) -> &'static str {
-    match stage {
-        Stage::Preflop => "Preflop",
-        Stage::Flop => "Flop",
-        Stage::Turn => "Turn",
-        Stage::River => "River",
-        Stage::Showdown => "Showdown",
-    }
-}
 
 fn category_text(cat: &mcg_shared::HandRankCategory) -> &'static str {
     match cat {
@@ -513,12 +540,17 @@ fn stage_badge(stage: Stage) -> egui::WidgetText {
 fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic]) {
     match &entry.event {
         LogEvent::Action(kind) => {
-            let who = entry
-                .player_id
-                .map(|id| name_of(players, id))
-                .unwrap_or_else(|| "Table".to_string());
+            let you_id = players.iter().find(|p| p.name == "You").map(|p| p.id);
+            let who_id = entry.player_id;
+            let who_name = who_id.map(|id| name_of(players, id)).unwrap_or_else(|| "Table".to_string());
             let (txt, color) = action_kind_text(kind);
-            ui.colored_label(color, format!("{} {}", who, txt));
+            let is_you = who_id.is_some() && Some(who_id.unwrap()) == you_id;
+            let label = if is_you {
+                RichText::new(format!("{} {}", who_name, txt)).color(color).strong()
+            } else {
+                RichText::new(format!("{} {}", who_name, txt)).color(color)
+            };
+            ui.label(label);
         }
         LogEvent::StageChanged(s) => {
             ui.add_space(6.0);
