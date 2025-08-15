@@ -20,6 +20,7 @@ pub enum AppEvent {
 #[derive(Clone)]
 pub struct Settings {
     pub dpi: f32,
+    pub dark_mode: bool,
 }
 
 /// Application state that owns non-UI state
@@ -32,6 +33,7 @@ impl AppState {
         Self {
             settings: Settings {
                 dpi: crate::calculate_dpi_scale(),
+                dark_mode: true,
             },
         }
     }
@@ -111,6 +113,7 @@ impl App {
             settings_open: false,
             pending_settings: Settings {
                 dpi: crate::calculate_dpi_scale(),
+                dark_mode: true,
             },
             app_state: AppState::new(),
             #[cfg(target_arch = "wasm32")]
@@ -188,7 +191,7 @@ impl App {
     fn render_top_bar(&mut self, ctx: &Context, events: &mut Vec<AppEvent>) {
         egui::TopBottomPanel::top("global_top_bar")
             .show_separator_line(false)
-            .frame(egui::Frame::default())
+            .frame(egui::Frame::default().fill(ctx.style().visuals.window_fill()))
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
                     let avail = ui.available_width();
@@ -199,9 +202,8 @@ impl App {
 
                     ui.allocate_ui_with_layout(
                         egui::vec2(left_w, row_h),
-                        egui::Layout::left_to_right(egui::Align::Center),
+                        egui::Layout::left_to_right(egui::Align::Min),
                         |ui| {
-                            ui.add_space(8.0);
                             let back_button =
                                 egui::Button::new("⬅ Back").min_size(egui::vec2(100.0, 28.0));
                             if ui.add(back_button).clicked() {
@@ -255,15 +257,26 @@ impl App {
                     if ui.button("Reset to default").clicked() {
                         self.pending_settings.dpi = crate::calculate_dpi_scale();
                     }
+                    ui.checkbox(&mut self.pending_settings.dark_mode, "Dark mode");
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
                         if ui.button("Apply").clicked() {
                             self.app_state.settings = self.pending_settings.clone();
                             ctx.set_pixels_per_point(self.app_state.settings.dpi);
+                            if self.app_state.settings.dark_mode {
+                                ctx.set_visuals(egui::Visuals::dark());
+                            } else {
+                                ctx.set_visuals(egui::Visuals::light());
+                            }
                         }
                         if ui.button("OK").clicked() {
                             self.app_state.settings = self.pending_settings.clone();
                             ctx.set_pixels_per_point(self.app_state.settings.dpi);
+                            if self.app_state.settings.dark_mode {
+                                ctx.set_visuals(egui::Visuals::dark());
+                            } else {
+                                ctx.set_visuals(egui::Visuals::light());
+                            }
                             self.settings_open = false;
                         }
                         if ui.button("Cancel").clicked() {
@@ -281,6 +294,11 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         ctx.set_pixels_per_point(self.app_state.settings.dpi);
+        if self.app_state.settings.dark_mode {
+            ctx.set_visuals(egui::Visuals::dark());
+        } else {
+            ctx.set_visuals(egui::Visuals::light());
+        }
         self.check_url_changes();
         self.process_events();
 
