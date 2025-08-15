@@ -674,8 +674,6 @@ impl Game {
         self.action_log.push(entry);
         self.cap_logs();
     }
-
-
 }
 
 #[cfg(test)]

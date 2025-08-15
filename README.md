@@ -68,64 +68,17 @@ Output
 
 ## Adding new screens (frontend)
 
-To add a new screen:
-1) Add a `ScreenType` variant and its metadata in `client/src/game/screens/mod.rs`.
-2) Implement a `ScreenWidget` for the screen and `ScreenFactory::create()`.
-3) Register it in `ScreenType::create_screen` and wire it in the `App` screen match in `client/src/game.rs`.
+The client uses a small screen registry and two traits to separate compile-time metadata from runtime UI state: ScreenDef (provides metadata() and create()) and ScreenWidget (the object-safe runtime UI trait: ui()). To add a new screen follow these steps:
 
-Code examples
+1) Create the screen module and type
+- Add a new file under `client/src/game/screens/`, e.g. `my_new_screen.rs`.
+- Implement a struct to hold the screen's runtime state and implement the ScreenWidget trait for it.
+- Implement the ScreenDef trait for the type to provide ScreenMetadata and a factory (create()).
 
-1. Declare and register your screen in `client/src/game/screens/mod.rs`:
-
-```rust
-// Add module and re-export
-pub mod my_new_screen;
-pub use my_new_screen::MyNewScreen;
-
-// Add to the ScreenType enum
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ScreenType {
-    // ...
-    MyNewScreen,
-}
-
-impl ScreenType {
-    /// Add metadata for your screen
-    pub fn metadata(&self) -> ScreenMetadata {
-        match self {
-            // ...
-            ScreenType::MyNewScreen => ScreenMetadata {
-                display_name: "My New Screen",
-                icon: "🆕",
-                url_path: "/my-new-screen",
-                description: "Demo screen showing how to extend the UI",
-                show_in_menu: true,
-            },
-        }
-    }
-
-    /// Make it show up in the main menu (optional)
-    pub fn menu_screens() -> Vec<ScreenType> {
-        vec![
-            // ...
-            ScreenType::MyNewScreen,
-        ]
-    }
-
-    /// Map ScreenType -> concrete screen instance
-    pub fn create_screen(self) -> Box<dyn ScreenWidget> {
-        match self {
-            // ...
-            ScreenType::MyNewScreen => MyNewScreen::create(),
-        }
-    }
-}
-```
-
-2. Implement the screen at `client/src/game/screens/my_new_screen.rs`:
+Example (client/src/game/screens/my_new_screen.rs):
 
 ```rust
-use super::{AppInterface, ScreenFactory, ScreenWidget};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use eframe::Frame;
 
 pub struct MyNewScreen {
@@ -145,37 +98,77 @@ impl ScreenWidget for MyNewScreen {
     }
 }
 
-impl ScreenFactory for MyNewScreen {
+impl ScreenDef for MyNewScreen {
+    fn metadata() -> ScreenMetadata {
+        ScreenMetadata {
+            path: "/my-new-screen",
+            display_name: "My New Screen",
+            icon: "🆕",
+            description: "Demo screen showing how to extend the UI",
+            show_in_menu: true,
+        }
+    }
+
     fn create() -> Box<dyn ScreenWidget> {
-        Box::new(MyNewScreen::new())
+        Box::new(Self::new())
     }
 }
 ```
 
-3. Wire the screen into the App in `client/src/game.rs`:
+2) Register and re-export the screen
+- Add the module declaration and a public re-export in `client/src/game/screens/mod.rs` so the registry and other code can find it.
+- Register the screen in the ScreenRegistry by adding a RegisteredScreen entry to the `regs` slice in `ScreenRegistry::new()` (see the existing pattern in that file).
+
+Example edits to `client/src/game/screens/mod.rs`:
 
 ```rust
-// 1) Add a field on App
+// at the top, add:
+pub mod my_new_screen;
+pub use my_new_screen::MyNewScreen;
+
+// inside the `regs` array in ScreenRegistry::new(), add another entry:
+RegisteredScreen {
+    meta: MyNewScreen::metadata(),
+    factory: MyNewScreen::create,
+},
+```
+
+3) Special-case typed screens (optional)
+- Some screens in this codebase are stored directly on App as typed fields (for example the main Game screen) instead of being created from the registry. If your screen needs to be owned by App as a typed instance (for faster access or special lifetime reasons), add a field on App, initialize it in App::new(), and render it as a special-case in the CentralPanel before the registry lookup.
+
+Example (client/src/game.rs):
+
+```rust
+// add a field on App
 pub struct App {
     // ...
     my_new_screen: screens::MyNewScreen,
     // ...
 }
 
-// 2) Initialize it in App::new()
+// initialize in App::new()
 Self {
     // ...
     my_new_screen: screens::MyNewScreen::new(),
     // ...
 }
 
-// 3) Route it in the update match
-match self.current_screen {
-    // ...
-    ScreenType::MyNewScreen => self.my_new_screen.ui(&mut app_interface, ui, frame),
-    // ...
+// render special-case in the CentralPanel before the registry path handling:
+if self.current_screen_path == "/my-new-screen" {
+    self.my_new_screen.ui(&mut app_interface, ui, frame);
+} else {
+    // existing registry-based creation and rendering
 }
 ```
+
+4) Triggering navigation
+- To navigate to your screen from code or UI, queue App events with AppEvent::ChangeRoute("/my-new-screen".to_string()) or call the Router on wasm targets.
+- If you want the screen to appear in the main menu, set show_in_menu: true in its metadata and register it in the registry.
+
+Notes and tips
+- The ScreenRegistry is used to present menu entries and lazily create runtime screen instances for routes handled by path. Registered screens must provide unique URL-safe path values.
+- Prefer implementing a ScreenDef + ScreenWidget and registering it in the registry for regular screens. Use typed App-owned screens only when necessary.
+- After adding a screen, run `just build dev` and open the app (`just start dev`) to verify it appears in the menu and renders as expected.
 
 Routing
 - On wasm targets, a small `Router` syncs `ScreenType` with the browser URL using History/Location and popstate.

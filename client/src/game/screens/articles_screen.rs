@@ -2,7 +2,7 @@ use eframe::Frame;
 use egui::{vec2, Color32, RichText, ScrollArea};
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use super::{AppInterface, ScreenWidget};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::articles::{fetch_posts, Post};
 
 #[derive(Debug)]
@@ -181,5 +181,27 @@ impl ScreenWidget for ArticlesScreen {
             }
             ui.add_space(50.0);
         });
+    }
+}
+
+impl ScreenDef for ArticlesScreen {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/articles",
+            display_name: "Articles",
+            icon: "📰",
+            description: "Fetch posts from a demo API",
+            show_in_menu: true,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Self::new())
     }
 }

@@ -58,16 +58,16 @@ Frontend (client crate)
   - Exports start(canvas) via wasm-bindgen. index.html imports ./pkg/mcg.js and calls start() with the #mcg_canvas element.
   - Calculates DPI scale and configures egui’s pixels_per_point dynamically based on device metrics.
 - Application core: client/src/game.rs
-  - App struct owns the current ScreenType and concrete screen instances (MainMenu, GameSetupScreen, Game, etc.).
+  - App struct owns the current route path (string) and concrete screen instances (MainMenu, GameSetupScreen, Game, etc.).
   - Event queue drives screen transitions (AppEvent). update() processes URL changes (on wasm), handles events, renders a fixed top bar (except on Main), and then draws the current screen.
-  - On wasm targets, an optional Router syncs ScreenType with the browser URL using History/Location and popstate.
+  - On wasm targets, an optional Router syncs the current path with the browser URL using History/Location and popstate.
 - Routing: client/src/router.rs
-  - Parses current path to ScreenType and updates history on navigation. Provides a small SPA router for client-only routes.
+  - Exposes a path-based Router that tracks the browser pathname, provides navigate_to_path(), check_for_url_changes(), and current_path().
+  - The router no longer maps to a ScreenType enum; navigation uses string paths.
 - Screen system: client/src/game/screens/
-  - ScreenType enumerates all screens and provides ScreenMetadata (display name, icon, URL path, description, show_in_menu).
-  - Routable maps between URL paths and ScreenType.
-  - ScreenWidget is the egui rendering trait for concrete screens; ScreenFactory traits/impls provide constructors for each screen type.
-  - ScreenRegistry caches metadata for menus and lookups.
+  - ScreenMetadata (display name, icon, URL path, description, show_in_menu) is provided by each screen via the ScreenDef trait.
+  - Each screen implements a runtime ScreenWidget trait (ui()) and a compile-time ScreenDef trait (metadata() and create()).
+  - ScreenRegistry caches metadata and factories (path -> factory) so App can lazily instantiate Box<dyn ScreenWidget> by path at runtime.
 - Cards/config: client/src/hardcoded_cards.rs and related game types handle themes and deck configuration used by setup/game screens.
 
 Backend (server crate)

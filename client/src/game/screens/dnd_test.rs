@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{vec2, Color32, Id};
 
-use super::{AppInterface, ScreenWidget};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 // use crate::sprintln;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -99,5 +99,27 @@ impl ScreenWidget for DNDTest {
             to.row = to.row.min(column.len());
             column.insert(to.row, item);
         }
+    }
+}
+
+impl ScreenDef for DNDTest {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/dnd-test",
+            display_name: "DND Test",
+            icon: "🧩",
+            description: "Drag-and-drop demo",
+            show_in_menu: true,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Self::new())
     }
 }

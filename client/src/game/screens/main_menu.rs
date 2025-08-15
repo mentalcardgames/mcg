@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{vec2, FontId, RichText};
 
-use super::{AppInterface, ScreenRegistry, ScreenWidget};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenRegistry, ScreenWidget};
 
 pub struct MainMenu {
     screen_registry: ScreenRegistry,
@@ -44,19 +44,19 @@ impl ScreenWidget for MainMenu {
                         let button_size = vec2(180.0, 80.0);
 
                         // Generate buttons from screen registry
-                        let menu_screens = self.screen_registry.get_menu_screens();
-                        for screen_type in menu_screens {
-                            let metadata = self.screen_registry.get_metadata(screen_type);
-                            let label = format!("{} {}", metadata.icon, metadata.display_name);
+                        let menu = self.screen_registry.menu_metas();
+                        for meta in menu {
+                            let label = format!("{} {}", meta.icon, meta.display_name);
 
                             let button = egui::Button::new(
                                 RichText::new(&label).font(FontId::proportional(16.0)),
                             );
 
                             if ui.add_sized(button_size, button).clicked() {
-                                eprintln!("{} opened", metadata.display_name);
-                                app_interface
-                                    .queue_event(crate::game::AppEvent::ChangeScreen(screen_type));
+                                eprintln!("{} opened", meta.display_name);
+                                app_interface.queue_event(crate::game::AppEvent::ChangeRoute(
+                                    meta.path.to_string(),
+                                ));
                             }
                         }
                     });
@@ -65,5 +65,27 @@ impl ScreenWidget for MainMenu {
                 ui.add_space(32.0);
             });
         });
+    }
+}
+
+impl ScreenDef for MainMenu {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/",
+            display_name: "Main",
+            icon: "🎮",
+            description: "Main menu",
+            show_in_menu: false,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Self::new())
     }
 }

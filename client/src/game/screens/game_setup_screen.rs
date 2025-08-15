@@ -2,7 +2,7 @@ use eframe::Frame;
 use egui::vec2;
 use std::rc::Rc;
 
-use super::{AppInterface, DirectoryCardType, GameConfig, ScreenWidget};
+use super::{AppInterface, DirectoryCardType, GameConfig, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::game::card::{CardConfig, SimpleCard};
 use crate::game::field::{SimpleField, SimpleFieldKind::Stack};
 
@@ -20,12 +20,15 @@ impl GameSetupScreen {
             .iter()
             .position(|&t| t == crate::hardcoded_cards::DEFAULT_THEME)
             .unwrap_or(0);
-        Self {
+        let mut screen = Self {
             card_config,
             players,
             theme_index,
             is_dnd_variant: false,
-        }
+        };
+        // Ensure a default deck is set for runtime-created screens
+        crate::hardcoded_cards::set_deck_by_theme(&mut screen.card_config, crate::hardcoded_cards::DEFAULT_THEME);
+        screen
     }
     pub fn new_dnd() -> Self {
         let mut screen = Self::new();
@@ -119,5 +122,27 @@ impl ScreenWidget for GameSetupScreen {
                 }
             }
         }
+    }
+}
+
+impl ScreenDef for GameSetupScreen {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/game-setup",
+            display_name: "Game Setup",
+            icon: "⚙️",
+            description: "Configure game and players",
+            show_in_menu: true,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Self::new())
     }
 }

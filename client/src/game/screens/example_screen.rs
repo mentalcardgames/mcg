@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{vec2, FontId, RichText};
 
-use super::{AppInterface, ScreenWidget};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 
 /// Example screen to demonstrate the new generalized screen system
 pub struct ExampleScreen {
@@ -86,8 +86,7 @@ impl ScreenWidget for ExampleScreen {
                     )
                     .clicked()
                 {
-                    app_interface
-                        .queue_event(crate::game::AppEvent::ChangeScreen(super::ScreenType::Main));
+                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/".to_string()));
                 }
 
                 ui.add_space(20.0);
@@ -100,10 +99,32 @@ impl ScreenWidget for ExampleScreen {
                         .font(FontId::proportional(14.0))
                         .strong(),
                 );
-                ui.label("1. Add 'Example' to the ScreenType enum");
-                ui.label("2. Add metadata in the ScreenType::metadata() method");
+                ui.label("1. Add 'Example' to the Screen registry");
+                ui.label("2. Implement ScreenDef::metadata() and create()");
                 ui.label("3. That's it! The router and main menu will automatically work.");
             });
         });
+    }
+}
+
+impl ScreenDef for ExampleScreen {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/example",
+            display_name: "Example",
+            icon: "🧪",
+            description: "An example screen",
+            show_in_menu: true,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Self::new())
     }
 }

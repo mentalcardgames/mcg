@@ -17,10 +17,10 @@ use tokio::sync::RwLock;
 use tower_http::services::ServeDir;
 
 use crate::game::Game;
+use mcg_server::pretty::format_table_header;
 use mcg_shared::{ClientMsg, GameStatePublic, ServerMsg};
-use mcg_server::pretty::{format_state_human, format_event_human, format_table_header};
-use std::io::IsTerminal;
 use owo_colors::OwoColorize;
+use std::io::IsTerminal;
 
 #[derive(Clone, Default)]
 pub struct AppState {
@@ -133,7 +133,12 @@ async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: usize) 
         let total = gs.action_log.len();
         if total > already {
             for e in gs.action_log.iter().skip(already) {
-                let line = mcg_server::pretty::format_event_human(e, &gs.players, gs.you_id, std::io::stdout().is_terminal());
+                let line = mcg_server::pretty::format_event_human(
+                    e,
+                    &gs.players,
+                    gs.you_id,
+                    std::io::stdout().is_terminal(),
+                );
                 println!("{}", line);
             }
             lobby.last_printed_log_len = total;
@@ -159,7 +164,11 @@ async fn drive_bots_with_delays(
                     let actor = game.to_act;
                     // Choose a simple bot action using the same logic as random_bot_action
                     let need = game.current_bet.saturating_sub(game.round_bets[actor]);
-                    let action = if need == 0 { mcg_shared::PlayerAction::Bet(game.bb) } else { mcg_shared::PlayerAction::CheckCall };
+                    let action = if need == 0 {
+                        mcg_shared::PlayerAction::Bet(game.bb)
+                    } else {
+                        mcg_shared::PlayerAction::CheckCall
+                    };
                     let _ = game.apply_player_action(actor, action);
                     true
                 } else {
@@ -230,7 +239,8 @@ async fn process_client_msg(
                     }
                     game.start_new_hand();
                     // After starting a new hand, print a table header banner once
-                    let sb = game.sb; let bb = game.bb;
+                    let sb = game.sb;
+                    let bb = game.bb;
                     let gs = game.public_for(you_id);
                     lobby.last_printed_log_len = gs.action_log.len();
                     let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
@@ -246,7 +256,8 @@ async fn process_client_msg(
                 let mut lobby = state.lobby.write().await;
                 lobby.game = Some(Game::new(name.to_string(), bots));
                 if let Some(game) = &mut lobby.game {
-                    let sb = game.sb; let bb = game.bb;
+                    let sb = game.sb;
+                    let bb = game.bb;
                     let gs = game.public_for(you_id);
                     lobby.last_printed_log_len = gs.action_log.len();
                     let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());

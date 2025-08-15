@@ -1,9 +1,12 @@
 use eframe::Frame;
 
-use super::{DNDSelector, DirectoryCardType, GameConfig, ScreenWidget};
-use crate::game::field::FieldWidget;
+use super::{DNDSelector, DirectoryCardType, GameConfig, ScreenDef, ScreenMetadata, ScreenWidget};
+use crate::game::field::{FieldWidget, SimpleField, SimpleFieldKind::Stack};
 use crate::game::AppInterface;
+use crate::game::card::SimpleCard;
 use crate::sprintln;
+use egui::vec2;
+use std::rc::Rc;
 
 pub struct CardsTestDND {
     pub(crate) game_config: Option<GameConfig<DirectoryCardType>>,
@@ -11,12 +14,40 @@ pub struct CardsTestDND {
     drop: Option<DNDSelector>,
 }
 impl CardsTestDND {
+    fn demo_config() -> GameConfig<DirectoryCardType> {
+        // Create a demo deck and populate a stack and two player fields
+        let card_config = crate::hardcoded_cards::create_deck(crate::hardcoded_cards::DEFAULT_THEME);
+        let mut players: Vec<(String, SimpleField<SimpleCard, DirectoryCardType>)> = (0..2)
+            .map(|i| {
+                (
+                    format!("Player {}", i + 1),
+                    SimpleField::new(Rc::new(card_config.clone()))
+                        .max_cards(8)
+                        .selectable(true)
+                        .max_card_size(vec2(100.0, 150.0)),
+                )
+            })
+            .collect();
+        let mut stack = SimpleField::new(Rc::new(card_config.clone()))
+            .kind(Stack)
+            .max_card_size(vec2(100.0, 150.0));
+        for i in 0..card_config.T {
+            let card = SimpleCard::Open(i);
+            stack.push(card.clone());
+            players[i % 2].1.push(SimpleCard::Open(i));
+        }
+        GameConfig { players, stack }
+    }
+
     pub fn new() -> Self {
-        CardsTestDND {
+        let mut s = CardsTestDND {
             game_config: None,
             drag: None,
             drop: None,
-        }
+        };
+        // populate with demo data so the screen is not empty when opened from the menu
+        s.set_config(Self::demo_config());
+        s
     }
     pub fn set_config(&mut self, config: GameConfig<DirectoryCardType>) {
         self.game_config = Some(config);
@@ -90,5 +121,27 @@ impl ScreenWidget for CardsTestDND {
                 sprintln!("Drag: {:?}\t Drop: {:?}", self.drag, self.drop);
             }
         }
+    }
+}
+
+impl ScreenDef for CardsTestDND {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/game-dnd",
+            display_name: "Game (DND)",
+            icon: "🃏",
+            description: "Drag-and-drop game screen",
+            show_in_menu: true,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Self::new())
     }
 }

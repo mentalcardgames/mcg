@@ -1,13 +1,12 @@
 //! Client-side (WASM) library for the MCG app.
 
-
 pub mod articles;
 pub mod game;
 pub mod hardcoded_cards;
+pub mod qr_scanner;
 #[cfg(target_arch = "wasm32")]
 pub mod router;
 pub mod utils;
-pub mod qr_scanner;
 
 #[allow(unused_imports)]
 use eframe::AppCreator;
@@ -62,7 +61,10 @@ pub fn start_game(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn start_game(_canvas: (), _init: AppCreator<'static>) -> Result<(), ()> { Ok(()) }
+#[allow(clippy::result_unit_err)]
+pub fn start_game(_canvas: (), _init: AppCreator<'static>) -> Result<(), ()> {
+    Ok(())
+}
 
 #[cfg(target_arch = "wasm32")]
 pub fn calculate_dpi_scale() -> f32 {

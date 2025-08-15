@@ -2,26 +2,25 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use futures_util::{SinkExt, StreamExt};
-use mcg_shared::{ClientMsg, GameStatePublic, PlayerAction, ServerMsg};
 use mcg_server::pretty::format_state_human;
+use mcg_shared::{ClientMsg, GameStatePublic, PlayerAction, ServerMsg};
+use std::io::IsTerminal;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
-use owo_colors::OwoColorize;
-use std::io::IsTerminal;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "mcg-cli", version, about = "Headless CLI for MCG poker demo", long_about = None)]
 struct Cli {
     /// Base server URL (http(s)://host:port or ws(s)://host:port/ws)
-    #[arg(short, long, default_value = "http://localhost:3000")] 
+    #[arg(short, long, default_value = "http://localhost:3000")]
     server: String,
 
     /// Join name to use for the single player
-    #[arg(short, long, default_value = "CLI")] 
+    #[arg(short, long, default_value = "CLI")]
     name: String,
 
     /// How long to wait for server state updates after sending a command (ms)
-    #[arg(long, default_value_t = 1200)] 
+    #[arg(long, default_value_t = 1200)]
     wait_ms: u64,
 
     /// Output JSON instead of human-readable text
@@ -49,7 +48,10 @@ enum Commands {
     /// Advance to the next hand
     NextHand,
     /// Reset the game with N bots
-    Reset { #[arg(long, short = 'b', default_value_t = 1)] bots: usize },
+    Reset {
+        #[arg(long, short = 'b', default_value_t = 1)]
+        bots: usize,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -69,11 +71,21 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Join => {
             let latest = run_once(&ws_url, &cli.name, None, cli.wait_ms).await?;
-            if let Some(state) = latest { output_state(&state, cli.json); }
+            if let Some(state) = latest {
+                output_state(&state, cli.json);
+            }
         }
         Commands::State => {
-            let latest = run_once(&ws_url, &cli.name, Some(ClientMsg::RequestState), cli.wait_ms).await?;
-            if let Some(state) = latest { output_state(&state, cli.json); }
+            let latest = run_once(
+                &ws_url,
+                &cli.name,
+                Some(ClientMsg::RequestState),
+                cli.wait_ms,
+            )
+            .await?;
+            if let Some(state) = latest {
+                output_state(&state, cli.json);
+            }
         }
         Commands::Action { kind, amount } => {
             let pa = match kind {
@@ -81,16 +93,30 @@ async fn main() -> anyhow::Result<()> {
                 ActionKind::CheckCall => PlayerAction::CheckCall,
                 ActionKind::Bet => PlayerAction::Bet(amount),
             };
-            let latest = run_once(&ws_url, &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?;
-            if let Some(state) = latest { output_state(&state, cli.json); }
+            let latest =
+                run_once(&ws_url, &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?;
+            if let Some(state) = latest {
+                output_state(&state, cli.json);
+            }
         }
         Commands::NextHand => {
-            let latest = run_once(&ws_url, &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?;
-            if let Some(state) = latest { output_state(&state, cli.json); }
+            let latest =
+                run_once(&ws_url, &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?;
+            if let Some(state) = latest {
+                output_state(&state, cli.json);
+            }
         }
         Commands::Reset { bots } => {
-            let latest = run_once(&ws_url, &cli.name, Some(ClientMsg::ResetGame { bots }), cli.wait_ms).await?;
-            if let Some(state) = latest { output_state(&state, cli.json); }
+            let latest = run_once(
+                &ws_url,
+                &cli.name,
+                Some(ClientMsg::ResetGame { bots }),
+                cli.wait_ms,
+            )
+            .await?;
+            if let Some(state) = latest {
+                output_state(&state, cli.json);
+            }
         }
     }
 
@@ -106,17 +132,16 @@ fn output_state(state: &GameStatePublic, json: bool) {
     }
 }
 
-
 fn build_ws_url(base: &str) -> anyhow::Result<Url> {
-    let mut url = Url::parse(base)
-        .or_else(|_| Url::parse(&format!("http://{}", base)))?;
+    let mut url = Url::parse(base).or_else(|_| Url::parse(&format!("http://{}", base)))?;
 
     match url.scheme() {
         "http" => url.set_scheme("ws").ok(),
         "https" => url.set_scheme("wss").ok(),
         "ws" | "wss" => Some(()),
         _ => None,
-    }.ok_or_else(|| anyhow::anyhow!("Unsupported URL scheme: {}", url.scheme()))?;
+    }
+    .ok_or_else(|| anyhow::anyhow!("Unsupported URL scheme: {}", url.scheme()))?;
 
     // Force path to /ws
     if url.path() != "/ws" {
@@ -135,13 +160,15 @@ async fn run_once(
     let (mut write, mut read) = ws_stream.split();
 
     // Always join first
-    let join = serde_json::to_string(&ClientMsg::Join { name: name.to_string() })?;
-    write.send(Message::Text(join.into())).await?;
+    let join = serde_json::to_string(&ClientMsg::Join {
+        name: name.to_string(),
+    })?;
+    write.send(Message::Text(join)).await?;
 
     // Optional follow-up command
     if let Some(msg) = after_join {
         let txt = serde_json::to_string(&msg)?;
-        write.send(Message::Text(txt.into())).await?;
+        write.send(Message::Text(txt)).await?;
     }
 
     // Read until timeout, return last State
@@ -153,7 +180,7 @@ async fn run_once(
                     match sm {
                         ServerMsg::State(gs) => latest_state = Some(gs),
                         ServerMsg::Error(e) => eprintln!("Server error: {}", e),
-                        ServerMsg::Welcome { .. } => {},
+                        ServerMsg::Welcome { .. } => {}
                     }
                 }
             }
@@ -163,7 +190,7 @@ async fn run_once(
                 break;
             }
             Ok(None) => break, // socket closed
-            Err(_) => break,    // timeout
+            Err(_) => break,   // timeout
         }
     }
 

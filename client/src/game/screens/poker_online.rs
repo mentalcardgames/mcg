@@ -14,7 +14,7 @@ use wasm_bindgen::JsCast;
 #[cfg(target_arch = "wasm32")]
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
-use super::{AppInterface, ScreenWidget};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
@@ -151,7 +151,8 @@ impl PokerOnlineScreen {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
                     ui.label("Name:");
-                    ui.text_edit_singleline(&mut self.name).on_hover_text("Your nickname");
+                    ui.text_edit_singleline(&mut self.name)
+                        .on_hover_text("Your nickname");
                     if ui.button("Connect").clicked() {
                         self.connect(ctx);
                     }
@@ -160,7 +161,8 @@ impl PokerOnlineScreen {
                     ui.label("Server:");
                     ui.text_edit_singleline(&mut self.server_address)
                         .on_hover_text("Server address (IP:PORT)");
-                    self.scanner.button_and_popup(ui, ctx, &mut self.server_address);
+                    self.scanner
+                        .button_and_popup(ui, ctx, &mut self.server_address);
                 });
                 ui.horizontal(|ui| {
                     ui.label("Bots:");
@@ -184,12 +186,14 @@ impl PokerOnlineScreen {
         } else {
             ui.horizontal(|ui| {
                 ui.label("Name:");
-                ui.text_edit_singleline(&mut self.name).on_hover_text("Your nickname");
+                ui.text_edit_singleline(&mut self.name)
+                    .on_hover_text("Your nickname");
                 ui.add_space(12.0);
                 ui.label("Server:");
                 ui.text_edit_singleline(&mut self.server_address)
                     .on_hover_text("Server address (IP:PORT)");
-                self.scanner.button_and_popup(ui, ctx, &mut self.server_address);
+                self.scanner
+                    .button_and_popup(ui, ctx, &mut self.server_address);
                 ui.add_space(12.0);
                 ui.label("Bots:");
                 ui.add(
@@ -258,7 +262,9 @@ impl PokerOnlineScreen {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .add(egui::Button::new("Copy to clipboard"))
-                        .on_hover_text("Copy a structured summary of the current game and full action log")
+                        .on_hover_text(
+                            "Copy a structured summary of the current game and full action log",
+                        )
                         .clicked()
                     {
                         let clip = format_game_for_clipboard(state);
@@ -356,7 +362,9 @@ impl PokerOnlineScreen {
             }
         });
     }
+}
 
+impl PokerOnlineScreen {
     #[cfg(target_arch = "wasm32")]
     fn connect(&mut self, ctx: &egui::Context) {
         let ws_url = format!("ws://{}/ws", self.server_address);
@@ -448,6 +456,28 @@ impl PokerOnlineScreen {
     fn send(&self, _msg: &ClientMsg) {}
 }
 
+impl ScreenDef for PokerOnlineScreen {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/poker-online",
+            display_name: "Poker Online",
+            icon: "♠️",
+            description: "Play poker against bots or online",
+            show_in_menu: true,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Self::new())
+    }
+}
+
 impl Default for PokerOnlineScreen {
     fn default() -> Self {
         Self::new()
@@ -472,12 +502,14 @@ impl ScreenWidget for PokerOnlineScreen {
         }
     }
 }
+
 fn card_chip(ui: &mut egui::Ui, c: u8) {
     let (text, color) = card_text_and_color(c);
     let b = egui::widgets::Button::new(RichText::new(text).color(color).size(28.0))
         .min_size(egui::vec2(48.0, 40.0));
     ui.add(b);
 }
+
 fn card_text_and_color(c: u8) -> (String, Color32) {
     let rank_idx = (c % 13) as usize;
     let suit_idx = (c / 13) as usize;
@@ -515,7 +547,6 @@ fn action_kind_text(kind: &ActionKind) -> (String, Color32) {
         },
     }
 }
-
 
 fn category_text(cat: &mcg_shared::HandRankCategory) -> &'static str {
     match cat {
@@ -572,7 +603,11 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
     out.push_str(&format!("Pot: {}\n", state.pot));
     if let Some(p) = state.players.iter().find(|p| p.id == state.you_id) {
         if let Some(cards) = p.cards {
-            out.push_str(&format!("Your hole cards: {}, {}\n", card_text(cards[0]), card_text(cards[1])));
+            out.push_str(&format!(
+                "Your hole cards: {}, {}\n",
+                card_text(cards[0]),
+                card_text(cards[1])
+            ));
         } else {
             out.push_str("Your hole cards: (hidden)\n");
         }
@@ -584,11 +619,22 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
     for (idx, p) in state.players.iter().enumerate() {
         let you = if p.id == state.you_id { " (you)" } else { "" };
         let folded = if p.has_folded { ", folded:true" } else { "" };
-        let to_act = if state.stage != Stage::Showdown && state.to_act == idx { ", to_act:true" } else { "" };
-        out.push_str(&format!("- id:{}, name:{}, stack:{}{}{}{}\n", p.id, p.name, p.stack, you, folded, to_act));
+        let to_act = if state.stage != Stage::Showdown && state.to_act == idx {
+            ", to_act:true"
+        } else {
+            ""
+        };
+        out.push_str(&format!(
+            "- id:{}, name:{}, stack:{}{}{}{}\n",
+            p.id, p.name, p.stack, you, folded, to_act
+        ));
         if p.id == state.you_id {
             if let Some(cards) = p.cards {
-                out.push_str(&format!("  hole: {}, {}\n", card_text(cards[0]), card_text(cards[1])));
+                out.push_str(&format!(
+                    "  hole: {}, {}\n",
+                    card_text(cards[0]),
+                    card_text(cards[1])
+                ));
             }
         }
     }
@@ -599,7 +645,12 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
     if state.community.is_empty() {
         out.push_str("- (no community cards yet)\n");
     } else {
-        let board = state.community.iter().map(|&c| card_text(c)).collect::<Vec<_>>().join(", ");
+        let board = state
+            .community
+            .iter()
+            .map(|&c| card_text(c))
+            .collect::<Vec<_>>()
+            .join(", ");
         out.push_str(&format!("- {}\n", board));
     }
     out.push('\n');
@@ -609,37 +660,53 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
     for entry in &state.action_log {
         match &entry.event {
             LogEvent::Action(kind) => {
-                let who_name = entry.player_id.map(|id| name_of(&state.players, id)).unwrap_or_else(|| "Table".to_string());
+                let who_name = entry
+                    .player_id
+                    .map(|id| name_of(&state.players, id))
+                    .unwrap_or_else(|| "Table".to_string());
                 match kind {
                     ActionKind::Fold => out.push_str(&format!("- {} folds\n", who_name)),
                     ActionKind::Check => out.push_str(&format!("- {} checks\n", who_name)),
                     ActionKind::Call(n) => out.push_str(&format!("- {} calls {}\n", who_name, n)),
                     ActionKind::Bet(n) => out.push_str(&format!("- {} bets {}\n", who_name, n)),
-                    ActionKind::Raise { to, by } => out.push_str(&format!("- {} raises to {} (+{})\n", who_name, to, by)),
+                    ActionKind::Raise { to, by } => {
+                        out.push_str(&format!("- {} raises to {} (+{})\n", who_name, to, by))
+                    }
                     ActionKind::PostBlind { kind, amount } => match kind {
-                        BlindKind::SmallBlind => out.push_str(&format!("- {} posts small blind {}\n", who_name, amount)),
-                        BlindKind::BigBlind => out.push_str(&format!("- {} posts big blind {}\n", who_name, amount)),
+                        BlindKind::SmallBlind => {
+                            out.push_str(&format!("- {} posts small blind {}\n", who_name, amount))
+                        }
+                        BlindKind::BigBlind => {
+                            out.push_str(&format!("- {} posts big blind {}\n", who_name, amount))
+                        }
                     },
                 }
             }
             LogEvent::StageChanged(s) => {
-                out.push_str(&format!("== Stage: {} ==\n", stage_to_str(*s)));
+                out.push_str(&format!("== Stage: {} ==\\n", stage_to_str(*s)));
             }
             LogEvent::DealtHole { player_id } => {
                 let who = name_of(&state.players, *player_id);
                 out.push_str(&format!("- Dealt hole cards to {}\n", who));
             }
-            LogEvent::DealtCommunity { cards } => {
-                match cards.len() {
-                    3 => out.push_str(&format!("- Flop: {}, {}, {}\n", card_text(cards[0]), card_text(cards[1]), card_text(cards[2]))),
-                    4 => out.push_str(&format!("- Turn: {}\n", card_text(cards[3]))),
-                    5 => out.push_str(&format!("- River: {}\n", card_text(cards[4]))),
-                    _ => {
-                        let s = cards.iter().map(|&c| card_text(c)).collect::<Vec<_>>().join(", ");
-                        out.push_str(&format!("- Community: {}\n", s));
-                    }
+            LogEvent::DealtCommunity { cards } => match cards.len() {
+                3 => out.push_str(&format!(
+                    "- Flop: {}, {}, {}\n",
+                    card_text(cards[0]),
+                    card_text(cards[1]),
+                    card_text(cards[2])
+                )),
+                4 => out.push_str(&format!("- Turn: {}\n", card_text(cards[3]))),
+                5 => out.push_str(&format!("- River: {}\n", card_text(cards[4]))),
+                _ => {
+                    let s = cards
+                        .iter()
+                        .map(|&c| card_text(c))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    out.push_str(&format!("- Community: {}\n", s));
                 }
-            }
+            },
             LogEvent::Showdown { hand_results } => {
                 if hand_results.is_empty() {
                     out.push_str("- Showdown\n");
@@ -647,13 +714,22 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
                     for hr in hand_results {
                         let who = name_of(&state.players, hr.player_id);
                         let cat = category_text(&hr.rank.category);
-                        let best = hr.best_five.iter().map(|&c| card_text(c)).collect::<Vec<_>>().join(", ");
+                        let best = hr
+                            .best_five
+                            .iter()
+                            .map(|&c| card_text(c))
+                            .collect::<Vec<_>>()
+                            .join(", ");
                         out.push_str(&format!("- Showdown: {} -> {} [{}]\n", who, cat, best));
                     }
                 }
             }
             LogEvent::PotAwarded { winners, amount } => {
-                let names = winners.iter().map(|&id| name_of(&state.players, id)).collect::<Vec<_>>().join(", ");
+                let names = winners
+                    .iter()
+                    .map(|&id| name_of(&state.players, id))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 out.push_str(&format!("- Pot {} awarded to {}\n", amount, names));
             }
         }
@@ -666,11 +742,15 @@ fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic], 
     match &entry.event {
         LogEvent::Action(kind) => {
             let who_id = entry.player_id;
-            let who_name = who_id.map(|id| name_of(players, id)).unwrap_or_else(|| "Table".to_string());
+            let who_name = who_id
+                .map(|id| name_of(players, id))
+                .unwrap_or_else(|| "Table".to_string());
             let (txt, color) = action_kind_text(kind);
             let is_you = who_id == Some(you_id);
             let label = if is_you {
-                RichText::new(format!("{} {}", who_name, txt)).color(color).strong()
+                RichText::new(format!("{} {}", who_name, txt))
+                    .color(color)
+                    .strong()
             } else {
                 RichText::new(format!("{} {}", who_name, txt)).color(color)
             };
@@ -688,41 +768,47 @@ fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic], 
         }
         LogEvent::DealtHole { player_id } => {
             let who = name_of(players, *player_id);
-            ui.colored_label(Color32::from_rgb(150, 150, 150), format!("🂠 Dealt hole cards to {}", who));
+            ui.colored_label(
+                Color32::from_rgb(150, 150, 150),
+                format!("🂠 Dealt hole cards to {}", who),
+            );
         }
-        LogEvent::DealtCommunity { cards } => {
-            match cards.len() {
-                3 => {
-                    ui.colored_label(
-                        Color32::from_rgb(100, 200, 120),
-                        format!("🃏 Flop: {} {} {}", card_text(cards[0]), card_text(cards[1]), card_text(cards[2])),
-                    );
-                }
-                4 => {
-                    ui.colored_label(
-                        Color32::from_rgb(230, 180, 80),
-                        format!("🃏 Turn: {}", card_text(cards[3])),
-                    );
-                }
-                5 => {
-                    ui.colored_label(
-                        Color32::from_rgb(220, 120, 120),
-                        format!("🃏 River: {}", card_text(cards[4])),
-                    );
-                }
-                _ => {
-                    ui.colored_label(
-                        Color32::from_rgb(120, 120, 120),
-                        format!(
-                            "🃏 Community: {}",
-                            cards
-                                .iter()
-                                .map(|&c| card_text(c))
-                                .collect::<Vec<_>>()
-                                .join(" ")
-                        ),
-                    );
-                }
+        LogEvent::DealtCommunity { cards } => match cards.len() {
+            3 => {
+                ui.colored_label(
+                    Color32::from_rgb(100, 200, 120),
+                    format!(
+                        "🃏 Flop: {} {} {}",
+                        card_text(cards[0]),
+                        card_text(cards[1]),
+                        card_text(cards[2])
+                    ),
+                );
+            }
+            4 => {
+                ui.colored_label(
+                    Color32::from_rgb(230, 180, 80),
+                    format!("🃏 Turn: {}", card_text(cards[3])),
+                );
+            }
+            5 => {
+                ui.colored_label(
+                    Color32::from_rgb(220, 120, 120),
+                    format!("🃏 River: {}", card_text(cards[4])),
+                );
+            }
+            _ => {
+                ui.colored_label(
+                    Color32::from_rgb(120, 120, 120),
+                    format!(
+                        "🃏 Community: {}",
+                        cards
+                            .iter()
+                            .map(|&c| card_text(c))
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    ),
+                );
             }
         },
         LogEvent::Showdown { hand_results } => {

@@ -1,11 +1,13 @@
-use egui::{vec2, TextureHandle};
+use egui::TextureHandle;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{JsCast, JsValue};
 #[cfg(target_arch = "wasm32")]
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlVideoElement, MediaStreamConstraints};
+use web_sys::{
+    CanvasRenderingContext2d, HtmlCanvasElement, HtmlVideoElement, MediaStreamConstraints,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CameraFacing {
@@ -27,6 +29,7 @@ impl std::fmt::Display for CameraFacing {
     }
 }
 
+#[allow(dead_code)]
 pub struct Camera {
     #[cfg(target_arch = "wasm32")]
     video_element: Option<HtmlVideoElement>,
@@ -44,7 +47,9 @@ pub struct Camera {
     facing_mode: CameraFacing,
 }
 impl Default for Camera {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl Camera {
     pub fn new() -> Self {
@@ -146,7 +151,9 @@ impl Camera {
             let image_data =
                 context.get_image_data(0.0, 0.0, canvas_width as f64, canvas_height as f64)?;
             let data = image_data.data();
-            if data.len() == 0 { return Ok(()); }
+            if data.len() == 0 {
+                return Ok(());
+            }
             let mut pixels = Vec::with_capacity((canvas_width * canvas_height) as usize);
             for i in (0..data.len()).step_by(4) {
                 if i + 3 < data.len() {
@@ -157,7 +164,9 @@ impl Camera {
                     pixels.push(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
                 }
             }
-            if pixels.len() != (canvas_width * canvas_height) as usize { return Ok(()); }
+            if pixels.len() != (canvas_width * canvas_height) as usize {
+                return Ok(());
+            }
             let color_image = egui::ColorImage {
                 size: [canvas_width as usize, canvas_height as usize],
                 pixels: pixels.clone(),
@@ -178,10 +187,18 @@ impl Camera {
         }
         Ok(())
     }
-    pub fn get_texture(&self) -> Option<&TextureHandle> { self.frame_texture.as_ref() }
-    pub fn is_active(&self) -> bool { self.is_active }
-    pub fn is_video_ready(&self) -> bool { self.is_video_ready }
-    pub fn get_last_qr_result(&self) -> Option<&String> { self.last_qr_result.as_ref() }
+    pub fn get_texture(&self) -> Option<&TextureHandle> {
+        self.frame_texture.as_ref()
+    }
+    pub fn is_active(&self) -> bool {
+        self.is_active
+    }
+    pub fn is_video_ready(&self) -> bool {
+        self.is_video_ready
+    }
+    pub fn get_last_qr_result(&self) -> Option<&String> {
+        self.last_qr_result.as_ref()
+    }
     #[cfg(target_arch = "wasm32")]
     pub fn stop(&mut self) {
         if let Some(stream) = &self.stream {
@@ -192,7 +209,9 @@ impl Camera {
                 }
             }
         }
-        if let Some(video) = &self.video_element { video.set_src_object(None); }
+        if let Some(video) = &self.video_element {
+            video.set_src_object(None);
+        }
         self.video_element = None;
         self.canvas_element = None;
         self.context = None;
@@ -209,7 +228,9 @@ impl Camera {
             CameraFacing::Environment => CameraFacing::User,
         };
     }
-    pub fn get_facing_mode(&self) -> CameraFacing { self.facing_mode }
+    pub fn get_facing_mode(&self) -> CameraFacing {
+        self.facing_mode
+    }
     #[cfg(target_arch = "wasm32")]
     fn process_qr_detection(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
         let mut gray_data = Vec::with_capacity(width * height);
@@ -220,9 +241,10 @@ impl Camera {
             let gray = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
             gray_data.push(gray);
         }
-        let mut prepared_image = rqrr::PreparedImage::prepare_from_greyscale(width, height, |x, y| {
-            gray_data[y * width + x]
-        });
+        let mut prepared_image =
+            rqrr::PreparedImage::prepare_from_greyscale(width, height, |x, y| {
+                gray_data[y * width + x]
+            });
         let grids = prepared_image.detect_grids();
         for grid in grids {
             if let Ok((_meta, content)) = grid.decode() {
@@ -234,11 +256,18 @@ impl Camera {
     }
 }
 
+#[allow(dead_code)]
 pub struct QrScannerPopup {
     open: bool,
     camera: Rc<RefCell<Camera>>,
     started: bool,
 }
+
+impl Default for QrScannerPopup {
+    fn default() -> Self {
+        Self::new()
+    }
+} 
 impl QrScannerPopup {
     pub fn new() -> Self {
         Self {
@@ -247,8 +276,18 @@ impl QrScannerPopup {
             started: false,
         }
     }
-    pub fn button_and_popup(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, target: &mut String) {
-        if ui.button("Scan QR").on_hover_text("Open camera to scan a QR code").clicked() {
+    #[allow(clippy::ptr_arg)]
+    pub fn button_and_popup(
+        &mut self,
+        ui: &mut egui::Ui,
+        ctx: &egui::Context,
+        target: &mut String,
+    ) {
+        if ui
+            .button("Scan QR")
+            .on_hover_text("Open camera to scan a QR code")
+            .clicked()
+        {
             self.open = true;
             #[cfg(target_arch = "wasm32")]
             {
@@ -278,7 +317,7 @@ impl QrScannerPopup {
                             if let Some(texture) = camera.get_texture() {
                                 ui.add(
                                     egui::Image::from_texture(texture)
-                                        .max_size(vec2(640.0, 480.0))
+                                        .max_size(egui::vec2(640.0, 480.0))
                                         .corner_radius(egui::CornerRadius::same(5)),
                                 );
                             } else if camera.is_video_ready() {
@@ -304,14 +343,22 @@ impl QrScannerPopup {
                     if ui.button("Close").clicked() {
                         #[cfg(target_arch = "wasm32")]
                         if let Ok(mut camera) = self.camera.try_borrow_mut() {
-                            if self.started { camera.stop(); }
+                            if self.started {
+                                camera.stop();
+                            }
                         }
                         self.started = false;
                         self.open = false;
                     }
                     #[cfg(target_arch = "wasm32")]
-                    if ui.button("Retry").on_hover_text("Retry initializing the camera").clicked() {
-                        if let Ok(mut camera) = self.camera.try_borrow_mut() { camera.stop(); }
+                    if ui
+                        .button("Retry")
+                        .on_hover_text("Retry initializing the camera")
+                        .clicked()
+                    {
+                        if let Ok(mut camera) = self.camera.try_borrow_mut() {
+                            camera.stop();
+                        }
                         let camera_ref = self.camera.clone();
                         self.started = true;
                         wasm_bindgen_futures::spawn_local(async move {
@@ -324,7 +371,9 @@ impl QrScannerPopup {
             if !open {
                 #[cfg(target_arch = "wasm32")]
                 if let Ok(mut camera) = self.camera.try_borrow_mut() {
-                    if self.started { camera.stop(); }
+                    if self.started {
+                        camera.stop();
+                    }
                 }
                 self.started = false;
                 self.open = false;

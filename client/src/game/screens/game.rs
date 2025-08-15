@@ -1,6 +1,6 @@
 use eframe::Frame;
 
-use super::{AppInterface, ScreenWidget};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::game::card::{CardConfig, SimpleCard};
 use crate::game::field::{FieldWidget, SimpleField};
 // use crate::sprintln;
@@ -116,6 +116,28 @@ impl ScreenWidget for Game<DirectoryCardType> {
         } else {
             ui.label("No game configuration loaded");
         }
+    }
+}
+
+impl ScreenDef for Game<DirectoryCardType> {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/game",
+            display_name: "Game",
+            icon: "🃏",
+            description: "Active game screen",
+            show_in_menu: false,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Game::new())
     }
 }
 

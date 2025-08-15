@@ -64,7 +64,7 @@ fn get_origin() -> String {
 
 #[allow(non_snake_case)]
 pub trait CardConfig {
-    fn img(&self, t: &impl CardEncoding) -> Image;
+    fn img(&self, t: &impl CardEncoding) -> Image<'_>;
     fn T(&self) -> usize;
     fn w(&self) -> u32;
     fn natural_size(&self) -> Vec2;
@@ -79,7 +79,7 @@ pub trait CardConfig {
     }
 }
 impl CardConfig for DirectoryCardType {
-    fn img(&self, t: &impl CardEncoding) -> Image {
+    fn img(&self, t: &impl CardEncoding) -> Image<'_> {
         let origin = get_origin();
         let path = format!(
             "{origin}/media/{folder}/{card}",
@@ -124,7 +124,7 @@ impl DirectoryCardType {
             natural_size,
         }
     }
-    pub fn all_images(&self) -> Iter<String> {
+    pub fn all_images(&self) -> Iter<'_, String> {
         self.img_names.iter()
     }
 }

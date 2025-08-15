@@ -1,4 +1,4 @@
-use super::{AppInterface, ScreenWidget};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct QrScreen {
@@ -38,5 +38,27 @@ impl ScreenWidget for QrScreen {
         });
         ui.add_space(8.0);
         ui.label("Tip: Click 'Scan QR' to fill this field from a QR code.");
+    }
+}
+
+impl ScreenDef for QrScreen {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/qr",
+            display_name: "QR Demo",
+            icon: "🔍",
+            description: "Scan QR codes into an input",
+            show_in_menu: true,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Self::new())
     }
 }

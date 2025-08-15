@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{vec2, Align, Button, Color32, Grid, Layout, RichText, ScrollArea};
 
-use super::{AppInterface, ScreenWidget};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::sprintln;
 use crate::utils::emoji_hash;
 
@@ -157,5 +157,27 @@ impl ScreenWidget for PairingScreen {
                     });
                 });
         }
+    }
+}
+
+impl ScreenDef for PairingScreen {
+    fn metadata() -> ScreenMetadata
+    where
+        Self: Sized,
+    {
+        ScreenMetadata {
+            path: "/pairing",
+            display_name: "Pairing",
+            icon: "🔗",
+            description: "Player pairing demo",
+            show_in_menu: true,
+        }
+    }
+
+    fn create() -> Box<dyn ScreenWidget>
+    where
+        Self: Sized,
+    {
+        Box::new(Self::new())
     }
 }
