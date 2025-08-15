@@ -191,22 +191,21 @@ impl App {
     fn render_top_bar(&mut self, ctx: &Context, events: &mut Vec<AppEvent>) {
         egui::TopBottomPanel::top("global_top_bar")
             .show_separator_line(false)
-            .frame(egui::Frame::default().fill(ctx.style().visuals.window_fill()))
+            .frame(egui::Frame::default().fill(ctx.style().visuals.window_fill()).inner_margin(egui::Margin::symmetric(0, 8)))
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
                     let avail = ui.available_width();
                     let left_w = 120.0;
                     let right_w = 140.0;
                     let center_w = (avail - left_w - right_w).max(0.0);
-                    let row_h = ui.spacing().interact_size.y;
+                    let row_h = ui.spacing().interact_size.y + 12.0;
 
                     ui.allocate_ui_with_layout(
                         egui::vec2(left_w, row_h),
                         egui::Layout::left_to_right(egui::Align::Min),
                         |ui| {
-                            let back_button =
-                                egui::Button::new("⬅ Back").min_size(egui::vec2(100.0, 28.0));
-                            if ui.add(back_button).clicked() {
+                            ui.add_space(8.0);
+                            if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
                                 events.push(AppEvent::ChangeRoute("/".to_string()));
                             }
                         },
