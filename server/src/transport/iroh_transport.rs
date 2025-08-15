@@ -71,8 +71,15 @@ impl Transport for IrohTransport {
         Ok(hex::encode(hash.as_bytes()))
     }
 
-    async fn fetch_blob(&self, _hash: &str, _node_id: Option<&str>, _out_path: PathBuf) -> Result<()> {
+    async fn fetch_blob(
+        &self,
+        _hash: &str,
+        _node_id: Option<&str>,
+        _out_path: PathBuf,
+    ) -> Result<()> {
         // Fetching via iroh blobs is not implemented yet; return an error explaining that.
-        Err(anyhow::anyhow!("fetch_blob not implemented for iroh transport yet"))
+        Err(anyhow::anyhow!(
+            "fetch_blob not implemented for iroh transport yet"
+        ))
     }
 }

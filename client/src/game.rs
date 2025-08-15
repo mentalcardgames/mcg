@@ -69,7 +69,6 @@ pub struct App {
     #[cfg(not(target_arch = "wasm32"))]
     router: Option<()>,
 
-
     // Event queue for handling screen transitions
     pending_events: Vec<AppEvent>,
 }
@@ -191,7 +190,11 @@ impl App {
     fn render_top_bar(&mut self, ctx: &Context, events: &mut Vec<AppEvent>) {
         egui::TopBottomPanel::top("global_top_bar")
             .show_separator_line(false)
-            .frame(egui::Frame::default().fill(ctx.style().visuals.window_fill()).inner_margin(egui::Margin::symmetric(0, 8)))
+            .frame(
+                egui::Frame::default()
+                    .fill(ctx.style().visuals.window_fill())
+                    .inner_margin(egui::Margin::symmetric(0, 8)),
+            )
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
                     let avail = ui.available_width();

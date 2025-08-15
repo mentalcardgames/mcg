@@ -2,17 +2,17 @@
 
 mod eval;
 mod game;
-mod transport;
 mod server;
+mod transport;
 
 use server::AppState;
 use std::net::{SocketAddr, TcpListener};
 use std::sync::Arc;
 
-use crate::transport::{WebSocketTransport, Transport};
 use crate::transport::iroh_transport::IrohTransport;
-use tokio::sync::{mpsc, Mutex};
+use crate::transport::{Transport, WebSocketTransport};
 use mcg_shared::ClientMsg;
+use tokio::sync::{mpsc, Mutex};
 
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///
@@ -75,9 +75,11 @@ async fn main() {
     if let Some(tr) = transport.clone() {
         let (tx, mut rx) = mpsc::unbounded_channel::<(String, ClientMsg)>();
         // Provide a callback for transport incoming messages to forward into tx
-        tr.lock().await.set_on_client_message(Box::new(move |peer, cm| {
-            let _ = tx.send((peer, cm));
-        }));
+        tr.lock()
+            .await
+            .set_on_client_message(Box::new(move |peer, cm| {
+                let _ = tx.send((peer, cm));
+            }));
 
         // Spawn a background task to process incoming transport messages
         let state_clone = state.clone();
@@ -85,7 +87,13 @@ async fn main() {
         tokio::spawn(async move {
             while let Some((peer, cm)) = rx.recv().await {
                 // Dispatch to processing function (mirror websocket behavior)
-                crate::server::process_client_msg_from_transport(peer, &state_clone, cm, Some(tr2.clone())).await;
+                crate::server::process_client_msg_from_transport(
+                    peer,
+                    &state_clone,
+                    cm,
+                    Some(tr2.clone()),
+                )
+                .await;
             }
         });
     }

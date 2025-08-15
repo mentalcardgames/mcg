@@ -91,7 +91,10 @@ async fn main() -> anyhow::Result<()> {
                     return Ok(());
                 }
                 Ok(None) => {
-                    eprintln!("Could not detect iroh node id from server at {}", cli.server);
+                    eprintln!(
+                        "Could not detect iroh node id from server at {}",
+                        cli.server
+                    );
                     return Ok(());
                 }
                 Err(e) => {
@@ -100,7 +103,10 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         } else {
-            println!("Using provided iroh node id: {}", cli.iroh_node_id.as_ref().unwrap());
+            println!(
+                "Using provided iroh node id: {}",
+                cli.iroh_node_id.as_ref().unwrap()
+            );
             return Ok(());
         }
     }
@@ -239,7 +245,11 @@ async fn run_once(
 
 async fn detect_iroh_node_id(server_base: &str) -> anyhow::Result<Option<String>> {
     // Try the admin endpoint at /admin/iroh/node_id
-    let url = if server_base.ends_with('/') { format!("{}admin/iroh/node_id", server_base) } else { format!("{}/admin/iroh/node_id", server_base) };
+    let url = if server_base.ends_with('/') {
+        format!("{}admin/iroh/node_id", server_base)
+    } else {
+        format!("{}/admin/iroh/node_id", server_base)
+    };
     if let Ok(resp) = reqwest::get(&url).await {
         if resp.status().is_success() {
             if let Ok(body) = resp.text().await {

@@ -1,23 +1,36 @@
+use crate::transport::framing::{encode_frame, ALPN_MSG};
+use crate::transport::Transport;
 use anyhow::Result;
+use bytes::BytesMut;
 use futures_util::{SinkExt, StreamExt};
+use mcg_shared::{ClientMsg, ServerMsg};
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
-use mcg_shared::{ClientMsg, ServerMsg};
-use crate::transport::framing::{encode_frame, ALPN_MSG};
-use bytes::BytesMut;
-use crate::transport::Transport;
 
 /// A thin wrapper that reuses the existing websocket handler logic but exposes the Transport trait.
 pub struct WebSocketTransport {
     // map of peer id -> sender
-    peers: Arc<Mutex<HashMap<String, futures_util::stream::SplitSink<tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>, Message>>>>,
+    peers: Arc<
+        Mutex<
+            HashMap<
+                String,
+                futures_util::stream::SplitSink<
+                    tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
+                    Message,
+                >,
+            >,
+        >,
+    >,
     on_client: Option<Arc<dyn Fn(String, ClientMsg) + Send + Sync>>,
 }
 
 impl WebSocketTransport {
     pub fn new() -> Self {
-        Self { peers: Arc::new(Mutex::new(HashMap::new())), on_client: None }
+        Self {
+            peers: Arc::new(Mutex::new(HashMap::new())),
+            on_client: None,
+        }
     }
 }
 
@@ -28,9 +41,13 @@ impl Transport for WebSocketTransport {
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<()> { Ok(()) }
+    async fn stop(&mut self) -> Result<()> {
+        Ok(())
+    }
 
-    fn node_id(&self) -> Option<String> { None }
+    fn node_id(&self) -> Option<String> {
+        None
+    }
 
     async fn send_message(&self, peer: Option<String>, msg: &ServerMsg) -> Result<()> {
         let txt = serde_json::to_string(msg)?;
@@ -59,9 +76,16 @@ impl Transport for WebSocketTransport {
         Ok(hex::encode(hash.as_bytes()))
     }
 
-    async fn fetch_blob(&self, _hash: &str, _node_id: Option<&str>, out_path: PathBuf) -> Result<()> {
+    async fn fetch_blob(
+        &self,
+        _hash: &str,
+        _node_id: Option<&str>,
+        out_path: PathBuf,
+    ) -> Result<()> {
         // No distributed fetch for websocket mode — in parity mode, clients should upload blobs via HTTP.
         // Here we return an error to indicate not available.
-        Err(anyhow::anyhow!("fetch_blob not supported for websocket transport"))
+        Err(anyhow::anyhow!(
+            "fetch_blob not supported for websocket transport"
+        ))
     }
 }

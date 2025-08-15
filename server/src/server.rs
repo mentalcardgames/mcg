@@ -13,7 +13,7 @@ use axum::{
     Json, Router,
 };
 use futures::StreamExt;
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tower_http::services::ServeDir;
 
 use crate::game::Game;
@@ -159,7 +159,9 @@ where
     <S as futures_util::Sink<Message>>::Error: std::fmt::Debug,
 {
     use futures_util::SinkExt;
-    let _ = sink.send(Message::Text(serde_json::to_string(msg).unwrap())).await;
+    let _ = sink
+        .send(Message::Text(serde_json::to_string(msg).unwrap()))
+        .await;
 }
 
 async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: usize) {
@@ -475,7 +477,10 @@ pub async fn process_client_msg_from_transport(
             drive_bots_with_delays_transport(state, 0, Some(peer.clone()), 500, 1500).await;
         }
         ClientMsg::ResetGame { bots } => {
-            println!("[TRANSPORT] ResetGame requested by {}: bots={} ", peer, bots);
+            println!(
+                "[TRANSPORT] ResetGame requested by {}: bots={} ",
+                peer, bots
+            );
             {
                 let mut lobby = state.lobby.write().await;
                 lobby.game = Some(Game::new(peer.clone(), bots));
