@@ -25,8 +25,16 @@ async fn main() -> Result<()> {
 
     let msg = ClientMsg::RequestState;
     let bytes = serde_json::to_vec(&msg)?;
-    // Use the same framing implementation as the server transport module
-    let framed = mcg_server::transport::framing::encode_frame(&bytes);
+    // Local implementation of the same length-prefixed framing (u32 BE)
+    fn encode_frame(payload: &[u8]) -> Vec<u8> {
+        use bytes::BufMut;
+        let mut buf = Vec::with_capacity(4 + payload.len());
+        buf.put_u32(payload.len() as u32);
+        buf.extend_from_slice(payload);
+        buf
+    }
+
+    let framed = encode_frame(&bytes);
 
     use tokio::io::AsyncWriteExt;
     send.write_all(&framed).await?;
