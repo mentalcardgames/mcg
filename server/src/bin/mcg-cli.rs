@@ -15,6 +15,15 @@ struct Cli {
     #[arg(short, long, default_value = "http://localhost:3000")]
     server: String,
 
+    /// Transport to use: websocket or iroh
+    #[arg(long, default_value = "websocket")]
+    #[arg(long, value_enum, default_value = "websocket")]
+    transport: TransportKind,
+
+    /// If using iroh transport, optional node id to target (otherwise auto-detect)
+    #[arg(long)]
+    iroh_node_id: Option<String>,
+
     /// Join name to use for the single player
     #[arg(short, long, default_value = "CLI")]
     name: String,
@@ -29,6 +38,12 @@ struct Cli {
 
     #[command(subcommand)]
     command: Commands,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum TransportKind {
+    Websocket,
+    Iroh,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -64,6 +79,31 @@ enum ActionKind {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    // If user requested iroh transport, attempt auto-detect if not provided
+    if let TransportKind::Iroh = cli.transport {
+        if cli.iroh_node_id.is_none() {
+            match detect_iroh_node_id(&cli.server).await {
+                Ok(Some(id)) => {
+                    println!("Detected iroh node id: {}", id);
+                    // For now we've validated detection; the iroh transport client is not
+                    // implemented yet, so print and exit successfully.
+                    return Ok(());
+                }
+                Ok(None) => {
+                    eprintln!("Could not detect iroh node id from server at {}", cli.server);
+                    return Ok(());
+                }
+                Err(e) => {
+                    eprintln!("Error detecting iroh node id: {}", e);
+                    return Ok(());
+                }
+            }
+        } else {
+            println!("Using provided iroh node id: {}", cli.iroh_node_id.as_ref().unwrap());
+            return Ok(());
+        }
+    }
 
     // Build ws URL
     let ws_url = build_ws_url(&cli.server)?;
@@ -195,4 +235,23 @@ async fn run_once(
     }
 
     Ok(latest_state)
+}
+
+async fn detect_iroh_node_id(server_base: &str) -> anyhow::Result<Option<String>> {
+    // Try the admin endpoint at /admin/iroh/node_id
+    let url = if server_base.ends_with('/') { format!("{}admin/iroh/node_id", server_base) } else { format!("{}/admin/iroh/node_id", server_base) };
+    if let Ok(resp) = reqwest::get(&url).await {
+        if resp.status().is_success() {
+            if let Ok(body) = resp.text().await {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+                    if let Some(id) = v.get("node_id") {
+                        if id.is_string() {
+                            return Ok(Some(id.as_str().unwrap().to_string()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(None)
 }

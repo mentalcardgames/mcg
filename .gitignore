@@ -13,3 +13,5 @@ dist/
 node_modules
 dist
 .crush
+server.log
+.mcg_server.pid

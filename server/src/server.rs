@@ -13,7 +13,7 @@ use axum::{
     Json, Router,
 };
 use futures::StreamExt;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Mutex};
 use tower_http::services::ServeDir;
 
 use crate::game::Game;
@@ -22,10 +22,28 @@ use mcg_shared::{ClientMsg, GameStatePublic, ServerMsg};
 use owo_colors::OwoColorize;
 use std::io::IsTerminal;
 
-#[derive(Clone, Default)]
+mod server_admin;
+use crate::server::server_admin::get_iroh_node_id;
+
+#[derive(Clone)]
 pub struct AppState {
     pub lobby: Arc<RwLock<Lobby>>,
     pub bot_count: usize,
+    // Optional transport-backed node id (set when iroh transport is running)
+    pub transport_node_id: Option<String>,
+    // Active transports kept alive so server can broadcast to them
+    pub transports: Arc<Mutex<Vec<Arc<Mutex<Box<dyn crate::transport::Transport>>>>>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            lobby: Arc::new(RwLock::new(Lobby::default())),
+            bot_count: 1,
+            transport_node_id: None,
+            transports: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
 }
 
 #[derive(Clone, Default)]
@@ -45,6 +63,8 @@ pub fn build_router(state: AppState) -> Router {
             get(|| async { Json(serde_json::json!({ "ok": true })) }),
         )
         .route("/ws", get(ws_handler))
+        // Admin endpoints for transport introspection
+        .route("/admin/iroh/node_id", get(get_iroh_node_id))
         .nest_service("/pkg", serve_dir)
         .nest_service("/media", serve_media)
         // Serve index.html for the root route
@@ -54,7 +74,8 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-pub async fn run_server(addr: SocketAddr, state: AppState) {
+pub async fn run_server(addr: SocketAddr, mut state: AppState) {
+    // If iroh transport is requested via env or CLI later we will start it and populate state.transport_node_id
     let app = build_router(state.clone());
 
     let display_addr = if addr.ip().to_string() == "127.0.0.1" {
@@ -94,10 +115,16 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     send_ws(&mut socket, &ServerMsg::Welcome { you: you_id }).await;
     send_state_to(&mut socket, &state, you_id).await;
 
+    // Also log transport node id if present
+    if let Some(node_id) = &state.transport_node_id {
+        println!("[TRANSPORT] node_id: {}", node_id);
+    }
+
     while let Some(msg) = socket.next().await {
         match msg {
             Ok(Message::Text(txt)) => {
                 if let Ok(cm) = serde_json::from_str::<ClientMsg>(&txt) {
+                    // WebSocket path: use the websocket-specific handler so replies and bot-driving work
                     process_client_msg(&name, &state, &mut socket, cm, you_id).await;
                 }
             }
@@ -125,6 +152,16 @@ async fn send_ws(socket: &mut WebSocket, msg: &ServerMsg) {
         .await;
 }
 
+// Generic helper used by transport implementations that have a WebSocket sink
+pub async fn send_ws_generic<S>(sink: &mut S, msg: &ServerMsg)
+where
+    S: futures_util::Sink<Message> + Unpin + Send,
+    <S as futures_util::Sink<Message>>::Error: std::fmt::Debug,
+{
+    use futures_util::SinkExt;
+    let _ = sink.send(Message::Text(serde_json::to_string(msg).unwrap())).await;
+}
+
 async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: usize) {
     if let Some(gs) = current_state_public(state, you_id).await {
         // Only print newly added events since the last print, to avoid repeating "Preflop"
@@ -144,7 +181,116 @@ async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: usize) 
             lobby.last_printed_log_len = total;
         }
         drop(lobby);
-        send_ws(socket, &ServerMsg::State(gs)).await;
+
+        // Send to WebSocket sink
+        send_ws(socket, &ServerMsg::State(gs.clone())).await;
+
+        // Broadcast to all active transports concurrently
+        let transports = state.transports.clone();
+        let gs_clone = gs.clone();
+        tokio::spawn(async move {
+            let locked = transports.lock().await;
+            for t in locked.iter() {
+                let t = t.clone();
+                let msg = ServerMsg::State(gs_clone.clone());
+                // spawn a task to call send_message on each transport
+                tokio::spawn(async move {
+                    let mut guard = t.lock().await;
+                    let _ = guard.send_message(None, &msg).await;
+                });
+            }
+        });
+    }
+}
+
+/// Send the current public state to active transports. If `peer` is Some(id) the transports
+/// may choose to send a peer-targeted message; otherwise this is a broadcast.
+pub async fn send_state_to_transports(state: &AppState, you_id: usize, peer: Option<String>) {
+    if let Some(gs) = current_state_public(state, you_id).await {
+        // Only print newly added events since the last print, to avoid repeating "Preflop"
+        let mut lobby = state.lobby.write().await;
+        let already = lobby.last_printed_log_len;
+        let total = gs.action_log.len();
+        if total > already {
+            for e in gs.action_log.iter().skip(already) {
+                let line = mcg_server::pretty::format_event_human(
+                    e,
+                    &gs.players,
+                    gs.you_id,
+                    std::io::stdout().is_terminal(),
+                );
+                println!("{}", line);
+            }
+            lobby.last_printed_log_len = total;
+        }
+        drop(lobby);
+
+        // Broadcast to all active transports concurrently
+        let transports = state.transports.clone();
+        let gs_clone = gs.clone();
+        tokio::spawn(async move {
+            let locked = transports.lock().await;
+            for t in locked.iter() {
+                let t = t.clone();
+                let msg = ServerMsg::State(gs_clone.clone());
+                let peer_clone = peer.clone();
+                // spawn a task to call send_message on each transport
+                tokio::spawn(async move {
+                    let mut guard = t.lock().await;
+                    let _ = guard.send_message(peer_clone.clone(), &msg).await;
+                });
+            }
+        });
+    }
+}
+
+/// Bot-driving helper for non-WebSocket transports. Applies a single bot action (if any)
+/// and broadcasts state to transports. Repeats with delays until no bot acted.
+async fn drive_bots_with_delays_transport(
+    state: &AppState,
+    you_id: usize,
+    peer: Option<String>,
+    min_ms: u64,
+    max_ms: u64,
+) {
+    loop {
+        // Perform a single bot action if it's their turn
+        let did_act = {
+            let mut lobby = state.lobby.write().await;
+            if let Some(game) = &mut lobby.game {
+                if game.stage != mcg_shared::Stage::Showdown && game.to_act != you_id {
+                    let actor = game.to_act;
+                    // Choose a simple bot action using the same logic as random_bot_action
+                    let need = game.current_bet.saturating_sub(game.round_bets[actor]);
+                    let action = if need == 0 {
+                        mcg_shared::PlayerAction::Bet(game.bb)
+                    } else {
+                        mcg_shared::PlayerAction::CheckCall
+                    };
+                    let _ = game.apply_player_action(actor, action);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+
+        // Broadcast updated state to transports
+        send_state_to_transports(state, you_id, peer.clone()).await;
+
+        if !did_act {
+            break;
+        }
+        // Sleep a pseudo-random-ish delay between actions without holding non-Send state
+        let now_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos() as u64;
+        let span = max_ms.saturating_sub(min_ms);
+        let delay = min_ms + (now_ns % span.max(1));
+        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
     }
 }
 
@@ -196,7 +342,9 @@ async fn drive_bots_with_delays(
     }
 }
 
-async fn process_client_msg(
+/// Transport-agnostic client message processor for messages received from iroh transports.
+/// For websocket we still use the original process_client_msg helper which wraps around this.
+pub async fn process_client_msg(
     name: &str,
     state: &AppState,
     socket: &mut WebSocket,
@@ -271,6 +419,81 @@ async fn process_client_msg(
     }
 }
 
+// Transport-agnostic client message processor for messages received from iroh transports.
+// For websocket we still use the original process_client_msg helper which wraps around this.
+pub async fn process_client_msg_from_transport(
+    peer: String,
+    state: &AppState,
+    cm: ClientMsg,
+    _transport: Option<std::sync::Arc<tokio::sync::Mutex<Box<dyn crate::transport::Transport>>>>,
+) {
+    match cm {
+        ClientMsg::Action(a) => {
+            println!("[TRANSPORT] Action from {}: {:?}", peer, a);
+            let mut err: Option<String> = None;
+            {
+                let mut lobby = state.lobby.write().await;
+                if let Some(game) = &mut lobby.game {
+                    if let Err(e) = game.apply_player_action(0, a.clone()) {
+                        err = Some(e.to_string());
+                    }
+                }
+            }
+            if let Some(e) = err {
+                println!("[TRANSPORT] Error applying action for {}: {}", peer, e);
+            }
+            // Send latest state to transports (including back to the originating peer)
+            send_state_to_transports(state, 0, Some(peer.clone())).await;
+            // Drive bots if it's their turn
+            drive_bots_with_delays_transport(state, 0, Some(peer.clone()), 500, 1500).await;
+        }
+        ClientMsg::RequestState => {
+            println!("[TRANSPORT] State requested by {}", peer);
+            send_state_to_transports(state, 0, Some(peer.clone())).await;
+            drive_bots_with_delays_transport(state, 0, Some(peer.clone()), 500, 1500).await;
+        }
+        ClientMsg::NextHand => {
+            println!("[TRANSPORT] NextHand requested by {}", peer);
+            {
+                let mut lobby = state.lobby.write().await;
+                if let Some(game) = &mut lobby.game {
+                    let n = game.players.len();
+                    if n > 0 {
+                        game.dealer_idx = (game.dealer_idx + 1) % n;
+                    }
+                    game.start_new_hand();
+                    let sb = game.sb;
+                    let bb = game.bb;
+                    let gs = game.public_for(0);
+                    lobby.last_printed_log_len = gs.action_log.len();
+                    let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+                    println!("{}", header);
+                }
+            }
+            // Send updated state and drive bots
+            send_state_to_transports(state, 0, Some(peer.clone())).await;
+            drive_bots_with_delays_transport(state, 0, Some(peer.clone()), 500, 1500).await;
+        }
+        ClientMsg::ResetGame { bots } => {
+            println!("[TRANSPORT] ResetGame requested by {}: bots={} ", peer, bots);
+            {
+                let mut lobby = state.lobby.write().await;
+                lobby.game = Some(Game::new(peer.clone(), bots));
+                if let Some(game) = &mut lobby.game {
+                    let sb = game.sb;
+                    let bb = game.bb;
+                    let gs = game.public_for(0);
+                    lobby.last_printed_log_len = gs.action_log.len();
+                    let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+                    println!("{}", header);
+                }
+            }
+            send_state_to_transports(state, 0, Some(peer.clone())).await;
+            drive_bots_with_delays_transport(state, 0, Some(peer.clone()), 500, 1500).await;
+        }
+        ClientMsg::Join { .. } => {}
+    }
+}
 async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameStatePublic> {
     let lobby = state.lobby.read().await;
     lobby.game.as_ref().map(|g| g.public_for(you_id))

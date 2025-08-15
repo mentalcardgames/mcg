@@ -2,19 +2,28 @@
 
 mod eval;
 mod game;
+mod transport;
 mod server;
 
 use server::AppState;
 use std::net::{SocketAddr, TcpListener};
+use std::sync::Arc;
+
+use crate::transport::{WebSocketTransport, Transport};
+use crate::transport::iroh_transport::IrohTransport;
+use tokio::sync::{mpsc, Mutex};
+use mcg_shared::ClientMsg;
 
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///
 /// Usage:
-///   mcg-server --bots <N>
+///   mcg-server --bots <N> [--transport websocket|iroh] [--iroh-node-id <ID>]
 #[tokio::main]
 async fn main() {
     // Default settings
     let mut bots: usize = 1;
+    let mut transport_choice = "websocket".to_string();
+    let mut iroh_node_id_arg: Option<String> = None;
 
     // Parse simple CLI args
     let mut args = std::env::args().skip(1);
@@ -27,6 +36,16 @@ async fn main() {
                     }
                 }
             }
+            "--transport" => {
+                if let Some(t) = args.next() {
+                    transport_choice = t;
+                }
+            }
+            "--iroh-node-id" => {
+                if let Some(id) = args.next() {
+                    iroh_node_id_arg = Some(id);
+                }
+            }
             _ => {
                 // Unknown flags are ignored for now
             }
@@ -34,10 +53,42 @@ async fn main() {
     }
 
     // Initialize shared state for the server
-    let state = AppState {
+    let mut state = AppState {
         bot_count: bots,
         ..Default::default()
     };
+
+    // Always start the Iroh transport so the server is reachable over iroh and websocket simultaneously.
+    // The Iroh endpoint runs alongside the HTTP/WebSocket server; we keep a boxed transport alive.
+    let mut it = IrohTransport::new();
+    it.start().await.expect("Failed to start iroh transport");
+    if let Some(id) = it.node_id() {
+        println!("IROH node id: {}", id);
+        state.transport_node_id = Some(id);
+    } else {
+        println!("IROH transport started but node id not yet available");
+    }
+    let boxed: Box<dyn Transport> = Box::new(it);
+    let transport: Option<Arc<Mutex<Box<dyn Transport>>>> = Some(Arc::new(Mutex::new(boxed)));
+
+    // If transport produces incoming messages, hook a channel to handle them centrally
+    if let Some(tr) = transport.clone() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<(String, ClientMsg)>();
+        // Provide a callback for transport incoming messages to forward into tx
+        tr.lock().await.set_on_client_message(Box::new(move |peer, cm| {
+            let _ = tx.send((peer, cm));
+        }));
+
+        // Spawn a background task to process incoming transport messages
+        let state_clone = state.clone();
+        let tr2 = tr.clone();
+        tokio::spawn(async move {
+            while let Some((peer, cm)) = rx.recv().await {
+                // Dispatch to processing function (mirror websocket behavior)
+                crate::server::process_client_msg_from_transport(peer, &state_clone, cm, Some(tr2.clone())).await;
+            }
+        });
+    }
 
     // Find first available port starting from 3000
     let port = find_available_port(3000).expect("Could not find an available port");

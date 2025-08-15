@@ -46,12 +46,13 @@ server BOTS="1":
     cargo run -p mcg-server --bin mcg-server -- --bots {{BOTS}}
 
 # Run the server in the background for AI agent testing
+# Starts server detached, logs to ./server.log and writes PID to .mcg_server.pid
 server-bg:
-    cargo run -p mcg-server --bin mcg-server &
+    @bash -cu 'cargo run -p mcg-server --bin mcg-server -- --transport iroh > ./server.log 2>&1 & echo $! > .mcg_server.pid; echo Started mcg-server with PID $(cat .mcg_server.pid)'
 
-# Kill the background server process
+# Kill the background server process using PID file if present, fallback to pkill
 kill-server:
-    pkill -f "mcg-server" || true
+    @bash -cu 'if [ -f .mcg_server.pid ]; then pid=$(cat .mcg_server.pid); echo "Killing mcg-server pid=$pid"; kill "$pid" || true; rm -f .mcg_server.pid; else pkill -f "mcg-server" || true; fi'
 
 # Run the headless CLI with arbitrary arguments
 # Usage examples:
