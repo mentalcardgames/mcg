@@ -77,64 +77,36 @@ pub struct ScreenRegistry {
 }
 
 impl ScreenRegistry {
+    /// Ergonomic helper to register a screen type implementing ScreenDef
+    pub fn register<T: ScreenDef + 'static>(&mut self) {
+        let meta = T::metadata();
+        self.by_path.insert(
+            meta.path,
+            RegisteredScreen {
+                meta,
+                factory: T::create,
+            },
+        );
+    }
+
     pub fn new() -> Self {
-        let mut by_path = std::collections::HashMap::new();
+        let mut reg = Self {
+            by_path: std::collections::HashMap::new(),
+        };
 
         // Register all screens by calling their ScreenDef implementations
-        let regs: &[RegisteredScreen] = &[
-            RegisteredScreen {
-                meta: MainMenu::metadata(),
-                factory: MainMenu::create,
-            },
-            RegisteredScreen {
-                meta: GameSetupScreen::metadata(),
-                factory: GameSetupScreen::create,
-            },
-            RegisteredScreen {
-                meta: Game::<DirectoryCardType>::metadata(),
-                factory: Game::<DirectoryCardType>::create,
-            },
-            RegisteredScreen {
-                meta: PairingScreen::metadata(),
-                factory: PairingScreen::create,
-            },
-            RegisteredScreen {
-                meta: DNDTest::metadata(),
-                factory: DNDTest::create,
-            },
-            RegisteredScreen {
-                meta: CardsTestDND::metadata(),
-                factory: CardsTestDND::create,
-            },
-            RegisteredScreen {
-                meta: ArticlesScreen::metadata(),
-                factory: ArticlesScreen::create,
-            },
-            RegisteredScreen {
-                meta: QrScreen::metadata(),
-                factory: QrScreen::create,
-            },
-            RegisteredScreen {
-                meta: PokerOnlineScreen::metadata(),
-                factory: PokerOnlineScreen::create,
-            },
-            RegisteredScreen {
-                meta: ExampleScreen::metadata(),
-                factory: ExampleScreen::create,
-            },
-        ];
+        reg.register::<MainMenu>();
+        reg.register::<GameSetupScreen>();
+        reg.register::<Game<DirectoryCardType>>();
+        reg.register::<PairingScreen>();
+        reg.register::<DNDTest>();
+        reg.register::<CardsTestDND>();
+        reg.register::<ArticlesScreen>();
+        reg.register::<QrScreen>();
+        reg.register::<PokerOnlineScreen>();
+        reg.register::<ExampleScreen>();
 
-        for r in regs {
-            by_path.insert(
-                r.meta.path,
-                RegisteredScreen {
-                    meta: r.meta,
-                    factory: r.factory,
-                },
-            );
-        }
-
-        Self { by_path }
+        reg
     }
 
     /// Resolve metadata by path
