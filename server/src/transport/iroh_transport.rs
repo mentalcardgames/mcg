@@ -2,6 +2,8 @@ use anyhow::Result;
 use iroh::endpoint::Endpoint;
 use iroh_base::{NodeAddr, NodeId};
 use iroh::protocol::Router;
+use futures_util::StreamExt;
+use iroh::Watcher;
 use std::path::PathBuf;
 
 use crate::transport::Transport;
@@ -17,11 +19,13 @@ pub struct IrohTransport {
     // Optional callback storage for incoming ClientMsg from protocol handler
     // Callback storage for incoming ClientMsg. Use a type alias for readability.
     on_client: IrohOnClientCallback,
+    debug: bool,
 }
 
 impl IrohTransport {
-    pub fn new() -> Self {
-        Self { endpoint: None, on_client: IrohOnClientCallback::default() }
+    /// Create a new IrohTransport. Pass `debug=true` to enable verbose iroh event logging.
+    pub fn new(debug: bool) -> Self {
+        Self { endpoint: None, on_client: IrohOnClientCallback::default(), debug }
     }
 }
 
@@ -36,13 +40,47 @@ impl Transport for IrohTransport {
         // The iroh endpoint's Router is created via Router::builder(endpoint).spawn().
         // Create and spawn a router accepting our ALPN and handler so incoming connections
         // with that ALPN are dispatched to our MsgProtocol handler.
+        // When debug is enabled, request additional logging from iroh components
+        if self.debug {
+            // Note: endpoint.set_alpns is available; use endpoint.metrics or other hooks if needed.
+            eprintln!("[IROH] starting endpoint in debug mode");
+        }
+
         let router = Router::builder(endpoint.clone())
             .accept(b"/mcg/msg/1", proto)
             .spawn();
 
         // Router takes ownership of the endpoint internally; stash the endpoint returned by router.endpoint().
         self.endpoint = Some(router.endpoint().clone());
-        // Keep the router alive by dropping into a background task handle stored on the endpoint by Router.
+
+        // Spawn a task to watch for the endpoint's node_addr being initialized and report it.
+        // This always reports a concise published status; when debug=true we also stream discovery events.
+        if let Some(ep) = &self.endpoint {
+            let ep = ep.clone();
+            let debug = self.debug;
+            tokio::spawn(async move {
+                // print node_addr when it is initialized (indicates addresses were published)
+                let node_addr = ep.node_addr().initialized().await;
+                println!("[IROH] node_addr initialized: {:?}", node_addr);
+
+                // print home_relay when available (print whatever the API returns)
+                let home_relay = ep.home_relay().initialized().await;
+                println!("[IROH] home_relay: {:?}", home_relay);
+
+                // If debug was requested, stream verbose discovery events to stderr
+                if debug {
+                    eprintln!("[IROH DEBUG] starting discovery event stream");
+                    let mut ds = ep.discovery_stream();
+                    while let Some(item) = ds.next().await {
+                        match item {
+                            Ok(di) => eprintln!("[IROH DEBUG] discovery item: {:?}", di),
+                            Err(e) => eprintln!("[IROH DEBUG] discovery error: {:?}", e),
+                        }
+                    }
+                }
+            });
+        }
+
         Ok(())
     }
 

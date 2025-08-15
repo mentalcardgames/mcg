@@ -60,19 +60,36 @@ async fn main() {
 
     // Always start the Iroh transport so the server is reachable over iroh and websocket simultaneously.
     // The Iroh endpoint runs alongside the HTTP/WebSocket server; we keep a boxed transport alive.
-    let mut it = IrohTransport::new();
+    // Accept an optional --debug flag for verbose iroh event logging
+    let args_vec: Vec<String> = std::env::args().collect();
+    let debug = args_vec.iter().any(|s| s == "--debug");
+
+    let mut it = IrohTransport::new(debug);
     it.start().await.expect("Failed to start iroh transport");
+
     if let Some(id) = it.node_id() {
         println!("IROH node id: {}", id);
         state.transport_node_id = Some(id);
+        // Wait for node_addr to be initialized to confirm we've published addresses to discovery/relay
+        // Note: calling node_addr().initialized() requires access to the Endpoint which we keep inside transport.
+        // For simplicity, poll the server's admin endpoint later; but print that we have node id now.
+        println!("IROH transport started and node id available (discovery publication may still be in progress)");
     } else {
         println!("IROH transport started but node id not yet available");
     }
+
     let boxed: Box<dyn Transport> = Box::new(it);
-    let transport: Option<Arc<Mutex<Box<dyn Transport>>>> = Some(Arc::new(Mutex::new(boxed)));
+    let transport: Arc<Mutex<Box<dyn Transport>>> = Arc::new(Mutex::new(boxed));
+
+    // Register transport in server state transports so broadcasts reach it
+    {
+        let mut transports_lock = state.transports.lock().await;
+        transports_lock.push(transport.clone());
+    }
 
     // If transport produces incoming messages, hook a channel to handle them centrally
-    if let Some(tr) = transport.clone() {
+    {
+        let tr = transport.clone();
         let (tx, mut rx) = mpsc::unbounded_channel::<(String, ClientMsg)>();
         // Provide a callback for transport incoming messages to forward into tx
         tr.lock()
