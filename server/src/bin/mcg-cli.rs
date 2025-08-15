@@ -80,39 +80,31 @@ enum ActionKind {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // If user requested iroh transport, attempt auto-detect if not provided
+    // Build ws URL (used when websocket transport is selected)
+    let ws_url = build_ws_url(&cli.server)?;
+
+    // If using iroh transport, perform iroh-based run logic (medium-agnostic CLI)
     if let TransportKind::Iroh = cli.transport {
-        if cli.iroh_node_id.is_none() {
-            match detect_iroh_node_id(&cli.server).await {
-                Ok(Some(id)) => {
-                    println!("Detected iroh node id: {}", id);
-                    // For now we've validated detection; the iroh transport client is not
-                    // implemented yet, so print and exit successfully.
-                    return Ok(());
-                }
-                Ok(None) => {
-                    eprintln!(
-                        "Could not detect iroh node id from server at {}",
-                        cli.server
-                    );
-                    return Ok(());
-                }
-                Err(e) => {
-                    eprintln!("Error detecting iroh node id: {}", e);
+        // Determine server node id (either provided or detect via admin endpoint)
+        let server_node_id = if let Some(id) = cli.iroh_node_id.clone() {
+            id
+        } else {
+            match detect_iroh_node_id(&cli.server).await? {
+                Some(id) => id,
+                None => {
+                    eprintln!("Could not detect iroh node id from server at {}", cli.server);
                     return Ok(());
                 }
             }
-        } else {
-            println!(
-                "Using provided iroh node id: {}",
-                cli.iroh_node_id.as_ref().unwrap()
-            );
-            return Ok(());
-        }
-    }
+        };
 
-    // Build ws URL
-    let ws_url = build_ws_url(&cli.server)?;
+        // Run using iroh transport
+        let result = run_once_iroh(&server_node_id, &cli.name, map_after_join(&cli.command), cli.wait_ms).await?;
+        if let Some(state) = result {
+            output_state(&state, cli.json);
+        }
+        return Ok(());
+    }
 
     match cli.command {
         Commands::Join => {
@@ -237,6 +229,84 @@ async fn run_once(
             }
             Ok(None) => break, // socket closed
             Err(_) => break,   // timeout
+        }
+    }
+
+    Ok(latest_state)
+}
+
+// Map a CLI command to an optional ClientMsg to send after Join
+fn map_after_join(cmd: &Commands) -> Option<ClientMsg> {
+    match cmd {
+        Commands::Join => None,
+        Commands::State => Some(ClientMsg::RequestState),
+        Commands::NextHand => Some(ClientMsg::NextHand),
+        Commands::Reset { bots } => Some(ClientMsg::ResetGame { bots: *bots }),
+        Commands::Action { kind, amount } => {
+            let pa = match kind {
+                ActionKind::Fold => PlayerAction::Fold,
+                ActionKind::CheckCall => PlayerAction::CheckCall,
+                ActionKind::Bet => PlayerAction::Bet(*amount),
+            };
+            Some(ClientMsg::Action(pa))
+        }
+    }
+}
+
+/// Run a single command via iroh by dialing the server node id and sending a framed ClientMsg.
+async fn run_once_iroh(
+    server_node_id: &str,
+    name: &str,
+    after_join: Option<ClientMsg>,
+    wait_ms: u64,
+) -> anyhow::Result<Option<GameStatePublic>> {
+    use iroh::endpoint::Endpoint;
+    use iroh_base::NodeAddr;
+
+    // Build an Endpoint, dial the server node id and send a single bi stream with Join + optional msg
+    let endpoint = Endpoint::builder().discovery_n0().bind().await?;
+    let node_id: iroh_base::NodeId = server_node_id.parse().map_err(|e| anyhow::anyhow!(e))?;
+    let node_addr = NodeAddr::new(node_id);
+    let conn = endpoint.connect(node_addr, b"/mcg/msg/1").await?;
+    let (mut send, mut recv) = conn.open_bi().await?;
+
+    // Compose frames: Join then optional after_join
+    let mut payloads: Vec<Vec<u8>> = Vec::new();
+    payloads.push(serde_json::to_vec(&ClientMsg::Join { name: name.to_string() })?);
+    if let Some(msg) = after_join {
+        payloads.push(serde_json::to_vec(&msg)?);
+    }
+
+    // Write all frames concatenated using the same framing
+    for p in payloads.iter() {
+        let framed = crate::transport::framing::encode_frame(p);
+        use tokio::io::AsyncWriteExt;
+        send.write_all(&framed).await?;
+    }
+    // finish() is synchronous in this iroh version
+    send.finish()?;
+
+    // Read responses until timeout and parse any ServerMsg::State frames
+    let data = recv.read_to_end(10_000_000).await?;
+    let mut buf = bytes::BytesMut::from(&data[..]);
+    let mut latest_state: Option<GameStatePublic> = None;
+    loop {
+        match crate::transport::framing::try_parse(&mut buf) {
+            Ok(Some(frame)) => {
+                if let Ok(txt) = String::from_utf8(frame) {
+                    if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
+                        if let ServerMsg::State(gs) = sm {
+                            latest_state = Some(gs);
+                        }
+                    }
+                }
+                continue;
+            }
+            Ok(None) => break,
+            Err(e) => {
+                eprintln!("[IROH] frame parse error: {:?}", e);
+                break;
+            }
         }
     }
 
