@@ -12,7 +12,7 @@ pub fn encode_frame(payload: &[u8]) -> Vec<u8> {
     buf
 }
 
-pub fn try_parse(mut src: &mut BytesMut) -> io::Result<Option<Vec<u8>>> {
+pub fn try_parse(src: &mut BytesMut) -> io::Result<Option<Vec<u8>>> {
     if src.len() < 4 {
         return Ok(None);
     }
@@ -22,7 +22,7 @@ pub fn try_parse(mut src: &mut BytesMut) -> io::Result<Option<Vec<u8>>> {
         // put back len
         let mut restored = BytesMut::with_capacity(4 + src.len());
         restored.put_u32(len);
-        restored.extend_from_slice(&src);
+        restored.extend_from_slice(src);
         *src = restored;
         return Ok(None);
     }

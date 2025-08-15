@@ -26,6 +26,7 @@ mod server_admin;
 use crate::server::server_admin::get_iroh_node_id;
 
 #[derive(Clone)]
+#[allow(clippy::type_complexity)]
 pub struct AppState {
     pub lobby: Arc<RwLock<Lobby>>,
     pub bot_count: usize,
@@ -74,7 +75,7 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-pub async fn run_server(addr: SocketAddr, mut state: AppState) {
+pub async fn run_server(addr: SocketAddr, state: AppState) {
     // If iroh transport is requested via env or CLI later we will start it and populate state.transport_node_id
     let app = build_router(state.clone());
 

@@ -1,27 +1,21 @@
-use crate::transport::framing::{encode_frame, ALPN_MSG};
 use crate::transport::Transport;
 use anyhow::Result;
-use bytes::BytesMut;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::SinkExt;
 use mcg_shared::{ClientMsg, ServerMsg};
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 
 /// A thin wrapper that reuses the existing websocket handler logic but exposes the Transport trait.
+// Reduce type complexity warning by providing a type alias for the peers map.
+type PeersMap = std::collections::HashMap<
+    String,
+    futures_util::stream::SplitSink<tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>, Message>,
+>;
+
 pub struct WebSocketTransport {
     // map of peer id -> sender
-    peers: Arc<
-        Mutex<
-            HashMap<
-                String,
-                futures_util::stream::SplitSink<
-                    tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
-                    Message,
-                >,
-            >,
-        >,
-    >,
+    peers: Arc<Mutex<PeersMap>>,
     on_client: Option<Arc<dyn Fn(String, ClientMsg) + Send + Sync>>,
 }
 
@@ -80,7 +74,7 @@ impl Transport for WebSocketTransport {
         &self,
         _hash: &str,
         _node_id: Option<&str>,
-        out_path: PathBuf,
+        _out_path: PathBuf,
     ) -> Result<()> {
         // No distributed fetch for websocket mode — in parity mode, clients should upload blobs via HTTP.
         // Here we return an error to indicate not available.

@@ -9,9 +9,12 @@ use std::future::Future;
 
 // Protocol handler that reads length-prefixed frames, parses JSON ClientMsg and invokes
 // a user-provided callback with the peer id and ClientMsg.
+// Reduce type complexity by introducing a type alias for the callback storage.
+type OnClientCallback = Arc<Mutex<Option<Arc<dyn Fn(String, ClientMsg) + Send + Sync>>>>;
+
 pub struct MsgProtocol {
     // Shared callback storage. If None, incoming messages are ignored.
-    pub on_client: Arc<Mutex<Option<Arc<dyn Fn(String, ClientMsg) + Send + Sync>>>>,
+    pub on_client: OnClientCallback,
 }
 
 impl std::fmt::Debug for MsgProtocol {
@@ -27,10 +30,14 @@ impl Clone for MsgProtocol {
 }
 
 impl MsgProtocol {
-    pub fn new(on_client: Arc<Mutex<Option<Arc<dyn Fn(String, ClientMsg) + Send + Sync>>>>) -> Self {
+    pub fn new(on_client: OnClientCallback) -> Self {
         MsgProtocol { on_client }
     }
 }
+
+// Provide a convenient alias to satisfy complexity lints for the protocol handler signature
+#[allow(clippy::type_complexity)]
+type DynOnClient = Arc<dyn Fn(String, ClientMsg) + Send + Sync>;
 
 impl ProtocolHandler for MsgProtocol {
     fn accept(&self, connection: Connection) -> impl Future<Output = Result<(), AcceptError>> + Send {

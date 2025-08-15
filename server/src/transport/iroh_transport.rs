@@ -1,23 +1,27 @@
 use anyhow::Result;
 use iroh::endpoint::Endpoint;
+use iroh_base::{NodeAddr, NodeId};
 use iroh::protocol::Router;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use crate::transport::Transport;
 use mcg_shared::{ClientMsg, ServerMsg};
+
+// Type alias for the on-client callback storage to reduce type complexity warnings from clippy.
+type IrohOnClientCallback = std::sync::Arc<tokio::sync::Mutex<Option<std::sync::Arc<dyn Fn(String, ClientMsg) + Send + Sync>>>>;
 
 /// Minimal Iroh transport: only create an Endpoint and expose node_id for now.
 /// Full blobs and message protocols will be added incrementally.
 pub struct IrohTransport {
     endpoint: Option<Endpoint>,
     // Optional callback storage for incoming ClientMsg from protocol handler
-    on_client: std::sync::Arc<tokio::sync::Mutex<Option<std::sync::Arc<dyn Fn(String, ClientMsg) + Send + Sync>>>>,
+    // Callback storage for incoming ClientMsg. Use a type alias for readability.
+    on_client: IrohOnClientCallback,
 }
 
 impl IrohTransport {
     pub fn new() -> Self {
-        Self { endpoint: None, on_client: std::sync::Arc::new(tokio::sync::Mutex::new(None)) }
+        Self { endpoint: None, on_client: IrohOnClientCallback::default() }
     }
 }
 
@@ -53,14 +57,51 @@ impl Transport for IrohTransport {
         self.endpoint.as_ref().map(|e| e.node_id().to_string())
     }
 
-    async fn send_message(&self, peer: Option<String>, _msg: &ServerMsg) -> Result<()> {
-        // Per-current implementation constraints, sending a directed message to a
-        // specific iroh peer is not implemented. We accept messages from transports
-        // (via the registered protocol handler) but do not attempt outgoing dials here.
-        if peer.is_some() {
-            return Err(anyhow::anyhow!("send_message to a specific iroh peer is not implemented"));
+    async fn send_message(&self, peer: Option<String>, msg: &ServerMsg) -> Result<()> {
+        // If peer is None, per current design we do nothing (no broadcast).
+        if peer.is_none() {
+            return Ok(());
         }
-        // For peer=None (broadcast) there's no simple broadcast API on Endpoint; do nothing.
+
+        let pid = peer.unwrap();
+        let endpoint = self
+            .endpoint
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("iroh endpoint not initialized"))?;
+
+        // Try to connect to the remote node by id and open a bi-directional stream.
+        // The exact iroh API may vary; attempt to use Endpoint::connect which accepts a
+        // node id/address type that implements FromStr. Map errors into anyhow for simplicity.
+        // We perform a best-effort implementation and return any underlying errors.
+        // Note: this will be compiled and adjusted if the iroh API requires different types.
+        // Parse peer id into NodeId and build a NodeAddr for dialing. We don't have relay or addrs so
+        // use NodeAddr::new(node_id) which contains only the NodeId; discovery will be used to find paths.
+        let node_id: NodeId = pid
+            .parse()
+            .map_err(|e| anyhow::anyhow!("invalid node id: {}", e))?;
+        let node_addr = NodeAddr::new(node_id);
+
+        let conn = endpoint
+            .connect(node_addr, b"/mcg/msg/1")
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        // Open a bi-directional stream and write framed JSON payload
+        let (mut send, _recv) = conn
+            .open_bi()
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        // Serialize and frame
+        let bytes = serde_json::to_vec(msg)?;
+        let framed = crate::transport::framing::encode_frame(&bytes);
+
+        // Write all and finish
+        use tokio::io::AsyncWriteExt;
+        send.write_all(&framed).await.map_err(|e| anyhow::anyhow!(e))?;
+        // finish() is synchronous in this iroh version
+        send.finish().map_err(|e| anyhow::anyhow!(e))?;
+
         Ok(())
     }
 

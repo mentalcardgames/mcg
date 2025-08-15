@@ -10,7 +10,7 @@ use std::net::{SocketAddr, TcpListener};
 use std::sync::Arc;
 
 use crate::transport::iroh_transport::IrohTransport;
-use crate::transport::{Transport, WebSocketTransport};
+use crate::transport::Transport;
 use mcg_shared::ClientMsg;
 use tokio::sync::{mpsc, Mutex};
 
@@ -22,8 +22,8 @@ use tokio::sync::{mpsc, Mutex};
 async fn main() {
     // Default settings
     let mut bots: usize = 1;
-    let mut transport_choice = "websocket".to_string();
-    let mut iroh_node_id_arg: Option<String> = None;
+    let mut _transport_choice = "websocket".to_string();
+    let mut _iroh_node_id_arg: Option<String> = None;
 
     // Parse simple CLI args
     let mut args = std::env::args().skip(1);
@@ -38,12 +38,12 @@ async fn main() {
             }
             "--transport" => {
                 if let Some(t) = args.next() {
-                    transport_choice = t;
+                    _transport_choice = t;
                 }
             }
             "--iroh-node-id" => {
                 if let Some(id) = args.next() {
-                    iroh_node_id_arg = Some(id);
+                    _iroh_node_id_arg = Some(id);
                 }
             }
             _ => {

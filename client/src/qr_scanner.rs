@@ -277,6 +277,7 @@ impl QrScannerPopup {
         }
     }
     #[allow(clippy::ptr_arg)]
+    #[cfg_attr(not(target_arch = "wasm32"), allow(unused_variables))]
     pub fn button_and_popup(
         &mut self,
         ui: &mut egui::Ui,

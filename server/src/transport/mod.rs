@@ -3,7 +3,10 @@ pub mod iroh_transport;
 pub mod websocket_transport;
 pub mod msg_protocol;
 
+// Re-export transports used by main.rs
+#[allow(unused_imports)]
 pub use iroh_transport::IrohTransport;
+#[allow(unused_imports)]
 pub use websocket_transport::WebSocketTransport;
 
 use anyhow::Result;
