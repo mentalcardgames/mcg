@@ -1,6 +1,7 @@
 pub mod framing;
 pub mod iroh_transport;
 pub mod websocket_transport;
+pub mod msg_protocol;
 
 pub use iroh_transport::IrohTransport;
 pub use websocket_transport::WebSocketTransport;

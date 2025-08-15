@@ -1,5 +1,6 @@
 use anyhow::Result;
 use iroh::endpoint::Endpoint;
+use iroh::protocol::Router;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -10,11 +11,13 @@ use mcg_shared::{ClientMsg, ServerMsg};
 /// Full blobs and message protocols will be added incrementally.
 pub struct IrohTransport {
     endpoint: Option<Endpoint>,
+    // Optional callback storage for incoming ClientMsg from protocol handler
+    on_client: std::sync::Arc<tokio::sync::Mutex<Option<std::sync::Arc<dyn Fn(String, ClientMsg) + Send + Sync>>>>,
 }
 
 impl IrohTransport {
     pub fn new() -> Self {
-        Self { endpoint: None }
+        Self { endpoint: None, on_client: std::sync::Arc::new(tokio::sync::Mutex::new(None)) }
     }
 }
 
@@ -22,7 +25,20 @@ impl IrohTransport {
 impl Transport for IrohTransport {
     async fn start(&mut self) -> Result<()> {
         let endpoint = Endpoint::builder().discovery_n0().bind().await?;
-        self.endpoint = Some(endpoint);
+
+        // Register our MsgProtocol handler so incoming connections are handled and
+        // messages are forwarded to the on_client callback if set.
+        let proto = crate::transport::msg_protocol::MsgProtocol::new(self.on_client.clone());
+        // The iroh endpoint's Router is created via Router::builder(endpoint).spawn().
+        // Create and spawn a router accepting our ALPN and handler so incoming connections
+        // with that ALPN are dispatched to our MsgProtocol handler.
+        let router = Router::builder(endpoint.clone())
+            .accept(b"/mcg/msg/1", proto)
+            .spawn();
+
+        // Router takes ownership of the endpoint internally; stash the endpoint returned by router.endpoint().
+        self.endpoint = Some(router.endpoint().clone());
+        // Keep the router alive by dropping into a background task handle stored on the endpoint by Router.
         Ok(())
     }
 
@@ -37,31 +53,26 @@ impl Transport for IrohTransport {
         self.endpoint.as_ref().map(|e| e.node_id().to_string())
     }
 
-    async fn send_message(&self, peer: Option<String>, msg: &ServerMsg) -> Result<()> {
-        // Basic framed JSON message send using transport's connection API.
-        // For now, implement a best-effort broadcast to all connected peers via the endpoint.
-        if self.endpoint.is_none() {
-            return Err(anyhow::anyhow!("iroh endpoint not started"));
+    async fn send_message(&self, peer: Option<String>, _msg: &ServerMsg) -> Result<()> {
+        // Per-current implementation constraints, sending a directed message to a
+        // specific iroh peer is not implemented. We accept messages from transports
+        // (via the registered protocol handler) but do not attempt outgoing dials here.
+        if peer.is_some() {
+            return Err(anyhow::anyhow!("send_message to a specific iroh peer is not implemented"));
         }
-        let ep = self.endpoint.as_ref().unwrap();
-        let txt = serde_json::to_string(msg)?;
-        // Encode length-prefixed frame
-        let frame = crate::transport::framing::encode_frame(txt.as_bytes());
-        if let Some(pid) = peer {
-            // Attempt to open a connection and send the frame
-            if let Ok(mut conn) = ep.connect(&pid).await {
-                let _ = conn.write(&frame).await;
-                let _ = conn.close().await;
-            }
-        } else {
-            // No peer specified: try to send via discovery peers (best-effort)
-            // Endpoint doesn't provide a built-in broadcast; so we skip for now.
-        }
+        // For peer=None (broadcast) there's no simple broadcast API on Endpoint; do nothing.
         Ok(())
     }
 
-    fn set_on_client_message(&mut self, _cb: Box<dyn Fn(String, ClientMsg) + Send + Sync>) {
-        // not implemented yet - message accept/handler requires protocol plumbing
+    fn set_on_client_message(&mut self, cb: Box<dyn Fn(String, ClientMsg) + Send + Sync>) {
+        // Store the callback so the MsgProtocol handler can call it on incoming messages.
+        let cb_arc: std::sync::Arc<dyn Fn(String, ClientMsg) + Send + Sync> = std::sync::Arc::from(cb);
+        let on_client = self.on_client.clone();
+        // Spawn a task to set it asynchronously
+        tokio::spawn(async move {
+            let mut guard = on_client.lock().await;
+            *guard = Some(cb_arc);
+        });
     }
 
     async fn advertise_blob(&self, path: PathBuf) -> Result<String> {
