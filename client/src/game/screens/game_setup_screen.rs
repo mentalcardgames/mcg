@@ -133,7 +133,7 @@ impl ScreenDef for GameSetupScreen {
         ScreenMetadata {
             path: "/game-setup",
             display_name: "Game Setup",
-            icon: "⚙️",
+            icon: "⚙",
             description: "Configure game and players",
             show_in_menu: true,
         }

@@ -115,7 +115,7 @@ impl ScreenDef for ExampleScreen {
         ScreenMetadata {
             path: "/example",
             display_name: "Example",
-            icon: "🧪",
+            icon: "📄",
             description: "An example screen",
             show_in_menu: true,
         }

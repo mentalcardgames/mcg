@@ -464,7 +464,7 @@ impl ScreenDef for PokerOnlineScreen {
         ScreenMetadata {
             path: "/poker-online",
             display_name: "Poker Online",
-            icon: "♠️",
+            icon: "♠",
             description: "Play poker against bots or online",
             show_in_menu: true,
         }

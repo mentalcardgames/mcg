@@ -110,7 +110,7 @@ impl ScreenDef for DNDTest {
         ScreenMetadata {
             path: "/dnd-test",
             display_name: "DND Test",
-            icon: "🧩",
+            icon: "✋",
             description: "Drag-and-drop demo",
             show_in_menu: true,
         }
