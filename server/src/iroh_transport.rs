@@ -42,6 +42,10 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
         .bind()
         .await
         .context("binding iroh endpoint")?;
+    // Print the local node's public key (NodeId) so CLI users can dial by it.
+    // Use the Endpoint::node_id() accessor and print its z32 representation.
+    let pk = endpoint.node_id();
+    println!("🔑 Iroh NodeId (public key): {}", pk);
 
     // Router builder: accept our ALPN and handle incoming protocol streams using
     // the ProtocolHandler implementation below.
