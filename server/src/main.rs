@@ -3,6 +3,7 @@
 mod eval;
 mod game;
 mod server;
+mod iroh_transport;
 
 use server::AppState;
 use std::net::{SocketAddr, TcpListener};

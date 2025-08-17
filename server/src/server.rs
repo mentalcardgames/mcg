@@ -32,8 +32,8 @@ pub struct AppState {
 
 #[derive(Clone, Default)]
 pub(crate) struct Lobby {
-    game: Option<Game>,
-    last_printed_log_len: usize,
+    pub(crate) game: Option<Game>,
+    pub(crate) last_printed_log_len: usize,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -58,6 +58,17 @@ pub fn build_router(state: AppState) -> Router {
 
 pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
     let app = build_router(state.clone());
+
+    // Spawn the iroh listener so it runs concurrently with the Axum HTTP/WebSocket server.
+    // This is always enabled.
+    {
+        let state_clone = state.clone();
+        tokio::spawn(async move {
+            if let Err(e) = crate::iroh_transport::spawn_iroh_listener(state_clone).await {
+                eprintln!("Iroh listener failed: {}", e);
+            }
+        });
+    }
 
     let display_addr = if addr.ip().to_string() == "127.0.0.1" {
         format!("localhost:{}", addr.port())

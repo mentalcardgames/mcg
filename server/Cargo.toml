@@ -19,3 +19,10 @@ futures-util = "0.3.31"
 url = "2.5.4"
 anyhow = "1.0.99"
 owo-colors = "4.2.2"
+
+# Iroh transport support (enabled by default).
+# Use the upstream iroh repository to keep parity with their examples.
+iroh = { git = "https://github.com/n0-computer/iroh", branch = "main" }
+
+# Required helper for async trait usage in iroh handler
+async-trait = "0.1"
