@@ -3,6 +3,7 @@
 mod eval;
 mod game;
 mod server;
+mod transport;
 mod iroh_transport;
 
 use server::AppState;

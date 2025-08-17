@@ -16,17 +16,20 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::RwLock;
+use tokio::io::{AsyncBufReadExt, AsyncWrite, BufReader};
+use owo_colors::OwoColorize;
+use std::io::IsTerminal;
 
 use crate::server::AppState;
 use mcg_shared::{ClientMsg, GameStatePublic, ServerMsg};
+use crate::transport::send_server_msg_to_writer;
 
 /// Public entrypoint spawned by server startup
 pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // Import iroh types inside function to limit compile-time exposure when feature is enabled.
     // These imports are based on the iroh README snippets; they may require adjustment.
-    use iroh::{Endpoint, Router};
+    use iroh::endpoint::Endpoint;
+    use iroh::protocol::Router;
 
     // Choose an ALPN identifier for our application protocol.
     // Clients must use the same ALPN when connecting.
@@ -42,17 +45,15 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
 
     // Router builder: accept our ALPN and handle incoming protocol streams using
     // the ProtocolHandler implementation below.
-    let router = Router::builder(endpoint)
-        .accept(ALPN.to_vec(), std::sync::Arc::new(IrohHandler { state: state.clone() }))
-        .spawn()
-        .await
-        .context("spawning iroh router")?;
+    // spawn() returns a result handle; do not await the router itself.
+    let _router = Router::builder(endpoint)
+        .accept(ALPN.to_vec(), Arc::new(IrohHandler { state: state.clone() }))
+        .spawn();
 
     // The router future runs in background; keep a handle until shutdown.
     // The spawned router will run until the endpoint is closed or an error occurs.
-    // For now, just await the router future to keep this task alive while the server runs.
-    // If spawn() returns a handle, it's already running; return Ok here.
-    drop(router);
+    // The router is spawned and running; keep the returned handle (named `_router`) alive.
+    // No explicit await is required here.
 
     println!("🔗 Iroh listener started (ALPN {:?})", std::str::from_utf8(ALPN).unwrap_or("mcg/iroh/1"));
     Ok(())
@@ -62,90 +63,86 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
 ///
 /// The iroh Router will call accept on this handler for each incoming connection.
 /// The handler accepts a bidirectional stream and speaks newline-delimited JSON.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct IrohHandler {
     state: AppState,
 }
 
-// The ProtocolHandler trait and Connection type are referenced from the iroh docs.
-// Adapt the paths if your iroh crate version exposes them elsewhere.
-#[async_trait::async_trait]
+impl std::fmt::Debug for IrohHandler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IrohHandler").finish()
+    }
+}
+ 
+// The ProtocolHandler trait uses a `fn accept(...) -> impl Future` style API.
+// Implement by returning a boxed future that runs our async connection handler.
 impl iroh::protocol::ProtocolHandler for IrohHandler {
-    async fn accept(&self, connection: iroh::connection::Connection) -> anyhow::Result<()> {
-        // Accept a bidirectional stream (send, recv)
-        let (mut send, mut recv) = connection.accept_bi().await?;
-
-        // Wrap the read side in a buffered reader so we can read lines.
-        let mut reader = BufReader::new(recv);
-
-        // The send side implements AsyncWrite; we'll write JSON lines and flush.
-        // Helper closure to write ServerMsg as a JSON line.
-        let mut write_server_msg = |msg: &ServerMsg| {
-            // We need an owned mutable reference to 'send' in an async block,
-            // so build a future that performs the write.
-            let mut send = send.clone();
-            let txt = match serde_json::to_string(msg) {
-                Ok(s) => s,
-                Err(e) => return Box::pin(async move {
-                    Err(anyhow::anyhow!("failed to serialize ServerMsg: {}", e))
-                }),
+    fn accept(
+        &self,
+        connection: iroh::endpoint::Connection,
+    ) -> impl std::future::Future<Output = Result<(), iroh::protocol::AcceptError>> + Send {
+        let state = self.state.clone();
+        Box::pin(async move {
+            use iroh::protocol::AcceptError;
+            // Accept a bidirectional stream (send, recv)
+            let (mut send, mut recv) = connection.accept_bi().await?;
+ 
+            // Wrap the read side in a buffered reader so we can read lines.
+            let mut reader = BufReader::new(recv);
+ 
+            // We'll use shared helper send_server_msg_to_writer to write JSON lines to `send`.
+ 
+            // Read the very first line from the client; expect a Join message.
+            let mut first_line = String::new();
+            let n = reader.read_line(&mut first_line).await.map_err(AcceptError::from_err)?;
+            if n == 0 {
+                return Ok(());
+            }
+            let first_trim = first_line.trim();
+            let cm: ClientMsg = match serde_json::from_str(first_trim) {
+                Ok(cm) => cm,
+                Err(_) => {
+                    // Send error and close
+                    if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::Error("Expected Join".into())).await {
+                        eprintln!("iroh send error: {}", e);
+                    }
+                    return Ok(());
+                }
             };
-            Box::pin(async move {
-                // write JSON line with newline delimiter
-                if let Err(e) = send.write_all(txt.as_bytes()).await {
-                    return Err(anyhow::anyhow!("iroh send write failed: {}", e));
-                }
-                if let Err(e) = send.write_all(b"\n").await {
-                    return Err(anyhow::anyhow!("iroh send write newline failed: {}", e));
-                }
-                if let Err(e) = send.flush().await {
-                    return Err(anyhow::anyhow!("iroh send flush failed: {}", e));
-                }
-                Ok(())
-            }) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
-        };
 
-        // Read the very first line from the client; expect a Join message.
-        let mut first_line = String::new();
-        let n = reader.read_line(&mut first_line).await?;
-        if n == 0 {
-            return Ok(());
-        }
-        let first_trim = first_line.trim();
-        let cm: ClientMsg = match serde_json::from_str(first_trim) {
-            Ok(cm) => cm,
-            Err(_) => {
-                // Send error and close
-                let _ = write_server_msg(&ServerMsg::Error("Expected Join".into())).await;
+            let name = match cm {
+                ClientMsg::Join { name } => name,
+                _ => {
+                    if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::Error("Expected Join".into())).await {
+                        eprintln!("iroh send error: {}", e);
+                    }
+                    return Ok(());
+                }
+            };
+ 
+            // Log connect
+            println!("{} {}", "[IROH CONNECT]".bold().green(), name.bold());
+ 
+            // Ensure game started similarly to the websocket handler
+            if let Err(e) = ensure_game_started(&state, &name).await {
+                if let Err(e2) = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to start game: {}", e))).await {
+                    eprintln!("iroh send error: {}", e2);
+                }
                 return Ok(());
             }
-        };
-
-        let name = match cm {
-            ClientMsg::Join { name } => name,
-            _ => {
-                let _ = write_server_msg(&ServerMsg::Error("Expected Join".into())).await;
-                return Ok(());
+ 
+            // You id for now is 0
+            let you_id = 0usize;
+            if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::Welcome { you: you_id }).await {
+                eprintln!("iroh send error: {}", e);
             }
-        };
-
-        // Log connect
-        println!("{} {}", "[IROH CONNECT]".bold().green(), name.bold());
-
-        // Ensure game started similarly to the websocket handler
-        if let Err(e) = ensure_game_started(&self.state, &name).await {
-            let _ = write_server_msg(&ServerMsg::Error(format!("Failed to start game: {}", e))).await;
-            return Ok(());
-        }
-
-        // You id for now is 0
-        let you_id = 0usize;
-        let _ = write_server_msg(&ServerMsg::Welcome { you: you_id }).await;
-
-        // Send initial state
-        if let Some(gs) = current_state_public(&self.state, you_id).await {
-            let _ = write_server_msg(&ServerMsg::State(gs)).await;
-        }
+    
+            // Send initial state
+            if let Some(gs) = current_state_public(&state, you_id).await {
+                if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await {
+                    eprintln!("iroh send error: {}", e);
+                }
+            }
 
         // Now enter a loop reading incoming JSON lines and processing ClientMsg
         let mut line = String::new();
@@ -162,26 +159,29 @@ impl iroh::protocol::ProtocolHandler for IrohHandler {
             }
             match serde_json::from_str::<ClientMsg>(trimmed) {
                 Ok(cm) => {
-                    // Process the client message in-place (mirroring process_client_msg)
-                    if let Err(e) =
-                        process_client_msg_iroh(&name, &self.state, &mut send, cm, you_id).await
-                    {
-                        eprintln!("iroh processing error: {}", e);
-                        let _ = write_server_msg(&ServerMsg::Error(format!("Processing error: {}", e))).await;
-                        // continue processing other messages
-                    }
+                        // Process the client message in-place (mirroring process_client_msg)
+                        if let Err(e) =
+                            process_client_msg_iroh(&name, &state, &mut send, cm, you_id).await
+                        {
+                            eprintln!("iroh processing error: {}", e);
+                            if let Err(e2) = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Processing error: {}", e))).await {
+                                eprintln!("iroh send error: {}", e2);
+                            }
+                            // continue processing other messages
+                        }
                 }
                 Err(e) => {
-                    let _ = write_server_msg(&ServerMsg::Error(format!("Invalid JSON message: {}", e))).await;
+                    let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Invalid JSON message: {}", e))).await;
                 }
             }
         }
 
-        println!("{} {}", "[IROH DISCONNECT]".bold().red(), name.bold());
-        // Close the send side politely if available
-        let _ = send.finish();
-        connection.closed().await;
-        Ok(())
+            println!("{} {}", "[IROH DISCONNECT]".bold().red(), name.bold());
+            // Close the send side politely if available
+            let _ = send.finish();
+            connection.closed().await;
+            Ok(())
+        })
     }
 }
 
@@ -209,17 +209,6 @@ async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameSta
     lobby.game.as_ref().map(|g| g.public_for(you_id))
 }
 
-/// Write a ServerMsg to the provided iroh send writer (JSON line)
-async fn send_server_msg_to_writer<W>(writer: &mut W, msg: &ServerMsg) -> Result<()>
-where
-    W: AsyncWrite + Unpin + Send,
-{
-    let txt = serde_json::to_string(msg)?;
-    writer.write_all(txt.as_bytes()).await?;
-    writer.write_all(b"\n").await?;
-    writer.flush().await?;
-    Ok(())
-}
 
 /// Process a ClientMsg received over iroh and reply over the iroh send writer.
 ///
