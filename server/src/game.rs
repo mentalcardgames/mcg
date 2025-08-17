@@ -13,6 +13,7 @@ use mcg_shared::{
 };
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
+use anyhow::{Result, bail, Context};
 
 const MAX_RECENT_ACTIONS: usize = 50;
 const MAX_LOG_ENTRIES: usize = 200;
@@ -64,10 +65,10 @@ enum RaiseOutcome {
 }
 
 impl Game {
-    pub fn new(human_name: String, bot_count: usize) -> Self {
+    pub fn new(human_name: String, bot_count: usize) -> Result<Self> {
         let mut deck: Vec<u8> = (0..52).collect();
         deck.shuffle(&mut rand::rng());
-
+ 
         let mut players = Vec::with_capacity(1 + bot_count);
         players.push(Player {
             id: 0,
@@ -87,12 +88,12 @@ impl Game {
                 all_in: false,
             });
         }
-
+ 
         let mut g = Self {
             players,
             deck: VecDeque::from(deck.clone()),
             community: vec![],
-
+ 
             pot: 0,
             stage: Stage::Preflop,
             dealer_idx: 0,
@@ -100,23 +101,24 @@ impl Game {
             current_bet: 0,
             min_raise: 0,
             round_bets: vec![],
-
+ 
             sb: 5,
             bb: 10,
-
+ 
             pending_to_act: Vec::new(),
             recent_actions: Vec::new(),
             action_log: Vec::new(),
             winner_ids: Vec::new(),
         };
-        g.start_new_hand_from_deck(deck);
-        g
+        g.start_new_hand_from_deck(deck)
+            .context("Failed to initialize new hand from deck")?;
+        Ok(g)
     }
 
     #[cfg(test)]
-    pub fn new_with_seed(human_name: String, bot_count: usize, seed: u64) -> Self {
+    pub fn new_with_seed(human_name: String, bot_count: usize, seed: u64) -> Result<Self> {
         let deck = shuffled_deck_with_seed(seed);
-
+ 
         let mut players = Vec::with_capacity(1 + bot_count);
         players.push(Player {
             id: 0,
@@ -136,12 +138,12 @@ impl Game {
                 all_in: false,
             });
         }
-
+ 
         let mut g = Self {
             players,
             deck: VecDeque::new(),
             community: vec![],
-
+ 
             pot: 0,
             stage: Stage::Preflop,
             dealer_idx: 0,
@@ -149,17 +151,18 @@ impl Game {
             current_bet: 0,
             min_raise: 0,
             round_bets: vec![],
-
+ 
             sb: 5,
             bb: 10,
-
+ 
             pending_to_act: Vec::new(),
             recent_actions: Vec::new(),
             action_log: Vec::new(),
             winner_ids: Vec::new(),
         };
-        g.start_new_hand_from_deck(deck);
-        g
+        g.start_new_hand_from_deck(deck)
+            .context("Failed to initialize new hand from deterministic deck")?;
+        Ok(g)
     }
 
     pub fn public_for(&self, viewer_id: usize) -> GameStatePublic {
@@ -244,15 +247,15 @@ impl Game {
         &mut self,
         actor: usize,
         action: PlayerAction,
-    ) -> Result<(), &'static str> {
+    ) -> Result<()> {
         if actor != self.to_act {
-            return Err("Not your turn");
+            bail!("Not your turn");
         }
         if self.players[actor].has_folded {
-            return Err("You have already folded");
+            bail!("You have already folded");
         }
         if self.players[actor].all_in {
-            return Err("You are all-in");
+            bail!("You are all-in");
         }
         println!(
             "[ACTION] {}: {:?} (stage: {:?})",
@@ -384,7 +387,7 @@ impl Game {
 
         // If betting round complete, advance stage
         if self.is_betting_round_complete() {
-            self.advance_stage();
+            self.advance_stage()?;
             if self.stage == Stage::Showdown {
                 self.finish_showdown();
                 return Ok(());
@@ -396,28 +399,34 @@ impl Game {
         Ok(())
     }
 
-    pub fn start_new_hand(&mut self) {
+    pub fn start_new_hand(&mut self) -> Result<()> {
         // Shuffle fresh deck
         let mut deck: Vec<u8> = (0..52).collect();
         deck.shuffle(&mut rand::rng());
-        self.start_new_hand_from_deck(deck);
+        self.start_new_hand_from_deck(deck)
+            .context("Failed to start new hand from shuffled deck")
     }
 
     /// Initialize a new hand using the provided deck order.
     /// This resets round state, deals hole cards, posts blinds and
     /// establishes the first player to act according to heads-up vs 3+ rules.
-    fn start_new_hand_from_deck(&mut self, deck: Vec<u8>) {
+    fn start_new_hand_from_deck(&mut self, deck: Vec<u8>) -> Result<()> {
         self.deck = VecDeque::from(deck);
-
+ 
         // Deal hole cards
         let mut dealt_logs = Vec::with_capacity(self.players.len());
         for p in &mut self.players {
             p.has_folded = false;
             p.all_in = false;
-            p.cards = [
-                self.deck.pop_front().unwrap(),
-                self.deck.pop_front().unwrap(),
-            ];
+            let c1 = self
+                .deck
+                .pop_front()
+                .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing hole card 1 to player {}", p.id))?;
+            let c2 = self
+                .deck
+                .pop_front()
+                .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing hole card 2 to player {}", p.id))?;
+            p.cards = [c1, c2];
             dealt_logs.push(LogEntry {
                 player_id: Some(p.id),
                 event: LogEvent::DealtHole { player_id: p.id },
@@ -429,7 +438,7 @@ impl Game {
                 card_str(p.cards[1])
             );
         }
-
+ 
         // Reset table state
         self.community.clear();
         self.pot = 0;
@@ -440,11 +449,11 @@ impl Game {
         self.recent_actions.clear();
         self.action_log.clear();
         self.winner_ids.clear();
-
+ 
         // Emit logs for dealing after the loop to avoid borrow conflicts
         self.action_log.extend(dealt_logs);
         self.cap_logs();
-
+ 
         // Post blinds
         let n = self.players.len();
         if n > 1 {
@@ -463,12 +472,13 @@ impl Game {
         } else {
             self.to_act = self.dealer_idx;
         }
-
+ 
         self.init_round_for_stage();
         self.log(LogEntry {
             player_id: None,
             event: LogEvent::StageChanged(self.stage),
         });
+        Ok(())
     }
 
     /// Post a small/big blind, capping to available stack and marking all-in when necessary.
@@ -553,13 +563,25 @@ impl Game {
     }
 
     /// Deal community cards and advance the hand's stage, emitting appropriate logs.
-    fn advance_stage(&mut self) {
+    fn advance_stage(&mut self) -> Result<()> {
         match self.stage {
             Stage::Preflop => {
                 // Flop (burn ignored for simplicity)
-                self.community.push(self.deck.pop_front().unwrap());
-                self.community.push(self.deck.pop_front().unwrap());
-                self.community.push(self.deck.pop_front().unwrap());
+                let c1 = self
+                    .deck
+                    .pop_front()
+                    .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing flop card 1"))?;
+                let c2 = self
+                    .deck
+                    .pop_front()
+                    .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing flop card 2"))?;
+                let c3 = self
+                    .deck
+                    .pop_front()
+                    .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing flop card 3"))?;
+                self.community.push(c1);
+                self.community.push(c2);
+                self.community.push(c3);
                 self.stage = Stage::Flop;
                 self.log(LogEntry {
                     player_id: None,
@@ -575,7 +597,11 @@ impl Game {
                 );
             }
             Stage::Flop => {
-                self.community.push(self.deck.pop_front().unwrap());
+                let c = self
+                    .deck
+                    .pop_front()
+                    .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing turn card"))?;
+                self.community.push(c);
                 self.stage = Stage::Turn;
                 self.log(LogEntry {
                     player_id: None,
@@ -586,7 +612,11 @@ impl Game {
                 println!("[STAGE] Turn: {}", card_str(self.community[3]));
             }
             Stage::Turn => {
-                self.community.push(self.deck.pop_front().unwrap());
+                let c = self
+                    .deck
+                    .pop_front()
+                    .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing river card"))?;
+                self.community.push(c);
                 self.stage = Stage::River;
                 self.log(LogEntry {
                     player_id: None,
@@ -605,6 +635,7 @@ impl Game {
             player_id: None,
             event: LogEvent::StageChanged(self.stage),
         });
+        Ok(())
     }
 
     /// Resolve showdown by evaluating all non-folded hands, splitting the pot on ties
@@ -716,23 +747,23 @@ mod tests {
 
     #[test]
     fn test_basic_game_flow() {
-        let mut game = Game::new_with_seed("Player".to_string(), 1, 42);
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 42).unwrap();
         // Preflop with blinds posted
         assert_eq!(game.stage, Stage::Preflop);
         assert_eq!(game.current_bet, 10);
         assert_eq!(game.min_raise, 10);
-
+ 
         // Player calls (calls BB of 10)
         game.apply_player_action(0, PlayerAction::CheckCall)
             .unwrap();
-
+ 
         // Next to act should not be the player again immediately
         assert_ne!(game.to_act, 0);
     }
 
     #[test]
     fn test_valid_raises() {
-        let mut game = Game::new_with_seed("Player".to_string(), 1, 123);
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 123).unwrap();
         // Heads-up preflop: player (SB/dealer) acts first, raises to 30 (BB=10, raise=20)
         game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
         assert_eq!(game.current_bet, 30);
@@ -747,7 +778,7 @@ mod tests {
 
     #[test]
     fn test_betting_round_completion() {
-        let mut game = Game::new_with_seed("Player".to_string(), 1, 999);
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 999).unwrap();
         // Heads-up preflop: player (SB/dealer) acts first, calls to match BB
         game.apply_player_action(0, PlayerAction::CheckCall)
             .unwrap();
@@ -760,7 +791,7 @@ mod tests {
 
     #[test]
     fn test_player_folding() {
-        let mut game = Game::new_with_seed("Player".to_string(), 1, 7);
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 7).unwrap();
         // Player folds immediately preflop
         game.apply_player_action(0, PlayerAction::Fold).unwrap();
         assert_eq!(game.stage, Stage::Showdown);
@@ -768,7 +799,7 @@ mod tests {
 
     #[test]
     fn test_pot_totals_no_double_count() {
-        let mut game = Game::new_with_seed("Player".to_string(), 1, 555);
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 555).unwrap();
         // Heads-up preflop: SB acts first; raise to 20 total (BB=10 -> +10 raise)
         let sb = game.to_act;
         let bb = (sb + 1) % 2;
@@ -818,7 +849,7 @@ mod tests {
 
     #[test]
     fn test_min_raise_enforcement() {
-        let mut game = Game::new_with_seed("Player".to_string(), 1, 42);
+        let mut game = Game::new_with_seed("Player".to_string(), 1, 42).unwrap();
 
         // Preflop: player raises to 30 (BB=10, so raise is +20, min_raise becomes 20)
         game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
@@ -862,7 +893,7 @@ mod tests {
 
     #[test]
     fn test_small_raise_treated_as_call() {
-        let mut game = Game::new_with_seed("Player".to_string(), 2, 123);
+        let mut game = Game::new_with_seed("Player".to_string(), 2, 123).unwrap();
 
         // Preflop: player1 raises to 30 (+20 from BB=10)
         game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
@@ -890,7 +921,7 @@ mod tests {
 
     #[test]
     fn test_all_in_small_raise_treated_as_call() {
-        let mut game = Game::new_with_seed("Player".to_string(), 2, 456);
+        let mut game = Game::new_with_seed("Player".to_string(), 2, 456).unwrap();
 
         // Preflop: player1 raises to 30 (BB=10, +20)
         game.apply_player_action(0, PlayerAction::Bet(20)).unwrap();
@@ -918,7 +949,7 @@ mod tests {
 
     #[test]
     fn test_after_all_in_correct_behavior() {
-        let mut game = Game::new_with_seed("Player".to_string(), 3, 789);
+        let mut game = Game::new_with_seed("Player".to_string(), 3, 789).unwrap();
 
         // Preflop: the first to act is left of the BB in 4-handed
         let n = game.players.len();

@@ -22,6 +22,8 @@ use mcg_shared::{ClientMsg, GameStatePublic, ServerMsg};
 use owo_colors::OwoColorize;
 use std::io::IsTerminal;
 
+use anyhow::{Result, Context};
+
 #[derive(Clone, Default)]
 pub struct AppState {
     pub lobby: Arc<RwLock<Lobby>>,
@@ -54,7 +56,7 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-pub async fn run_server(addr: SocketAddr, state: AppState) {
+pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
     let app = build_router(state.clone());
 
     let display_addr = if addr.ip().to_string() == "127.0.0.1" {
@@ -66,8 +68,12 @@ pub async fn run_server(addr: SocketAddr, state: AppState) {
     println!("🌐 MCG Server running at http://{}", display_addr);
     println!("📱 Open your browser and navigate to the above URL");
     println!();
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .with_context(|| format!("Failed to bind to {}", display_addr))?;
+    // axum::serve returns a future that runs the server; propagate any error if it returns one.
+    let _ = axum::serve(listener, app).await;
+    Ok(())
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
@@ -87,9 +93,12 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     };
     let hello = format!("{} {}", "[CONNECT]".bold().green(), name.bold());
     println!("{}", hello);
-
-    ensure_game_started(&state, &name).await;
-
+ 
+    if let Err(e) = ensure_game_started(&state, &name).await {
+        let _ = send_ws(&mut socket, &ServerMsg::Error(format!("Failed to start game: {}", e))).await;
+        return;
+    }
+ 
     let you_id = 0usize;
     send_ws(&mut socket, &ServerMsg::Welcome { you: you_id }).await;
     send_state_to(&mut socket, &state, you_id).await;
@@ -108,21 +117,29 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     println!("{} {}", "[DISCONNECT]".bold().red(), name.bold());
 }
 
-async fn ensure_game_started(state: &AppState, name: &str) {
+async fn ensure_game_started(state: &AppState, name: &str) -> Result<()> {
     let mut lobby = state.lobby.write().await;
     if lobby.game.is_none() {
-        lobby.game = Some(Game::new(name.to_string(), state.bot_count));
+        let g = Game::new(name.to_string(), state.bot_count)
+            .with_context(|| format!("creating new game for {}", name))?;
+        lobby.game = Some(g);
         println!(
             "[GAME] Created new game for {} with {} bot(s)",
             name, state.bot_count
         );
     }
+    Ok(())
 }
 
 async fn send_ws(socket: &mut WebSocket, msg: &ServerMsg) {
-    let _ = socket
-        .send(Message::Text(serde_json::to_string(msg).unwrap()))
-        .await;
+    match serde_json::to_string(msg) {
+        Ok(txt) => {
+            let _ = socket.send(Message::Text(txt)).await;
+        }
+        Err(e) => {
+            eprintln!("Failed to serialize ServerMsg for websocket send: {}", e);
+        }
+    }
 }
 
 async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: usize) {
@@ -186,10 +203,11 @@ async fn drive_bots_with_delays(
             break;
         }
         // Sleep a pseudo-random-ish delay between actions without holding non-Send state
-        let now_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .subsec_nanos() as u64;
+        let now_ns = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        {
+            Ok(d) => d.subsec_nanos() as u64,
+            Err(_) => 0u64,
+        };
         let span = max_ms.saturating_sub(min_ms);
         let delay = min_ms + (now_ns % span.max(1));
         tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
@@ -237,14 +255,17 @@ async fn process_client_msg(
                     if n > 0 {
                         game.dealer_idx = (game.dealer_idx + 1) % n;
                     }
-                    game.start_new_hand();
-                    // After starting a new hand, print a table header banner once
-                    let sb = game.sb;
-                    let bb = game.bb;
-                    let gs = game.public_for(you_id);
-                    lobby.last_printed_log_len = gs.action_log.len();
-                    let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
-                    println!("{}", header);
+                    if let Err(e) = game.start_new_hand() {
+                        let _ = send_ws(socket, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
+                    } else {
+                        // After starting a new hand, print a table header banner once
+                        let sb = game.sb;
+                        let bb = game.bb;
+                        let gs = game.public_for(you_id);
+                        lobby.last_printed_log_len = gs.action_log.len();
+                        let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+                        println!("{}", header);
+                    }
                 }
             }
             send_state_to(socket, state, you_id).await;
@@ -254,14 +275,21 @@ async fn process_client_msg(
             println!("[WS] ResetGame requested by {}: bots={} ", name, bots);
             {
                 let mut lobby = state.lobby.write().await;
-                lobby.game = Some(Game::new(name.to_string(), bots));
-                if let Some(game) = &mut lobby.game {
-                    let sb = game.sb;
-                    let bb = game.bb;
-                    let gs = game.public_for(you_id);
-                    lobby.last_printed_log_len = gs.action_log.len();
-                    let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
-                    println!("{}", header);
+                match Game::new(name.to_string(), bots) {
+                    Ok(g) => {
+                        lobby.game = Some(g);
+                        if let Some(game) = &mut lobby.game {
+                            let sb = game.sb;
+                            let bb = game.bb;
+                            let gs = game.public_for(you_id);
+                            lobby.last_printed_log_len = gs.action_log.len();
+                            let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+                            println!("{}", header);
+                        }
+                    }
+                    Err(e) => {
+                        let _ = send_ws(socket, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
+                    }
                 }
             }
             send_state_to(socket, state, you_id).await;
