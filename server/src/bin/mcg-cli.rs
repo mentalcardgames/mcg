@@ -7,6 +7,7 @@ use mcg_shared::{ClientMsg, GameStatePublic, PlayerAction, ServerMsg};
 use std::io::IsTerminal;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
+use anyhow::Context;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "mcg-cli", version, about = "Headless CLI for MCG poker demo", long_about = None)]
@@ -14,10 +15,15 @@ struct Cli {
     /// Base server URL (http(s)://host:port or ws(s)://host:port/ws)
     #[arg(short, long, default_value = "http://localhost:3000")]
     server: String,
-
+ 
     /// Join name to use for the single player
     #[arg(short, long, default_value = "CLI")]
     name: String,
+ 
+    /// Connect to an iroh peer (multiaddr / peer URI). When set the CLI
+    /// attempts to use iroh transport instead of WebSocket. (Explicit target.)
+    #[arg(long)]
+    iroh_peer: Option<String>,
 
     /// How long to wait for server state updates after sending a command (ms)
     #[arg(long, default_value_t = 1200)]
@@ -65,24 +71,36 @@ enum ActionKind {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Build ws URL
-    let ws_url = build_ws_url(&cli.server)?;
+    // Build ws URL only if iroh_peer not requested
+    let ws_url = if cli.iroh_peer.is_none() {
+        Some(build_ws_url(&cli.server)?)
+    } else {
+        None
+    };
 
     match cli.command {
         Commands::Join => {
-            let latest = run_once(&ws_url, &cli.name, None, cli.wait_ms).await?;
+            let latest = if let Some(peer) = &cli.iroh_peer {
+                run_once_iroh(peer, &cli.name, None, cli.wait_ms).await?
+            } else {
+                run_once(ws_url.as_ref().unwrap(), &cli.name, None, cli.wait_ms).await?
+            };
             if let Some(state) = latest {
                 output_state(&state, cli.json);
             }
         }
         Commands::State => {
-            let latest = run_once(
-                &ws_url,
-                &cli.name,
-                Some(ClientMsg::RequestState),
-                cli.wait_ms,
-            )
-            .await?;
+            let latest = if let Some(peer) = &cli.iroh_peer {
+                run_once_iroh(peer, &cli.name, Some(ClientMsg::RequestState), cli.wait_ms).await?
+            } else {
+                run_once(
+                    ws_url.as_ref().unwrap(),
+                    &cli.name,
+                    Some(ClientMsg::RequestState),
+                    cli.wait_ms,
+                )
+                .await?
+            };
             if let Some(state) = latest {
                 output_state(&state, cli.json);
             }
@@ -93,27 +111,37 @@ async fn main() -> anyhow::Result<()> {
                 ActionKind::CheckCall => PlayerAction::CheckCall,
                 ActionKind::Bet => PlayerAction::Bet(amount),
             };
-            let latest =
-                run_once(&ws_url, &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?;
+            let latest = if let Some(peer) = &cli.iroh_peer {
+                run_once_iroh(peer, &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?
+            } else {
+                run_once(ws_url.as_ref().unwrap(), &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?
+            };
             if let Some(state) = latest {
                 output_state(&state, cli.json);
             }
         }
         Commands::NextHand => {
-            let latest =
-                run_once(&ws_url, &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?;
+            let latest = if let Some(peer) = &cli.iroh_peer {
+                run_once_iroh(peer, &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?
+            } else {
+                run_once(ws_url.as_ref().unwrap(), &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?
+            };
             if let Some(state) = latest {
                 output_state(&state, cli.json);
             }
         }
         Commands::Reset { bots } => {
-            let latest = run_once(
-                &ws_url,
-                &cli.name,
-                Some(ClientMsg::ResetGame { bots }),
-                cli.wait_ms,
-            )
-            .await?;
+            let latest = if let Some(peer) = &cli.iroh_peer {
+                run_once_iroh(peer, &cli.name, Some(ClientMsg::ResetGame { bots }), cli.wait_ms).await?
+            } else {
+                run_once(
+                    ws_url.as_ref().unwrap(),
+                    &cli.name,
+                    Some(ClientMsg::ResetGame { bots }),
+                    cli.wait_ms,
+                )
+                .await?
+            };
             if let Some(state) = latest {
                 output_state(&state, cli.json);
             }
@@ -121,6 +149,112 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+ 
+/// Placeholder iroh client path. Currently returns an explanatory error until
+/// a full iroh client implementation is added. The function signature mirrors
+/// `run_once` so the CLI can switch between transports cleanly.
+async fn run_once_iroh(
+    peer_uri: &str,
+    name: &str,
+    after_join: Option<ClientMsg>,
+    wait_ms: u64,
+) -> anyhow::Result<Option<GameStatePublic>> {
+    // Implement a minimal iroh client that:
+    // - creates a local endpoint
+    // - connects to the supplied peer URI
+    // - opens a bidirectional stream
+    // - sends newline-delimited JSON messages (Join + optional command)
+    // - reads newline-delimited ServerMsg responses and returns the last State seen
+    //
+    // Note: iroh APIs are imported inside the function to limit compile-time
+    // exposure when the feature is disabled.
+    use iroh::endpoint::Endpoint;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    // ALPN must match the server's ALPN
+    const ALPN: &[u8] = b"mcg/iroh/1";
+
+    // Bind a local endpoint (discovery_n0 for default settings)
+    let endpoint = Endpoint::builder()
+        .discovery_n0()
+        .bind()
+        .await
+        .context("binding iroh endpoint for client")?;
+
+    // Connect to the target peer. Expect the peer_uri to be a valid iroh target.
+    // Interpret peer_uri as a public key (NodeId). Use discovery/relay to dial by public key.
+    // Parse the supplied peer identifier as an iroh PublicKey (NodeId) and
+    // pass it to Endpoint::connect. NodeAddr implements From<PublicKey>, so
+    // passing the PublicKey satisfies the connect() signature and enables
+    // discovery/relay resolution within the iroh library.
+    use std::str::FromStr;
+    use iroh::PublicKey;
+    let pk = PublicKey::from_str(peer_uri).context("parsing peer public key (expected public key string)")?;
+    let connection = endpoint
+        .connect(pk, ALPN)
+        .await
+        .context("connecting to iroh peer")?;
+
+    // Open a bidirectional stream
+    let (mut send, recv) = connection
+        .open_bi()
+        .await
+        .context("opening bidirectional stream")?;
+
+    let mut reader = BufReader::new(recv);
+
+    // Send Join
+    let join_txt = serde_json::to_string(&ClientMsg::Join {
+        name: name.to_string(),
+    })?;
+    send.write_all(join_txt.as_bytes()).await?;
+    send.write_all(b"\n").await?;
+    send.flush().await?;
+
+    // Optional follow-up command
+    if let Some(msg) = after_join {
+        let txt = serde_json::to_string(&msg)?;
+        send.write_all(txt.as_bytes()).await?;
+        send.write_all(b"\n").await?;
+        send.flush().await?;
+    }
+
+    // Read newline-delimited JSON messages until timeout; track last State
+    let mut latest_state: Option<GameStatePublic> = None;
+    let mut line = String::new();
+    loop {
+        // read_line appends to the buffer so we clear before each call
+        line.clear();
+        match tokio::time::timeout(std::time::Duration::from_millis(wait_ms), reader.read_line(&mut line)).await {
+            Ok(Ok(0)) => break, // connection closed
+            Ok(Ok(_)) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if let Ok(sm) = serde_json::from_str::<ServerMsg>(trimmed) {
+                    match sm {
+                        ServerMsg::State(gs) => latest_state = Some(gs),
+                        ServerMsg::Error(e) => eprintln!("Server error: {}", e),
+                        ServerMsg::Welcome { .. } => {}
+                    }
+                } else {
+                    eprintln!("Invalid JSON from iroh peer: {}", trimmed);
+                }
+            }
+            Ok(Err(e)) => {
+                eprintln!("iroh read error: {}", e);
+                break;
+            }
+            Err(_) => break, // timeout
+        }
+    }
+
+    // Try to finish/close the send side politely if available
+    let _ = send.finish();
+
+    Ok(latest_state)
 }
 
 fn output_state(state: &GameStatePublic, json: bool) {
