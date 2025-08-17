@@ -1,7 +1,7 @@
 use anyhow::Result;
 use iroh::endpoint::Endpoint;
 use iroh_base::{NodeAddr, NodeId};
-use mcg_shared::ClientMsg;
+use mcg_shared::ClientMsg; // used by framing/parsing and as the message type sent to server
 use std::env;
 
 #[tokio::main]

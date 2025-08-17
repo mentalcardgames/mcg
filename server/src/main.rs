@@ -11,7 +11,6 @@ use std::sync::Arc;
 
 use crate::transport::iroh_transport::IrohTransport;
 use crate::transport::Transport;
-use mcg_shared::ClientMsg;
 use tokio::sync::{mpsc, Mutex};
 
 /// Minimal server entrypoint: parse CLI args and run the server.

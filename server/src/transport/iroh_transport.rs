@@ -7,7 +7,7 @@ use iroh_base::{NodeAddr, NodeId};
 use std::path::PathBuf;
 
 use crate::transport::Transport;
-use mcg_shared::{ClientMsg, ServerMsg};
+use mcg_shared::ServerMsg;
 
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
@@ -22,7 +22,7 @@ pub struct IrohTransport {
 impl IrohTransport {
     /// Create and initialize a new IrohTransport. Returns the transport and a receiver
     /// which yields (peer_node_id, ClientMsg) tuples parsed by the protocol handler.
-    pub async fn new(debug: bool) -> Result<(Self, UnboundedReceiver<(String, ClientMsg)>)> {
+    pub async fn new(debug: bool) -> Result<(Self, UnboundedReceiver<(String, mcg_shared::ClientMsg)>)> {
         if debug {
             eprintln!("[IROH] creating endpoint in debug mode");
         }

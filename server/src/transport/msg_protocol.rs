@@ -2,7 +2,6 @@ use iroh::protocol::{ProtocolHandler, AcceptError};
 use iroh::endpoint::Connection;
 use bytes::BytesMut;
 use crate::transport::framing::try_parse;
-use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use mcg_shared::ClientMsg;
 use std::future::Future;
