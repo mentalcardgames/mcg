@@ -39,8 +39,8 @@ impl Transport for WebSocketTransport {
         Ok(())
     }
 
-    fn node_id(&self) -> Option<String> {
-        None
+    fn node_id(&self) -> String {
+        String::new()
     }
 
     async fn send_message(&self, peer: Option<String>, msg: &ServerMsg) -> Result<()> {
@@ -59,9 +59,6 @@ impl Transport for WebSocketTransport {
         Ok(())
     }
 
-    fn set_on_client_message(&mut self, cb: Box<dyn Fn(String, ClientMsg) + Send + Sync>) {
-        self.on_client = Some(Arc::from(cb));
-    }
 
     async fn advertise_blob(&self, path: PathBuf) -> Result<String> {
         // For parity, implement a filesystem-backed blob hashing using blake3 and return hex

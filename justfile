@@ -43,12 +43,12 @@ start PROFILE="release" BOTS="1":
 # Run the native server (serves frontend + WebSocket backend)
 # Usage: just server [BOTS]
 server BOTS="1":
-    cargo run -p mcg-server --bin mcg-server -- --bots {{BOTS}}
+    cargo run -p mcg-server --bin mcg-server -- --bots {{BOTS}} --debug
 
 # Run the server in the background for AI agent testing
 # Starts server detached, logs to ./server.log and writes PID to .mcg_server.pid
 server-bg:
-    @bash -cu 'cargo run -p mcg-server --bin mcg-server -- --transport iroh > ./server.log 2>&1 & echo $! > .mcg_server.pid; echo Started mcg-server with PID $(cat .mcg_server.pid)'
+    @bash -cu 'cargo run -p mcg-server --bin mcg-server -- --transport iroh --debug > ./server.log 2>&1 & echo $! > .mcg_server.pid; echo Started mcg-server with PID $(cat .mcg_server.pid)'
 
 # Kill the background server process using PID file if present, fallback to pkill
 kill-server:

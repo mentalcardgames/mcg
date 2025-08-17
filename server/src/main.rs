@@ -20,63 +20,40 @@ use tokio::sync::{mpsc, Mutex};
 ///   mcg-server --bots <N> [--transport websocket|iroh] [--iroh-node-id <ID>]
 #[tokio::main]
 async fn main() {
-    // Default settings
-    let mut bots: usize = 1;
-    let mut _transport_choice = "websocket".to_string();
-    let mut _iroh_node_id_arg: Option<String> = None;
+    // Parse CLI args using clap
+    #[derive(clap::Parser, Debug)]
+    struct Cli {
+        /// Number of bots
+        #[arg(long, default_value_t = 1)]
+        bots: usize,
 
-    // Parse simple CLI args
-    let mut args = std::env::args().skip(1);
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--bots" => {
-                if let Some(n) = args.next() {
-                    if let Ok(v) = n.parse::<usize>() {
-                        bots = v;
-                    }
-                }
-            }
-            "--transport" => {
-                if let Some(t) = args.next() {
-                    _transport_choice = t;
-                }
-            }
-            "--iroh-node-id" => {
-                if let Some(id) = args.next() {
-                    _iroh_node_id_arg = Some(id);
-                }
-            }
-            _ => {
-                // Unknown flags are ignored for now
-            }
-        }
+        /// Enable debug logging
+        #[arg(long)]
+        debug: bool,
     }
+
+    use clap::Parser;
+    let cli = Cli::parse();
 
     // Initialize shared state for the server
     let mut state = AppState {
-        bot_count: bots,
+        bot_count: cli.bots,
         ..Default::default()
     };
 
-    // Always start the Iroh transport so the server is reachable over iroh and websocket simultaneously.
-    // The Iroh endpoint runs alongside the HTTP/WebSocket server; we keep a boxed transport alive.
     // Accept an optional --debug flag for verbose iroh event logging
-    let args_vec: Vec<String> = std::env::args().collect();
-    let debug = args_vec.iter().any(|s| s == "--debug");
+    let debug = cli.debug;
 
-    let mut it = IrohTransport::new(debug);
-    it.start().await.expect("Failed to start iroh transport");
+    // Construct iroh transport and obtain the receiver for parsed inbound messages
+    let (it, mut iroh_rx) = IrohTransport::new(debug).await.expect("Failed to start iroh transport");
 
-    if let Some(id) = it.node_id() {
-        println!("IROH node id: {}", id);
-        state.transport_node_id = Some(id);
-        // Wait for node_addr to be initialized to confirm we've published addresses to discovery/relay
-        // Note: calling node_addr().initialized() requires access to the Endpoint which we keep inside transport.
-        // For simplicity, poll the server's admin endpoint later; but print that we have node id now.
-        println!("IROH transport started and node id available (discovery publication may still be in progress)");
-    } else {
-        println!("IROH transport started but node id not yet available");
-    }
+    let id = it.node_id();
+    println!("IROH node id: {}", id);
+    state.transport_node_id = Some(id.clone());
+
+    // Print a more prominent full NodeTicket string so CLI callers can dial using a concrete ticket.
+    let full_na = it.node_addr_string().await;
+    println!("IROH full node_addr: {}", full_na);
 
     let boxed: Box<dyn Transport> = Box::new(it);
     let transport: Arc<Mutex<Box<dyn Transport>>> = Arc::new(Mutex::new(boxed));
@@ -87,23 +64,12 @@ async fn main() {
         transports_lock.push(transport.clone());
     }
 
-    // If transport produces incoming messages, hook a channel to handle them centrally
+    // Spawn a background task to forward parsed iroh protocol messages into the central processing loop
     {
-        let tr = transport.clone();
-        let (tx, mut rx) = mpsc::unbounded_channel::<(String, ClientMsg)>();
-        // Provide a callback for transport incoming messages to forward into tx
-        tr.lock()
-            .await
-            .set_on_client_message(Box::new(move |peer, cm| {
-                let _ = tx.send((peer, cm));
-            }));
-
-        // Spawn a background task to process incoming transport messages
         let state_clone = state.clone();
-        let tr2 = tr.clone();
+        let tr2 = transport.clone();
         tokio::spawn(async move {
-            while let Some((peer, cm)) = rx.recv().await {
-                // Dispatch to processing function (mirror websocket behavior)
+            while let Some((peer, cm)) = iroh_rx.recv().await {
                 crate::server::process_client_msg_from_transport(
                     peer,
                     &state_clone,

@@ -1,98 +1,103 @@
 use anyhow::Result;
-use iroh::endpoint::Endpoint;
-use iroh_base::{NodeAddr, NodeId};
-use iroh::protocol::Router;
 use futures_util::StreamExt;
+use iroh::endpoint::Endpoint;
+use iroh::protocol::Router;
 use iroh::Watcher;
+use iroh_base::{NodeAddr, NodeId};
 use std::path::PathBuf;
 
 use crate::transport::Transport;
 use mcg_shared::{ClientMsg, ServerMsg};
 
-// Type alias for the on-client callback storage to reduce type complexity warnings from clippy.
-type IrohOnClientCallback = std::sync::Arc<tokio::sync::Mutex<Option<std::sync::Arc<dyn Fn(String, ClientMsg) + Send + Sync>>>>;
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
 /// Minimal Iroh transport: only create an Endpoint and expose node_id for now.
 /// Full blobs and message protocols will be added incrementally.
 pub struct IrohTransport {
-    endpoint: Option<Endpoint>,
-    // Optional callback storage for incoming ClientMsg from protocol handler
-    // Callback storage for incoming ClientMsg. Use a type alias for readability.
-    on_client: IrohOnClientCallback,
+    endpoint: Endpoint,
+    // debug flag retained for optional verbose discovery streaming
     debug: bool,
 }
 
 impl IrohTransport {
-    /// Create a new IrohTransport. Pass `debug=true` to enable verbose iroh event logging.
-    pub fn new(debug: bool) -> Self {
-        Self { endpoint: None, on_client: IrohOnClientCallback::default(), debug }
+    /// Create and initialize a new IrohTransport. Returns the transport and a receiver
+    /// which yields (peer_node_id, ClientMsg) tuples parsed by the protocol handler.
+    pub async fn new(debug: bool) -> Result<(Self, UnboundedReceiver<(String, ClientMsg)>)> {
+        if debug {
+            eprintln!("[IROH] creating endpoint in debug mode");
+        }
+
+        // Build endpoint
+        let endpoint = Endpoint::builder()
+            .alpns(vec![b"/mcg/msg/1".to_vec()])
+            .discovery_n0()
+            .bind()
+            .await?;
+
+        // Create an unbounded channel to receive parsed messages from the protocol handler
+        let (tx, rx) = unbounded_channel::<(String, mcg_shared::ClientMsg)>();
+        let proto = crate::transport::msg_protocol::MsgProtocol::new(tx.clone());
+
+        let router = Router::builder(endpoint.clone())
+            .accept(b"/mcg/msg/1", proto)
+            .spawn();
+        let endpoint = router.endpoint().clone();
+
+        // Wait for initialization of node_addr/home_relay so callers can rely on published info
+        endpoint.node_addr().initialized().await;
+        let _ = endpoint.home_relay().initialized().await;
+
+        // Spawn discovery stream if debug
+        if debug {
+            let ep_debug = endpoint.clone();
+            tokio::spawn(async move {
+                eprintln!("[IROH DEBUG] starting discovery event stream");
+                let mut ds = ep_debug.discovery_stream();
+                while let Some(item) = ds.next().await {
+                    match item {
+                        Ok(di) => eprintln!("[IROH DEBUG] discovery item: {:?}", di),
+                        Err(e) => eprintln!("[IROH DEBUG] discovery error: {:?}", e),
+                    }
+                }
+            });
+        } else {
+            // print concise published node_addr/home_relay once
+            let ep_once = endpoint.clone();
+            tokio::spawn(async move {
+                let node_addr = ep_once.node_addr().initialized().await;
+                println!("[IROH] node_addr initialized: {:?}", node_addr);
+                let home_relay = ep_once.home_relay().initialized().await;
+                println!("[IROH] home_relay: {:?}", home_relay);
+            });
+        }
+
+        Ok((Self { endpoint, debug }, rx))
+    }
+
+
+    /// Return the full NodeTicket string (ticket) for the endpoint, waiting for initialization if necessary.
+    /// Always returns a String (may be empty only in pathological cases where initialization failed).
+    pub async fn node_addr_string(&self) -> String {
+        let na = self.endpoint.node_addr().initialized().await;
+        let ticket = iroh_base::ticket::NodeTicket::from(na);
+        ticket.to_string()
     }
 }
 
 #[async_trait::async_trait]
 impl Transport for IrohTransport {
     async fn start(&mut self) -> Result<()> {
-        let endpoint = Endpoint::builder().discovery_n0().bind().await?;
-
-        // Register our MsgProtocol handler so incoming connections are handled and
-        // messages are forwarded to the on_client callback if set.
-        let proto = crate::transport::msg_protocol::MsgProtocol::new(self.on_client.clone());
-        // The iroh endpoint's Router is created via Router::builder(endpoint).spawn().
-        // Create and spawn a router accepting our ALPN and handler so incoming connections
-        // with that ALPN are dispatched to our MsgProtocol handler.
-        // When debug is enabled, request additional logging from iroh components
-        if self.debug {
-            // Note: endpoint.set_alpns is available; use endpoint.metrics or other hooks if needed.
-            eprintln!("[IROH] starting endpoint in debug mode");
-        }
-
-        let router = Router::builder(endpoint.clone())
-            .accept(b"/mcg/msg/1", proto)
-            .spawn();
-
-        // Router takes ownership of the endpoint internally; stash the endpoint returned by router.endpoint().
-        self.endpoint = Some(router.endpoint().clone());
-
-        // Spawn a task to watch for the endpoint's node_addr being initialized and report it.
-        // This always reports a concise published status; when debug=true we also stream discovery events.
-        if let Some(ep) = &self.endpoint {
-            let ep = ep.clone();
-            let debug = self.debug;
-            tokio::spawn(async move {
-                // print node_addr when it is initialized (indicates addresses were published)
-                let node_addr = ep.node_addr().initialized().await;
-                println!("[IROH] node_addr initialized: {:?}", node_addr);
-
-                // print home_relay when available (print whatever the API returns)
-                let home_relay = ep.home_relay().initialized().await;
-                println!("[IROH] home_relay: {:?}", home_relay);
-
-                // If debug was requested, stream verbose discovery events to stderr
-                if debug {
-                    eprintln!("[IROH DEBUG] starting discovery event stream");
-                    let mut ds = ep.discovery_stream();
-                    while let Some(item) = ds.next().await {
-                        match item {
-                            Ok(di) => eprintln!("[IROH DEBUG] discovery item: {:?}", di),
-                            Err(e) => eprintln!("[IROH DEBUG] discovery error: {:?}", e),
-                        }
-                    }
-                }
-            });
-        }
-
+        // Endpoint is initialized during IrohTransport::new(), so start() is a no-op here.
         Ok(())
     }
 
     async fn stop(&mut self) -> Result<()> {
-        if let Some(endpoint) = self.endpoint.take() {
-            endpoint.close().await;
-        }
+        self.endpoint.close().await;
         Ok(())
     }
 
-    fn node_id(&self) -> Option<String> {
-        self.endpoint.as_ref().map(|e| e.node_id().to_string())
+    fn node_id(&self) -> String {
+        self.endpoint.node_id().to_string()
     }
 
     async fn send_message(&self, peer: Option<String>, msg: &ServerMsg) -> Result<()> {
@@ -102,11 +107,7 @@ impl Transport for IrohTransport {
         }
 
         let pid = peer.unwrap();
-        let endpoint = self
-            .endpoint
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("iroh endpoint not initialized"))?;
-
+        let endpoint = &self.endpoint;
         // Try to connect to the remote node by id and open a bi-directional stream.
         // The exact iroh API may vary; attempt to use Endpoint::connect which accepts a
         // node id/address type that implements FromStr. Map errors into anyhow for simplicity.
@@ -123,36 +124,22 @@ impl Transport for IrohTransport {
             .connect(node_addr, b"/mcg/msg/1")
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
-
         // Open a bi-directional stream and write framed JSON payload
-        let (mut send, _recv) = conn
-            .open_bi()
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
-
+        let (mut send, _recv) = conn.open_bi().await.map_err(|e| anyhow::anyhow!(e))?;
         // Serialize and frame
         let bytes = serde_json::to_vec(msg)?;
         let framed = crate::transport::framing::encode_frame(&bytes);
 
         // Write all and finish
-        use tokio::io::AsyncWriteExt;
-        send.write_all(&framed).await.map_err(|e| anyhow::anyhow!(e))?;
+        send.write_all(&framed)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
         // finish() is synchronous in this iroh version
         send.finish().map_err(|e| anyhow::anyhow!(e))?;
 
         Ok(())
     }
 
-    fn set_on_client_message(&mut self, cb: Box<dyn Fn(String, ClientMsg) + Send + Sync>) {
-        // Store the callback so the MsgProtocol handler can call it on incoming messages.
-        let cb_arc: std::sync::Arc<dyn Fn(String, ClientMsg) + Send + Sync> = std::sync::Arc::from(cb);
-        let on_client = self.on_client.clone();
-        // Spawn a task to set it asynchronously
-        tokio::spawn(async move {
-            let mut guard = on_client.lock().await;
-            *guard = Some(cb_arc);
-        });
-    }
 
     async fn advertise_blob(&self, path: PathBuf) -> Result<String> {
         // Implement simple blake3 hashing and return hex of file contents as an "advertised id".

@@ -18,9 +18,8 @@ use std::path::PathBuf;
 pub trait Transport: Send + Sync {
     async fn start(&mut self) -> Result<()>;
     async fn stop(&mut self) -> Result<()>;
-    fn node_id(&self) -> Option<String>;
+    fn node_id(&self) -> String;
     async fn send_message(&self, peer: Option<String>, msg: &ServerMsg) -> Result<()>;
-    fn set_on_client_message(&mut self, cb: Box<dyn Fn(String, ClientMsg) + Send + Sync>);
     async fn advertise_blob(&self, path: PathBuf) -> Result<String>;
     async fn fetch_blob(&self, hash: &str, node_id: Option<&str>, out_path: PathBuf) -> Result<()>;
 }

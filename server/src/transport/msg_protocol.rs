@@ -3,45 +3,41 @@ use iroh::endpoint::Connection;
 use bytes::BytesMut;
 use crate::transport::framing::try_parse;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::mpsc::UnboundedSender;
 use mcg_shared::ClientMsg;
 use std::future::Future;
 
-// Protocol handler that reads length-prefixed frames, parses JSON ClientMsg and invokes
-// a user-provided callback with the peer id and ClientMsg.
-// Reduce type complexity by introducing a type alias for the callback storage.
-type OnClientCallback = Arc<Mutex<Option<Arc<dyn Fn(String, ClientMsg) + Send + Sync>>>>;
+// Protocol handler that reads length-prefixed frames, parses JSON ClientMsg and forwards
+// parsed messages to a tokio mpsc::UnboundedSender<(peer, ClientMsg)> for processing by the server.
+
+type MsgSender = UnboundedSender<(String, ClientMsg)>;
 
 pub struct MsgProtocol {
-    // Shared callback storage. If None, incoming messages are ignored.
-    pub on_client: OnClientCallback,
+    // Sender to forward parsed messages to the server task.
+    pub sender: MsgSender,
 }
 
 impl std::fmt::Debug for MsgProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("MsgProtocol{on_client: <callback>}")
+        f.write_str("MsgProtocol{sender: <mpsc::UnboundedSender>}")
     }
 }
 
 impl Clone for MsgProtocol {
     fn clone(&self) -> Self {
-        MsgProtocol { on_client: self.on_client.clone() }
+        MsgProtocol { sender: self.sender.clone() }
     }
 }
 
 impl MsgProtocol {
-    pub fn new(on_client: OnClientCallback) -> Self {
-        MsgProtocol { on_client }
+    pub fn new(sender: MsgSender) -> Self {
+        MsgProtocol { sender }
     }
 }
 
-// Provide a convenient alias to satisfy complexity lints for the protocol handler signature
-#[allow(clippy::type_complexity)]
-type DynOnClient = Arc<dyn Fn(String, ClientMsg) + Send + Sync>;
-
 impl ProtocolHandler for MsgProtocol {
     fn accept(&self, connection: Connection) -> impl Future<Output = Result<(), AcceptError>> + Send {
-        let on_client = self.on_client.clone();
+        let sender = self.sender.clone();
         async move {
             // Each connection: accept a bidi stream and read until the peer finishes.
             let peer = match connection.remote_node_id() {
@@ -59,10 +55,8 @@ impl ProtocolHandler for MsgProtocol {
                     Ok(Some(frame)) => {
                         if let Ok(txt) = String::from_utf8(frame) {
                             if let Ok(cm) = serde_json::from_str::<ClientMsg>(&txt) {
-                                let guard = on_client.lock().await;
-                                if let Some(cb) = guard.as_ref() {
-                                    cb(peer.clone(), cm);
-                                }
+                                // forward to server task; ignore send error if receiver closed
+                                let _ = sender.send((peer.clone(), cm));
                             }
                         }
                         continue;

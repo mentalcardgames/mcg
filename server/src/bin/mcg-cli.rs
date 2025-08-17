@@ -265,10 +265,19 @@ async fn run_once_iroh(
 
     // Build an Endpoint, dial the server node id and send a single bi stream with Join + optional msg
     let endpoint = Endpoint::builder().discovery_n0().bind().await?;
-    let node_id: iroh_base::NodeId = server_node_id.parse().map_err(|e| anyhow::anyhow!(e))?;
+    let node_id: iroh_base::NodeId = server_node_id.parse().map_err(|e| anyhow::anyhow!("invalid node id: {}", e))?;
     let node_addr = NodeAddr::new(node_id);
-    let conn = endpoint.connect(node_addr, b"/mcg/msg/1").await?;
-    let (mut send, mut recv) = conn.open_bi().await?;
+    // Dial with a timeout so we can report clearer errors
+    let conn = match tokio::time::timeout(std::time::Duration::from_secs(10), endpoint.connect(node_addr, b"/mcg/msg/1")).await {
+        Ok(Ok(c)) => c,
+        Ok(Err(e)) => return Err(anyhow::anyhow!("iroh connect error: {}", e)),
+        Err(_) => return Err(anyhow::anyhow!("iroh connect timed out")),
+    };
+    let (mut send, mut recv) = match tokio::time::timeout(std::time::Duration::from_secs(5), conn.open_bi()).await {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err(anyhow::anyhow!("iroh open_bi error: {}", e)),
+        Err(_) => return Err(anyhow::anyhow!("iroh open_bi timed out")),
+    };
 
     // Compose frames: Join then optional after_join
     let mut payloads: Vec<Vec<u8>> = Vec::new();
@@ -277,11 +286,19 @@ async fn run_once_iroh(
         payloads.push(serde_json::to_vec(&msg)?);
     }
 
+    // Local framing implementation (same as transport/framing.rs)
+    fn encode_frame_local(payload: &[u8]) -> Vec<u8> {
+        use bytes::BufMut;
+        let mut buf = Vec::with_capacity(4 + payload.len());
+        buf.put_u32(payload.len() as u32);
+        buf.extend_from_slice(payload);
+        buf
+    }
+
     // Write all frames concatenated using the same framing
     for p in payloads.iter() {
-        let framed = crate::transport::framing::encode_frame(p);
-        use tokio::io::AsyncWriteExt;
-        send.write_all(&framed).await?;
+        let framed = encode_frame_local(p);
+        tokio::io::AsyncWriteExt::write_all(&mut send, &framed).await?;
     }
     // finish() is synchronous in this iroh version
     send.finish()?;
@@ -291,7 +308,7 @@ async fn run_once_iroh(
     let mut buf = bytes::BytesMut::from(&data[..]);
     let mut latest_state: Option<GameStatePublic> = None;
     loop {
-        match crate::transport::framing::try_parse(&mut buf) {
+        match try_parse_local(&mut buf) {
             Ok(Some(frame)) => {
                 if let Ok(txt) = String::from_utf8(frame) {
                     if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
@@ -312,6 +329,28 @@ async fn run_once_iroh(
 
     Ok(latest_state)
 }
+
+// Local try_parse implementation to avoid referencing crate transport module
+fn try_parse_local(src: &mut bytes::BytesMut) -> std::io::Result<Option<Vec<u8>>> {
+    use bytes::Buf;
+        if src.len() < 4 {
+        return Ok(None);
+    }
+    let len = src.get_u32();
+    if src.len() < len as usize {
+        // not enough - restore len
+        use bytes::BufMut;
+        let mut restored = bytes::BytesMut::with_capacity(4 + src.len());
+        restored.put_u32(len);
+        restored.extend_from_slice(src);
+        *src = restored;
+        return Ok(None);
+    }
+    let mut out = vec![0u8; len as usize];
+    src.copy_to_slice(&mut out);
+    Ok(Some(out))
+}
+
 
 async fn detect_iroh_node_id(server_base: &str) -> anyhow::Result<Option<String>> {
     // Try the admin endpoint at /admin/iroh/node_id
