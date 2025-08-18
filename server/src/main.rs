@@ -7,11 +7,13 @@ mod server;
 mod transport;
 mod iroh_transport;
 mod config;
+mod cli;
 
 use server::AppState;
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
 use crate::config::Config;
+use clap::Parser;
 use anyhow::Context;
 
 /// Minimal server entrypoint: parse CLI args and run the server.
@@ -20,35 +22,28 @@ use anyhow::Context;
 ///   mcg-server [--config PATH] [--bots N]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // CLI-collected overrides
-    let mut cli_bots: Option<usize> = None;
-    let mut config_path = PathBuf::from("mcg-server.toml");
+    // Use clap-based CLI for parsing
+    let cli = crate::cli::ServerCli::parse();
 
-    // Parse simple CLI args: --bots <N> and --config <PATH>
-    let mut args = std::env::args().skip(1);
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--bots" => {
-                if let Some(n) = args.next() {
-                    if let Ok(v) = n.parse::<usize>() {
-                        cli_bots = Some(v);
-                    }
-                }
-            }
-            "--config" => {
-                if let Some(p) = args.next() {
-                    config_path = PathBuf::from(p);
-                }
-            }
-            _ => {
-                // Unknown flags are ignored for now
-            }
-        }
+    let config_path: PathBuf = cli.config.clone();
+
+    // Load or create config file (creates file if missing).
+    let mut cfg = Config::load_or_create(&config_path)
+        .with_context(|| format!("loading or creating config '{}'", config_path.display()))?;
+
+    // Apply CLI overrides in-memory (non-persistent by default)
+    if let Some(b) = cli.bots {
+        cfg.bots = b;
+    }
+    if let Some(k) = cli.iroh_key {
+        cfg.iroh_key = Some(k);
     }
 
-    // Load or create config file (creates file if missing). CLI --bots overrides config.bots
-    let cfg = Config::load_or_create_with_override(&config_path, cli_bots)
-        .with_context(|| format!("loading or creating config '{}'", config_path.display()))?;
+    // Persist overrides only if requested
+    if cli.persist {
+        cfg.save(&config_path)
+            .with_context(|| format!("saving updated config '{}'", config_path.display()))?;
+    }
 
     let bots = cfg.bots;
 
