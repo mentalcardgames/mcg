@@ -128,7 +128,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     println!("{} {}", "[DISCONNECT]".bold().red(), name.bold());
 }
 
-async fn ensure_game_started(state: &AppState, name: &str) -> Result<()> {
+pub async fn ensure_game_started(state: &AppState, name: &str) -> Result<()> {
     let mut lobby = state.lobby.write().await;
     if lobby.game.is_none() {
         let g = Game::new(name.to_string(), state.bot_count)
@@ -235,17 +235,8 @@ async fn process_client_msg(
     match cm {
         ClientMsg::Action(a) => {
             println!("[WS] Action from {}: {:?}", name, a);
-            let mut err: Option<String> = None;
-            {
-                let mut lobby = state.lobby.write().await;
-                if let Some(game) = &mut lobby.game {
-                    if let Err(e) = game.apply_player_action(0, a.clone()) {
-                        err = Some(e.to_string());
-                    }
-                }
-            }
-            if let Some(e) = err {
-                send_ws(socket, &ServerMsg::Error(e)).await;
+            if let Some(e) = apply_action_to_game(state, 0, a.clone()).await {
+                let _ = send_ws(socket, &ServerMsg::Error(e)).await;
             }
             // Always send latest state then drive bots stepwise with delays
             send_state_to(socket, state, you_id).await;
@@ -259,60 +250,94 @@ async fn process_client_msg(
         }
         ClientMsg::NextHand => {
             println!("[WS] NextHand requested by {}", name);
-            {
-                let mut lobby = state.lobby.write().await;
-                if let Some(game) = &mut lobby.game {
-                    let n = game.players.len();
-                    if n > 0 {
-                        game.dealer_idx = (game.dealer_idx + 1) % n;
-                    }
-                    if let Err(e) = game.start_new_hand() {
-                        let _ = send_ws(socket, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
-                    } else {
-                        // After starting a new hand, print a table header banner once
-                        let sb = game.sb;
-                        let bb = game.bb;
-                        let gs = game.public_for(you_id);
-                        lobby.last_printed_log_len = gs.action_log.len();
-                        let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
-                        println!("{}", header);
-                    }
-                }
+            if let Err(e) = start_new_hand_and_print(state, you_id).await {
+                let _ = send_ws(socket, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
             }
             send_state_to(socket, state, you_id).await;
             drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
         }
         ClientMsg::ResetGame { bots } => {
             println!("[WS] ResetGame requested by {}: bots={} ", name, bots);
-            {
-                let mut lobby = state.lobby.write().await;
-                match Game::new(name.to_string(), bots) {
-                    Ok(g) => {
-                        lobby.game = Some(g);
-                        if let Some(game) = &mut lobby.game {
-                            let sb = game.sb;
-                            let bb = game.bb;
-                            let gs = game.public_for(you_id);
-                            lobby.last_printed_log_len = gs.action_log.len();
-                            let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
-                            println!("{}", header);
-                        }
-                    }
-                    Err(e) => {
-                        let _ = send_ws(socket, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
-                    }
-                }
+            if let Err(e) = reset_game_with_bots(state, &name, bots, you_id).await {
+                let _ = send_ws(socket, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
+            } else {
+                send_state_to(socket, state, you_id).await;
             }
-            send_state_to(socket, state, you_id).await;
             drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
         }
         ClientMsg::Join { .. } => {}
     }
 }
 
-async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameStatePublic> {
+pub async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameStatePublic> {
     let lobby = state.lobby.read().await;
     lobby.game.as_ref().map(|g| g.public_for(you_id))
+}
+
+/// Apply an action to the game's state. Returns Some(error_string) if the
+/// underlying Game::apply_player_action returned an error, otherwise None.
+pub async fn apply_action_to_game(
+    state: &AppState,
+    actor: usize,
+    action: mcg_shared::PlayerAction,
+) -> Option<String> {
+    let mut lobby = state.lobby.write().await;
+    if let Some(game) = &mut lobby.game {
+        if let Err(e) = game.apply_player_action(actor, action) {
+            return Some(e.to_string());
+        }
+    }
+    None
+}
+
+/// Advance to the next hand (increment dealer, start a new hand) and print a table header.
+/// Mirrors the logic previously duplicated in websocket / iroh handlers.
+pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result<()> {
+    let mut lobby = state.lobby.write().await;
+    if let Some(game) = &mut lobby.game {
+        let n = game.players.len();
+        if n > 0 {
+            game.dealer_idx = (game.dealer_idx + 1) % n;
+        }
+        if let Err(e) = game.start_new_hand() {
+            return Err(e);
+        }
+        let sb = game.sb;
+        let bb = game.bb;
+        let gs = game.public_for(you_id);
+        lobby.last_printed_log_len = gs.action_log.len();
+        let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+        println!("{}", header);
+    }
+    Ok(())
+}
+
+/// Reset the game with a new Game created for `name` with `bots` bots, and print header.
+/// Returns Err if Game::new fails.
+pub async fn reset_game_with_bots(
+    state: &AppState,
+    name: &str,
+    bots: usize,
+    you_id: usize,
+) -> Result<()> {
+    let mut lobby = state.lobby.write().await;
+    match Game::new(name.to_string(), bots) {
+        Ok(g) => {
+            lobby.game = Some(g);
+            if let Some(game) = &mut lobby.game {
+                let sb = game.sb;
+                let bb = game.bb;
+                let gs = game.public_for(you_id);
+                lobby.last_printed_log_len = gs.action_log.len();
+                let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+                println!("{}", header);
+            }
+        }
+        Err(e) => {
+            return Err(e);
+        }
+    }
+    Ok(())
 }
 
 /// Serve index.html file

@@ -141,7 +141,7 @@ async fn handle_iroh_connection(
     println!("{} {}", "[IROH CONNECT]".bold().green(), name.bold());
 
     // Ensure game started similarly to the websocket handler
-    if let Err(e) = ensure_game_started(&state, &name).await {
+    if let Err(e) = crate::server::ensure_game_started(&state, &name).await {
         if let Err(e2) = send_server_msg_to_writer(
             &mut send,
             &ServerMsg::Error(format!("Failed to start game: {}", e)),
@@ -161,7 +161,7 @@ async fn handle_iroh_connection(
     }
 
     // Send initial state
-    if let Some(gs) = current_state_public(&state, you_id).await {
+    if let Some(gs) = crate::server::current_state_public(&state, you_id).await {
         if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await {
             eprintln!("iroh send error: {}", e);
         }
@@ -214,29 +214,7 @@ async fn handle_iroh_connection(
     Ok(())
 }
 
-/// Ensure the game is started for the connecting player.
-///
-/// This duplicates logic from the WS handler in server.rs to avoid cross-file
-/// privatization changes. It mutates the shared AppState.
-async fn ensure_game_started(state: &AppState, name: &str) -> Result<()> {
-    let mut lobby = state.lobby.write().await;
-    if lobby.game.is_none() {
-        let g = crate::game::Game::new(name.to_string(), state.bot_count)
-            .with_context(|| format!("creating new game for {}", name))?;
-        lobby.game = Some(g);
-        println!(
-            "[GAME] Created new game for {} with {} bot(s)",
-            name, state.bot_count
-        );
-    }
-    Ok(())
-}
 
-/// Get public view of the current state for a given viewer id.
-async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameStatePublic> {
-    let lobby = state.lobby.read().await;
-    lobby.game.as_ref().map(|g| g.public_for(you_id))
-}
 
 /// Process a ClientMsg received over iroh and reply over the iroh send writer.
 ///
@@ -255,98 +233,41 @@ where
     match cm {
         ClientMsg::Action(a) => {
             println!("[IROH] Action from {}: {:?}", name, a);
-            let mut err: Option<String> = None;
-            {
-                let mut lobby = state.lobby.write().await;
-                if let Some(game) = &mut lobby.game {
-                    if let Err(e) = game.apply_player_action(0, a.clone()) {
-                        err = Some(e.to_string());
-                    }
-                }
-            }
-            if let Some(e) = err {
+            if let Some(e) = crate::server::apply_action_to_game(state, 0, a.clone()).await {
                 let _ = send_server_msg_to_writer(writer, &ServerMsg::Error(e)).await;
             }
             // send latest state then drive bots
-            if let Some(gs) = current_state_public(state, you_id).await {
+            if let Some(gs) = crate::server::current_state_public(state, you_id).await {
                 let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
             }
             drive_bots_with_delays_iroh(writer, state, you_id, 500, 1500).await?;
         }
         ClientMsg::RequestState => {
             println!("[IROH] State requested by {}", name);
-            if let Some(gs) = current_state_public(state, you_id).await {
+            if let Some(gs) = crate::server::current_state_public(state, you_id).await {
                 let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
             }
             drive_bots_with_delays_iroh(writer, state, you_id, 500, 1500).await?;
         }
         ClientMsg::NextHand => {
             println!("[IROH] NextHand requested by {}", name);
-            {
-                let mut lobby = state.lobby.write().await;
-                if let Some(game) = &mut lobby.game {
-                    let n = game.players.len();
-                    if n > 0 {
-                        game.dealer_idx = (game.dealer_idx + 1) % n;
-                    }
-                    if let Err(e) = game.start_new_hand() {
-                        let _ = send_server_msg_to_writer(
-                            writer,
-                            &ServerMsg::Error(format!("Failed to start new hand: {}", e)),
-                        )
-                        .await;
-                    } else {
-                        // After starting a new hand, print a table header banner once
-                        let sb = game.sb;
-                        let bb = game.bb;
-                        let gs = game.public_for(you_id);
-                        lobby.last_printed_log_len = gs.action_log.len();
-                        let header = mcg_server::pretty::format_table_header(
-                            &gs,
-                            sb,
-                            bb,
-                            std::io::stdout().is_terminal(),
-                        );
-                        println!("{}", header);
-                    }
-                }
+            if let Err(e) = crate::server::start_new_hand_and_print(state, you_id).await {
+                let _ = send_server_msg_to_writer(
+                    writer,
+                    &ServerMsg::Error(format!("Failed to start new hand: {}", e)),
+                )
+                .await;
             }
-            if let Some(gs) = current_state_public(state, you_id).await {
+            if let Some(gs) = crate::server::current_state_public(state, you_id).await {
                 let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
             }
             drive_bots_with_delays_iroh(writer, state, you_id, 500, 1500).await?;
         }
         ClientMsg::ResetGame { bots } => {
             println!("[IROH] ResetGame requested by {}: bots={} ", name, bots);
-            {
-                let mut lobby = state.lobby.write().await;
-                match crate::game::Game::new(name.to_string(), bots) {
-                    Ok(g) => {
-                        lobby.game = Some(g);
-                        if let Some(game) = &mut lobby.game {
-                            let sb = game.sb;
-                            let bb = game.bb;
-                            let gs = game.public_for(you_id);
-                            lobby.last_printed_log_len = gs.action_log.len();
-                            let header = mcg_server::pretty::format_table_header(
-                                &gs,
-                                sb,
-                                bb,
-                                std::io::stdout().is_terminal(),
-                            );
-                            println!("{}", header);
-                        }
-                    }
-                    Err(e) => {
-                        let _ = send_server_msg_to_writer(
-                            writer,
-                            &ServerMsg::Error(format!("Failed to reset game: {}", e)),
-                        )
-                        .await;
-                    }
-                }
-            }
-            if let Some(gs) = current_state_public(state, you_id).await {
+            if let Err(e) = crate::server::reset_game_with_bots(state, &name, bots, you_id).await {
+                let _ = send_server_msg_to_writer(writer, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
+            } else if let Some(gs) = crate::server::current_state_public(state, you_id).await {
                 let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
             }
             drive_bots_with_delays_iroh(writer, state, you_id, 500, 1500).await?;
@@ -394,7 +315,7 @@ where
         };
 
         // Send updated state to client
-        if let Some(gs) = current_state_public(state, you_id).await {
+        if let Some(gs) = crate::server::current_state_public(state, you_id).await {
             let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
         }
 
