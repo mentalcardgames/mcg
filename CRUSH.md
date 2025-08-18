@@ -5,9 +5,9 @@
 This repository contains the implementation of a "Mental Card Game" (MCG), primarily designed to run in a web browser using WebAssembly (WASM). The core application is written in Rust and uses the `egui` library for its user interface. The project also includes a separate WebSocket-based backend server for multiplayer functionality, demonstrably used for a poker game.
 
 The project is structured as a Cargo workspace with three main crates:
-- `client/`: The main WASM frontend application using `egui` and `eframe`. This is the core of the MCG experience.
-- `server/`: An `axum`-based WebSocket server to facilitate multiplayer games.
-- `shared/`: Data types and structures shared between the client and server, defining the communication protocol.
+- `frontend/`: The main WASM frontend application using `egui` and `eframe`. This is the core of the MCG experience (previously named `client/`).
+- `native_mcg/`: A native node containing the HTTP/WebSocket backend, CLI, and native-only helpers (previously named `server/`).
+- `shared/`: Data types and structures shared between the frontend and native node, defining the communication protocol.
 
 The build process uses `wasm-pack` to compile the Rust client code into WASM, which is then loaded by an `index.html` file in the browser. Media assets for card images are stored in the `media/` directory.
 
@@ -17,36 +17,40 @@ This application is aimed to be peer to peer (p2p) in the future. Each player ge
 
 ## Building and Running
 
-### WASM Frontend (Client)
+### WASM Frontend (frontend)
 
 1.  **Build WASM Package:**
-    *   `just build`: Builds the WASM package in release mode.
+    *   `just build`: Builds the WASM package (release by default). See the `justfile` for PROFILE options (`release`, `profiling`, `dev`).
     *   `just build dev`: Builds the WASM package in development mode (faster compilation, larger output).
-    *   This outputs the necessary files (like `mcg.js` and `mcg_bg.wasm`) to the `pkg/` directory.
+    *   The build emits the wasm artifacts (`mcg.js`, `mcg_bg.wasm`, etc.) into the repository-root `pkg/` directory.
 
-2.  **Serve Frontend:**
-    *   `just serve`: Starts a simple HTTP server (using Python's built-in server) to serve the `index.html`, `pkg/`, and `media/` directories on `http://localhost:8080`.
-    *   `just start`: Combines `just build` and `just serve`.
-    *   `just start dev`: Combines `just build dev` and `just serve`.
+2.  **Serve / Run:**
+    *   There is no dedicated `just serve` recipe in the current repo. The recommended end-to-end command is:
+        - `just start [PROFILE] [BOTS]` — builds the frontend and runs the native node (see below) to serve the SPA and provide the WebSocket endpoint.
+    *   If you only want to serve static files without running the native node, use a simple static server (example):
+        - `python3 -m http.server 8080` (run from repo root) and open `http://localhost:8080`.
+    *   Examples:
+        - `just start` — release build + native node with 1 bot
+        - `just start dev` — dev build + native node with 1 bot
 
 3.  **Run in Browser:**
-    *   After building and serving, navigate to `http://localhost:8080` in your browser.
+    *   After building and serving, open the printed URL from the native node (typically `http://localhost:3000`) or `http://localhost:8080` if using a simple static server.
 
-### Native Backend (Server)
+### Native Backend (native_mcg)
 
-1.  **Run Server:**
-    *   `just server`: Runs the native `mcg-server` binary, which starts the WebSocket server (typically on `127.0.0.1:3000`). It supports a `--bots <N>` CLI argument to specify the number of AI bots to include in the game.
-
+1.  **Run native node / backend:**
+    *   `just server [BOTS]` — runs the `native_mcg` binary which starts the HTTP/WebSocket backend (typically binds starting at port 3000). It accepts `--bots <N>` to specify the number of AI bots included in games.
+      - Internally the `justfile` invokes: `cargo run -p native_mcg --bin native_mcg -- --bots {{BOTS}}`
 2.  **Run Server in Background (for AI agents):**
-    *   `just server-bg`: Runs the server in the background, allowing AI agents to test functionality without blocking their main thread.
-    *   `just kill-server`: Terminates the background server process.
+    *   `just server-bg` — runs the native node in the background.
+    *   `just kill-server` — stops the background native node process.
 
 ## Development Conventions
 
 *   **Language:** Rust is the primary language for all components (client, server, shared).
-*   **Workspace:** The project utilizes a Cargo workspace to manage the `client`, `server`, and `shared` crates.
-*   **WASM:** The client is built for the `wasm32-unknown-unknown` target using `wasm-pack`.
-*   **UI Framework:** The `egui` crate is used for creating the user interface.
+*   **Workspace:** The project utilizes a Cargo workspace to manage the `frontend`, `native_mcg`, and `shared` crates.
+*   **WASM:** The frontend is built for the `wasm32-unknown-unknown` target using `wasm-pack` (invoked via the `just build` recipe).
+*   **UI Framework:** The `egui` crate (with `eframe`) is used for creating the user interface.
 *   **Build Tool:** The `just` command runner is used to define and execute common development tasks.
 *   **Frontend Entry Point:** The `index.html` file in the repository root serves as the main entry point for the web application.
 *   **Asset Structure:** WASM output goes to `pkg/`, and media assets go to `media/`. This structure is expected by `index.html`.

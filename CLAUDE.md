@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 Project summary
-- MCG is a Rust workspace for a browser-based card game. The frontend (client) compiles to WebAssembly (WASM) and renders with eframe/egui. The backend (server) is an Axum HTTP/WebSocket server that serves the SPA and provides real-time poker demo gameplay. A shared crate (shared) contains serialized message types and supporting structures.
+- MCG is a Rust workspace for a browser-based card game. The frontend (crate: `frontend`) compiles to WebAssembly (WASM) and renders with eframe/egui. The native node (crate: `native_mcg`) contains the native backend and CLI; it exposes an HTTP/WebSocket backend that serves the SPA and provides real-time poker demo gameplay. A shared crate (`shared`) contains serialized message types and supporting structures.
 
 Common commands
 Prerequisites
@@ -29,15 +29,15 @@ Build/run
 
 Notes
 - The server binds to the first available port starting at 3000 and logs the chosen URL (e.g., http://localhost:3000). Open that URL in the browser.
-- The server assumes current working directory is the repo root to serve ./pkg and ./media.
-- wasm-pack builds are run from client/ and emit to ../pkg (repo root). If a client/pkg directory exists, prefer the root pkg output.
+- The native node assumes current working directory is the repo root to serve ./pkg and ./media.
+- wasm-pack builds are run from the `frontend/` crate and emit to ../pkg (repo root). If a `frontend/pkg` directory exists, prefer the root `pkg` output.
 
 Testing
 - Workspace tests (if present):
   - cargo test --workspace
 - Single-crate or single-test examples:
-  - cargo test -p mcg-shared
-  - cargo test -p mcg-server game::state::tests::your_test_name
+  - cargo test -p shared
+  - cargo test -p native_mcg game::state::tests::your_test_name
 
 Lint/format
 - Lint with Clippy (fail on warnings):
@@ -47,33 +47,33 @@ Lint/format
 
 High-level architecture
 Workspace layout
-- client/: WASM/egui frontend and all UI/game/screen code
-- server/: Axum-based HTTP + WebSocket backend (serves SPA and game)
-- shared/: Types shared between client and server (serde-serializable protocol and game data)
+- frontend/: WASM/egui frontend and all UI/game/screen code (previously `client/`)
+- native_mcg/: Native node containing the backend (HTTP + WebSocket), CLI, and native-only helpers (previously `server/`)
+- shared/: Types shared between frontend and native_mcg (serde-serializable protocol and game data)
 - pkg/: wasm-pack output (mcg.js, mcg_bg.wasm, mcg.d.ts) loaded by index.html
 - index.html: loads pkg/mcg.js and starts the game on a full-screen canvas
 
-Frontend (client crate)
-- Entry (WASM): client/src/lib.rs
+Frontend (frontend crate)
+- Entry (WASM): frontend/src/lib.rs
   - Exports start(canvas) via wasm-bindgen. index.html imports ./pkg/mcg.js and calls start() with the #mcg_canvas element.
   - Calculates DPI scale and configures egui’s pixels_per_point dynamically based on device metrics.
-- Application core: client/src/game.rs
+- Application core: frontend/src/game.rs
   - App struct owns the current route path (string) and concrete screen instances (MainMenu, GameSetupScreen, Game, etc.).
   - Event queue drives screen transitions (AppEvent). update() processes URL changes (on wasm), handles events, renders a fixed top bar (except on Main), and then draws the current screen.
   - On wasm targets, an optional Router syncs the current path with the browser URL using History/Location and popstate.
-- Routing: client/src/router.rs
+- Routing: frontend/src/router.rs
   - Exposes a path-based Router that tracks the browser pathname, provides navigate_to_path(), check_for_url_changes(), and current_path().
   - The router no longer maps to a ScreenType enum; navigation uses string paths.
-- Screen system: client/src/game/screens/
+- Screen system: frontend/src/game/screens/
   - ScreenMetadata (display name, icon, URL path, description, show_in_menu) is provided by each screen via the ScreenDef trait.
   - Each screen implements a runtime ScreenWidget trait (ui()) and a compile-time ScreenDef trait (metadata() and create()).
   - ScreenRegistry caches metadata and factories (path -> factory) so App can lazily instantiate Box<dyn ScreenWidget> by path at runtime.
-- Cards/config: client/src/hardcoded_cards.rs and related game types handle themes and deck configuration used by setup/game screens.
+- Cards/config: frontend/src/hardcoded_cards.rs and related game types handle themes and deck configuration used by setup/game screens.
 
-Backend (server crate)
-- Entry: server/src/main.rs
-  - Parses --bots <N> (default 1). Chooses the first available port starting at 3000. Starts the server with an AppState containing bot_count and a Lobby.
-- HTTP/router: server/src/server.rs
+Backend (native_mcg / backend)
+- Entry: native_mcg/src/main.rs
+  - Parses --bots <N> (default 1). Chooses the first available port starting at 3000. Starts the backend with an AppState containing bot_count and a Lobby. The native node (`native_mcg`) includes both backend HTTP/WebSocket handlers and additional native-only CLI helpers.
+- HTTP/router: native_mcg/src/server.rs (or native_mcg/src/backend/http.rs)
   - Routes:
     - GET /health -> { ok: true }
     - GET /ws -> WebSocket upgrade (game protocol)
@@ -84,7 +84,7 @@ Backend (server crate)
     - On first message expects ClientMsg::Join; creates or reuses a single Lobby game, sends Welcome and current State; applies actions, advances bots, and broadcasts the latest State to the connecting client.
   - AppState holds a Lobby (RwLock) and bot_count.
 - Iroh transport (optional feature)
-  - Location: server/src/iroh_transport.rs (feature-gated behind the `iroh` Cargo feature)
+  - Location: native_mcg/src/iroh_transport.rs (feature-gated behind the `iroh` Cargo feature)
   - Behavior:
     - The server spawns an iroh listener that accepts incoming iroh QUIC connections and speaks the same newline-delimited JSON protocol (ClientMsg / ServerMsg) used by the WebSocket handler.
     - The iroh handler expects ClientMsg::Join as the first message, sends ServerMsg::Welcome and an initial ServerMsg::State, then processes ClientMsg messages (Action, RequestState, NextHand, ResetGame) and reuses the server's broadcast/drive-bots helpers.
@@ -96,7 +96,7 @@ Backend (server crate)
     - If you plan to accept richer NodeAddr forms in future, document a stable dial string; currently the project prefers dialing by the z-base-32 PublicKey.
 
 Shared protocol/types (shared crate)
-- shared/src/lib.rs: serde-serializable enums and structs used across client/server:
+- shared/src/lib.rs: serde-serializable enums and structs used across frontend and native_mcg:
   - Stage, PlayerAction, ActionKind/LogEvent, GameStatePublic, ClientMsg, ServerMsg
 - shared/src/communication.rs: strongly-typed structures modeling ElGamal-based messaging primitives (ModularElement, ElgamalCiphertext, BitString, CardDeck, CommunicationPacket). These are domain data structures and do not directly wire into the Axum server in this repo.
 

@@ -1,10 +1,9 @@
 # MCG
 
-A Rust workspace for a browser-based card game. The frontend (client) compiles
-to WebAssembly (WASM) and renders with eframe/egui. The backend (server) is an
-Axum HTTP/WebSocket server that serves the SPA and provides a real-time poker
-demo. A shared crate contains the serialized message types and supporting
-structures.
+A Rust workspace for a browser-based card game. The frontend (crate: `frontend`) compiles
+to WebAssembly (WASM) and renders with eframe/egui. The native node (crate: `native_mcg`) provides
+an HTTP/WebSocket backend that serves the SPA and provides the real-time poker demo. A shared
+crate contains the serialized message types and supporting structures.
 
 ## Quick start
 
@@ -24,15 +23,15 @@ structures.
 
 Notes
 - The server binds to the first available port starting at 3000 and logs the chosen URL (e.g., http://localhost:3000). Open that URL in the browser.
-- The server assumes current working directory is the repo root to serve ./pkg and ./media.
-- wasm-pack builds are run from client/ and emit to ../pkg (repo root). If a client/pkg directory exists, prefer the root pkg output.
+- The native node assumes current working directory is the repo root to serve ./pkg and ./media.
+- wasm-pack builds are run from the `frontend/` crate and emit to ../pkg (repo root). If a `frontend/pkg` directory exists, prefer the root `pkg` output.
 
 ## Headless CLI (for automation and testing)
 
 A minimal CLI is provided to exercise the same WebSocket protocol as the GUI client. It is useful for smoke tests and AI agents.
 
 - Run directly:
-  - `cargo run -p mcg-server --bin mcg-cli -- [GLOBAL-OPTS] <COMMAND> [ARGS]`
+  - `cargo run -p native_mcg --bin mcg-cli -- [GLOBAL-OPTS] <COMMAND> [ARGS]`
 - Or use the Just recipe (forwards all arguments after `--`):
   - `just cli -- [GLOBAL-OPTS] <COMMAND> [ARGS]`
 
@@ -62,9 +61,9 @@ Output
 
 ## Workspace layout
 
-- `client/`: WASM/egui frontend and all UI/game/screen code
-- `server/`: Axum-based HTTP + WebSocket backend (serves SPA and game)
-- `shared/`: Types shared between client and server (serde-serializable protocol and game data)
+- `frontend/`: WASM/egui frontend and all UI/game/screen code (previously `client/`)
+- `native_mcg/`: Native node containing the backend (HTTP + WebSocket), CLI, and native-only helpers (previously `server/`)
+- `shared/`: Types shared between frontend and native_mcg (serde-serializable protocol and game data)
 - `pkg/`: wasm-pack output (mcg.js, mcg_bg.wasm, mcg.d.ts) loaded by `index.html`
 - `index.html`: loads `pkg/mcg.js` and starts the game on a full-screen canvas
 
@@ -73,11 +72,11 @@ Output
 The client uses a small screen registry and two traits to separate compile-time metadata from runtime UI state: ScreenDef (provides metadata() and create()) and ScreenWidget (the object-safe runtime UI trait: ui()). To add a new screen follow these steps:
 
 1) Create the screen module and type
-- Add a new file under `client/src/game/screens/`, e.g. `my_new_screen.rs`.
+- Add a new file under `frontend/src/game/screens/`, e.g. `my_new_screen.rs`.
 - Implement a struct to hold the screen's runtime state and implement the ScreenWidget trait for it.
 - Implement the ScreenDef trait for the type to provide ScreenMetadata and a factory (create()).
 
-Example (client/src/game/screens/my_new_screen.rs):
+Example (frontend/src/game/screens/my_new_screen.rs):
 
 ```rust
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
@@ -121,7 +120,7 @@ impl ScreenDef for MyNewScreen {
 - Add the module declaration and a public re-export in `client/src/game/screens/mod.rs` so the registry and other code can find it.
 - Register the screen in the ScreenRegistry by adding a RegisteredScreen entry to the `regs` slice in `ScreenRegistry::new()` (see the existing pattern in that file).
 
-Example edits to `client/src/game/screens/mod.rs`:
+Example edits to `frontend/src/game/screens/mod.rs`:
 
 ```rust
 // at the top, add:
@@ -138,7 +137,7 @@ RegisteredScreen {
 3) Special-case typed screens (optional)
 - Some screens in this codebase are stored directly on App as typed fields (for example the main Game screen) instead of being created from the registry. If your screen needs to be owned by App as a typed instance (for faster access or special lifetime reasons), add a field on App, initialize it in App::new(), and render it as a special-case in the CentralPanel before the registry lookup.
 
-Example (client/src/game.rs):
+Example (frontend/src/game.rs):
 
 ```rust
 // add a field on App
@@ -191,8 +190,8 @@ The easiest way is to run a dev build and start the server, then open the printe
 Then open the printed URL in your browser (e.g., http://localhost:3000).
 
 Hot reload loop
-- After client changes: `just build dev` and refresh the browser tab.
-- If the server is already running, it will serve the updated `./pkg` artifacts.
+- After frontend changes: `just build dev` and refresh the browser tab.
+- If the native node is already running, it will serve the updated `./pkg` artifacts.
 
 Troubleshooting
 - Blank page or missing game:
@@ -217,8 +216,8 @@ Troubleshooting
 
 - Tests (if present):
   - `cargo test --workspace`
-  - `cargo test -p mcg-shared`
-  - `cargo test -p mcg-server game::state::tests::your_test_name`
+  - `cargo test -p shared`
+  - `cargo test -p native_mcg game::state::tests::your_test_name`
 - Lint with Clippy (fail on warnings):
   - `cargo clippy --workspace --all-targets -- -D warnings`
 - Format:

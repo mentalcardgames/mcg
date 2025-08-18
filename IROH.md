@@ -19,11 +19,11 @@ Many of the behavioral notes below are drawn from the iroh docs (endpoint, Watch
 
 ## How this repo uses iroh (file mapping)
 - Server listener and per-connection handling:
-  - `mcg/server/src/iroh_transport.rs` implements the server-side iroh listener, per-connection stream handling, and message processing (JSON newline-delimited ClientMsg / ServerMsg protocol).
+  - `native_mcg/src/iroh_transport.rs` implements the native node iroh listener, per-connection stream handling, and message processing (JSON newline-delimited ClientMsg / ServerMsg protocol).
 - CLI iroh client:
-  - `mcg/server/src/bin/mcg-cli.rs` contains `run_once_iroh` which implements a minimal iroh client flow (bind local endpoint, connect by PublicKey, open a bi stream, send Join + optional command, read responses until timeout).
+  - `native_mcg/src/bin/mcg-cli.rs` contains `run_once_iroh` which implements a minimal iroh client flow (bind local endpoint, connect by PublicKey, open a bi stream, send Join + optional command, read responses until timeout).
 - Shared protocol types:
-  - `mcg/shared` contains `ClientMsg` / `ServerMsg` / `GameStatePublic` used on both transports.
+  - `shared` contains `ClientMsg` / `ServerMsg` / `GameStatePublic` used on both transports.
 
 ---
 
@@ -42,7 +42,7 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
     - Prints the node's public key (z-base-32) via `endpoint.node_id()` and does not print the raw `NodeAddr`. The server intentionally avoids relying on the `NodeAddr` debug/display form which can be brittle across iroh versions; dialing is done by PublicKey.
     - Spawns a background task that loops on `endpoint.accept()` and awaits the returned connect-future. Each successful `Connection` spawns `handle_iroh_connection`.
   - See the implementation:
-```mcg/server/src/iroh_transport.rs#L26-88
+```native_mcg/src/iroh_transport.rs#L26-88
 (pub async fn spawn_iroh_listener(state: AppState) -> Result<()> { ... })
 ```
   - Important notes:
@@ -58,7 +58,7 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
     - Sends `Welcome` and initial `State` messages to the client, then processes subsequent messages by delegating to `process_client_msg_iroh`.
     - Closes the send side politely with `send.finish()` and awaits `connection.closed().await` when done.
   - See the implementation:
-```mcg/server/src/iroh_transport.rs#L96-214
+```native_mcg/src/iroh_transport.rs#L96-214
 (async fn handle_iroh_connection(state: AppState, connection: iroh::endpoint::Connection) -> Result<()> { ... })
 ```
   - Important notes:
@@ -72,7 +72,7 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
     - Mutates shared `AppState` under locks, applies game logic, sends `ServerMsg::State` or `ServerMsg::Error` via `send_server_msg_to_writer`.
     - Drives bots after player actions using `drive_bots_with_delays_iroh`.
   - See the implementation:
-```mcg/server/src/iroh_transport.rs#L232-322
+```native_mcg/src/iroh_transport.rs#L232-322
 (async fn process_client_msg_iroh<W>(...) -> Result<()> { ... })
 ```
   - Important notes:
@@ -107,7 +107,7 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
     - Sends `ClientMsg::Join` and optional `after_join` message as newline-delimited JSON, flushes, and reads newline-delimited `ServerMsg` lines until timeout, returning the last received `State`.
     - Calls `send.finish()` to close the send side politely.
   - See the implementation:
-```mcg/server/src/bin/mcg-cli.rs#L154-258
+```native_mcg/src/bin/mcg-cli.rs#L154-258
 (async fn run_once_iroh(peer_uri: &str, name: &str, after_join: Option<ClientMsg>, wait_ms: u64) -> anyhow::Result<Option<GameStatePublic>> { ... })
 ```
   - Important notes:
@@ -120,21 +120,21 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
   - Key behavior:
     - Connects to server via WebSocket, sends Join and optional follow-up, reads `ServerMsg` text messages until timeout, returns last `State`.
   - See the implementation:
-```mcg/server/src/bin/mcg-cli.rs#L287-331
+```native_mcg/src/bin/mcg-cli.rs#L287-331
 (async fn run_once(ws_url: &Url, name: &str, after_join: Option<ClientMsg>, wait_ms: u64) -> anyhow::Result<Option<GameStatePublic>> { ... })
 ```
 
 - `build_ws_url(base: &str) -> anyhow::Result<Url>`
   - Purpose: Helper to normalize a user-provided server string into a WebSocket URL (ensures ws/wss scheme and path `/ws`).
   - See the implementation:
-```mcg/server/src/bin/mcg-cli.rs#L269-285
+```native_mcg/src/bin/mcg-cli.rs#L269-285
 (fn build_ws_url(base: &str) -> anyhow::Result<Url> { ... })
 ```
 
 - `output_state(state: &GameStatePublic, json: bool)`
   - Purpose: Helper to print game state either as JSON or a human-friendly table (used by the CLI after receiving `State`).
   - See the implementation:
-```mcg/server/src/bin/mcg-cli.rs#L260-266
+```native_mcg/src/bin/mcg-cli.rs#L260-266
 (fn output_state(state: &GameStatePublic, json: bool) { ... })
 ```
 
