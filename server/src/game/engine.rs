@@ -165,6 +165,8 @@ impl Game {
             players,
             community: self.community.clone(),
             pot: self.pot,
+            sb: self.sb,
+            bb: self.bb,
             to_act: self.to_act,
             stage: self.stage,
             you_id: viewer_id,

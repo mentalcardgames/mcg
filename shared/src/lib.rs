@@ -110,6 +110,10 @@ pub struct GameStatePublic {
     pub players: Vec<PlayerPublic>,
     pub community: Vec<u8>,
     pub pot: u32,
+    #[serde(default)]
+    pub sb: u32,
+    #[serde(default)]
+    pub bb: u32,
     pub to_act: usize,
     pub stage: Stage,
     pub you_id: usize,
