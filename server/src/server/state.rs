@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use std::io::IsTerminal;
+use std::path::PathBuf;
 
 use tokio::sync::RwLock;
 use tokio::sync::broadcast;
@@ -17,6 +18,12 @@ pub struct AppState {
     pub(crate) lobby: Arc<RwLock<Lobby>>,
     pub bot_count: usize,
     pub broadcaster: broadcast::Sender<mcg_shared::ServerMsg>,
+    /// In-memory shared Config instance. Holds the authoritative configuration
+    /// for the running server. Use tokio::sync::RwLock for concurrent access.
+    pub config: std::sync::Arc<RwLock<crate::config::Config>>,
+    /// Optional path to the TOML config file used by the running server.
+    /// If present, transports (e.g. iroh) may persist changes to this path.
+    pub config_path: Option<PathBuf>,
 }
 
 #[derive(Clone, Default)]
@@ -32,6 +39,8 @@ impl Default for AppState {
             lobby: Arc::new(RwLock::new(Lobby::default())),
             bot_count: 0,
             broadcaster: tx,
+            config: std::sync::Arc::new(RwLock::new(crate::config::Config::default())),
+            config_path: None,
         }
     }
 }

@@ -55,11 +55,19 @@ async fn main() -> anyhow::Result<()> {
     println!("Using config: {}", config_path.display());
     println!("Starting with {} bot(s)", bots);
 
-    // Initialize shared state for the server
-    let state = AppState {
+    // Initialize shared state for the server and record config path for transports.
+    let mut state = AppState {
         bot_count: bots,
         ..Default::default()
     };
+    // Store config path and the loaded config into shared AppState so components
+    // can access the single in-memory config instance.
+    state.config_path = Some(config_path.clone());
+    // Overwrite the default in-memory config with the loaded one
+    {
+        let mut cg = state.config.write().await;
+        *cg = cfg.clone();
+    }
  
     // Find first available port starting from 3000
     let port = find_available_port(3000)

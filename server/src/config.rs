@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 ///
 /// Fields:
 /// - bots: number of bot players to start with
-/// - iroh_key: optional iroh key (peer id or private key string depending on usage)
+/// - iroh_key: optional iroh key stored as hex string of 32 bytes
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub bots: usize,
@@ -49,6 +49,39 @@ impl Config {
                 .with_context(|| format!("writing default config to '{}'", path.display()))?;
             Ok(cfg)
         }
+    }
+
+    /// Save the current config state back to the provided path (overwrites).
+    pub fn save(&self, path: &Path) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("creating config directory '{}'", parent.display()))?;
+            }
+        }
+        let toml_text = toml::to_string_pretty(&self)
+            .with_context(|| "serializing config to TOML")?;
+        fs::write(path, toml_text)
+            .with_context(|| format!("writing config to '{}'", path.display()))?;
+        Ok(())
+    }
+
+
+    /// Return iroh key bytes if present in config (hex-decoded).
+    pub fn iroh_key_bytes(&self) -> Option<Vec<u8>> {
+        if let Some(ref s) = self.iroh_key {
+            if let Ok(b) = hex::decode(s) {
+                return Some(b);
+            }
+        }
+        None
+    }
+
+    /// Set iroh key from raw bytes and persist to disk (via save).
+    pub fn set_iroh_key_bytes_and_save(&mut self, path: &Path, bytes: &[u8]) -> Result<()> {
+        self.iroh_key = Some(hex::encode(bytes));
+        self.save(path)?;
+        Ok(())
     }
 
     /// Load (or create) config and optionally override with a CLI-provided `bots` value.

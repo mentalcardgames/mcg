@@ -4,3 +4,4 @@ pub mod server;
 pub mod eval;
 pub mod transport;
 pub mod iroh_transport;
+pub mod config;
