@@ -267,7 +267,7 @@ impl Default for QrScannerPopup {
     fn default() -> Self {
         Self::new()
     }
-} 
+}
 impl QrScannerPopup {
     pub fn new() -> Self {
         Self {

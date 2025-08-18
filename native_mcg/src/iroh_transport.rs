@@ -27,10 +27,9 @@ use mcg_shared::{ClientMsg, ServerMsg};
 pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // Import iroh types inside function to limit compile-time exposure when feature is enabled.
     // These imports are based on the iroh README snippets; they may require adjustment.
+    use getrandom::getrandom;
     use iroh::endpoint::Endpoint;
     use iroh::SecretKey;
-    use getrandom::getrandom;
-    use std::path::PathBuf;
 
     // Choose an ALPN identifier for our application protocol.
     // Clients must use the same ALPN when connecting.
@@ -53,62 +52,80 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
             SecretKey::from_bytes(&arr)
         };
 
-    // If a server config path is available, use the in-memory shared config in AppState
-    // as the canonical store. Persist new keys to disk only when a config path is present.
-    if let Some(cfg_path) = state.config_path.clone() {
-        // First try a read lock to see if a key already exists in memory.
-        {
-            let cfg_r = state.config.read().await;
-            if let Some(bytes) = cfg_r.iroh_key_bytes() {
-                if bytes.len() >= 32 {
-                    let mut arr = [0u8; 32];
-                    arr.copy_from_slice(&bytes[..32]);
-                    SecretKey::from_bytes(&arr)
-                } else {
-                    // Invalid length in-memory config; fall through to generate-and-save below.
-                    // Drop read lock and acquire write lock.
-                    drop(cfg_r);
-                    // generate below
-                    let sk = generate_new_key();
-                    let mut cfg_w = state.config.write().await;
-                    if let Err(e) = cfg_w.set_iroh_key_bytes_and_save(&cfg_path, &sk.to_bytes()) {
-                        eprintln!("Failed to save generated iroh key to config '{}': {}", cfg_path.display(), e);
-                    } else {
-                        println!("Saved generated iroh key into config '{}'", cfg_path.display());
-                    }
-                    sk
-                }
-            } else {
-                // No key in memory: upgrade to write lock and generate + persist.
-                drop(cfg_r);
-                let sk = generate_new_key();
-                let mut cfg_w = state.config.write().await;
-                // Double-check another writer didn't set the key while we waited for the write lock.
-                if cfg_w.iroh_key_bytes().is_none() {
-                    if let Err(e) = cfg_w.set_iroh_key_bytes_and_save(&cfg_path, &sk.to_bytes()) {
-                        eprintln!("Failed to save generated iroh key to config '{}': {}", cfg_path.display(), e);
-                    } else {
-                        println!("Saved generated iroh key into config '{}'", cfg_path.display());
-                    }
-                    sk
-                } else {
-                    // Another writer added the key: use that one instead.
-                    if let Some(bytes) = cfg_w.iroh_key_bytes() {
+        // If a server config path is available, use the in-memory shared config in AppState
+        // as the canonical store. Persist new keys to disk only when a config path is present.
+        if let Some(cfg_path) = state.config_path.clone() {
+            // First try a read lock to see if a key already exists in memory.
+            {
+                let cfg_r = state.config.read().await;
+                if let Some(bytes) = cfg_r.iroh_key_bytes() {
+                    if bytes.len() >= 32 {
                         let mut arr = [0u8; 32];
                         arr.copy_from_slice(&bytes[..32]);
                         SecretKey::from_bytes(&arr)
                     } else {
-                        // Unlikely: fall back to generated key
+                        // Invalid length in-memory config; fall through to generate-and-save below.
+                        // Drop read lock and acquire write lock.
+                        drop(cfg_r);
+                        // generate below
+                        let sk = generate_new_key();
+                        let mut cfg_w = state.config.write().await;
+                        if let Err(e) = cfg_w.set_iroh_key_bytes_and_save(&cfg_path, &sk.to_bytes())
+                        {
+                            eprintln!(
+                                "Failed to save generated iroh key to config '{}': {}",
+                                cfg_path.display(),
+                                e
+                            );
+                        } else {
+                            println!(
+                                "Saved generated iroh key into config '{}'",
+                                cfg_path.display()
+                            );
+                        }
                         sk
+                    }
+                } else {
+                    // No key in memory: upgrade to write lock and generate + persist.
+                    drop(cfg_r);
+                    let sk = generate_new_key();
+                    let mut cfg_w = state.config.write().await;
+                    // Double-check another writer didn't set the key while we waited for the write lock.
+                    if cfg_w.iroh_key_bytes().is_none() {
+                        if let Err(e) = cfg_w.set_iroh_key_bytes_and_save(&cfg_path, &sk.to_bytes())
+                        {
+                            eprintln!(
+                                "Failed to save generated iroh key to config '{}': {}",
+                                cfg_path.display(),
+                                e
+                            );
+                        } else {
+                            println!(
+                                "Saved generated iroh key into config '{}'",
+                                cfg_path.display()
+                            );
+                        }
+                        sk
+                    } else {
+                        // Another writer added the key: use that one instead.
+                        if let Some(bytes) = cfg_w.iroh_key_bytes() {
+                            let mut arr = [0u8; 32];
+                            arr.copy_from_slice(&bytes[..32]);
+                            SecretKey::from_bytes(&arr)
+                        } else {
+                            // Unlikely: fall back to generated key
+                            sk
+                        }
                     }
                 }
             }
+        } else {
+            // No config path available: generate an ephemeral key (do not persist).
+            eprintln!(
+                "No server config path provided; generating ephemeral iroh key (not persisted)."
+            );
+            generate_new_key()
         }
-    } else {
-        // No config path available: generate an ephemeral key (do not persist).
-        eprintln!("No server config path provided; generating ephemeral iroh key (not persisted).");
-        generate_new_key()
-    }
     };
 
     let endpoint = Endpoint::builder()

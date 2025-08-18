@@ -22,6 +22,12 @@ pub struct ConnectionService {
     error_inbox: Rc<RefCell<Vec<String>>>,
 }
 
+impl Default for ConnectionService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConnectionService {
     pub fn new() -> Self {
         Self {
@@ -66,14 +72,15 @@ impl ConnectionService {
                     // onmessage -> push into inbox
                     let inbox = Rc::clone(&self.inbox);
                     let ctx_for_msg = ctx.clone();
-                    let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
-                        if let Some(txt) = e.data().as_string() {
-                            if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {
-                                inbox.borrow_mut().push(msg);
-                                ctx_for_msg.request_repaint();
+                    let onmessage =
+                        Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
+                            if let Some(txt) = e.data().as_string() {
+                                if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {
+                                    inbox.borrow_mut().push(msg);
+                                    ctx_for_msg.request_repaint();
+                                }
                             }
-                        }
-                    });
+                        });
                     ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
                     onmessage.forget();
 

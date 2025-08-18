@@ -33,14 +33,19 @@ pub fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
                 if total < already {
                     // action_log was reset on the server (new hand); print table header like the server
                     let use_color = std::io::stdout().is_terminal();
-                    let header = format_table_header(&gs, gs.sb, gs.bb, use_color);
+                    let header = format_table_header(gs, gs.sb, gs.bb, use_color);
                     println!("{}", header);
                     *last_printed = total;
                 } else if total > already {
                     for e in gs.action_log.iter().skip(already) {
                         println!(
                             "{}",
-                            format_event_human(e, &gs.players, gs.you_id, std::io::stdout().is_terminal())
+                            format_event_human(
+                                e,
+                                &gs.players,
+                                gs.you_id,
+                                std::io::stdout().is_terminal()
+                            )
                         );
                     }
                     *last_printed = total;

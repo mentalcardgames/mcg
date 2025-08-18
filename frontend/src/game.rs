@@ -1,9 +1,9 @@
 use egui::Context;
 pub mod card;
+pub mod connection;
 pub mod field;
 pub mod screen;
 pub mod screens;
-pub mod connection;
 #[cfg(target_arch = "wasm32")]
 use crate::router::Router;
 use screens::{AppInterface, MainMenu, ScreenWidget};
@@ -71,7 +71,6 @@ pub struct App {
     #[allow(dead_code)]
     #[cfg(not(target_arch = "wasm32"))]
     router: Option<()>,
-
 
     // Event queue for handling screen transitions
     pending_events: Vec<AppEvent>,
@@ -172,15 +171,17 @@ impl App {
     fn check_url_changes(&mut self) {
         #[cfg(target_arch = "wasm32")]
         if let Some(ref mut router) = self.router {
-                if let Ok(changed) = router.check_for_url_changes() {
-                    if changed {
-                        if let Some(new_path) = self.screen_registry.path_from_path(router.current_path()) {
-                            if new_path != self.current_screen_path {
-                                self.current_screen_path = new_path.to_string();
-                            }
+            if let Ok(changed) = router.check_for_url_changes() {
+                if changed {
+                    if let Some(new_path) =
+                        self.screen_registry.path_from_path(router.current_path())
+                    {
+                        if new_path != self.current_screen_path {
+                            self.current_screen_path = new_path.to_string();
                         }
                     }
                 }
+            }
         }
     }
 
@@ -193,7 +194,11 @@ impl App {
     fn render_top_bar(&mut self, ctx: &Context, events: &mut Vec<AppEvent>) {
         egui::TopBottomPanel::top("global_top_bar")
             .show_separator_line(false)
-            .frame(egui::Frame::default().fill(ctx.style().visuals.window_fill()).inner_margin(egui::Margin::symmetric(0, 8)))
+            .frame(
+                egui::Frame::default()
+                    .fill(ctx.style().visuals.window_fill())
+                    .inner_margin(egui::Margin::symmetric(0, 8)),
+            )
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
                     let avail = ui.available_width();
@@ -217,7 +222,9 @@ impl App {
                         egui::vec2(center_w, row_h),
                         egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
                         |ui| {
-                            if let Some(meta) = self.screen_registry.meta_by_path(&self.current_screen_path) {
+                            if let Some(meta) =
+                                self.screen_registry.meta_by_path(&self.current_screen_path)
+                            {
                                 ui.strong(meta.display_name);
                             }
                         },
@@ -326,7 +333,10 @@ impl eframe::App for App {
 
             // Ensure screen exists
             if !self.screens.contains_key(&self.current_screen_path) {
-                if let Some(factory) = self.screen_registry.factory_by_path(&self.current_screen_path) {
+                if let Some(factory) = self
+                    .screen_registry
+                    .factory_by_path(&self.current_screen_path)
+                {
                     let boxed = factory();
                     self.screens.insert(self.current_screen_path.clone(), boxed);
                 }

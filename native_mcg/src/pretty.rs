@@ -1,5 +1,5 @@
 use mcg_shared::{
-    ActionKind as SharedActionKind, BlindKind, GameStatePublic, ActionEvent, GameAction,
+    ActionEvent, ActionKind as SharedActionKind, BlindKind, GameAction, GameStatePublic,
     PlayerPublic, Stage,
 };
 use owo_colors::OwoColorize;

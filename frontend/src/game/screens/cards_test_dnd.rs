@@ -1,9 +1,9 @@
 use eframe::Frame;
 
 use super::{DNDSelector, DirectoryCardType, GameConfig, ScreenDef, ScreenMetadata, ScreenWidget};
+use crate::game::card::SimpleCard;
 use crate::game::field::{FieldWidget, SimpleField, SimpleFieldKind::Stack};
 use crate::game::AppInterface;
-use crate::game::card::SimpleCard;
 use crate::sprintln;
 use egui::vec2;
 use std::rc::Rc;
@@ -16,7 +16,8 @@ pub struct CardsTestDND {
 impl CardsTestDND {
     fn demo_config() -> GameConfig<DirectoryCardType> {
         // Create a demo deck and populate a stack and two player fields
-        let card_config = crate::hardcoded_cards::create_deck(crate::hardcoded_cards::DEFAULT_THEME);
+        let card_config =
+            crate::hardcoded_cards::create_deck(crate::hardcoded_cards::DEFAULT_THEME);
         let mut players: Vec<(String, SimpleField<SimpleCard, DirectoryCardType>)> = (0..2)
             .map(|i| {
                 (

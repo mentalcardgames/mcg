@@ -109,12 +109,11 @@ pub async fn run_once_iroh(
 
     // Connect to the target peer. Expect the peer_uri to be a valid iroh target.
     // Interpret peer_uri as a public key (NodeId). Use discovery/relay to dial by public key.
-    use std::str::FromStr;
     use iroh::PublicKey;
+    use std::str::FromStr;
     // Expect the supplied peer_uri to be a PublicKey (z-base-32). The CLI
     // accepts only the PublicKey form for dialing.
-    let pk = PublicKey::from_str(peer_uri)
-        .context("parsing iroh public key (z-base-32)")?;
+    let pk = PublicKey::from_str(peer_uri).context("parsing iroh public key (z-base-32)")?;
     let connection = endpoint
         .connect(pk, ALPN)
         .await
@@ -150,7 +149,12 @@ pub async fn run_once_iroh(
     loop {
         // read_line appends to the buffer so we clear before each call
         line.clear();
-        match tokio::time::timeout(std::time::Duration::from_millis(wait_ms), reader.read_line(&mut line)).await {
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(wait_ms),
+            reader.read_line(&mut line),
+        )
+        .await
+        {
             Ok(Ok(0)) => break, // connection closed
             Ok(Ok(_)) => {
                 let trimmed = line.trim();
@@ -190,7 +194,9 @@ pub async fn run_once_http(
 ) -> anyhow::Result<Option<GameStatePublic>> {
     // Use reqwest to POST join and optional action, then GET state once with a timeout.
     let client = reqwest::Client::new();
-    let join = ClientMsg::Join { name: name.to_string() };
+    let join = ClientMsg::Join {
+        name: name.to_string(),
+    };
     // Send Join
     let _ = client
         .post(format!("{}/api/join", base))

@@ -1,11 +1,10 @@
+use crate::game::connection::ConnectionService;
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
-    ActionKind, BlindKind, ClientMsg, GameStatePublic, ActionEvent, GameAction, PlayerAction,
+    ActionEvent, ActionKind, BlindKind, ClientMsg, GameAction, GameStatePublic, PlayerAction,
     PlayerPublic, ServerMsg, Stage,
 };
-use crate::game::connection::ConnectionService;
-
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
@@ -348,7 +347,8 @@ impl PokerOnlineScreen {
 
 impl PokerOnlineScreen {
     fn connect(&mut self, ctx: &egui::Context) {
-        self.connection.connect(&self.server_address, &self.name, ctx);
+        self.connection
+            .connect(&self.server_address, &self.name, ctx);
         self.last_error = None;
         self.show_error_popup = false;
     }

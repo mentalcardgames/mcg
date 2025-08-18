@@ -44,7 +44,10 @@ pub enum GameAction {
 /// for player-initiated actions and ActionEvent::GameAction for dealer/stage/etc.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ActionEvent {
-    PlayerAction { player_id: usize, action: ActionKind },
+    PlayerAction {
+        player_id: usize,
+        action: ActionKind,
+    },
     GameAction(GameAction),
 }
 

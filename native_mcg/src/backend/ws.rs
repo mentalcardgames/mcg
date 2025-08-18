@@ -1,6 +1,5 @@
 // WebSocket handlers and websocket-specific helpers.
 
-
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -26,7 +25,11 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
         Some(Ok(Message::Text(t))) => match serde_json::from_str::<mcg_shared::ClientMsg>(&t) {
             Ok(mcg_shared::ClientMsg::Join { name }) => name,
             _ => {
-                send_ws(&mut socket, &mcg_shared::ServerMsg::Error("Expected Join".into())).await;
+                send_ws(
+                    &mut socket,
+                    &mcg_shared::ServerMsg::Error("Expected Join".into()),
+                )
+                .await;
                 return;
             }
         },
@@ -36,7 +39,11 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     println!("{}", hello);
 
     if let Err(e) = super::state::ensure_game_started(&state, &name).await {
-        let _ = send_ws(&mut socket, &mcg_shared::ServerMsg::Error(format!("Failed to start game: {}", e))).await;
+        let _ = send_ws(
+            &mut socket,
+            &mcg_shared::ServerMsg::Error(format!("Failed to start game: {}", e)),
+        )
+        .await;
         return;
     }
 
@@ -151,7 +158,11 @@ async fn process_client_msg(
         mcg_shared::ClientMsg::NextHand => {
             println!("[WS] NextHand requested by {}", name);
             if let Err(e) = super::state::start_new_hand_and_print(state, you_id).await {
-                let _ = send_ws(socket, &mcg_shared::ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
+                let _ = send_ws(
+                    socket,
+                    &mcg_shared::ServerMsg::Error(format!("Failed to start new hand: {}", e)),
+                )
+                .await;
             }
             // Send updated state to the requesting socket, then broadcast and drive bots.
             send_state_to(socket, state, you_id).await;
@@ -160,8 +171,12 @@ async fn process_client_msg(
         }
         mcg_shared::ClientMsg::ResetGame { bots } => {
             println!("[WS] ResetGame requested by {}: bots={} ", name, bots);
-            if let Err(e) = super::state::reset_game_with_bots(state, &name, bots, you_id).await {
-                let _ = send_ws(socket, &mcg_shared::ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
+            if let Err(e) = super::state::reset_game_with_bots(state, name, bots, you_id).await {
+                let _ = send_ws(
+                    socket,
+                    &mcg_shared::ServerMsg::Error(format!("Failed to reset game: {}", e)),
+                )
+                .await;
             } else {
                 // Send updated state to the requesting socket, then broadcast to others.
                 send_state_to(socket, state, you_id).await;

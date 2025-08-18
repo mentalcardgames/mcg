@@ -27,7 +27,10 @@ impl GameSetupScreen {
             is_dnd_variant: false,
         };
         // Ensure a default deck is set for runtime-created screens
-        crate::hardcoded_cards::set_deck_by_theme(&mut screen.card_config, crate::hardcoded_cards::DEFAULT_THEME);
+        crate::hardcoded_cards::set_deck_by_theme(
+            &mut screen.card_config,
+            crate::hardcoded_cards::DEFAULT_THEME,
+        );
         screen
     }
     pub fn new_dnd() -> Self {

@@ -2,7 +2,7 @@
 
 use super::Game;
 use crate::eval::{evaluate_best_hand, pick_best_five};
-use mcg_shared::{HandResult, ActionEvent, GameAction};
+use mcg_shared::{ActionEvent, GameAction, HandResult};
 
 /// Resolve showdown by evaluating all non-folded hands, splitting the pot on ties
 /// and logging the results. Pot is distributed chip-by-chip for any remainder to

@@ -1,12 +1,10 @@
 use anyhow::Context;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
-use url::Url;
 
 use mcg_shared::{ClientMsg, ServerMsg};
 
-use super::transport;
-use super::utils::{handle_server_msg, output_state};
+use super::utils::handle_server_msg;
 
 /// Watch over a websocket connection and print events as they arrive.
 /// Accepts an address string (e.g. "ws://host:port/ws" or "http://host:port") and builds the ws URL internally.
@@ -47,12 +45,23 @@ pub async fn watch_ws(ws_addr: &str, name: &str, json: bool) -> anyhow::Result<(
 /// Implement a basic long-polling watcher over the HTTP API.
 pub async fn watch_http(base: &str, name: &str, json: bool) -> anyhow::Result<()> {
     let client = reqwest::Client::new();
-    let join = ClientMsg::Join { name: name.to_string() };
-    let _ = client.post(format!("{}/api/join", base)).json(&join).send().await?;
+    let join = ClientMsg::Join {
+        name: name.to_string(),
+    };
+    let _ = client
+        .post(format!("{}/api/join", base))
+        .json(&join)
+        .send()
+        .await?;
     let mut last_printed: usize = 0;
     loop {
         // Long-poll GET state with a 30s timeout
-        match tokio::time::timeout(std::time::Duration::from_secs(30), client.get(format!("{}/api/state", base)).send()).await {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            client.get(format!("{}/api/state", base)).send(),
+        )
+        .await
+        {
             Ok(Ok(resp)) => {
                 if let Ok(sm) = resp.json::<ServerMsg>().await {
                     handle_server_msg(&sm, json, &mut last_printed);
@@ -88,10 +97,9 @@ pub async fn watch_iroh(peer_uri: &str, name: &str, json: bool) -> anyhow::Resul
         .await
         .context("binding iroh endpoint for client")?;
 
-    use std::str::FromStr;
     use iroh::PublicKey;
-    let pk = PublicKey::from_str(peer_uri)
-        .context("parsing iroh public key (z-base-32)")?;
+    use std::str::FromStr;
+    let pk = PublicKey::from_str(peer_uri).context("parsing iroh public key (z-base-32)")?;
     let connection = endpoint
         .connect(pk, ALPN)
         .await

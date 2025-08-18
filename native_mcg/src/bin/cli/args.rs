@@ -86,7 +86,10 @@ impl std::str::FromStr for TransportKind {
             } else {
                 Ok(TransportKind::Http(addr))
             }
-        } else if lower.starts_with("websocket:") || lower.starts_with("ws:") || lower.starts_with("web-socket:") {
+        } else if lower.starts_with("websocket:")
+            || lower.starts_with("ws:")
+            || lower.starts_with("web-socket:")
+        {
             // preserve original case for address portion
             let prefix_len = if lower.starts_with("websocket:") {
                 "websocket:".len()
@@ -97,7 +100,10 @@ impl std::str::FromStr for TransportKind {
             };
             let addr = s[prefix_len..].to_string();
             if addr.is_empty() {
-                Err("websocket transport requires an address: --transport 'websocket:ADDRESS'".into())
+                Err(
+                    "websocket transport requires an address: --transport 'websocket:ADDRESS'"
+                        .into(),
+                )
             } else {
                 Ok(TransportKind::WebSocket(addr))
             }
@@ -109,7 +115,10 @@ impl std::str::FromStr for TransportKind {
                 Ok(TransportKind::Iroh(peer))
             }
         } else {
-            Err(format!("unknown transport '{}', expected forms: http:ADDR, websocket:ADDR, iroh:PEER", s))
+            Err(format!(
+                "unknown transport '{}', expected forms: http:ADDR, websocket:ADDR, iroh:PEER",
+                s
+            ))
         }
     }
 }

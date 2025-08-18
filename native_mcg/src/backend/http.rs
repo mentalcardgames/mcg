@@ -6,20 +6,22 @@
 // ServerMsg/ClientMsg shapes (mcg_shared) as other transports.
 
 use axum::{
-    extract::{State, Json},
+    extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
 };
-use anyhow::Result;
 
 use crate::backend::AppState;
-use mcg_shared::{ClientMsg, PlayerAction, ServerMsg};
+use mcg_shared::{ClientMsg, ServerMsg};
 
 /// Accept a Join-like ClientMsg (or JSON equivalent) and ensure a game exists.
 ///
 /// Example payload:
 ///   { "type": "Join", "data": { "name": "CLI" } }
-pub async fn join_handler(State(state): State<AppState>, Json(cm): Json<ClientMsg>) -> impl IntoResponse {
+pub async fn join_handler(
+    State(state): State<AppState>,
+    Json(cm): Json<ClientMsg>,
+) -> impl IntoResponse {
     match cm {
         ClientMsg::Join { name } => {
             if let Err(e) = crate::backend::ensure_game_started(&state, &name).await {
@@ -43,7 +45,10 @@ pub async fn join_handler(State(state): State<AppState>, Json(cm): Json<ClientMs
 ///
 /// Body: { "type": "Action", "data": ... } or simply the action shape if you prefer.
 /// Returns a ServerMsg::State on success or ServerMsg::Error on failure.
-pub async fn action_handler(State(state): State<AppState>, Json(cm): Json<ClientMsg>) -> impl IntoResponse {
+pub async fn action_handler(
+    State(state): State<AppState>,
+    Json(cm): Json<ClientMsg>,
+) -> impl IntoResponse {
     match cm {
         ClientMsg::Action(action) => {
             // actor id is 0 for single-player CLI usage
@@ -60,10 +65,10 @@ pub async fn action_handler(State(state): State<AppState>, Json(cm): Json<Client
                 tokio::spawn(async move {
                     crate::backend::drive_bots_with_delays(&state_clone, 0, 500, 1500).await;
                 });
-                return (StatusCode::OK, Json(ServerMsg::State(gs))).into_response();
+                (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
             } else {
                 let err = ServerMsg::Error("No game running".into());
-                return (StatusCode::NOT_FOUND, Json(err)).into_response();
+                (StatusCode::NOT_FOUND, Json(err)).into_response()
             }
         }
         _ => {
@@ -78,14 +83,22 @@ pub async fn state_handler(State(state): State<AppState>) -> impl IntoResponse {
     if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
         (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
     } else {
-        (StatusCode::NOT_FOUND, Json(ServerMsg::Error("No game running".into()))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(ServerMsg::Error("No game running".into())),
+        )
+            .into_response()
     }
 }
 
 /// Advance to the next hand (server-side). Returns state after change.
 pub async fn next_hand_handler(State(state): State<AppState>) -> impl IntoResponse {
     if let Err(e) = crate::backend::start_new_hand_and_print(&state, 0).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(ServerMsg::Error(format!("Failed to start new hand: {}", e)))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ServerMsg::Error(format!("Failed to start new hand: {}", e))),
+        )
+            .into_response();
     }
     if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
         crate::backend::broadcast_state(&state, 0).await;
@@ -96,25 +109,40 @@ pub async fn next_hand_handler(State(state): State<AppState>) -> impl IntoRespon
         });
         (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
     } else {
-        (StatusCode::NOT_FOUND, Json(ServerMsg::Error("No game running".into()))).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(ServerMsg::Error("No game running".into())),
+        )
+            .into_response()
     }
 }
 
 /// Reset the game with N bots. Expects payload:
 ///   { "type": "ResetGame", "data": { "bots": 2 } }
-pub async fn reset_handler(State(state): State<AppState>, Json(cm): Json<ClientMsg>) -> impl IntoResponse {
+pub async fn reset_handler(
+    State(state): State<AppState>,
+    Json(cm): Json<ClientMsg>,
+) -> impl IntoResponse {
     match cm {
         ClientMsg::ResetGame { bots } => {
             // Use a default name for HTTP-initiated resets
             let name = "HTTP";
             if let Err(e) = crate::backend::reset_game_with_bots(&state, name, bots, 0).await {
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(ServerMsg::Error(format!("Failed to reset game: {}", e)))).into_response();
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ServerMsg::Error(format!("Failed to reset game: {}", e))),
+                )
+                    .into_response();
             }
             if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
                 crate::backend::broadcast_state(&state, 0).await;
                 (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
             } else {
-                (StatusCode::NOT_FOUND, Json(ServerMsg::Error("No game running".into()))).into_response()
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(ServerMsg::Error("No game running".into())),
+                )
+                    .into_response()
             }
         }
         _ => {

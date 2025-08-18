@@ -1,20 +1,20 @@
 //! Main entry point for the MCG poker server.
 
-mod pretty;
+mod backend;
+mod cli;
+mod config;
 mod eval;
 mod game;
-mod backend;
-mod transport;
 mod iroh_transport;
-mod config;
-mod cli;
+mod pretty;
+mod transport;
 
+use crate::config::Config;
+use anyhow::Context;
 use backend::AppState;
+use clap::Parser;
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
-use crate::config::Config;
-use clap::Parser;
-use anyhow::Context;
 
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///
@@ -63,12 +63,12 @@ async fn main() -> anyhow::Result<()> {
         let mut cg = state.config.write().await;
         *cg = cfg.clone();
     }
- 
+
     // Find first available port starting from 3000
     let port = find_available_port(3000)
         .map_err(|e| anyhow::anyhow!("Could not find an available port: {}", e))?;
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
- 
+
     println!("🚀 Starting server on port {}", port);
     if port != 3000 {
         println!(
@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
             port
         );
     }
- 
+
     // Run the server
     backend::run_server(addr, state).await?;
     Ok(())

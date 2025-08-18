@@ -1,6 +1,6 @@
 // Run and routing helpers (build_router, run_server, SPA handlers).
 
-use std::{net::SocketAddr};
+use std::net::SocketAddr;
 
 use axum::{
     http::Uri,
@@ -11,7 +11,7 @@ use axum::{
 use tower_http::services::ServeDir;
 
 use crate::backend::AppState;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 
 pub fn build_router(state: AppState) -> Router {
     // Serve static files from the project root. Assumes process CWD is repo root.
@@ -29,7 +29,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/join", post(crate::backend::http::join_handler))
         .route("/api/action", post(crate::backend::http::action_handler))
         .route("/api/state", get(crate::backend::http::state_handler))
-        .route("/api/next_hand", post(crate::backend::http::next_hand_handler))
+        .route(
+            "/api/next_hand",
+            post(crate::backend::http::next_hand_handler),
+        )
         .route("/api/reset", post(crate::backend::http::reset_handler))
         .nest_service("/pkg", serve_dir)
         .nest_service("/media", serve_media)
@@ -74,7 +77,12 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
 /// Serve index.html file
 async fn serve_index() -> impl IntoResponse {
     match tokio::fs::read_to_string("index.html").await {
-        Ok(content) => (axum::http::StatusCode::OK, [("content-type", "text/html")], content).into_response(),
+        Ok(content) => (
+            axum::http::StatusCode::OK,
+            [("content-type", "text/html")],
+            content,
+        )
+            .into_response(),
         Err(_) => (axum::http::StatusCode::NOT_FOUND, "index.html not found").into_response(),
     }
 }
@@ -95,7 +103,12 @@ async fn spa_handler(uri: Uri) -> impl IntoResponse {
 
     // For all other routes, serve index.html to enable client-side routing
     match tokio::fs::read_to_string("index.html").await {
-        Ok(content) => (axum::http::StatusCode::OK, [("content-type", "text/html")], content).into_response(),
+        Ok(content) => (
+            axum::http::StatusCode::OK,
+            [("content-type", "text/html")],
+            content,
+        )
+            .into_response(),
         Err(_) => (axum::http::StatusCode::NOT_FOUND, "index.html not found").into_response(),
     }
 }

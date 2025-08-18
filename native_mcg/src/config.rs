@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::path::Path;
-use std::{fs, io};
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::Path;
 
 /// Server configuration persisted as TOML.
 ///
@@ -37,8 +37,9 @@ impl Config {
             // Create directories if needed
             if let Some(parent) = path.parent() {
                 if !parent.exists() {
-                    fs::create_dir_all(parent)
-                        .with_context(|| format!("creating config directory '{}'", parent.display()))?;
+                    fs::create_dir_all(parent).with_context(|| {
+                        format!("creating config directory '{}'", parent.display())
+                    })?;
                 }
             }
 
@@ -59,13 +60,12 @@ impl Config {
                     .with_context(|| format!("creating config directory '{}'", parent.display()))?;
             }
         }
-        let toml_text = toml::to_string_pretty(&self)
-            .with_context(|| "serializing config to TOML")?;
+        let toml_text =
+            toml::to_string_pretty(&self).with_context(|| "serializing config to TOML")?;
         fs::write(path, toml_text)
             .with_context(|| format!("writing config to '{}'", path.display()))?;
         Ok(())
     }
-
 
     /// Return iroh key bytes if present in config (hex-decoded).
     pub fn iroh_key_bytes(&self) -> Option<Vec<u8>> {
@@ -86,13 +86,14 @@ impl Config {
 
     /// Load (or create) config and optionally override with a CLI-provided `bots` value.
     /// If an override is applied, the config file will be updated on disk to reflect it.
+    #[allow(dead_code)]
     pub fn load_or_create_with_override(path: &Path, cli_bots: Option<usize>) -> Result<Self> {
         let mut cfg = Self::load_or_create(path)?;
         if let Some(b) = cli_bots {
             cfg.bots = b;
             // persist change back to file
-            let toml_text = toml::to_string_pretty(&cfg)
-                .with_context(|| "serializing config to TOML")?;
+            let toml_text =
+                toml::to_string_pretty(&cfg).with_context(|| "serializing config to TOML")?;
             fs::write(path, toml_text)
                 .with_context(|| format!("writing updated config to '{}'", path.display()))?;
         }

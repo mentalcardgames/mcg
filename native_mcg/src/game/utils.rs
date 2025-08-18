@@ -1,11 +1,11 @@
 #![allow(unused_imports)]
 //! Misc helper methods for Game (active players, round state transitions, logging cap).
 
-use anyhow::{Result, Context};
-use mcg_shared::{ActionEvent, GameAction, Stage};
+use super::Game;
 use crate::eval::card_str;
 use crate::game::engine::MAX_RECENT_ACTIONS;
-use super::Game;
+use anyhow::{Context, Result};
+use mcg_shared::{ActionEvent, GameAction, Stage};
 
 /// Cap in-memory logs to bounded sizes to avoid unbounded growth when
 /// the server runs for long sessions. This protects both serialization

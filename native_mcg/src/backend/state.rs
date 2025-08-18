@@ -1,16 +1,16 @@
 // Server state management: AppState, Lobby, and helpers that operate on shared state.
 
-use std::sync::Arc;
 use std::io::IsTerminal;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use tokio::sync::RwLock;
+use anyhow::{Context, Result};
 use tokio::sync::broadcast;
-use anyhow::{Result, Context};
+use tokio::sync::RwLock;
 
 use crate::game::Game;
-use mcg_shared::GameStatePublic;
 use crate::pretty;
+use mcg_shared::GameStatePublic;
 
 /// Shared application state exposed to handlers.
 #[derive(Clone)]
@@ -115,9 +115,7 @@ pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result
         if n > 0 {
             game.dealer_idx = (game.dealer_idx + 1) % n;
         }
-        if let Err(e) = game.start_new_hand() {
-            return Err(e);
-        }
+        game.start_new_hand()?;
         let sb = game.sb;
         let bb = game.bb;
         let gs = game.public_for(you_id);
@@ -144,7 +142,8 @@ pub async fn reset_game_with_bots(
                 let bb = game.bb;
                 let gs = game.public_for(you_id);
                 lobby.last_printed_log_len = gs.action_log.len();
-                let header = pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+                let header =
+                    pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
                 println!("{}", header);
             }
         }
@@ -189,8 +188,7 @@ pub async fn drive_bots_with_delays(state: &AppState, you_id: usize, min_ms: u64
             break;
         }
         // Sleep a pseudo-random-ish delay between actions without holding non-Send state
-        let now_ns = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-        {
+        let now_ns = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
             Ok(d) => d.subsec_nanos() as u64,
             Err(_) => 0u64,
         };

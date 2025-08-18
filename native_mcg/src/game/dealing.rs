@@ -1,10 +1,10 @@
 //! Dealing and hand initialization helpers.
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
 
-use mcg_shared::{BlindKind, ActionEvent, GameAction, ActionKind};
+use mcg_shared::{ActionEvent, ActionKind, BlindKind, GameAction};
 
 use super::Game;
 
@@ -23,20 +23,24 @@ impl Game {
 /// establishes the first player to act according to heads-up vs 3+ rules.
 pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()> {
     g.deck = VecDeque::from(deck);
- 
+
     // Deal hole cards
     let mut dealt_events = Vec::with_capacity(g.players.len());
     for p in &mut g.players {
         p.has_folded = false;
         p.all_in = false;
-        let c1 = g
-            .deck
-            .pop_front()
-            .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing hole card 1 to player {}", p.id))?;
-        let c2 = g
-            .deck
-            .pop_front()
-            .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing hole card 2 to player {}", p.id))?;
+        let c1 = g.deck.pop_front().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Deck underflow while dealing hole card 1 to player {}",
+                p.id
+            )
+        })?;
+        let c2 = g.deck.pop_front().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Deck underflow while dealing hole card 2 to player {}",
+                p.id
+            )
+        })?;
         p.cards = [c1, c2];
         // collect typed events to avoid mutable-borrow conflicts while iterating players
         dealt_events.push(ActionEvent::game(GameAction::DealtHole { player_id: p.id }));
@@ -47,7 +51,7 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()
             super::super::eval::card_str(p.cards[1])
         );
     }
- 
+
     // Reset table state
     g.community.clear();
     g.pot = 0;
@@ -57,11 +61,11 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()
     g.round_bets = vec![0; g.players.len()];
     g.recent_actions.clear();
     g.winner_ids.clear();
- 
+
     // Emit dealing events now that borrowing finished (derive legacy LogEntry on public serialization)
     g.recent_actions.extend(dealt_events);
     super::utils::cap_logs(g);
- 
+
     // Post blinds
     let n = g.players.len();
     if n > 1 {
@@ -80,7 +84,7 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()
     } else {
         g.to_act = g.dealer_idx;
     }
- 
+
     g.init_round_for_stage();
     g.log(ActionEvent::game(GameAction::StageChanged(g.stage)));
     Ok(())
@@ -95,7 +99,10 @@ fn post_blind(g: &mut Game, idx: usize, kind: BlindKind, amount: u32) {
     if a < amount {
         g.players[idx].all_in = true;
     }
-    g.log(ActionEvent::player(idx, ActionKind::PostBlind { kind, amount: a }));
+    g.log(ActionEvent::player(
+        idx,
+        ActionKind::PostBlind { kind, amount: a },
+    ));
     println!(
         "[BLIND] {} posts {:?} {} -> stack {}",
         g.players[idx].name, kind, a, g.players[idx].stack
@@ -103,6 +110,7 @@ fn post_blind(g: &mut Game, idx: usize, kind: BlindKind, amount: u32) {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn shuffled_deck_with_seed(seed: u64) -> Vec<u8> {
     // Simple LCG for deterministic shuffling in tests
     fn lcg(next: &mut u64) -> u32 {

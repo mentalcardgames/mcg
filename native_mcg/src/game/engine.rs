@@ -1,9 +1,9 @@
 //! Core Game and Player definitions + constructors and small helpers.
 
+use anyhow::{Context, Result};
 use mcg_shared::{ActionEvent, GameStatePublic, PlayerPublic, Stage};
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
-use anyhow::{Result, Context};
 
 pub(crate) const MAX_RECENT_ACTIONS: usize = 50;
 
@@ -48,7 +48,7 @@ impl Game {
     pub fn new(human_name: String, bot_count: usize) -> Result<Self> {
         let mut deck: Vec<u8> = (0..52).collect();
         deck.shuffle(&mut rand::rng());
- 
+
         let mut players = Vec::with_capacity(1 + bot_count);
         players.push(Player {
             id: 0,
@@ -68,12 +68,12 @@ impl Game {
                 all_in: false,
             });
         }
- 
+
         let mut g = Self {
             players,
             deck: VecDeque::from(deck.clone()),
             community: vec![],
- 
+
             pot: 0,
             stage: Stage::Preflop,
             dealer_idx: 0,
@@ -81,10 +81,10 @@ impl Game {
             current_bet: 0,
             min_raise: 0,
             round_bets: vec![],
- 
+
             sb: 5,
             bb: 10,
- 
+
             pending_to_act: Vec::new(),
             recent_actions: Vec::new(),
             winner_ids: Vec::new(),
@@ -96,9 +96,10 @@ impl Game {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub fn new_with_seed(human_name: String, bot_count: usize, seed: u64) -> Result<Self> {
         let deck = super::dealing::shuffled_deck_with_seed(seed);
- 
+
         let mut players = Vec::with_capacity(1 + bot_count);
         players.push(Player {
             id: 0,
@@ -118,12 +119,12 @@ impl Game {
                 all_in: false,
             });
         }
- 
+
         let mut g = Self {
             players,
             deck: VecDeque::new(),
             community: vec![],
- 
+
             pot: 0,
             stage: Stage::Preflop,
             dealer_idx: 0,
@@ -131,10 +132,10 @@ impl Game {
             current_bet: 0,
             min_raise: 0,
             round_bets: vec![],
- 
+
             sb: 5,
             bb: 10,
- 
+
             pending_to_act: Vec::new(),
             recent_actions: Vec::new(),
             winner_ids: Vec::new(),

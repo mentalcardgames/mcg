@@ -1,8 +1,8 @@
 //! Betting and action handling for Game.
 
-use anyhow::{Result, bail};
-use mcg_shared::{ActionEvent, ActionKind, PlayerAction};
 use crate::game::Game;
+use anyhow::{bail, Result};
+use mcg_shared::{ActionEvent, ActionKind, PlayerAction};
 
 /// Compute the normalized add amount for an open bet (when current_bet == 0).
 /// Ensures the total bet is at least the big blind and not more than
@@ -25,7 +25,12 @@ enum RaiseOutcome {
 }
 
 /// Decide how to resolve a raise attempt over a non-zero current bet.
-fn decide_raise_outcome(game: &Game, actor: usize, raise_by: u32, prev_current_bet: u32) -> RaiseOutcome {
+fn decide_raise_outcome(
+    game: &Game,
+    actor: usize,
+    raise_by: u32,
+    prev_current_bet: u32,
+) -> RaiseOutcome {
     let need = game.current_bet.saturating_sub(game.round_bets[actor]);
     let target_to = game.current_bet + raise_by;
     let required = target_to.saturating_sub(game.round_bets[actor]);
@@ -49,11 +54,7 @@ fn decide_raise_outcome(game: &Game, actor: usize, raise_by: u32, prev_current_b
 
 impl Game {
     /// Apply a player action, enforcing betting rules and advancing the game flow.
-    pub fn apply_player_action(
-        &mut self,
-        actor: usize,
-        action: PlayerAction,
-    ) -> Result<()> {
+    pub fn apply_player_action(&mut self, actor: usize, action: PlayerAction) -> Result<()> {
         if actor != self.to_act {
             bail!("Not your turn");
         }
@@ -125,10 +126,13 @@ impl Game {
                             if self.players[actor].stack == 0 {
                                 self.players[actor].all_in = true;
                             }
-                            self.log(ActionEvent::player(actor, ActionKind::Raise {
-                                to: self.current_bet,
-                                by,
-                            }));
+                            self.log(ActionEvent::player(
+                                actor,
+                                ActionKind::Raise {
+                                    to: self.current_bet,
+                                    by,
+                                },
+                            ));
                         }
                     }
                 }
@@ -157,24 +161,24 @@ impl Game {
         self.remove_from_pending(actor);
 
         // If only one player remains, end the hand
-            if self.active_players().len() <= 1 {
-                self.stage = mcg_shared::Stage::Showdown;
-                // delegate to showdown module
+        if self.active_players().len() <= 1 {
+            self.stage = mcg_shared::Stage::Showdown;
+            // delegate to showdown module
+            crate::game::showdown::finish_showdown(self);
+            return Ok(());
+        }
+
+        // If betting round complete, advance stage
+        if self.is_betting_round_complete() {
+            self.advance_stage()?;
+            if self.stage == mcg_shared::Stage::Showdown {
                 crate::game::showdown::finish_showdown(self);
                 return Ok(());
             }
-
-        // If betting round complete, advance stage
-            if self.is_betting_round_complete() {
-                self.advance_stage()?;
-                if self.stage == mcg_shared::Stage::Showdown {
-                    crate::game::showdown::finish_showdown(self);
-                    return Ok(());
-                }
-                self.init_round_for_stage();
-            } else if let Some(&nxt) = self.pending_to_act.first() {
-                self.to_act = nxt;
-            }
+            self.init_round_for_stage();
+        } else if let Some(&nxt) = self.pending_to_act.first() {
+            self.to_act = nxt;
+        }
         Ok(())
     }
 }
