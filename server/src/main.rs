@@ -1,5 +1,6 @@
 //! Main entry point for the MCG poker server.
 
+mod pretty;
 mod eval;
 mod game;
 mod server;
