@@ -6,28 +6,38 @@ mod game;
 mod server;
 mod transport;
 mod iroh_transport;
+mod config;
 
 use server::AppState;
 use std::net::{SocketAddr, TcpListener};
+use std::path::PathBuf;
+use crate::config::Config;
+use anyhow::Context;
 
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///
 /// Usage:
-///   mcg-server --bots <N>
+///   mcg-server [--config PATH] [--bots N]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Default settings
-    let mut bots: usize = 1;
- 
-    // Parse simple CLI args
+    // CLI-collected overrides
+    let mut cli_bots: Option<usize> = None;
+    let mut config_path = PathBuf::from("mcg-server.toml");
+
+    // Parse simple CLI args: --bots <N> and --config <PATH>
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bots" => {
                 if let Some(n) = args.next() {
                     if let Ok(v) = n.parse::<usize>() {
-                        bots = v;
+                        cli_bots = Some(v);
                     }
+                }
+            }
+            "--config" => {
+                if let Some(p) = args.next() {
+                    config_path = PathBuf::from(p);
                 }
             }
             _ => {
@@ -35,7 +45,16 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
- 
+
+    // Load or create config file (creates file if missing). CLI --bots overrides config.bots
+    let cfg = Config::load_or_create_with_override(&config_path, cli_bots)
+        .with_context(|| format!("loading or creating config '{}'", config_path.display()))?;
+
+    let bots = cfg.bots;
+
+    println!("Using config: {}", config_path.display());
+    println!("Starting with {} bot(s)", bots);
+
     // Initialize shared state for the server
     let state = AppState {
         bot_count: bots,
