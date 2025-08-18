@@ -65,12 +65,12 @@ impl ConnectionService {
 
                     // onmessage -> push into inbox
                     let inbox = Rc::clone(&self.inbox);
-                    let ctx = ctx.clone();
+                    let ctx_for_msg = ctx.clone();
                     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
                         if let Some(txt) = e.data().as_string() {
                             if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {
                                 inbox.borrow_mut().push(msg);
-                                ctx.request_repaint();
+                                ctx_for_msg.request_repaint();
                             }
                         }
                     });
@@ -79,35 +79,35 @@ impl ConnectionService {
 
                     // onerror -> push into error_inbox
                     let err_inbox = Rc::clone(&self.error_inbox);
-                    let ctx = ctx.clone();
-                    let server_address = server_address.to_string();
+                    let ctx_for_err = ctx.clone();
+                    let server_address_err = server_address.to_string();
                     let onerror = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
                         err_inbox.borrow_mut().push(format!(
                             "Failed to connect to server at {}.",
-                            server_address
+                            server_address_err
                         ));
-                        ctx.request_repaint();
+                        ctx_for_err.request_repaint();
                     });
                     ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
                     onerror.forget();
 
                     // onclose -> push into error_inbox
                     let err_inbox = Rc::clone(&self.error_inbox);
-                    let ctx = ctx.clone();
-                    let server_address = server_address.to_string();
+                    let ctx_for_close = ctx.clone();
+                    let server_address_close = server_address.to_string();
                     let onclose = Closure::<dyn FnMut(CloseEvent)>::new(move |e: CloseEvent| {
                         let code = e.code();
                         let reason = e.reason();
                         let msg = if reason.is_empty() {
                             format!(
                                 "Connection closed (code {}). Is the server running at {}?",
-                                code, server_address
+                                code, server_address_close
                             )
                         } else {
                             format!("Connection closed (code {}): {}", code, reason)
                         };
                         err_inbox.borrow_mut().push(msg);
-                        ctx.request_repaint();
+                        ctx_for_close.request_repaint();
                     });
                     ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
                     onclose.forget();
