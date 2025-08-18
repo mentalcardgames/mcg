@@ -83,6 +83,17 @@ Backend (server crate)
   - WebSocket handler:
     - On first message expects ClientMsg::Join; creates or reuses a single Lobby game, sends Welcome and current State; applies actions, advances bots, and broadcasts the latest State to the connecting client.
   - AppState holds a Lobby (RwLock) and bot_count.
+- Iroh transport (optional feature)
+  - Location: server/src/iroh_transport.rs (feature-gated behind the `iroh` Cargo feature)
+  - Behavior:
+    - The server spawns an iroh listener that accepts incoming iroh QUIC connections and speaks the same newline-delimited JSON protocol (ClientMsg / ServerMsg) used by the WebSocket handler.
+    - The iroh handler expects ClientMsg::Join as the first message, sends ServerMsg::Welcome and an initial ServerMsg::State, then processes ClientMsg messages (Action, RequestState, NextHand, ResetGame) and reuses the server's broadcast/drive-bots helpers.
+    - The server prints the node's public key (z-base-32) on startup so CLI users can dial by public key. It intentionally does not print the raw Rust `NodeAddr` debug output (that form is brittle across iroh versions).
+    - ALPN used: `b"mcg/iroh/1"` (clients must use the same ALPN when connecting).
+  - CLI support:
+    - The CLI accepts `--iroh-peer <pubkey>` where `<pubkey>` is the iroh PublicKey (z-base-32). The CLI will bind a local endpoint, connect by PublicKey, open a bi-directional stream, and use the newline-delimited JSON protocol to interact.
+    - The CLI watcher and single-command client reuse the same ClientMsg/ServerMsg types and printing helpers as the WebSocket path.
+    - If you plan to accept richer NodeAddr forms in future, document a stable dial string; currently the project prefers dialing by the z-base-32 PublicKey.
 
 Shared protocol/types (shared crate)
 - shared/src/lib.rs: serde-serializable enums and structs used across client/server:
@@ -110,4 +121,4 @@ Licensing
 
 
 Use firecrawl to look up the rust docs for any libraries or APIs you are not
-sure about. Avoid using fetch. Avoid using fetch. 
+sure about. Avoid using fetch. Avoid using fetch.

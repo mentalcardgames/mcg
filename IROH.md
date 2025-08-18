@@ -39,7 +39,7 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
   - Purpose: Create and bind a server `Endpoint`, print node addressing info, and spawn an accept loop to receive incoming iroh connections.
   - Key behavior:
     - Builds an endpoint with ALPN configured (server accepts connections only for the chosen ALPN).
-    - Waits for the endpoint's `node_addr()` watcher to initialize before printing the dialable NodeAddr so users see an address that includes chosen relay and discovered addresses.
+    - Prints the node's public key (z-base-32) via `endpoint.node_id()` and does not print the raw `NodeAddr`. The server intentionally avoids relying on the `NodeAddr` debug/display form which can be brittle across iroh versions; dialing is done by PublicKey.
     - Spawns a background task that loops on `endpoint.accept()` and awaits the returned connect-future. Each successful `Connection` spawns `handle_iroh_connection`.
   - See the implementation:
 ```mcg/server/src/iroh_transport.rs#L26-88
@@ -47,7 +47,7 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
 ```
   - Important notes:
     - The file explicitly sets `ALPN` (const `ALPN: &[u8] = b"mcg/iroh/1"`). All iroh clients connecting to the server must use the same ALPN.
-    - The code calls `endpoint.node_addr().initialized().await` to obtain a ready `NodeAddr` to print. This avoids printing a minimal NodeAddr without relay info.
+    - The server prints the node's public key (z-base-32) via `endpoint.node_id()` and does not print the raw `NodeAddr`. This avoids relying on the Rust `NodeAddr` debug/display output which may change across iroh versions.
 
 - `handle_iroh_connection(state: AppState, connection: iroh::endpoint::Connection) -> Result<()>`
   - Purpose: Per-connection handler that performs the newline-delimited JSON protocol over a bidirectional stream.
