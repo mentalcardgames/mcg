@@ -9,7 +9,9 @@ use super::transport;
 use super::utils::{handle_server_msg, output_state};
 
 /// Watch over a websocket connection and print events as they arrive.
-pub async fn watch_ws(ws_url: &Url, name: &str, json: bool) -> anyhow::Result<()> {
+/// Accepts an address string (e.g. "ws://host:port/ws" or "http://host:port") and builds the ws URL internally.
+pub async fn watch_ws(ws_addr: &str, name: &str, json: bool) -> anyhow::Result<()> {
+    let ws_url = super::transport::build_ws_url(ws_addr)?;
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
     let (mut write, mut read) = ws_stream.split();
 

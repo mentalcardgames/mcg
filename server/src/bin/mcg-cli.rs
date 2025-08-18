@@ -13,12 +13,6 @@ async fn main() -> anyhow::Result<()> {
     // Transport now carries the address/peer. Clone once for use below.
     let transport = cli.transport.clone();
 
-    // Pre-build websocket URL only if transport is a websocket and an address was provided.
-    let ws_url = match &transport {
-        TransportKind::WebSocket(addr) => Some(cli::build_ws_url(addr)?),
-        _ => None,
-    };
-
     match cli.command {
         Commands::Join => {
             let latest = match transport.clone() {
@@ -28,9 +22,8 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(&addr, &cli.name, None, cli.wait_ms).await?
                 }
-                TransportKind::WebSocket(_addr) => {
-                    let ws_url = ws_url.as_ref().unwrap();
-                    cli::run_once(ws_url, &cli.name, None, cli.wait_ms).await?
+                TransportKind::WebSocket(addr) => {
+                    cli::run_once_ws(&addr, &cli.name, None, cli.wait_ms).await?
                 }
             };
             if let Some(state) = latest {
@@ -45,9 +38,8 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(&addr, &cli.name, Some(ClientMsg::RequestState), cli.wait_ms).await?
                 }
-                TransportKind::WebSocket(_addr) => {
-                    let ws_url = ws_url.as_ref().unwrap();
-                    cli::run_once(ws_url, &cli.name, Some(ClientMsg::RequestState), cli.wait_ms).await?
+                TransportKind::WebSocket(addr) => {
+                    cli::run_once_ws(&addr, &cli.name, Some(ClientMsg::RequestState), cli.wait_ms).await?
                 }
             };
             if let Some(state) = latest {
@@ -67,9 +59,8 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(&addr, &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?
                 }
-                TransportKind::WebSocket(_addr) => {
-                    let ws_url = ws_url.as_ref().unwrap();
-                    cli::run_once(ws_url, &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?
+                TransportKind::WebSocket(addr) => {
+                    cli::run_once_ws(&addr, &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?
                 }
             };
             if let Some(state) = latest {
@@ -84,9 +75,8 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(&addr, &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?
                 }
-                TransportKind::WebSocket(_addr) => {
-                    let ws_url = ws_url.as_ref().unwrap();
-                    cli::run_once(ws_url, &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?
+                TransportKind::WebSocket(addr) => {
+                    cli::run_once_ws(&addr, &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?
                 }
             };
             if let Some(state) = latest {
@@ -101,9 +91,8 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(&addr, &cli.name, Some(ClientMsg::ResetGame { bots }), cli.wait_ms).await?
                 }
-                TransportKind::WebSocket(_addr) => {
-                    let ws_url = ws_url.as_ref().unwrap();
-                    cli::run_once(ws_url, &cli.name, Some(ClientMsg::ResetGame { bots }), cli.wait_ms).await?
+                TransportKind::WebSocket(addr) => {
+                    cli::run_once_ws(&addr, &cli.name, Some(ClientMsg::ResetGame { bots }), cli.wait_ms).await?
                 }
             };
             if let Some(state) = latest {
@@ -118,9 +107,8 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::watch_http(&addr, &cli.name, cli.json).await?
                 }
-                TransportKind::WebSocket(_addr) => {
-                    let ws_url = ws_url.as_ref().unwrap();
-                    cli::watch_ws(ws_url, &cli.name, cli.json).await?
+                TransportKind::WebSocket(addr) => {
+                    cli::watch_ws(&addr, &cli.name, cli.json).await?
                 }
             };
         }
