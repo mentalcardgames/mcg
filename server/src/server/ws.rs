@@ -136,14 +136,18 @@ async fn process_client_msg(
             println!("[WS] Action from {}: {:?}", name, a);
             if let Some(e) = super::state::apply_action_to_game(state, 0, a.clone()).await {
                 let _ = send_ws(socket, &mcg_shared::ServerMsg::Error(e)).await;
+            } else {
+                // Send updated state immediately to the originating socket so the client sees its own action
+                send_state_to(socket, state, you_id).await;
+                // Broadcast latest state to all subscribers then drive bots stepwise with delays
+                super::state::broadcast_state(state, you_id).await;
+                super::state::drive_bots_with_delays(state, you_id, 500, 1500).await;
             }
-            // Broadcast latest state then drive bots stepwise with delays
-            super::state::broadcast_state(state, you_id).await;
-            super::state::drive_bots_with_delays(state, you_id, 500, 1500).await;
         }
         mcg_shared::ClientMsg::RequestState => {
             println!("[WS] State requested by {}", name);
-            // Broadcast latest then drive bots if it's their turn
+            // Send state to this socket immediately, then broadcast and drive bots if needed.
+            send_state_to(socket, state, you_id).await;
             super::state::broadcast_state(state, you_id).await;
             super::state::drive_bots_with_delays(state, you_id, 500, 1500).await;
         }
@@ -152,7 +156,8 @@ async fn process_client_msg(
             if let Err(e) = super::state::start_new_hand_and_print(state, you_id).await {
                 let _ = send_ws(socket, &mcg_shared::ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
             }
-            // Broadcast the changed state and drive bots
+            // Send updated state to the requesting socket, then broadcast and drive bots.
+            send_state_to(socket, state, you_id).await;
             super::state::broadcast_state(state, you_id).await;
             super::state::drive_bots_with_delays(state, you_id, 500, 1500).await;
         }
@@ -161,6 +166,8 @@ async fn process_client_msg(
             if let Err(e) = super::state::reset_game_with_bots(state, &name, bots, you_id).await {
                 let _ = send_ws(socket, &mcg_shared::ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
             } else {
+                // Send updated state to the requesting socket, then broadcast to others.
+                send_state_to(socket, state, you_id).await;
                 super::state::broadcast_state(state, you_id).await;
             }
             super::state::drive_bots_with_delays(state, you_id, 500, 1500).await;

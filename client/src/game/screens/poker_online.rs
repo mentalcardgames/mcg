@@ -382,10 +382,13 @@ impl PokerOnlineScreen {
                 onopen.forget();
                 let onmessage = {
                     let inbox = Rc::clone(&self.inbox);
+                    let ctx = ctx.clone();
                     Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
-                        if let Ok(txt) = e.data().dyn_into::<js_sys::JsString>() {
-                            if let Ok(msg) = serde_json::from_str::<ServerMsg>(&String::from(txt)) {
+                        if let Some(txt) = e.data().as_string() {
+                            if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {
                                 inbox.borrow_mut().push(msg);
+                                // Request a repaint so the UI processes the new message promptly.
+                                ctx.request_repaint();
                             }
                         }
                     })
