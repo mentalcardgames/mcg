@@ -12,6 +12,7 @@ use mcg_shared::ServerMsg;
 /// Send a ServerMsg over an Axum WebSocket connection.
 ///
 /// This mirrors the previous inline implementation used in server.rs.
+#[allow(dead_code)]
 pub async fn send_server_msg_ws(socket: &mut WebSocket, msg: &ServerMsg) {
     match serde_json::to_string(msg) {
         Ok(txt) => {

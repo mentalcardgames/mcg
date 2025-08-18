@@ -21,8 +21,8 @@ anyhow = "1.0.99"
 owo-colors = "4.2.2"
 
 # Iroh transport support (enabled by default).
-# Use the upstream iroh repository to keep parity with their examples.
-iroh = { git = "https://github.com/n0-computer/iroh", branch = "main" }
+# Use crates.io release 0.91.1 to match the docs/examples used by the rustdocs MCP server.
+iroh = "0.91.1"
 
 # Required helper for async trait usage in iroh handler
 async-trait = "0.1"

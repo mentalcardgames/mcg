@@ -189,12 +189,25 @@ async fn run_once_iroh(
     // passing the PublicKey satisfies the connect() signature and enables
     // discovery/relay resolution within the iroh library.
     use std::str::FromStr;
-    use iroh::PublicKey;
-    let pk = PublicKey::from_str(peer_uri).context("parsing peer public key (expected public key string)")?;
-    let connection = endpoint
-        .connect(pk, ALPN)
-        .await
-        .context("connecting to iroh peer")?;
+    use iroh::{NodeAddr, PublicKey};
+    // Try two common input forms:
+    // 1) JSON-serialized NodeAddr (useful if the server prints NodeAddr as JSON)
+    // 2) PublicKey / NodeId string (z-base-32) parsed via PublicKey::from_str
+    let connection = if let Ok(addr) = serde_json::from_str::<NodeAddr>(peer_uri) {
+        endpoint
+            .connect(addr, ALPN)
+            .await
+            .context("connecting to iroh peer (node addr from JSON)")?
+    } else if let Ok(pk) = PublicKey::from_str(peer_uri) {
+        endpoint
+            .connect(pk, ALPN)
+            .await
+            .context("connecting to iroh peer (public key)")?
+    } else {
+        return Err(anyhow::anyhow!(
+            "peer_uri not a valid iroh NodeAddr (JSON) or PublicKey (z-base-32)"
+        ));
+    };
 
     // Open a bidirectional stream
     let (mut send, recv) = connection

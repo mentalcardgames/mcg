@@ -107,3 +107,7 @@ CI and editor assistants
 
 Licensing
 - Dual-licensed under MIT and Apache-2.0 (per README).
+
+
+Use firecrawl to look up the rust docs for any libraries or APIs you are not
+sure about. Avoid using fetch. Avoid using fetch. 
