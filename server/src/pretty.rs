@@ -1,6 +1,6 @@
 use mcg_shared::{
-    ActionKind as SharedActionKind, BlindKind, GameStatePublic, LogEntry, LogEvent, PlayerPublic,
-    Stage,
+    ActionKind as SharedActionKind, BlindKind, GameStatePublic, ActionEvent, GameAction,
+    PlayerPublic, Stage,
 };
 use owo_colors::OwoColorize;
 
@@ -97,18 +97,15 @@ fn player_name(players: &[PlayerPublic], id: usize, you_id: usize, color: bool) 
 }
 
 fn format_log_entry(
-    entry: &LogEntry,
+    entry: &ActionEvent,
     players: &[PlayerPublic],
     you_id: usize,
     color: bool,
 ) -> String {
-    match &entry.event {
-        LogEvent::Action(kind) => {
-            let who = entry
-                .player_id
-                .map(|id| player_name(players, id, you_id, color))
-                .unwrap_or_else(|| "?".into());
-            match kind {
+    match entry {
+        ActionEvent::PlayerAction { player_id, action } => {
+            let who = player_name(players, *player_id, you_id, color);
+            match action {
                 SharedActionKind::Fold => format!(
                     "{} {} (fold)",
                     if color {
@@ -167,7 +164,7 @@ fn format_log_entry(
                 }
             }
         }
-        LogEvent::DealtCommunity { cards } => {
+        ActionEvent::GameAction(GameAction::DealtCommunity { cards }) => {
             let list = cards
                 .iter()
                 .map(|c| format_card(*c, color))
@@ -175,12 +172,12 @@ fn format_log_entry(
                 .join(", ");
             format!("Board +[{}]", list)
         }
-        LogEvent::DealtHole { player_id } => {
+        ActionEvent::GameAction(GameAction::DealtHole { player_id }) => {
             let who = player_name(players, *player_id, you_id, color);
             format!("Dealt hole to {}", who)
         }
-        LogEvent::Showdown { .. } => "Showdown".into(),
-        LogEvent::PotAwarded { winners, amount } => {
+        ActionEvent::GameAction(GameAction::Showdown { .. }) => "Showdown".into(),
+        ActionEvent::GameAction(GameAction::PotAwarded { winners, amount }) => {
             let names = winners
                 .iter()
                 .map(|id| player_name(players, *id, you_id, color))
@@ -188,18 +185,18 @@ fn format_log_entry(
                 .join(", ");
             format!("Pot awarded {} -> [{}]", amount, names)
         }
-        LogEvent::StageChanged(_) => unreachable!(),
+        ActionEvent::GameAction(GameAction::StageChanged(_)) => unreachable!(),
     }
 }
 
 pub fn format_event_human(
-    entry: &LogEntry,
+    entry: &ActionEvent,
     players: &[PlayerPublic],
     you_id: usize,
     color: bool,
 ) -> String {
-    match &entry.event {
-        LogEvent::StageChanged(s) => {
+    match entry {
+        ActionEvent::GameAction(GameAction::StageChanged(s)) => {
             let sname = format!("== {:?} ==", s);
             if color {
                 sname.bold().purple().to_string()
@@ -338,9 +335,9 @@ pub fn format_state_human(gs: &GameStatePublic, color: bool) -> String {
         out.push_str("\nLog:\n");
         let mut last_stage: Option<Stage> = None;
         for e in &gs.action_log {
-            if let LogEvent::StageChanged(s) = e.event {
-                if last_stage != Some(s) {
-                    last_stage = Some(s);
+            if let ActionEvent::GameAction(GameAction::StageChanged(s)) = e {
+                if last_stage != Some(*s) {
+                    last_stage = Some(*s);
                     let sname = format!("== {:?} ==", s);
                     let sline = if color {
                         sname.bold().purple().to_string()

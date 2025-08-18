@@ -68,29 +68,17 @@ impl Game {
             "[ACTION] {}: {:?} (stage: {:?})",
             self.players[actor].name, action, self.stage
         );
-        self.recent_actions.push(ActionEvent {
-            player_id: actor,
-            action: action.clone(),
-        });
-        // cap recent_actions / action_log
-        super::utils::cap_logs(self);
 
         let prev_current_bet = self.current_bet;
         match action {
             PlayerAction::Fold => {
                 self.players[actor].has_folded = true;
-                self.log(mcg_shared::LogEntry {
-                    player_id: Some(actor),
-                    event: mcg_shared::LogEvent::Action(ActionKind::Fold),
-                });
+                self.log(ActionEvent::player(actor, ActionKind::Fold));
             }
             PlayerAction::CheckCall => {
                 let need = self.current_bet.saturating_sub(self.round_bets[actor]);
                 if need == 0 {
-                    self.log(mcg_shared::LogEntry {
-                        player_id: Some(actor),
-                        event: mcg_shared::LogEvent::Action(ActionKind::Check),
-                    });
+                    self.log(ActionEvent::player(actor, ActionKind::Check));
                 } else {
                     let pay = need.min(self.players[actor].stack);
                     self.players[actor].stack -= pay;
@@ -99,10 +87,7 @@ impl Game {
                     if pay < need {
                         self.players[actor].all_in = true;
                     }
-                    self.log(mcg_shared::LogEntry {
-                        player_id: Some(actor),
-                        event: mcg_shared::LogEvent::Action(ActionKind::Call(pay)),
-                    });
+                    self.log(ActionEvent::player(actor, ActionKind::Call(pay)));
                 }
             }
             PlayerAction::Bet(x) => {
@@ -116,10 +101,7 @@ impl Game {
                     if self.players[actor].stack == 0 {
                         self.players[actor].all_in = true;
                     }
-                    self.log(mcg_shared::LogEntry {
-                        player_id: Some(actor),
-                        event: mcg_shared::LogEvent::Action(ActionKind::Bet(add)),
-                    });
+                    self.log(ActionEvent::player(actor, ActionKind::Bet(add)));
                 } else {
                     match decide_raise_outcome(self, actor, x, prev_current_bet) {
                         RaiseOutcome::Call { pay } => {
@@ -131,10 +113,7 @@ impl Game {
                             if pay < need {
                                 self.players[actor].all_in = true;
                             }
-                            self.log(mcg_shared::LogEntry {
-                                player_id: Some(actor),
-                                event: mcg_shared::LogEvent::Action(ActionKind::Call(pay)),
-                            });
+                            self.log(ActionEvent::player(actor, ActionKind::Call(pay)));
                         }
                         RaiseOutcome::Raise { add, by } => {
                             self.players[actor].stack -= add;
@@ -146,13 +125,10 @@ impl Game {
                             if self.players[actor].stack == 0 {
                                 self.players[actor].all_in = true;
                             }
-                            self.log(mcg_shared::LogEntry {
-                                player_id: Some(actor),
-                                event: mcg_shared::LogEvent::Action(ActionKind::Raise {
-                                    to: self.current_bet,
-                                    by,
-                                }),
-                            });
+                            self.log(ActionEvent::player(actor, ActionKind::Raise {
+                                to: self.current_bet,
+                                by,
+                            }));
                         }
                     }
                 }

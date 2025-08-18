@@ -18,18 +18,7 @@ pub enum PlayerAction {
     Bet(u32),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ActionEvent {
-    pub player_id: usize,
-    pub action: PlayerAction,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum BlindKind {
-    SmallBlind,
-    BigBlind,
-}
-
+/// Player-side action kinds used in logs/history (keeps richer semantics for history)
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ActionKind {
     Fold,
@@ -38,6 +27,43 @@ pub enum ActionKind {
     Bet(u32),
     Raise { to: u32, by: u32 },
     PostBlind { kind: BlindKind, amount: u32 },
+}
+
+/// Game-level actions/events (formerly folded into LogEvent)
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GameAction {
+    StageChanged(Stage),
+    DealtHole { player_id: usize },
+    DealtCommunity { cards: Vec<u8> },
+    Showdown { hand_results: Vec<HandResult> },
+    PotAwarded { winners: Vec<usize>, amount: u32 },
+}
+
+/// A single recorded action/event in the game. This is now the canonical,
+/// typed source-of-truth for both UI and logs. Use ActionEvent::PlayerAction
+/// for player-initiated actions and ActionEvent::GameAction for dealer/stage/etc.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ActionEvent {
+    PlayerAction { player_id: usize, action: ActionKind },
+    GameAction(GameAction),
+}
+
+impl ActionEvent {
+    /// Helper to create a PlayerAction event from a player id + ActionKind
+    pub fn player(player_id: usize, action: ActionKind) -> Self {
+        ActionEvent::PlayerAction { player_id, action }
+    }
+
+    /// Helper to create a GameAction event
+    pub fn game(action: GameAction) -> Self {
+        ActionEvent::GameAction(action)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BlindKind {
+    SmallBlind,
+    BigBlind,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -66,21 +92,9 @@ pub struct HandResult {
     pub best_five: [u8; 5],
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum LogEvent {
-    Action(ActionKind),
-    StageChanged(Stage),
-    DealtHole { player_id: usize },
-    DealtCommunity { cards: Vec<u8> },
-    Showdown { hand_results: Vec<HandResult> },
-    PotAwarded { winners: Vec<usize>, amount: u32 },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LogEntry {
-    pub player_id: Option<usize>,
-    pub event: LogEvent,
-}
+/// LogEntry is a thin wrapper around the canonical ActionEvent. LogEntries
+/// may later gain timestamps/ids for persistence, but the event itself should
+/// be derived from ActionEvents (ActionEvent -> LogEntry), not the other way.
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerPublic {
@@ -102,11 +116,9 @@ pub struct GameStatePublic {
     #[serde(default)]
     pub bot_count: usize,
     #[serde(default)]
-    pub recent_actions: Vec<ActionEvent>,
-    #[serde(default)]
     pub winner_ids: Vec<usize>,
     #[serde(default)]
-    pub action_log: Vec<LogEntry>,
+    pub action_log: Vec<ActionEvent>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

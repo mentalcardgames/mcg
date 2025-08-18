@@ -2,9 +2,9 @@
 //! Misc helper methods for Game (active players, round state transitions, logging cap).
 
 use anyhow::{Result, Context};
-use mcg_shared::{LogEntry, LogEvent, Stage};
+use mcg_shared::{ActionEvent, GameAction, Stage};
 use crate::eval::card_str;
-use crate::game::engine::{MAX_RECENT_ACTIONS, MAX_LOG_ENTRIES};
+use crate::game::engine::MAX_RECENT_ACTIONS;
 use super::Game;
 
 /// Cap in-memory logs to bounded sizes to avoid unbounded growth when
@@ -14,10 +14,6 @@ pub(crate) fn cap_logs(g: &mut Game) {
     if g.recent_actions.len() > MAX_RECENT_ACTIONS {
         let start = g.recent_actions.len() - MAX_RECENT_ACTIONS;
         g.recent_actions.drain(0..start);
-    }
-    if g.action_log.len() > MAX_LOG_ENTRIES {
-        let start = g.action_log.len() - MAX_LOG_ENTRIES;
-        g.action_log.drain(0..start);
     }
 }
 
@@ -106,12 +102,9 @@ impl Game {
                 self.community.push(c2);
                 self.community.push(c3);
                 self.stage = Stage::Flop;
-                self.log(LogEntry {
-                    player_id: None,
-                    event: LogEvent::DealtCommunity {
-                        cards: self.community.clone(),
-                    },
-                });
+                self.log(ActionEvent::game(GameAction::DealtCommunity {
+                    cards: self.community.clone(),
+                }));
                 println!(
                     "[STAGE] Flop: {} {} {}",
                     card_str(self.community[0]),
@@ -126,12 +119,9 @@ impl Game {
                     .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing turn card"))?;
                 self.community.push(c);
                 self.stage = Stage::Turn;
-                self.log(LogEntry {
-                    player_id: None,
-                    event: LogEvent::DealtCommunity {
-                        cards: self.community.clone(),
-                    },
-                });
+                self.log(ActionEvent::game(GameAction::DealtCommunity {
+                    cards: self.community.clone(),
+                }));
                 println!("[STAGE] Turn: {}", card_str(self.community[3]));
             }
             Stage::Turn => {
@@ -141,12 +131,9 @@ impl Game {
                     .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing river card"))?;
                 self.community.push(c);
                 self.stage = Stage::River;
-                self.log(LogEntry {
-                    player_id: None,
-                    event: LogEvent::DealtCommunity {
-                        cards: self.community.clone(),
-                    },
-                });
+                self.log(ActionEvent::game(GameAction::DealtCommunity {
+                    cards: self.community.clone(),
+                }));
                 println!("[STAGE] River: {}", card_str(self.community[4]));
             }
             Stage::River => {
@@ -154,10 +141,7 @@ impl Game {
             }
             Stage::Showdown => {}
         }
-        self.log(LogEntry {
-            player_id: None,
-            event: LogEvent::StageChanged(self.stage),
-        });
+        self.log(ActionEvent::game(GameAction::StageChanged(self.stage)));
         Ok(())
     }
 }

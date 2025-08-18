@@ -2,7 +2,7 @@
 
 use super::Game;
 use crate::eval::{evaluate_best_hand, pick_best_five};
-use mcg_shared::{HandResult, LogEntry, LogEvent};
+use mcg_shared::{HandResult, ActionEvent, GameAction};
 
 /// Resolve showdown by evaluating all non-folded hands, splitting the pot on ties
 /// and logging the results. Pot is distributed chip-by-chip for any remainder to
@@ -37,12 +37,9 @@ pub(crate) fn finish_showdown(g: &mut Game) {
     };
     g.winner_ids = winners.clone();
 
-    g.log(LogEntry {
-        player_id: None,
-        event: LogEvent::Showdown {
-            hand_results: results.clone(),
-        },
-    });
+    g.log(ActionEvent::game(GameAction::Showdown {
+        hand_results: results.clone(),
+    }));
 
     if !winners.is_empty() && g.pot > 0 {
         let share = g.pot / winners.len() as u32;
@@ -55,13 +52,10 @@ pub(crate) fn finish_showdown(g: &mut Game) {
             }
             g.players[w].stack += win;
         }
-        g.log(LogEntry {
-            player_id: None,
-            event: LogEvent::PotAwarded {
-                winners: winners.clone(),
-                amount: g.pot,
-            },
-        });
+        g.log(ActionEvent::game(GameAction::PotAwarded {
+            winners: winners.clone(),
+            amount: g.pot,
+        }));
         println!("[SHOWDOWN] Pot {} awarded to {:?}", g.pot, winners);
         g.pot = 0;
     }

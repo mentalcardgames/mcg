@@ -1,12 +1,11 @@
 //! Core Game and Player definitions + constructors and small helpers.
 
-use mcg_shared::{ActionEvent, GameStatePublic, LogEntry, PlayerPublic, Stage};
+use mcg_shared::{ActionEvent, GameStatePublic, PlayerPublic, Stage};
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
 use anyhow::{Result, Context};
 
 pub(crate) const MAX_RECENT_ACTIONS: usize = 50;
-pub(crate) const MAX_LOG_ENTRIES: usize = 200;
 
 #[derive(Clone, Debug)]
 pub struct Player {
@@ -40,8 +39,8 @@ pub struct Game {
 
     // Flow bookkeeping
     pub pending_to_act: Vec<usize>, // players that still need to act this street (non-folded, non-all-in)
+    // canonical in-memory store of typed events
     pub recent_actions: Vec<ActionEvent>,
-    pub action_log: Vec<LogEntry>,
     pub winner_ids: Vec<usize>,
 }
 
@@ -88,7 +87,6 @@ impl Game {
  
             pending_to_act: Vec::new(),
             recent_actions: Vec::new(),
-            action_log: Vec::new(),
             winner_ids: Vec::new(),
         };
         // delegate dealing/init to sibling module
@@ -139,7 +137,6 @@ impl Game {
  
             pending_to_act: Vec::new(),
             recent_actions: Vec::new(),
-            action_log: Vec::new(),
             winner_ids: Vec::new(),
         };
         super::dealing::start_new_hand_from_deck(&mut g, deck)
@@ -172,14 +169,14 @@ impl Game {
             stage: self.stage,
             you_id: viewer_id,
             bot_count: self.players.len().saturating_sub(1),
-            recent_actions: self.recent_actions.clone(),
             winner_ids: self.winner_ids.clone(),
-            action_log: self.action_log.clone(),
+            action_log: self.recent_actions.clone(),
         }
     }
 
-    pub(crate) fn log(&mut self, entry: LogEntry) {
-        self.action_log.push(entry);
+    pub(crate) fn log(&mut self, ev: ActionEvent) {
+        // canonical store is recent_actions (typed ActionEvent).
+        self.recent_actions.push(ev);
         // cap logs via utils helper
         super::utils::cap_logs(self);
     }

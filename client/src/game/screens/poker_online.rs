@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
-    ActionKind, BlindKind, ClientMsg, GameStatePublic, LogEntry, LogEvent, PlayerAction,
+    ActionKind, BlindKind, ClientMsg, GameStatePublic, ActionEvent, GameAction, PlayerAction,
     PlayerPublic, ServerMsg, Stage,
 };
 use std::cell::RefCell;
@@ -661,13 +661,10 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
     // Action log (chronological)
     out.push_str("Action log (chronological)\n");
     for entry in &state.action_log {
-        match &entry.event {
-            LogEvent::Action(kind) => {
-                let who_name = entry
-                    .player_id
-                    .map(|id| name_of(&state.players, id))
-                    .unwrap_or_else(|| "Table".to_string());
-                match kind {
+        match entry {
+            ActionEvent::PlayerAction { player_id, action } => {
+                let who_name = name_of(&state.players, *player_id);
+                match action {
                     ActionKind::Fold => out.push_str(&format!("- {} folds\n", who_name)),
                     ActionKind::Check => out.push_str(&format!("- {} checks\n", who_name)),
                     ActionKind::Call(n) => out.push_str(&format!("- {} calls {}\n", who_name, n)),
@@ -685,14 +682,14 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
                     },
                 }
             }
-            LogEvent::StageChanged(s) => {
+            ActionEvent::GameAction(GameAction::StageChanged(s)) => {
                 out.push_str(&format!("== Stage: {} ==\\n", stage_to_str(*s)));
             }
-            LogEvent::DealtHole { player_id } => {
+            ActionEvent::GameAction(GameAction::DealtHole { player_id }) => {
                 let who = name_of(&state.players, *player_id);
                 out.push_str(&format!("- Dealt hole cards to {}\n", who));
             }
-            LogEvent::DealtCommunity { cards } => match cards.len() {
+            ActionEvent::GameAction(GameAction::DealtCommunity { cards }) => match cards.len() {
                 3 => out.push_str(&format!(
                     "- Flop: {}, {}, {}\n",
                     card_text(cards[0]),
@@ -710,7 +707,7 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
                     out.push_str(&format!("- Community: {}\n", s));
                 }
             },
-            LogEvent::Showdown { hand_results } => {
+            ActionEvent::GameAction(GameAction::Showdown { hand_results }) => {
                 if hand_results.is_empty() {
                     out.push_str("- Showdown\n");
                 } else {
@@ -727,7 +724,7 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
                     }
                 }
             }
-            LogEvent::PotAwarded { winners, amount } => {
+            ActionEvent::GameAction(GameAction::PotAwarded { winners, amount }) => {
                 let names = winners
                     .iter()
                     .map(|&id| name_of(&state.players, id))
@@ -741,14 +738,12 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
     out
 }
 
-fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic], you_id: usize) {
-    match &entry.event {
-        LogEvent::Action(kind) => {
-            let who_id = entry.player_id;
-            let who_name = who_id
-                .map(|id| name_of(players, id))
-                .unwrap_or_else(|| "Table".to_string());
-            let (txt, color) = action_kind_text(kind);
+fn log_entry_row(ui: &mut egui::Ui, entry: &ActionEvent, players: &[PlayerPublic], you_id: usize) {
+    match entry {
+        ActionEvent::PlayerAction { player_id, action } => {
+            let who_id = Some(*player_id);
+            let who_name = name_of(players, *player_id);
+            let (txt, color) = action_kind_text(action);
             let is_you = who_id == Some(you_id);
             let label = if is_you {
                 RichText::new(format!("{} {}", who_name, txt))
@@ -759,7 +754,7 @@ fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic], 
             };
             ui.label(label);
         }
-        LogEvent::StageChanged(s) => {
+        ActionEvent::GameAction(GameAction::StageChanged(s)) => {
             ui.add_space(6.0);
             ui.separator();
             ui.horizontal(|ui| {
@@ -769,14 +764,14 @@ fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic], 
             ui.separator();
             ui.add_space(6.0);
         }
-        LogEvent::DealtHole { player_id } => {
+        ActionEvent::GameAction(GameAction::DealtHole { player_id }) => {
             let who = name_of(players, *player_id);
             ui.colored_label(
                 Color32::from_rgb(150, 150, 150),
                 format!("🂠 Dealt hole cards to {}", who),
             );
         }
-        LogEvent::DealtCommunity { cards } => match cards.len() {
+        ActionEvent::GameAction(GameAction::DealtCommunity { cards }) => match cards.len() {
             3 => {
                 ui.colored_label(
                     Color32::from_rgb(100, 200, 120),
@@ -814,7 +809,7 @@ fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic], 
                 );
             }
         },
-        LogEvent::Showdown { hand_results } => {
+        ActionEvent::GameAction(GameAction::Showdown { hand_results }) => {
             let mut parts = Vec::new();
             for hr in hand_results {
                 let who = name_of(players, hr.player_id);
@@ -828,7 +823,7 @@ fn log_entry_row(ui: &mut egui::Ui, entry: &LogEntry, players: &[PlayerPublic], 
             };
             ui.colored_label(Color32::from_rgb(180, 100, 220), text);
         }
-        LogEvent::PotAwarded { winners, amount } => {
+        ActionEvent::GameAction(GameAction::PotAwarded { winners, amount }) => {
             let names = winners
                 .iter()
                 .map(|&id| name_of(players, id))

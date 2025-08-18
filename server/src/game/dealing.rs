@@ -4,7 +4,7 @@ use anyhow::{Result, Context};
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
 
-use mcg_shared::{BlindKind, LogEntry, LogEvent};
+use mcg_shared::{BlindKind, ActionEvent, GameAction, ActionKind};
 
 use super::Game;
 
@@ -25,7 +25,7 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()
     g.deck = VecDeque::from(deck);
  
     // Deal hole cards
-    let mut dealt_logs = Vec::with_capacity(g.players.len());
+    let mut dealt_events = Vec::with_capacity(g.players.len());
     for p in &mut g.players {
         p.has_folded = false;
         p.all_in = false;
@@ -38,10 +38,8 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()
             .pop_front()
             .ok_or_else(|| anyhow::anyhow!("Deck underflow while dealing hole card 2 to player {}", p.id))?;
         p.cards = [c1, c2];
-        dealt_logs.push(LogEntry {
-            player_id: Some(p.id),
-            event: LogEvent::DealtHole { player_id: p.id },
-        });
+        // collect typed events to avoid mutable-borrow conflicts while iterating players
+        dealt_events.push(ActionEvent::game(GameAction::DealtHole { player_id: p.id }));
         println!(
             "[DEAL] {} gets {} {}",
             p.name,
@@ -58,11 +56,10 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()
     g.min_raise = g.bb;
     g.round_bets = vec![0; g.players.len()];
     g.recent_actions.clear();
-    g.action_log.clear();
     g.winner_ids.clear();
  
-    // Emit logs for dealing after the loop to avoid borrow conflicts
-    g.action_log.extend(dealt_logs);
+    // Emit dealing events now that borrowing finished (derive legacy LogEntry on public serialization)
+    g.recent_actions.extend(dealt_events);
     super::utils::cap_logs(g);
  
     // Post blinds
@@ -85,10 +82,7 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()
     }
  
     g.init_round_for_stage();
-    g.log(LogEntry {
-        player_id: None,
-        event: LogEvent::StageChanged(g.stage),
-    });
+    g.log(ActionEvent::game(GameAction::StageChanged(g.stage)));
     Ok(())
 }
 
@@ -101,10 +95,7 @@ fn post_blind(g: &mut Game, idx: usize, kind: BlindKind, amount: u32) {
     if a < amount {
         g.players[idx].all_in = true;
     }
-    g.log(LogEntry {
-        player_id: Some(idx),
-        event: LogEvent::Action(mcg_shared::ActionKind::PostBlind { kind, amount: a }),
-    });
+    g.log(ActionEvent::player(idx, ActionKind::PostBlind { kind, amount: a }));
     println!(
         "[BLIND] {} posts {:?} {} -> stack {}",
         g.players[idx].name, kind, a, g.players[idx].stack
