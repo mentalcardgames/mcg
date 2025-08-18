@@ -6,12 +6,6 @@ use mcg_shared::{
 };
 use crate::game::connection::ConnectionService;
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::closure::Closure;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::JsCast;
-#[cfg(target_arch = "wasm32")]
-use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;

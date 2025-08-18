@@ -52,6 +52,8 @@ pub struct App {
     current_screen_path: String,
     // lazily-created screens by path
     screens: std::collections::HashMap<String, Box<dyn ScreenWidget>>,
+    // single shared screen registry
+    screen_registry: screens::ScreenRegistry,
 
     // typed screens for special access
     game: screens::Game<screens::DirectoryCardType>,
@@ -109,6 +111,7 @@ impl App {
         Self {
             current_screen_path: current_path,
             screens: std::collections::HashMap::new(),
+            screen_registry: screens::ScreenRegistry::new(),
             game: screens::Game::new(),
             game_dnd: screens::CardsTestDND::new(),
             settings_open: false,
@@ -155,8 +158,7 @@ impl App {
 
     /// Change route by path and update URL
     fn change_route(&mut self, path: &str) {
-        let reg = screens::ScreenRegistry::new();
-        let new_path = reg.path_from_path(path).unwrap_or("/");
+        let new_path = self.screen_registry.path_from_path(path).unwrap_or("/");
         if self.current_screen_path != new_path {
             self.current_screen_path = new_path.to_string();
             #[cfg(target_arch = "wasm32")]
@@ -170,16 +172,15 @@ impl App {
     fn check_url_changes(&mut self) {
         #[cfg(target_arch = "wasm32")]
         if let Some(ref mut router) = self.router {
-            if let Ok(changed) = router.check_for_url_changes() {
-                if changed {
-                    let reg = screens::ScreenRegistry::new();
-                    if let Some(new_path) = reg.path_from_path(router.current_path()) {
-                        if new_path != self.current_screen_path {
-                            self.current_screen_path = new_path.to_string();
+                if let Ok(changed) = router.check_for_url_changes() {
+                    if changed {
+                        if let Some(new_path) = self.screen_registry.path_from_path(router.current_path()) {
+                            if new_path != self.current_screen_path {
+                                self.current_screen_path = new_path.to_string();
+                            }
                         }
                     }
                 }
-            }
         }
     }
 
@@ -216,8 +217,7 @@ impl App {
                         egui::vec2(center_w, row_h),
                         egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
                         |ui| {
-                            let reg = screens::ScreenRegistry::new();
-                            if let Some(meta) = reg.meta_by_path(&self.current_screen_path) {
+                            if let Some(meta) = self.screen_registry.meta_by_path(&self.current_screen_path) {
                                 ui.strong(meta.display_name);
                             }
                         },
@@ -326,9 +326,7 @@ impl eframe::App for App {
 
             // Ensure screen exists
             if !self.screens.contains_key(&self.current_screen_path) {
-                if let Some(factory) =
-                    screens::ScreenRegistry::new().factory_by_path(&self.current_screen_path)
-                {
+                if let Some(factory) = self.screen_registry.factory_by_path(&self.current_screen_path) {
                     let boxed = factory();
                     self.screens.insert(self.current_screen_path.clone(), boxed);
                 }
