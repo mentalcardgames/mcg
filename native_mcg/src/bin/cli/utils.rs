@@ -2,7 +2,7 @@ use std::io::IsTerminal;
 
 use mcg_shared::{GameStatePublic, ServerMsg};
 
-use mcg_server::pretty::{format_event_human, format_state_human, format_table_header};
+use native_mcg::pretty::{format_event_human, format_state_human, format_table_header};
 
 /// Print a state either as JSON or human-friendly text.
 pub fn output_state(state: &GameStatePublic, json: bool) {

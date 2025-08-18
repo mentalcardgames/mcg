@@ -10,7 +10,7 @@ use axum::{
 };
 use tower_http::services::ServeDir;
 
-use crate::server::state::AppState;
+use crate::backend::AppState;
 use anyhow::{Result, Context};
 
 pub fn build_router(state: AppState) -> Router {
@@ -24,13 +24,13 @@ pub fn build_router(state: AppState) -> Router {
             get(|| async { Json(serde_json::json!({ "ok": true })) }),
         )
         // WebSocket endpoint (WASM GUI remains websocket-only)
-        .route("/ws", get(crate::server::ws::ws_handler))
+        .route("/ws", get(crate::backend::ws::ws_handler))
         // HTTP API endpoints (transport-agnostic server logic is reused)
-        .route("/api/join", post(crate::server::http::join_handler))
-        .route("/api/action", post(crate::server::http::action_handler))
-        .route("/api/state", get(crate::server::http::state_handler))
-        .route("/api/next_hand", post(crate::server::http::next_hand_handler))
-        .route("/api/reset", post(crate::server::http::reset_handler))
+        .route("/api/join", post(crate::backend::http::join_handler))
+        .route("/api/action", post(crate::backend::http::action_handler))
+        .route("/api/state", get(crate::backend::http::state_handler))
+        .route("/api/next_hand", post(crate::backend::http::next_hand_handler))
+        .route("/api/reset", post(crate::backend::http::reset_handler))
         .nest_service("/pkg", serve_dir)
         .nest_service("/media", serve_media)
         // Serve index.html for the root route

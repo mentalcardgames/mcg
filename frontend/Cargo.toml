@@ -1,5 +1,5 @@
 [package]
-name = "mcg"
+name = "frontend"
 version = "0.1.0"
 edition = "2021"
 description = "A mental card game implementation for the browser"

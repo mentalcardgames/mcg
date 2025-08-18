@@ -1,4 +1,4 @@
 [workspace]
-members = ["client", "server", "shared"]
-default-members = ["server", "shared"]
+members = ["frontend", "native_mcg", "shared"]
+default-members = ["native_mcg", "shared"]
 resolver = "2"

@@ -3,13 +3,13 @@
 mod pretty;
 mod eval;
 mod game;
-mod server;
+mod backend;
 mod transport;
 mod iroh_transport;
 mod config;
 mod cli;
 
-use server::AppState;
+use backend::AppState;
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
 use crate::config::Config;
@@ -78,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
     }
  
     // Run the server
-    server::run_server(addr, state).await?;
+    backend::run_server(addr, state).await?;
     Ok(())
 }
 

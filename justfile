@@ -7,10 +7,10 @@ wasm_pack := require("wasm-pack")
 default:
     @just --list
 
-# Build the WASM package for the client crate into root ./pkg
+# Build the WASM package for the frontend crate into root ./pkg
 # Usage: just build [PROFILE]
 # PROFILE: "release" (default), "profiling", or "dev"
-[working-directory: 'client']
+[working-directory: 'frontend']
 build PROFILE="release":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -43,15 +43,15 @@ start PROFILE="release" BOTS="1":
 # Run the native server (serves frontend + WebSocket backend)
 # Usage: just server [BOTS]
 server BOTS="1":
-    cargo run -p mcg-server --bin mcg-server -- --bots {{BOTS}}
+    cargo run -p native_mcg --bin native_mcg -- --bots {{BOTS}}
 
 # Run the server in the background for AI agent testing
 server-bg:
-    cargo run -p mcg-server --bin mcg-server &
+    cargo run -p native_mcg --bin native_mcg &
 
 # Kill the background server process
 kill-server:
-    pkill -f "mcg-server" || true
+    pkill -f "native_mcg" || true
 
 # Run the headless CLI with arbitrary arguments
 # Usage examples:
@@ -60,4 +60,4 @@ kill-server:
 #   just cli -- action bet --amount 20
 #   just cli -- reset --bots 3
 cli +ARGS:
-    cargo run -p mcg-server --bin mcg-cli -- {{ARGS}}
+    cargo run -p native_mcg --bin mcg-cli -- {{ARGS}}

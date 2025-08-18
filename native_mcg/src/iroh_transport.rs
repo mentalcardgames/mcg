@@ -19,7 +19,7 @@ use owo_colors::OwoColorize;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 
-use crate::server::AppState;
+use crate::backend::AppState;
 use crate::transport::send_server_msg_to_writer;
 use mcg_shared::{ClientMsg, ServerMsg};
 
@@ -210,7 +210,7 @@ async fn handle_iroh_connection(
     println!("{} {}", "[IROH CONNECT]".bold().green(), name.bold());
 
     // Ensure game started similarly to the websocket handler
-    if let Err(e) = crate::server::ensure_game_started(&state, &name).await {
+    if let Err(e) = crate::backend::ensure_game_started(&state, &name).await {
         if let Err(e2) = send_server_msg_to_writer(
             &mut send,
             &ServerMsg::Error(format!("Failed to start game: {}", e)),
@@ -230,7 +230,7 @@ async fn handle_iroh_connection(
     }
 
     // Send initial state directly to this client (same behaviour as websocket)
-    if let Some(gs) = crate::server::current_state_public(&state, you_id).await {
+    if let Some(gs) = crate::backend::current_state_public(&state, you_id).await {
         if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await {
             eprintln!("iroh send error: {}", e);
         }
@@ -281,34 +281,34 @@ async fn handle_iroh_connection(
                                 match cm {
                                     ClientMsg::Action(a) => {
                                         println!("[IROH] Action from {}: {:?}", name, a);
-                                        if let Some(e) = crate::server::apply_action_to_game(&state, 0, a.clone()).await {
+                                        if let Some(e) = crate::backend::apply_action_to_game(&state, 0, a.clone()).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(e)).await;
                                         }
                                         // Broadcast latest state then drive bots stepwise with delays
-                                        crate::server::broadcast_state(&state, you_id).await;
-                                        crate::server::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                        crate::backend::broadcast_state(&state, you_id).await;
+                                        crate::backend::drive_bots_with_delays(&state, you_id, 500, 1500).await;
                                     }
                                     ClientMsg::RequestState => {
                                         println!("[IROH] State requested by {}", name);
-                                        crate::server::broadcast_state(&state, you_id).await;
-                                        crate::server::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                        crate::backend::broadcast_state(&state, you_id).await;
+                                        crate::backend::drive_bots_with_delays(&state, you_id, 500, 1500).await;
                                     }
                                     ClientMsg::NextHand => {
                                         println!("[IROH] NextHand requested by {}", name);
-                                        if let Err(e) = crate::server::start_new_hand_and_print(&state, you_id).await {
+                                        if let Err(e) = crate::backend::start_new_hand_and_print(&state, you_id).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
                                         }
-                                        crate::server::broadcast_state(&state, you_id).await;
-                                        crate::server::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                        crate::backend::broadcast_state(&state, you_id).await;
+                                        crate::backend::drive_bots_with_delays(&state, you_id, 500, 1500).await;
                                     }
                                     ClientMsg::ResetGame { bots } => {
                                         println!("[IROH] ResetGame requested by {}: bots={} ", name, bots);
-                                        if let Err(e) = crate::server::reset_game_with_bots(&state, &name, bots, you_id).await {
+                                        if let Err(e) = crate::backend::reset_game_with_bots(&state, &name, bots, you_id).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
                                         } else {
-                                            crate::server::broadcast_state(&state, you_id).await;
+                                            crate::backend::broadcast_state(&state, you_id).await;
                                         }
-                                        crate::server::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                        crate::backend::drive_bots_with_delays(&state, you_id, 500, 1500).await;
                                     }
                                     ClientMsg::Join { .. } => {
                                         // Ignore subsequent joins
