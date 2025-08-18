@@ -28,6 +28,9 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // Import iroh types inside function to limit compile-time exposure when feature is enabled.
     // These imports are based on the iroh README snippets; they may require adjustment.
     use iroh::endpoint::Endpoint;
+    use iroh::SecretKey;
+    use getrandom::getrandom;
+    use std::path::PathBuf;
 
     // Choose an ALPN identifier for our application protocol.
     // Clients must use the same ALPN when connecting.
@@ -36,8 +39,47 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // Build and bind an endpoint. discovery_n0() helps with relay/discovery defaults
     // in the upstream iroh examples.
     // Ensure the endpoint advertises/accepts our ALPN so accept() will match incoming connections.
+    // Load or generate persistent secret key for stable NodeId.
+    // Key path: $HOME/.iroh/keypair (override with IROH_KEY_PATH env var).
+    let key_path = std::env::var("IROH_KEY_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let mut p = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".into()));
+            p.push(".iroh");
+            p.push("keypair");
+            p
+        });
+
+    let secret_key: SecretKey = match std::fs::read(&key_path) {
+        Ok(bytes) if bytes.len() >= 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&bytes[..32]);
+            SecretKey::from_bytes(&arr)
+        }
+        _ => {
+            // Generate a new secret key and persist it using getrandom to avoid rand version conflicts.
+            let mut arr = [0u8; 32];
+            if let Err(e) = getrandom(&mut arr) {
+                // Fallback: zeroed key (very unlikely). Log error and continue.
+                eprintln!("Failed to get randomness for iroh key: {}", e);
+            }
+            let sk = SecretKey::from_bytes(&arr);
+            if let Some(parent) = key_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            // Write raw 32 bytes; ignore errors for now but log them.
+            if let Err(e) = std::fs::write(&key_path, &sk.to_bytes()) {
+                eprintln!("Failed to persist iroh key to {:?}: {}", key_path, e);
+            } else {
+                println!("Persisted new iroh key to {:?}", key_path);
+            }
+            sk
+        }
+    };
+
     let endpoint = Endpoint::builder()
         .alpns(vec![ALPN.to_vec()])
+        .secret_key(secret_key)
         .discovery_n0()
         .bind()
         .await

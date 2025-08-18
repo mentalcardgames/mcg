@@ -23,6 +23,7 @@ owo-colors = "4.2.2"
 # Iroh transport support (enabled by default).
 # Use crates.io release 0.91.1 to match the docs/examples used by the rustdocs MCP server.
 iroh = "0.91.1"
+getrandom = "0.2"
 
 # Required helper for async trait usage in iroh handler
 async-trait = "0.1"
