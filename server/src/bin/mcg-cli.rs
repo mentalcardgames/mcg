@@ -354,10 +354,15 @@ fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
                 // In JSON mode, print the full state as before.
                 output_state(gs, true);
             } else {
-                // Print only newly appended log entries (to avoid repeating full state)
+                // Print only newly appended log entries (to avoid repeating full state).
+                // Handle the case where the server resets/truncates the action_log (e.g. on new hand).
                 let already = *last_printed;
                 let total = gs.action_log.len();
-                if total > already {
+                if total < already {
+                    // action_log was reset on the server (new hand); print full state to reflect change
+                    output_state(gs, false);
+                    *last_printed = total;
+                } else if total > already {
                     for e in gs.action_log.iter().skip(already) {
                         println!(
                             "{}",
