@@ -4,8 +4,7 @@ use mcg_shared::{
     ActionKind, BlindKind, ClientMsg, GameStatePublic, ActionEvent, GameAction, PlayerAction,
     PlayerPublic, ServerMsg, Stage,
 };
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::game::connection::ConnectionService;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::closure::Closure;
@@ -18,24 +17,20 @@ use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
-    #[cfg(target_arch = "wasm32")]
-    ws: Option<WebSocket>,
+    connection: ConnectionService,
     last_error: Option<String>,
     last_info: Option<String>,
     state: Option<GameStatePublic>,
     name: String,
     server_address: String,
     bots: usize,
-    inbox: Rc<RefCell<Vec<ServerMsg>>>,
-    error_inbox: Rc<RefCell<Vec<String>>>,
     show_error_popup: bool,
     scanner: QrScannerPopup,
 }
 impl PokerOnlineScreen {
     pub fn new() -> Self {
         Self {
-            #[cfg(target_arch = "wasm32")]
-            ws: None,
+            connection: ConnectionService::new(),
             last_error: None,
             last_info: None,
             state: None,
@@ -51,8 +46,6 @@ impl PokerOnlineScreen {
             #[cfg(not(target_arch = "wasm32"))]
             server_address: "127.0.0.1:3000".to_string(),
             bots: 1,
-            inbox: Rc::new(RefCell::new(Vec::new())),
-            error_inbox: Rc::new(RefCell::new(Vec::new())),
             show_error_popup: false,
             scanner: QrScannerPopup::new(),
         }
@@ -87,32 +80,27 @@ impl PokerOnlineScreen {
     }
 
     fn process_incoming_messages(&mut self) {
-        {
-            let mut msgs = self.inbox.borrow_mut();
-            for msg in msgs.drain(..) {
-                match msg {
-                    ServerMsg::Welcome { .. } => {
-                        self.last_info = Some("Connected".into());
-                        self.last_error = None;
-                        self.show_error_popup = false;
-                    }
-                    ServerMsg::State(gs) => {
-                        self.state = Some(gs);
-                        self.last_info = None;
-                    }
-                    ServerMsg::Error(err) => {
-                        self.last_error = Some(err);
-                        self.show_error_popup = true;
-                    }
+        for msg in self.connection.drain_messages() {
+            match msg {
+                ServerMsg::Welcome { .. } => {
+                    self.last_info = Some("Connected".into());
+                    self.last_error = None;
+                    self.show_error_popup = false;
+                }
+                ServerMsg::State(gs) => {
+                    self.state = Some(gs);
+                    self.last_info = None;
+                }
+                ServerMsg::Error(err) => {
+                    self.last_error = Some(err);
+                    self.show_error_popup = true;
                 }
             }
         }
-        {
-            let mut errs = self.error_inbox.borrow_mut();
-            for e in errs.drain(..) {
-                self.last_error = Some(e);
-                self.show_error_popup = true;
-            }
+
+        for e in self.connection.drain_errors() {
+            self.last_error = Some(e);
+            self.show_error_popup = true;
         }
     }
 
@@ -365,98 +353,15 @@ impl PokerOnlineScreen {
 }
 
 impl PokerOnlineScreen {
-    #[cfg(target_arch = "wasm32")]
     fn connect(&mut self, ctx: &egui::Context) {
-        let ws_url = format!("ws://{}/ws", self.server_address);
-        match WebSocket::new(&ws_url) {
-            Ok(ws) => {
-                let join = serde_json::to_string(&ClientMsg::Join {
-                    name: self.name.clone(),
-                })
-                .unwrap();
-                let ws_clone = ws.clone();
-                let onopen = Closure::<dyn FnMut()>::new(move || {
-                    let _ = ws_clone.send_with_str(&join);
-                });
-                ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
-                onopen.forget();
-                let onmessage = {
-                    let inbox = Rc::clone(&self.inbox);
-                    let ctx = ctx.clone();
-                    Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
-                        if let Some(txt) = e.data().as_string() {
-                            if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {
-                                inbox.borrow_mut().push(msg);
-                                // Request a repaint so the UI processes the new message promptly.
-                                ctx.request_repaint();
-                            }
-                        }
-                    })
-                };
-                ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-                onmessage.forget();
-                let onerror = {
-                    let err_inbox = Rc::clone(&self.error_inbox);
-                    let ctx = ctx.clone();
-                    let server_address = self.server_address.clone();
-                    Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
-                        err_inbox.borrow_mut().push(format!(
-                            "Failed to connect to server at {}.",
-                            server_address
-                        ));
-                        ctx.request_repaint();
-                    })
-                };
-                ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
-                onerror.forget();
-                let onclose = {
-                    let err_inbox = Rc::clone(&self.error_inbox);
-                    let ctx = ctx.clone();
-                    let server_address = self.server_address.clone();
-                    Closure::<dyn FnMut(CloseEvent)>::new(move |e: CloseEvent| {
-                        let code = e.code();
-                        let reason = e.reason();
-                        let msg = if reason.is_empty() {
-                            format!(
-                                "Connection closed (code {}). Is the server running at {}?",
-                                code, server_address
-                            )
-                        } else {
-                            format!("Connection closed (code {}): {}", code, reason)
-                        };
-                        err_inbox.borrow_mut().push(msg);
-                        ctx.request_repaint();
-                    })
-                };
-                ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
-                onclose.forget();
-                self.ws = Some(ws);
-                self.last_error = None;
-                self.show_error_popup = false;
-            }
-            Err(err) => {
-                self.last_error = Some(format!("WS connect error: {err:?}"));
-                self.show_error_popup = true;
-            }
-        }
+        self.connection.connect(&self.server_address, &self.name, ctx);
+        self.last_error = None;
+        self.show_error_popup = false;
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    fn connect(&mut self, _ctx: &egui::Context) {
-        self.last_error = Some("Online mode is unavailable on native builds".into());
-    }
-
-    #[cfg(target_arch = "wasm32")]
     fn send(&self, msg: &ClientMsg) {
-        if let Some(ws) = &self.ws {
-            if let Ok(txt) = serde_json::to_string(msg) {
-                let _ = ws.send_with_str(&txt);
-            }
-        }
+        self.connection.send(msg);
     }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    fn send(&self, _msg: &ClientMsg) {}
 }
 
 impl ScreenDef for PokerOnlineScreen {

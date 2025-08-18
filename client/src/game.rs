@@ -3,6 +3,7 @@ pub mod card;
 pub mod field;
 pub mod screen;
 pub mod screens;
+pub mod connection;
 #[cfg(target_arch = "wasm32")]
 use crate::router::Router;
 use screens::{AppInterface, MainMenu, ScreenWidget};
