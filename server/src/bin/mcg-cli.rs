@@ -20,7 +20,7 @@ struct Cli {
     #[arg(short, long, default_value = "CLI")]
     name: String,
  
-    /// Connect to an iroh peer (multiaddr / peer URI). When set the CLI
+    /// Connect to an iroh peer by public key (z-base-32). When set the CLI
     /// attempts to use iroh transport instead of WebSocket. (Explicit target.)
     #[arg(long)]
     iroh_peer: Option<String>,
@@ -189,25 +189,15 @@ async fn run_once_iroh(
     // passing the PublicKey satisfies the connect() signature and enables
     // discovery/relay resolution within the iroh library.
     use std::str::FromStr;
-    use iroh::{NodeAddr, PublicKey};
-    // Try two common input forms:
-    // 1) JSON-serialized NodeAddr (useful if the server prints NodeAddr as JSON)
-    // 2) PublicKey / NodeId string (z-base-32) parsed via PublicKey::from_str
-    let connection = if let Ok(addr) = serde_json::from_str::<NodeAddr>(peer_uri) {
-        endpoint
-            .connect(addr, ALPN)
-            .await
-            .context("connecting to iroh peer (node addr from JSON)")?
-    } else if let Ok(pk) = PublicKey::from_str(peer_uri) {
-        endpoint
-            .connect(pk, ALPN)
-            .await
-            .context("connecting to iroh peer (public key)")?
-    } else {
-        return Err(anyhow::anyhow!(
-            "peer_uri not a valid iroh NodeAddr (JSON) or PublicKey (z-base-32)"
-        ));
-    };
+    use iroh::PublicKey;
+    // Expect the supplied peer_uri to be a PublicKey (z-base-32). The CLI
+    // accepts only the PublicKey form for dialing.
+    let pk = PublicKey::from_str(peer_uri)
+        .context("parsing iroh public key (z-base-32)")?;
+    let connection = endpoint
+        .connect(pk, ALPN)
+        .await
+        .context("connecting to iroh peer (public key)")?;
 
     // Open a bidirectional stream
     let (mut send, recv) = connection

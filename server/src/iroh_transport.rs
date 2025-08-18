@@ -16,12 +16,11 @@
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use std::io::IsTerminal;
 use tokio::io::{AsyncBufReadExt, AsyncWrite, BufReader};
 
 use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
-use mcg_shared::{ClientMsg, GameStatePublic, ServerMsg};
+use mcg_shared::{ClientMsg, ServerMsg};
 
 /// Public entrypoint spawned by server startup
 pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
@@ -47,10 +46,6 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // Use the Endpoint::node_id() accessor and print its z32 representation.
     let pk = endpoint.node_id();
     println!("🔑 Iroh NodeId (public key): {}", pk);
-    // Wait until the endpoint's dialable NodeAddr is fully initialized before printing.
-    // This avoids printing an incomplete/placeholder address.
-    let node_addr = endpoint.node_addr().initialized().await;
-    println!("🧭 Iroh NodeAddr (dialable): {:?}", node_addr);
 
     // Use Endpoint.accept() to receive incoming connections. The `accept()`
     // call returns an Option-like incoming value which must be awaited to
