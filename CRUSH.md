@@ -28,7 +28,7 @@ This application is aimed to be peer to peer (p2p) in the future. Each player ge
     *   There is no dedicated `just serve` recipe in the current repo. The recommended end-to-end command is:
         - `just start [PROFILE] [BOTS]` — builds the frontend and runs the native node (see below) to serve the SPA and provide the WebSocket endpoint.
     *   If you only want to serve static files without running the native node, use a simple static server (example):
-        - `python3 -m http.server 8080` (run from repo root) and open `http://localhost:8080`.
+        - Important: Use the `native_mcg` backend to serve the frontend (recommended). Run `just server`, `just start`, or `cargo run -p native_mcg --bin native_mcg` to start the HTTP/WebSocket server which serves `/`, `/pkg`, `/media` and exposes the WebSocket endpoint `/ws`. Ad-hoc static servers like `python3 -m http.server` are not recommended because the app requires the server-side WebSocket endpoint.
     *   Examples:
         - `just start` — release build + native node with 1 bot
         - `just start dev` — dev build + native node with 1 bot

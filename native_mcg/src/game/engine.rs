@@ -183,15 +183,14 @@ impl Game {
         // cap logs via utils helper
         super::utils::cap_logs(self);
     }
-
 }
- 
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game::dealing;
     use anyhow::Result;
     use std::collections::VecDeque;
-    use crate::game::dealing;
 
     #[test]
     fn heads_up_blinds_and_dealing() -> Result<()> {
@@ -241,9 +240,9 @@ mod tests {
 
     #[test]
     fn blind_caps_to_stack_and_marks_all_in() -> Result<()> {
-            // Build a minimal game manually so we can set stack small before dealing.
-            let deck = dealing::shuffled_deck_with_seed(123);
-            let mut players = Vec::with_capacity(2);
+        // Build a minimal game manually so we can set stack small before dealing.
+        let deck = dealing::shuffled_deck_with_seed(123);
+        let mut players = Vec::with_capacity(2);
         players.push(Player {
             id: 0,
             name: "Short".to_owned(),

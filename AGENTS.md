@@ -27,8 +27,8 @@ This application is aimed to be peer to peer (p2p) in the future. Each player ge
 2.  **Serve / Run:**
     *   There is no dedicated `just serve` recipe in the current repo. The recommended end-to-end command is:
         - `just start [PROFILE] [BOTS]` — builds the frontend and runs the native node (see below) to serve the SPA and provide the WebSocket endpoint.
-    *   If you only want to serve static files without running the native node, use a simple static server (example):
-        - `python3 -m http.server 8080` (run from repo root) and open `http://localhost:8080`.
+    *   If you only want to serve static files without running the native node, note:
+        - Important: Use the `native_mcg` backend to serve the frontend (recommended). Run `just server`, `just start`, or `cargo run -p native_mcg --bin native_mcg` to start the HTTP/WebSocket server which serves `/`, `/pkg`, `/media` and exposes the WebSocket endpoint `/ws`. Ad-hoc static servers like `python3 -m http.server` are not recommended because the app requires the server-side WebSocket endpoint.
     *   Examples:
         - `just start` — release build + native node with 1 bot
         - `just start dev` — dev build + native node with 1 bot
@@ -41,7 +41,16 @@ This application is aimed to be peer to peer (p2p) in the future. Each player ge
 1.  **Run native node / backend:**
     *   `just server [BOTS]` — runs the `native_mcg` binary which starts the HTTP/WebSocket backend (typically binds starting at port 3000). It accepts `--bots <N>` to specify the number of AI bots included in games.
       - Internally the `justfile` invokes: `cargo run -p native_mcg --bin native_mcg -- --bots {{BOTS}}`
-2.  **Run Server in Background (for AI agents):**
+
+2.  **IROH (optional QUIC) transport**
+    *   `native_mcg` includes an optional iroh-based transport (QUIC) in addition to the HTTP/WebSocket backend. See `IROH.md` and `native_mcg/src/iroh_transport.rs` for details.
+    *   The iroh transport lets CLI clients and other nodes connect directly by PublicKey (z-base-32) using QUIC streams. The CLI provides an iroh client flow (`run_once_iroh`) that can dial a peer by PublicKey and exchange newline-delimited JSON `ClientMsg`/`ServerMsg`.
+    *   Notes:
+        - ALPN used by the iroh listener: `mcg/iroh/1` — clients must use the same ALPN when connecting.
+        - The server prints the node PublicKey (z-base-32). Dialing by the PublicKey is the recommended stable workflow; full NodeAddr representations are brittle across iroh versions.
+        - See `IROH.md` for examples, CLI usage, and recommendations (including `--print-addr` suggestions).
+
+3.  **Run Server in Background (for AI agents):**
     *   `just server-bg` — runs the native node in the background.
     *   `just kill-server` — stops the background native node process.
 
