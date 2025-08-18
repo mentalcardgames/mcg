@@ -24,16 +24,31 @@ use std::io::IsTerminal;
 
 use anyhow::{Result, Context};
 
-#[derive(Clone, Default)]
+use tokio::sync::broadcast;
+use crate::transport::send_server_msg_to_writer;
+
+#[derive(Clone)]
 pub struct AppState {
     pub lobby: Arc<RwLock<Lobby>>,
     pub bot_count: usize,
+    pub broadcaster: broadcast::Sender<ServerMsg>,
 }
 
 #[derive(Clone, Default)]
 pub(crate) struct Lobby {
     pub(crate) game: Option<Game>,
     pub(crate) last_printed_log_len: usize,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        let (tx, _rx) = broadcast::channel(16);
+        AppState {
+            lobby: Arc::new(RwLock::new(Lobby::default())),
+            bot_count: 0,
+            broadcaster: tx,
+        }
+    }
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -104,25 +119,54 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     };
     let hello = format!("{} {}", "[CONNECT]".bold().green(), name.bold());
     println!("{}", hello);
- 
+
     if let Err(e) = ensure_game_started(&state, &name).await {
         let _ = send_ws(&mut socket, &ServerMsg::Error(format!("Failed to start game: {}", e))).await;
         return;
     }
- 
+
     let you_id = 0usize;
     send_ws(&mut socket, &ServerMsg::Welcome { you: you_id }).await;
+    // Send initial state directly to this socket (does local printing & bookkeeping).
     send_state_to(&mut socket, &state, you_id).await;
 
-    while let Some(msg) = socket.next().await {
-        match msg {
-            Ok(Message::Text(txt)) => {
-                if let Ok(cm) = serde_json::from_str::<ClientMsg>(&txt) {
-                    process_client_msg(&name, &state, &mut socket, cm, you_id).await;
+    // Subscribe to broadcasts so this socket receives state updates produced by other connections.
+    let mut rx = state.broadcaster.subscribe();
+
+    loop {
+        tokio::select! {
+            biased;
+
+            // Broadcast messages from server-wide channel
+            biased_recv = rx.recv() => {
+                match biased_recv {
+                    Ok(sm) => {
+                        // Forward to connected socket. Ignore send failures.
+                        send_ws(&mut socket, &sm).await;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        // We missed messages; continue and try to catch up on next send.
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        // Broadcaster closed - treat as shutdown
+                        break;
+                    }
                 }
             }
-            Ok(Message::Close(_)) | Err(_) => break,
-            _ => {}
+
+            // Incoming websocket messages from this client
+            msg = socket.next() => {
+                match msg {
+                    Some(Ok(Message::Text(txt))) => {
+                        if let Ok(cm) = serde_json::from_str::<ClientMsg>(&txt) {
+                            process_client_msg(&name, &state, &mut socket, cm, you_id).await;
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
+                    _ => {}
+                }
+            }
         }
     }
     println!("{} {}", "[DISCONNECT]".bold().red(), name.bold());
@@ -176,13 +220,38 @@ async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: usize) 
     }
 }
 
-async fn drive_bots_with_delays(
-    socket: &mut WebSocket,
-    state: &AppState,
-    you_id: usize,
-    min_ms: u64,
-    max_ms: u64,
-) {
+/// Broadcast the current state (and print new events to server console) to all subscribers.
+///
+/// This centralizes server-side broadcasting so websocket and iroh transports both
+/// share the same behavior.
+pub async fn broadcast_state(state: &AppState, you_id: usize) {
+    if let Some(gs) = current_state_public(state, you_id).await {
+        // Print any newly added events to server console and update bookkeeping.
+        let mut lobby = state.lobby.write().await;
+        let already = lobby.last_printed_log_len;
+        let total = gs.action_log.len();
+        if total > already {
+            for e in gs.action_log.iter().skip(already) {
+                let line = mcg_server::pretty::format_event_human(
+                    e,
+                    &gs.players,
+                    gs.you_id,
+                    std::io::stdout().is_terminal(),
+                );
+                println!("{}", line);
+            }
+            lobby.last_printed_log_len = total;
+        }
+        drop(lobby);
+
+        // Broadcast the new state to all subscribers.
+        let _ = state.broadcaster.send(ServerMsg::State(gs));
+    }
+}
+
+/// Drive bots similarly to the websocket handler, but mutate shared state and
+/// broadcast resulting states. Exposed so iroh transport can reuse the same behaviour.
+pub async fn drive_bots_with_delays(state: &AppState, you_id: usize, min_ms: u64, max_ms: u64) {
     loop {
         // Perform a single bot action if it's their turn
         let did_act = {
@@ -207,8 +276,8 @@ async fn drive_bots_with_delays(
             }
         };
 
-        // Send updated state to client
-        send_state_to(socket, state, you_id).await;
+        // Broadcast updated state to all subscribers
+        broadcast_state(state, you_id).await;
 
         if !did_act {
             break;
@@ -238,32 +307,33 @@ async fn process_client_msg(
             if let Some(e) = apply_action_to_game(state, 0, a.clone()).await {
                 let _ = send_ws(socket, &ServerMsg::Error(e)).await;
             }
-            // Always send latest state then drive bots stepwise with delays
-            send_state_to(socket, state, you_id).await;
-            drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
+            // Broadcast latest state then drive bots stepwise with delays
+            broadcast_state(state, you_id).await;
+            drive_bots_with_delays(state, you_id, 500, 1500).await;
         }
         ClientMsg::RequestState => {
             println!("[WS] State requested by {}", name);
-            // Send latest then drive bots if it's their turn
-            send_state_to(socket, state, you_id).await;
-            drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
+            // Broadcast latest then drive bots if it's their turn
+            broadcast_state(state, you_id).await;
+            drive_bots_with_delays(state, you_id, 500, 1500).await;
         }
         ClientMsg::NextHand => {
             println!("[WS] NextHand requested by {}", name);
             if let Err(e) = start_new_hand_and_print(state, you_id).await {
                 let _ = send_ws(socket, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
             }
-            send_state_to(socket, state, you_id).await;
-            drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
+            // Broadcast the changed state and drive bots
+            broadcast_state(state, you_id).await;
+            drive_bots_with_delays(state, you_id, 500, 1500).await;
         }
         ClientMsg::ResetGame { bots } => {
             println!("[WS] ResetGame requested by {}: bots={} ", name, bots);
             if let Err(e) = reset_game_with_bots(state, &name, bots, you_id).await {
                 let _ = send_ws(socket, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
             } else {
-                send_state_to(socket, state, you_id).await;
+                broadcast_state(state, you_id).await;
             }
-            drive_bots_with_delays(socket, state, you_id, 500, 1500).await;
+            drive_bots_with_delays(state, you_id, 500, 1500).await;
         }
         ClientMsg::Join { .. } => {}
     }

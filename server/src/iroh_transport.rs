@@ -16,8 +16,10 @@
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tokio::io::{AsyncBufReadExt, AsyncWrite, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWrite};
+use tokio::io::BufReader;
 
+use crate::server;
 use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
 use mcg_shared::{ClientMsg, ServerMsg};
@@ -84,11 +86,9 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     Ok(())
 }
 
-// ProtocolHandler removed. Using explicit accept loop + handle_iroh_connection(...) above.
-
-/// Per-connection handler which speaks newline-delimited JSON over a
-/// bi-directional iroh connection. Separated into its own async function
-/// so it can be spawned as a task from the accept loop above.
+// Per-connection handler which speaks newline-delimited JSON over a
+// bi-directional iroh connection. Separated into its own async function
+// so it can be spawned as a task from the accept loop above.
 async fn handle_iroh_connection(
     state: AppState,
     connection: iroh::endpoint::Connection,
@@ -155,49 +155,102 @@ async fn handle_iroh_connection(
         eprintln!("iroh send error: {}", e);
     }
 
-    // Send initial state
+    // Send initial state directly to this client (same behaviour as websocket)
     if let Some(gs) = crate::server::current_state_public(&state, you_id).await {
         if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await {
             eprintln!("iroh send error: {}", e);
         }
     }
 
-    // Now enter a loop reading incoming JSON lines and processing ClientMsg
+    // Subscribe to global broadcasts so this iroh connection receives state updates
+    // caused by other transports (e.g. websocket clients).
+    let mut rx = state.broadcaster.subscribe();
+
+    // Now enter a loop that waits for either incoming client lines or broadcast messages.
     let mut line = String::new();
     loop {
         line.clear();
-        let bytes = reader.read_line(&mut line).await?;
-        if bytes == 0 {
-            // connection closed by peer
-            break;
-        }
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        match serde_json::from_str::<ClientMsg>(trimmed) {
-            Ok(cm) => {
-                // Process the client message in-place (mirroring process_client_msg)
-                if let Err(e) = process_client_msg_iroh(&name, &state, &mut send, cm, you_id).await
-                {
-                    eprintln!("iroh processing error: {}", e);
-                    if let Err(e2) = send_server_msg_to_writer(
-                        &mut send,
-                        &ServerMsg::Error(format!("Processing error: {}", e)),
-                    )
-                    .await
-                    {
-                        eprintln!("iroh send error: {}", e2);
+        tokio::select! {
+            // Broadcast events from server (State/Error/Welcome) forwarded to this client
+            biased;
+            recv = rx.recv() => {
+                match recv {
+                    Ok(sm) => {
+                        if let Err(e) = send_server_msg_to_writer(&mut send, &sm).await {
+                            eprintln!("iroh send error while forwarding broadcast: {}", e);
+                            // On write failure, break the connection loop
+                            break;
+                        }
                     }
-                    // continue processing other messages
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        // missed messages, continue
+                        continue;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        break;
+                    }
                 }
             }
-            Err(e) => {
-                let _ = send_server_msg_to_writer(
-                    &mut send,
-                    &ServerMsg::Error(format!("Invalid JSON message: {}", e)),
-                )
-                .await;
+
+            // Incoming client messages (newline-delimited JSON)
+            res = reader.read_line(&mut line) => {
+                match res {
+                    Ok(0) => break, // connection closed
+                    Ok(_) => {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+                        match serde_json::from_str::<ClientMsg>(trimmed) {
+                            Ok(cm) => {
+                                // Process the client message and use server-side broadcast functions
+                                match cm {
+                                    ClientMsg::Action(a) => {
+                                        println!("[IROH] Action from {}: {:?}", name, a);
+                                        if let Some(e) = crate::server::apply_action_to_game(&state, 0, a.clone()).await {
+                                            let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(e)).await;
+                                        }
+                                        // Broadcast latest state then drive bots stepwise with delays
+                                        crate::server::broadcast_state(&state, you_id).await;
+                                        crate::server::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                    }
+                                    ClientMsg::RequestState => {
+                                        println!("[IROH] State requested by {}", name);
+                                        crate::server::broadcast_state(&state, you_id).await;
+                                        crate::server::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                    }
+                                    ClientMsg::NextHand => {
+                                        println!("[IROH] NextHand requested by {}", name);
+                                        if let Err(e) = crate::server::start_new_hand_and_print(&state, you_id).await {
+                                            let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
+                                        }
+                                        crate::server::broadcast_state(&state, you_id).await;
+                                        crate::server::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                    }
+                                    ClientMsg::ResetGame { bots } => {
+                                        println!("[IROH] ResetGame requested by {}: bots={} ", name, bots);
+                                        if let Err(e) = crate::server::reset_game_with_bots(&state, &name, bots, you_id).await {
+                                            let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
+                                        } else {
+                                            crate::server::broadcast_state(&state, you_id).await;
+                                        }
+                                        crate::server::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                    }
+                                    ClientMsg::Join { .. } => {
+                                        // Ignore subsequent joins
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Invalid JSON message: {}", e))).await;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("iroh read error: {}", e);
+                        break;
+                    }
+                }
             }
         }
     }
@@ -206,125 +259,5 @@ async fn handle_iroh_connection(
     // Close the send side politely if available
     let _ = send.finish();
     connection.closed().await;
-    Ok(())
-}
-
-
-
-/// Process a ClientMsg received over iroh and reply over the iroh send writer.
-///
-/// This mirrors the behaviour of process_client_msg in the WebSocket handler,
-/// but operates directly on the shared AppState and the iroh send writer.
-async fn process_client_msg_iroh<W>(
-    name: &str,
-    state: &AppState,
-    writer: &mut W,
-    cm: ClientMsg,
-    you_id: usize,
-) -> Result<()>
-where
-    W: AsyncWrite + Unpin + Send,
-{
-    match cm {
-        ClientMsg::Action(a) => {
-            println!("[IROH] Action from {}: {:?}", name, a);
-            if let Some(e) = crate::server::apply_action_to_game(state, 0, a.clone()).await {
-                let _ = send_server_msg_to_writer(writer, &ServerMsg::Error(e)).await;
-            }
-            // send latest state then drive bots
-            if let Some(gs) = crate::server::current_state_public(state, you_id).await {
-                let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
-            }
-            drive_bots_with_delays_iroh(writer, state, you_id, 500, 1500).await?;
-        }
-        ClientMsg::RequestState => {
-            println!("[IROH] State requested by {}", name);
-            if let Some(gs) = crate::server::current_state_public(state, you_id).await {
-                let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
-            }
-            drive_bots_with_delays_iroh(writer, state, you_id, 500, 1500).await?;
-        }
-        ClientMsg::NextHand => {
-            println!("[IROH] NextHand requested by {}", name);
-            if let Err(e) = crate::server::start_new_hand_and_print(state, you_id).await {
-                let _ = send_server_msg_to_writer(
-                    writer,
-                    &ServerMsg::Error(format!("Failed to start new hand: {}", e)),
-                )
-                .await;
-            }
-            if let Some(gs) = crate::server::current_state_public(state, you_id).await {
-                let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
-            }
-            drive_bots_with_delays_iroh(writer, state, you_id, 500, 1500).await?;
-        }
-        ClientMsg::ResetGame { bots } => {
-            println!("[IROH] ResetGame requested by {}: bots={} ", name, bots);
-            if let Err(e) = crate::server::reset_game_with_bots(state, &name, bots, you_id).await {
-                let _ = send_server_msg_to_writer(writer, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
-            } else if let Some(gs) = crate::server::current_state_public(state, you_id).await {
-                let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
-            }
-            drive_bots_with_delays_iroh(writer, state, you_id, 500, 1500).await?;
-        }
-        ClientMsg::Join { .. } => {
-            // Join is handled at connection start; ignore subsequent joins
-        }
-    }
-    Ok(())
-}
-
-/// Drive bots similarly to the websocket handler, but send state updates over the provided writer.
-async fn drive_bots_with_delays_iroh<W>(
-    writer: &mut W,
-    state: &AppState,
-    you_id: usize,
-    min_ms: u64,
-    max_ms: u64,
-) -> Result<()>
-where
-    W: AsyncWrite + Unpin + Send,
-{
-    loop {
-        // Perform a single bot action if it's their turn
-        let did_act = {
-            let mut lobby = state.lobby.write().await;
-            if let Some(game) = &mut lobby.game {
-                if game.stage != mcg_shared::Stage::Showdown && game.to_act != you_id {
-                    let actor = game.to_act;
-                    // Choose a simple bot action using the same logic as random_bot_action
-                    let need = game.current_bet.saturating_sub(game.round_bets[actor]);
-                    let action = if need == 0 {
-                        mcg_shared::PlayerAction::Bet(game.bb)
-                    } else {
-                        mcg_shared::PlayerAction::CheckCall
-                    };
-                    let _ = game.apply_player_action(actor, action);
-                    true
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        };
-
-        // Send updated state to client
-        if let Some(gs) = crate::server::current_state_public(state, you_id).await {
-            let _ = send_server_msg_to_writer(writer, &ServerMsg::State(gs)).await;
-        }
-
-        if !did_act {
-            break;
-        }
-        // Sleep a pseudo-random-ish delay between actions without holding non-Send state
-        let now_ns = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-            Ok(d) => d.subsec_nanos() as u64,
-            Err(_) => 0u64,
-        };
-        let span = max_ms.saturating_sub(min_ms);
-        let delay = min_ms + (now_ns % span.max(1));
-        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-    }
     Ok(())
 }

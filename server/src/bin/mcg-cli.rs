@@ -58,6 +58,8 @@ enum Commands {
         #[arg(long, short = 'b', default_value_t = 1)]
         bots: usize,
     },
+    /// Watch game events continuously and print them as they happen
+    Watch,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -145,6 +147,13 @@ async fn main() -> anyhow::Result<()> {
             if let Some(state) = latest {
                 output_state(&state, cli.json);
             }
+        }
+        Commands::Watch => {
+            if let Some(peer) = &cli.iroh_peer {
+                watch_iroh(peer, &cli.name, cli.json).await?
+            } else {
+                watch_ws(ws_url.as_ref().unwrap(), &cli.name, cli.json).await?
+            };
         }
     }
 
@@ -332,4 +341,128 @@ async fn run_once(
     }
 
     Ok(latest_state)
+}
+
+/// Shared handler for server messages so the CLI doesn't duplicate logic
+fn handle_server_msg(sm: &ServerMsg, json: bool) {
+    match sm {
+        ServerMsg::State(gs) => output_state(gs, json),
+        ServerMsg::Error(e) => eprintln!("Server error: {}", e),
+        ServerMsg::Welcome { .. } => {
+            if json {
+                // If user wants JSON, print the welcome message as JSON.
+                if let Ok(txt) = serde_json::to_string_pretty(sm) {
+                    println!("{}", txt);
+                }
+            } else {
+                // For human output we don't print anything special for Welcome
+            }
+        }
+    }
+}
+
+/// Watch over a websocket connection and print events as they arrive.
+async fn watch_ws(ws_url: &Url, name: &str, json: bool) -> anyhow::Result<()> {
+    let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
+    let (mut write, mut read) = ws_stream.split();
+
+    // Send Join
+    let join = serde_json::to_string(&ClientMsg::Join {
+        name: name.to_string(),
+    })?;
+    write.send(Message::Text(join)).await?;
+
+    // Read messages forever (until socket closed or error) and handle them via
+    // the shared handler.
+    loop {
+        match read.next().await {
+            Some(Ok(Message::Text(txt))) => {
+                if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
+                    handle_server_msg(&sm, json);
+                }
+            }
+            Some(Ok(_other)) => { /* ignore non-text frames */ }
+            Some(Err(e)) => {
+                eprintln!("WebSocket error: {}", e);
+                break;
+            }
+            None => break, // closed
+        }
+    }
+
+    Ok(())
+}
+
+/// Watch over an iroh bidirectional stream and print events as they arrive.
+///
+/// The function mirrors the websocket watcher in behavior but reuses the
+/// same `handle_server_msg` helper so there is no duplicate message handling.
+async fn watch_iroh(peer_uri: &str, name: &str, json: bool) -> anyhow::Result<()> {
+    // Import iroh APIs inside the function to limit compile-time exposure.
+    use iroh::endpoint::Endpoint;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    // ALPN must match the server's ALPN
+    const ALPN: &[u8] = b"mcg/iroh/1";
+
+    // Bind a local endpoint (discovery_n0 for default settings)
+    let endpoint = Endpoint::builder()
+        .discovery_n0()
+        .bind()
+        .await
+        .context("binding iroh endpoint for client")?;
+
+    use std::str::FromStr;
+    use iroh::PublicKey;
+    let pk = PublicKey::from_str(peer_uri)
+        .context("parsing iroh public key (z-base-32)")?;
+    let connection = endpoint
+        .connect(pk, ALPN)
+        .await
+        .context("connecting to iroh peer (public key)")?;
+
+    // Open a bidirectional stream
+    let (mut send, recv) = connection
+        .open_bi()
+        .await
+        .context("opening bidirectional stream")?;
+
+    let mut reader = BufReader::new(recv);
+
+    // Send Join
+    let join_txt = serde_json::to_string(&ClientMsg::Join {
+        name: name.to_string(),
+    })?;
+    send.write_all(join_txt.as_bytes()).await?;
+    send.write_all(b"\n").await?;
+    send.flush().await?;
+
+    // Read newline-delimited JSON messages and handle them via shared handler.
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line).await {
+            Ok(0) => break, // connection closed
+            Ok(_) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if let Ok(sm) = serde_json::from_str::<ServerMsg>(trimmed) {
+                    handle_server_msg(&sm, json);
+                } else {
+                    eprintln!("Invalid JSON from iroh peer: {}", trimmed);
+                }
+            }
+            Err(e) => {
+                eprintln!("iroh read error: {}", e);
+                break;
+            }
+        }
+    }
+
+    // Try to finish/close the send side politely if available
+    let _ = send.finish();
+
+    Ok(())
 }
