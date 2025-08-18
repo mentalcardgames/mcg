@@ -4,25 +4,9 @@
 //! the same serialization logic and error handling.
 
 use anyhow::Result;
-use axum::extract::ws::{Message, WebSocket};
+use mcg_shared::ServerMsg;
 use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
-use mcg_shared::ServerMsg;
-
-/// Send a ServerMsg over an Axum WebSocket connection.
-///
-/// This mirrors the previous inline implementation used in server.rs.
-#[allow(dead_code)]
-pub async fn send_server_msg_ws(socket: &mut WebSocket, msg: &ServerMsg) {
-    match serde_json::to_string(msg) {
-        Ok(txt) => {
-            let _ = socket.send(Message::Text(txt)).await;
-        }
-        Err(e) => {
-            eprintln!("Failed to serialize ServerMsg for websocket send: {}", e);
-        }
-    }
-}
 
 /// Send a ServerMsg to an AsyncWrite sink as a newline-delimited JSON line.
 ///

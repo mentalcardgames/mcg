@@ -281,7 +281,7 @@ impl QrScannerPopup {
         &mut self,
         ui: &mut egui::Ui,
         ctx: &egui::Context,
-        target: &mut String,
+        _target: &mut String,
     ) {
         if ui
             .button("Scan QR")
@@ -326,7 +326,7 @@ impl QrScannerPopup {
                                 ui.label("Waiting for camera to initialize...");
                             }
                             if let Some(qr_result) = camera.get_last_qr_result() {
-                                *target = qr_result.clone();
+                                *_target = qr_result.clone();
                                 camera.stop();
                                 self.started = false;
                                 self.open = false;
