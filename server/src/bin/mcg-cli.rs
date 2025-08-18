@@ -343,10 +343,36 @@ async fn run_once(
     Ok(latest_state)
 }
 
-/// Shared handler for server messages so the CLI doesn't duplicate logic
-fn handle_server_msg(sm: &ServerMsg, json: bool) {
+/// Shared handler for server messages so the CLI doesn't duplicate logic.
+/// This version supports incremental printing by accepting a mutable
+/// `last_printed` index which tracks how many log entries have already been
+/// displayed. For JSON mode we still print the full message.
+fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
     match sm {
-        ServerMsg::State(gs) => output_state(gs, json),
+        ServerMsg::State(gs) => {
+            if json {
+                // In JSON mode, print the full state as before.
+                output_state(gs, true);
+            } else {
+                // Print only newly appended log entries (to avoid repeating full state)
+                let already = *last_printed;
+                let total = gs.action_log.len();
+                if total > already {
+                    for e in gs.action_log.iter().skip(already) {
+                        println!(
+                            "{}",
+                            mcg_server::pretty::format_event_human(
+                                e,
+                                &gs.players,
+                                gs.you_id,
+                                std::io::stdout().is_terminal()
+                            )
+                        );
+                    }
+                    *last_printed = total;
+                }
+            }
+        }
         ServerMsg::Error(e) => eprintln!("Server error: {}", e),
         ServerMsg::Welcome { .. } => {
             if json {
@@ -373,12 +399,14 @@ async fn watch_ws(ws_url: &Url, name: &str, json: bool) -> anyhow::Result<()> {
     write.send(Message::Text(join)).await?;
 
     // Read messages forever (until socket closed or error) and handle them via
-    // the shared handler.
+    // the shared handler. Track how many log entries we've printed so we only
+    // print incremental events.
+    let mut last_printed: usize = 0;
     loop {
         match read.next().await {
             Some(Ok(Message::Text(txt))) => {
                 if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
-                    handle_server_msg(&sm, json);
+                    handle_server_msg(&sm, json, &mut last_printed);
                 }
             }
             Some(Ok(_other)) => { /* ignore non-text frames */ }
@@ -439,6 +467,8 @@ async fn watch_iroh(peer_uri: &str, name: &str, json: bool) -> anyhow::Result<()
 
     // Read newline-delimited JSON messages and handle them via shared handler.
     let mut line = String::new();
+    // Track how many log entries we've already printed for this connection.
+    let mut last_printed: usize = 0;
     loop {
         line.clear();
         match reader.read_line(&mut line).await {
@@ -449,7 +479,7 @@ async fn watch_iroh(peer_uri: &str, name: &str, json: bool) -> anyhow::Result<()
                     continue;
                 }
                 if let Ok(sm) = serde_json::from_str::<ServerMsg>(trimmed) {
-                    handle_server_msg(&sm, json);
+                    handle_server_msg(&sm, json, &mut last_printed);
                 } else {
                     eprintln!("Invalid JSON from iroh peer: {}", trimmed);
                 }

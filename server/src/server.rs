@@ -17,7 +17,6 @@ use tokio::sync::RwLock;
 use tower_http::services::ServeDir;
 
 use crate::game::Game;
-use mcg_server::pretty::format_table_header;
 use mcg_shared::{ClientMsg, GameStatePublic, ServerMsg};
 use owo_colors::OwoColorize;
 use std::io::IsTerminal;
@@ -25,7 +24,6 @@ use std::io::IsTerminal;
 use anyhow::{Result, Context};
 
 use tokio::sync::broadcast;
-use crate::transport::send_server_msg_to_writer;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -376,7 +374,7 @@ pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result
         let bb = game.bb;
         let gs = game.public_for(you_id);
         lobby.last_printed_log_len = gs.action_log.len();
-        let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+        let header = mcg_server::pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
         println!("{}", header);
     }
     Ok(())
@@ -399,7 +397,7 @@ pub async fn reset_game_with_bots(
                 let bb = game.bb;
                 let gs = game.public_for(you_id);
                 lobby.last_printed_log_len = gs.action_log.len();
-                let header = format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
+                let header = mcg_server::pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
                 println!("{}", header);
             }
         }
