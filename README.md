@@ -1,6 +1,10 @@
 # MCG
 
-A Rust workspace for a browser-based card game. The frontend (client) compiles to WebAssembly (WASM) and renders with eframe/egui. The backend (server) is an Axum HTTP/WebSocket server that serves the SPA and provides a real-time poker demo. A shared crate contains the serialized message types and supporting structures.
+A Rust workspace for a browser-based card game. The frontend (client) compiles
+to WebAssembly (WASM) and renders with eframe/egui. The backend (server) is an
+Axum HTTP/WebSocket server that serves the SPA and provides a real-time poker
+demo. A shared crate contains the serialized message types and supporting
+structures.
 
 ## Quick start
 
@@ -17,8 +21,6 @@ A Rust workspace for a browser-based card game. The frontend (client) compiles t
 
 - Build then run together:
   - `just start`              # release + server with 1 bot
-  - `just start dev`          # dev + server with 1 bot
-  - `just start release 3`    # release + server with 3 bots
 
 Notes
 - The server binds to the first available port starting at 3000 and logs the chosen URL (e.g., http://localhost:3000). Open that URL in the browser.
@@ -187,15 +189,6 @@ The easiest way is to run a dev build and start the server, then open the printe
   - `just server` (or `just server 3` to run with 3 bots)
 
 Then open the printed URL in your browser (e.g., http://localhost:3000).
-
-In the app
-- From the Main Menu, open “Poker Online”.
-- Name: enter your display name (default is fine).
-- Server: the server URL (default `http://localhost:3000`). Update it if the server chose a different port.
-- Connect: creates/joins a single-player game (bots are added server-side). You’ll see bots act with short delays and the UI update live.
-- Action row: click Fold / Check/Call / Bet to act; on Showdown, use “Next Hand”.
-- Clipboard: use “Copy to clipboard” in the log to export a concise game summary.
-- QR scan: click “Scan QR” beside the Server field to fill the server URL by scanning a QR code. Allow camera access when prompted. The popup is safe to close/reopen and shows a friendly message if no camera is available.
 
 Hot reload loop
 - After client changes: `just build dev` and refresh the browser tab.
