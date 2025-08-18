@@ -1,6 +1,5 @@
 // WebSocket handlers and websocket-specific helpers.
 
-use std::sync::Arc;
 
 use axum::{
     extract::{
@@ -17,8 +16,6 @@ use std::io::IsTerminal;
 
 use super::state::AppState;
 use crate::pretty;
-
-use anyhow::Result;
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))

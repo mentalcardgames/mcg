@@ -70,6 +70,7 @@ fn format_card(c: u8, color: bool) -> String {
     text
 }
 
+#[allow(dead_code)]
 fn format_cards(cards: &[u8], color: bool) -> String {
     cards
         .iter()
@@ -261,6 +262,7 @@ pub fn format_table_header(gs: &GameStatePublic, sb: u32, bb: u32, color: bool) 
     out
 }
 
+#[allow(dead_code)]
 pub fn format_state_human(gs: &GameStatePublic, color: bool) -> String {
     let mut out = String::new();
 

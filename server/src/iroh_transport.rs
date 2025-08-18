@@ -16,10 +16,9 @@
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
-use tokio::io::{AsyncBufReadExt, AsyncWrite};
+use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 
-use crate::server;
 use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
 use mcg_shared::{ClientMsg, ServerMsg};
@@ -29,7 +28,6 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // Import iroh types inside function to limit compile-time exposure when feature is enabled.
     // These imports are based on the iroh README snippets; they may require adjustment.
     use iroh::endpoint::Endpoint;
-    use iroh::Watcher;
 
     // Choose an ALPN identifier for our application protocol.
     // Clients must use the same ALPN when connecting.

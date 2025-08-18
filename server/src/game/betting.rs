@@ -2,7 +2,7 @@
 
 use anyhow::{Result, bail};
 use mcg_shared::{ActionEvent, ActionKind, PlayerAction};
-use crate::game::{Game, Player};
+use crate::game::Game;
 
 /// Compute the normalized add amount for an open bet (when current_bet == 0).
 /// Ensures the total bet is at least the big blind and not more than

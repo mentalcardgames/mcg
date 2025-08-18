@@ -10,4 +10,4 @@ mod showdown;
 mod betting;
 mod engine;
 
-pub use engine::{Game, Player};
+pub use engine::Game;

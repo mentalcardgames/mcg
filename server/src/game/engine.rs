@@ -1,9 +1,6 @@
 //! Core Game and Player definitions + constructors and small helpers.
 
-use crate::eval::{card_str, evaluate_best_hand, pick_best_five};
-use mcg_shared::{
-    ActionEvent, GameStatePublic, HandResult, LogEntry, LogEvent, PlayerPublic, Stage,
-};
+use mcg_shared::{ActionEvent, GameStatePublic, LogEntry, PlayerPublic, Stage};
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
 use anyhow::{Result, Context};

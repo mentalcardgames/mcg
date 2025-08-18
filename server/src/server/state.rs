@@ -1,6 +1,6 @@
 // Server state management: AppState, Lobby, and helpers that operate on shared state.
 
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use std::io::IsTerminal;
 
 use tokio::sync::RwLock;
@@ -14,7 +14,7 @@ use crate::pretty;
 /// Shared application state exposed to handlers.
 #[derive(Clone)]
 pub struct AppState {
-    pub lobby: Arc<RwLock<Lobby>>,
+    pub(crate) lobby: Arc<RwLock<Lobby>>,
     pub bot_count: usize,
     pub broadcaster: broadcast::Sender<mcg_shared::ServerMsg>,
 }
