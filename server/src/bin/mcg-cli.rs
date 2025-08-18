@@ -73,8 +73,13 @@ enum ActionKind {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Build ws URL only if iroh_peer not requested
-    let ws_url = if cli.iroh_peer.is_none() {
+    // Decide transport: iroh if requested, HTTP if server scheme is http(s), otherwise WebSocket.
+    let use_iroh = cli.iroh_peer.is_some();
+    let use_http = {
+        let s = cli.server.as_str();
+        s.starts_with("http://") || s.starts_with("https://")
+    };
+    let ws_url = if !use_iroh && !use_http {
         Some(build_ws_url(&cli.server)?)
     } else {
         None
@@ -82,8 +87,10 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::Join => {
-            let latest = if let Some(peer) = &cli.iroh_peer {
-                run_once_iroh(peer, &cli.name, None, cli.wait_ms).await?
+            let latest = if use_iroh {
+                run_once_iroh(cli.iroh_peer.as_ref().unwrap(), &cli.name, None, cli.wait_ms).await?
+            } else if use_http {
+                run_once_http(&cli.server, &cli.name, None, cli.wait_ms).await?
             } else {
                 run_once(ws_url.as_ref().unwrap(), &cli.name, None, cli.wait_ms).await?
             };
@@ -92,8 +99,10 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::State => {
-            let latest = if let Some(peer) = &cli.iroh_peer {
-                run_once_iroh(peer, &cli.name, Some(ClientMsg::RequestState), cli.wait_ms).await?
+            let latest = if use_iroh {
+                run_once_iroh(cli.iroh_peer.as_ref().unwrap(), &cli.name, Some(ClientMsg::RequestState), cli.wait_ms).await?
+            } else if use_http {
+                run_once_http(&cli.server, &cli.name, Some(ClientMsg::RequestState), cli.wait_ms).await?
             } else {
                 run_once(
                     ws_url.as_ref().unwrap(),
@@ -113,8 +122,10 @@ async fn main() -> anyhow::Result<()> {
                 ActionKind::CheckCall => PlayerAction::CheckCall,
                 ActionKind::Bet => PlayerAction::Bet(amount),
             };
-            let latest = if let Some(peer) = &cli.iroh_peer {
-                run_once_iroh(peer, &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?
+            let latest = if use_iroh {
+                run_once_iroh(cli.iroh_peer.as_ref().unwrap(), &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?
+            } else if use_http {
+                run_once_http(&cli.server, &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?
             } else {
                 run_once(ws_url.as_ref().unwrap(), &cli.name, Some(ClientMsg::Action(pa)), cli.wait_ms).await?
             };
@@ -123,8 +134,10 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::NextHand => {
-            let latest = if let Some(peer) = &cli.iroh_peer {
-                run_once_iroh(peer, &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?
+            let latest = if use_iroh {
+                run_once_iroh(cli.iroh_peer.as_ref().unwrap(), &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?
+            } else if use_http {
+                run_once_http(&cli.server, &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?
             } else {
                 run_once(ws_url.as_ref().unwrap(), &cli.name, Some(ClientMsg::NextHand), cli.wait_ms).await?
             };
@@ -133,8 +146,10 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Reset { bots } => {
-            let latest = if let Some(peer) = &cli.iroh_peer {
-                run_once_iroh(peer, &cli.name, Some(ClientMsg::ResetGame { bots }), cli.wait_ms).await?
+            let latest = if use_iroh {
+                run_once_iroh(cli.iroh_peer.as_ref().unwrap(), &cli.name, Some(ClientMsg::ResetGame { bots }), cli.wait_ms).await?
+            } else if use_http {
+                run_once_http(&cli.server, &cli.name, Some(ClientMsg::ResetGame { bots }), cli.wait_ms).await?
             } else {
                 run_once(
                     ws_url.as_ref().unwrap(),
@@ -149,8 +164,10 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Watch => {
-            if let Some(peer) = &cli.iroh_peer {
-                watch_iroh(peer, &cli.name, cli.json).await?
+            if use_iroh {
+                watch_iroh(cli.iroh_peer.as_ref().unwrap(), &cli.name, cli.json).await?
+            } else if use_http {
+                watch_http(&cli.server, &cli.name, cli.json).await?
             } else {
                 watch_ws(ws_url.as_ref().unwrap(), &cli.name, cli.json).await?
             };
@@ -342,7 +359,80 @@ async fn run_once(
 
     Ok(latest_state)
 }
-
+ 
+async fn run_once_http(
+    base: &str,
+    name: &str,
+    after_join: Option<ClientMsg>,
+    wait_ms: u64,
+) -> anyhow::Result<Option<GameStatePublic>> {
+    // Use reqwest to POST join and optional action, then GET state once with a timeout.
+    let client = reqwest::Client::new();
+    let join = ClientMsg::Join { name: name.to_string() };
+    // Send Join
+    let _ = client
+        .post(format!("{}/api/join", base))
+        .json(&join)
+        .send()
+        .await?;
+    // Optional follow-up command
+    if let Some(msg) = after_join {
+        let _ = client
+            .post(format!("{}/api/action", base))
+            .json(&msg)
+            .send()
+            .await?;
+    }
+    // Attempt a single GET state request with timeout equal to wait_ms
+    match tokio::time::timeout(std::time::Duration::from_millis(wait_ms), async {
+        client.get(format!("{}/api/state", base)).send().await
+    })
+    .await
+    {
+        Ok(Ok(r)) => {
+            let sm: ServerMsg = r.json().await?;
+            match sm {
+                ServerMsg::State(gs) => Ok(Some(gs)),
+                ServerMsg::Error(e) => {
+                    eprintln!("Server error: {}", e);
+                    Ok(None)
+                }
+                _ => Ok(None),
+            }
+        }
+        Ok(Err(e)) => Err(e.into()),
+        Err(_) => Ok(None), // timeout
+    }
+}
+ 
+async fn watch_http(base: &str, name: &str, json: bool) -> anyhow::Result<()> {
+    // Implement a basic long-polling watcher over the HTTP API.
+    let client = reqwest::Client::new();
+    let join = ClientMsg::Join { name: name.to_string() };
+    let _ = client.post(format!("{}/api/join", base)).json(&join).send().await?;
+    let mut last_printed: usize = 0;
+    loop {
+        // Long-poll GET state with a 30s timeout
+        match tokio::time::timeout(std::time::Duration::from_secs(30), client.get(format!("{}/api/state", base)).send()).await {
+            Ok(Ok(resp)) => {
+                if let Ok(sm) = resp.json::<ServerMsg>().await {
+                    handle_server_msg(&sm, json, &mut last_printed);
+                }
+            }
+            Ok(Err(e)) => {
+                eprintln!("HTTP error: {}", e);
+                break;
+            }
+            Err(_) => {
+                // timeout, continue polling
+                continue;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    Ok(())
+}
+ 
 /// Shared handler for server messages so the CLI doesn't duplicate logic.
 /// This version supports incremental printing by accepting a mutable
 /// `last_printed` index which tracks how many log entries have already been
