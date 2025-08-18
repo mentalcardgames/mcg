@@ -27,12 +27,14 @@ pub fn build_ws_url(base: &str) -> anyhow::Result<Url> {
 }
 
 /// Connect over websocket, send Join (and optional follow-up) and return the last State seen within `wait_ms`.
-pub async fn run_once(
-    ws_url: &Url,
+/// Accepts an address string (e.g. "ws://host:port/ws" or "http://host:port") and builds the ws URL internally.
+pub async fn run_once_ws(
+    ws_addr: &str,
     name: &str,
     after_join: Option<ClientMsg>,
     wait_ms: u64,
 ) -> anyhow::Result<Option<GameStatePublic>> {
+    let ws_url = build_ws_url(ws_addr)?;
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
     let (mut write, mut read) = ws_stream.split();
 
@@ -74,7 +76,7 @@ pub async fn run_once(
     Ok(latest_state)
 }
 
-/// Minimal iroh run-once client. Mirrors the behavior of `run_once` but over iroh.
+/// Minimal iroh run-once client. Mirrors the behavior of `run_once_ws` but over iroh.
 /// The iroh imports are inside the function so compilation only fails if iroh is
 /// actually required by the build.
 pub async fn run_once_iroh(
