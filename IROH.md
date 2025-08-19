@@ -89,7 +89,7 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
 
 - Helper: `send_server_msg_to_writer(writer, &ServerMsg)` (centralized serializer + newline + flush)
   - Purpose: Encapsulate serialization of `ServerMsg` -> bytes, append newline, and flush the writer.
-  - Location: `mcg/server/src/transport.rs` (used by the iroh handler and other transports).
+  - Location: `native_mcg/src/transport.rs` (used by the iroh handler and other transports).
   - Important notes:
     - Use this helper everywhere to maintain consistent JSON framing and flushing semantics across transports.
 
@@ -224,7 +224,7 @@ Status of this change
 - Update applied: NodeAddr printing removed from server logs; the server now prints only the PublicKey/NodeId (z-base-32).
 - CLI change: the iroh client now accepts only the PublicKey (z-base-32) as the peer identifier; parsing and JSON NodeAddr parsing were removed.
 - Files changed:
-  - `server/src/iroh_transport.rs`: removed NodeAddr printing while preserving the existing public key print.
-  - `server/src/bin/mcg-cli.rs`: iroh client parsing simplified to accept only `PublicKey` (z-base-32).
+  - `native_mcg/src/iroh_transport.rs`: removed NodeAddr printing while preserving the existing public key print.
+  - `native_mcg/src/bin/mcg-cli.rs`: iroh client parsing simplified to accept only `PublicKey` (z-base-32).
 - Rationale: Avoid brittle copy/paste of the Rust `NodeAddr` Debug/Display output, simplify user workflow, and rely on the stable public key representation for dialing.
 - Note: Earlier recommendations about printing structured dial strings remain documented for future reconsideration if upstream iroh introduces a canonical NodeAddr serialization (see n0-computer/iroh#3417).
