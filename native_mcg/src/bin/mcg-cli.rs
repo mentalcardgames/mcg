@@ -33,16 +33,31 @@ async fn main() -> anyhow::Result<()> {
         Commands::State => {
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(&peer, &cli.name, Some(ClientMsg::RequestState { player_id: 0 }), cli.wait_ms)
-                        .await?
+                    cli::run_once_iroh(
+                        &peer,
+                        &cli.name,
+                        Some(ClientMsg::RequestState { player_id: 0 }),
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(&addr, &cli.name, Some(ClientMsg::RequestState { player_id: 0 }), cli.wait_ms)
-                        .await?
+                    cli::run_once_http(
+                        &addr,
+                        &cli.name,
+                        Some(ClientMsg::RequestState { player_id: 0 }),
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(&addr, &cli.name, Some(ClientMsg::RequestState { player_id: 0 }), cli.wait_ms)
-                        .await?
+                    cli::run_once_ws(
+                        &addr,
+                        &cli.name,
+                        Some(ClientMsg::RequestState { player_id: 0 }),
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
             };
             if let Some(state) = latest {
@@ -57,16 +72,40 @@ async fn main() -> anyhow::Result<()> {
             };
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(&peer, &cli.name, Some(ClientMsg::Action { player_id: 0, action: pa }), cli.wait_ms)
-                        .await?
+                    cli::run_once_iroh(
+                        &peer,
+                        &cli.name,
+                        Some(ClientMsg::Action {
+                            player_id: 0,
+                            action: pa,
+                        }),
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(&addr, &cli.name, Some(ClientMsg::Action { player_id: 0, action: pa }), cli.wait_ms)
-                        .await?
+                    cli::run_once_http(
+                        &addr,
+                        &cli.name,
+                        Some(ClientMsg::Action {
+                            player_id: 0,
+                            action: pa,
+                        }),
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(&addr, &cli.name, Some(ClientMsg::Action { player_id: 0, action: pa }), cli.wait_ms)
-                        .await?
+                    cli::run_once_ws(
+                        &addr,
+                        &cli.name,
+                        Some(ClientMsg::Action {
+                            player_id: 0,
+                            action: pa,
+                        }),
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
             };
             if let Some(state) = latest {
@@ -76,16 +115,31 @@ async fn main() -> anyhow::Result<()> {
         Commands::NextHand => {
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(&peer, &cli.name, Some(ClientMsg::NextHand { player_id: 0 }), cli.wait_ms)
-                        .await?
+                    cli::run_once_iroh(
+                        &peer,
+                        &cli.name,
+                        Some(ClientMsg::NextHand { player_id: 0 }),
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(&addr, &cli.name, Some(ClientMsg::NextHand { player_id: 0 }), cli.wait_ms)
-                        .await?
+                    cli::run_once_http(
+                        &addr,
+                        &cli.name,
+                        Some(ClientMsg::NextHand { player_id: 0 }),
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(&addr, &cli.name, Some(ClientMsg::NextHand { player_id: 0 }), cli.wait_ms)
-                        .await?
+                    cli::run_once_ws(
+                        &addr,
+                        &cli.name,
+                        Some(ClientMsg::NextHand { player_id: 0 }),
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
             };
             if let Some(state) = latest {
@@ -98,7 +152,10 @@ async fn main() -> anyhow::Result<()> {
                     cli::run_once_iroh(
                         &peer,
                         &cli.name,
-                        Some(ClientMsg::ResetGame { bots, bots_auto: true }),
+                        Some(ClientMsg::ResetGame {
+                            bots,
+                            bots_auto: true,
+                        }),
                         cli.wait_ms,
                     )
                     .await?
@@ -107,7 +164,10 @@ async fn main() -> anyhow::Result<()> {
                     cli::run_once_http(
                         &addr,
                         &cli.name,
-                        Some(ClientMsg::ResetGame { bots, bots_auto: true }),
+                        Some(ClientMsg::ResetGame {
+                            bots,
+                            bots_auto: true,
+                        }),
                         cli.wait_ms,
                     )
                     .await?
@@ -116,7 +176,10 @@ async fn main() -> anyhow::Result<()> {
                     cli::run_once_ws(
                         &addr,
                         &cli.name,
-                        Some(ClientMsg::ResetGame { bots, bots_auto: true }),
+                        Some(ClientMsg::ResetGame {
+                            bots,
+                            bots_auto: true,
+                        }),
                         cli.wait_ms,
                     )
                     .await?

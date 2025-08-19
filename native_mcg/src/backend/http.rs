@@ -52,16 +52,19 @@ pub async fn action_handler(
     match cm {
         ClientMsg::Action { player_id, action } => {
             // Use the provided player_id as the actor (validate centrally)
-            match crate::backend::validate_and_apply_action(&state, player_id, action.clone()).await {
+            match crate::backend::validate_and_apply_action(&state, player_id, action.clone()).await
+            {
                 Ok(()) => {
                     // Send state to requester immediately (we return it) and broadcast to subscribers.
-                    if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
+                    if let Some(gs) = crate::backend::current_state_public(&state, player_id).await
+                    {
                         // Broadcast current state immediately so other transports see the update.
                         crate::backend::broadcast_state(&state, player_id).await;
                         // Drive bots in background (don't block the HTTP response)
                         let state_clone = state.clone();
                         tokio::spawn(async move {
-                            crate::backend::broadcast_and_drive(&state_clone, player_id, 500, 1500).await;
+                            crate::backend::broadcast_and_drive(&state_clone, player_id, 500, 1500)
+                                .await;
                         });
                         (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
                     } else {
@@ -104,7 +107,7 @@ pub async fn next_hand_handler(State(state): State<AppState>) -> impl IntoRespon
         )
             .into_response();
     }
-        if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
+    if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
         crate::backend::broadcast_state(&state, 0).await;
         // drive bots asynchronously
         let state_clone = state.clone();

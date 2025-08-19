@@ -39,11 +39,11 @@ impl PokerOnlineScreen {
             },
             #[cfg(not(target_arch = "wasm32"))]
             server_address: "127.0.0.1:3000".to_string(),
-                bots: 1,
-                bots_auto: true,
-                show_error_popup: false,
-                scanner: QrScannerPopup::new(),
-            }
+            bots: 1,
+            bots_auto: true,
+            show_error_popup: false,
+            scanner: QrScannerPopup::new(),
+        }
     }
 
     fn draw_error_popup(&mut self, ctx: &egui::Context) {
@@ -155,12 +155,15 @@ impl PokerOnlineScreen {
                             .speed(0.1)
                             .suffix(" bots"),
                     );
-                        if ui
+                    if ui
                         .add(egui::Button::new("Reset Game"))
                         .on_hover_text("Reset the game with the chosen number of bots")
                         .clicked()
                     {
-                        self.send(&ClientMsg::ResetGame { bots: self.bots, bots_auto: self.bots_auto });
+                        self.send(&ClientMsg::ResetGame {
+                            bots: self.bots,
+                            bots_auto: self.bots_auto,
+                        });
                         self.last_info = Some(format!("Reset requested ({} bots)", self.bots));
                         self.last_error = None;
                     }
@@ -179,22 +182,25 @@ impl PokerOnlineScreen {
                     .button_and_popup(ui, ctx, &mut self.server_address);
                 ui.add_space(12.0);
                 ui.label("Bots:");
-                    ui.add(
-                        egui::DragValue::new(&mut self.bots)
-                            .range(0..=8)
-                            .speed(0.1)
-                            .suffix(" bots"),
-                    );
-                    ui.checkbox(&mut self.bots_auto, "Bots auto");
-                    if ui
-                        .add(egui::Button::new("Reset Game"))
-                        .on_hover_text("Reset the game with the chosen number of bots")
-                        .clicked()
-                    {
-                        self.send(&ClientMsg::ResetGame { bots: self.bots, bots_auto: self.bots_auto });
-                        self.last_info = Some(format!("Reset requested ({} bots)", self.bots));
-                        self.last_error = None;
-                    }
+                ui.add(
+                    egui::DragValue::new(&mut self.bots)
+                        .range(0..=8)
+                        .speed(0.1)
+                        .suffix(" bots"),
+                );
+                ui.checkbox(&mut self.bots_auto, "Bots auto");
+                if ui
+                    .add(egui::Button::new("Reset Game"))
+                    .on_hover_text("Reset the game with the chosen number of bots")
+                    .clicked()
+                {
+                    self.send(&ClientMsg::ResetGame {
+                        bots: self.bots,
+                        bots_auto: self.bots_auto,
+                    });
+                    self.last_info = Some(format!("Reset requested ({} bots)", self.bots));
+                    self.last_error = None;
+                }
                 if ui.button("Connect").clicked() {
                     self.connect(ctx);
                 }
@@ -321,18 +327,27 @@ impl PokerOnlineScreen {
 
     fn render_action_row(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
         ui.horizontal(|ui| {
-                if ui.add(egui::Button::new("Check / Call")).clicked() {
-                    self.send(&ClientMsg::Action { player_id: 0, action: PlayerAction::CheckCall });
-                }
-                    if ui
-                        .add(egui::Button::new("Bet 10"))
-                        .on_hover_text("Place a small bet")
-                        .clicked()
-                    {
-                        self.send(&ClientMsg::Action { player_id: 0, action: PlayerAction::Bet(10) });
-                    }
+            if ui.add(egui::Button::new("Check / Call")).clicked() {
+                self.send(&ClientMsg::Action {
+                    player_id: 0,
+                    action: PlayerAction::CheckCall,
+                });
+            }
+            if ui
+                .add(egui::Button::new("Bet 10"))
+                .on_hover_text("Place a small bet")
+                .clicked()
+            {
+                self.send(&ClientMsg::Action {
+                    player_id: 0,
+                    action: PlayerAction::Bet(10),
+                });
+            }
             if ui.add(egui::Button::new("Fold")).clicked() {
-                self.send(&ClientMsg::Action { player_id: 0, action: PlayerAction::Fold });
+                self.send(&ClientMsg::Action {
+                    player_id: 0,
+                    action: PlayerAction::Fold,
+                });
             }
             ui.separator();
             if state.stage == Stage::Showdown {

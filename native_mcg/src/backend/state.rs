@@ -117,7 +117,7 @@ pub async fn apply_action_to_game(
     }
     None
 }
- 
+
 /// Validate that the provided player_id is currently allowed to take an action
 /// and apply the action. Returns Ok(()) on success or Err(String) with an error
 /// message to send back to the client.
@@ -145,7 +145,7 @@ pub async fn validate_and_apply_action(
     }
     Ok(())
 }
- 
+
 /// Broadcast the current state (and trigger bots if enabled).
 pub async fn broadcast_and_drive(state: &AppState, you_id: usize, min_ms: u64, max_ms: u64) {
     // Broadcast updated state to subscribers.
@@ -153,7 +153,7 @@ pub async fn broadcast_and_drive(state: &AppState, you_id: usize, min_ms: u64, m
     // Drive bots (drive_bots_with_delays itself respects lobby.bots_auto).
     drive_bots_with_delays(state, you_id, min_ms, max_ms).await;
 }
- 
+
 /// Advance to the next hand (increment dealer, start a new hand) and print a table header.
 pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result<()> {
     let mut lobby = state.lobby.write().await;

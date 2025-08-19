@@ -138,7 +138,10 @@ async fn process_client_msg(
     match cm {
         // ClientMsg::Action now has form: Action { player_id, action }
         mcg_shared::ClientMsg::Action { player_id, action } => {
-            println!("[WS] Action from {}: player_id={} action={:?}", name, player_id, action);
+            println!(
+                "[WS] Action from {}: player_id={} action={:?}",
+                name, player_id, action
+            );
 
             match super::state::validate_and_apply_action(state, player_id, action.clone()).await {
                 Ok(()) => {
@@ -162,7 +165,10 @@ async fn process_client_msg(
 
         // NextHand { player_id }
         mcg_shared::ClientMsg::NextHand { player_id } => {
-            println!("[WS] NextHand requested by {} for player {}", name, player_id);
+            println!(
+                "[WS] NextHand requested by {} for player {}",
+                name, player_id
+            );
             if let Err(e) = super::state::start_new_hand_and_print(state, player_id).await {
                 let _ = send_ws(
                     socket,
@@ -177,7 +183,10 @@ async fn process_client_msg(
 
         // ResetGame { bots, bots_auto }
         mcg_shared::ClientMsg::ResetGame { bots, bots_auto } => {
-            println!("[WS] ResetGame requested by {}: bots={} bots_auto={}", name, bots, bots_auto);
+            println!(
+                "[WS] ResetGame requested by {}: bots={} bots_auto={}",
+                name, bots, bots_auto
+            );
 
             // Persist the bots_auto preference in lobby so drive_bots can observe it.
             {
