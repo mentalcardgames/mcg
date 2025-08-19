@@ -320,23 +320,15 @@ impl PokerOnlineScreen {
                             // Action buttons placed below the player's cards
                         if state.to_act == idx && state.stage != Stage::Showdown {
                             // Normal active action buttons during the hand
-                            self.render_action_buttons(ui, p.id, true);
+                            self.render_action_row(ui, p.id, true, false);
+                            ui.add_space(6.0);
+                            ui.separator();
                         } else if me && (state.stage == Stage::Showdown || p.cards.is_none()) {
                             // After showdown or if there are no cards (hand finished), show a Next hand button
                             // and the action buttons in a disabled state so the area doesn't disappear.
-                            ui.horizontal(|ui| {
-                                let next_label = RichText::new("▶ Next hand").size(16.0);
-                                if ui
-                                    .add(egui::Button::new(next_label).min_size(egui::vec2(140.0, 40.0)))
-                                    .clicked()
-                                {
-                                    self.send(&ClientMsg::NextHand { player_id: p.id });
-                                }
-                            });
-
+                            self.render_action_row(ui, p.id, false, true);
                             ui.add_space(6.0);
-
-                                self.render_action_buttons(ui, p.id, false);
+                            ui.separator();
                         } else {
                             // keep space for alignment when not active
                             ui.add_space(8.0);
@@ -416,6 +408,25 @@ impl PokerOnlineScreen {
 }
 
 impl PokerOnlineScreen {
+    fn render_action_row(&self, ui: &mut egui::Ui, player_id: usize, enabled: bool, show_next: bool) {
+        ui.vertical(|ui| {
+            if show_next {
+                ui.horizontal(|ui| {
+                    let next_label = RichText::new("▶ Next hand").size(16.0);
+                    if ui
+                        .add(egui::Button::new(next_label).min_size(egui::vec2(140.0, 40.0)))
+                        .clicked()
+                    {
+                        self.send(&ClientMsg::NextHand { player_id });
+                    }
+                });
+                ui.add_space(6.0);
+            }
+            // Render the centralized action buttons (enabled or disabled)
+            self.render_action_buttons(ui, player_id, enabled);
+        });
+    }
+
     fn connect(&mut self, ctx: &egui::Context) {
         self.connection
             .connect(&self.server_address, &self.name, ctx);
