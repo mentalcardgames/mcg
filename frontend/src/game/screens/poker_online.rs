@@ -129,7 +129,7 @@ impl PokerOnlineScreen {
     }
 
     fn render_connection_controls(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let narrow = ui.available_width() < 700.0;
+        let narrow = ui.available_width() < 900.0;
         if narrow {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
@@ -273,7 +273,7 @@ impl PokerOnlineScreen {
         });
     }
 
-    fn render_players_panel(ui: &mut egui::Ui, state: &GameStatePublic) {
+    fn render_players_panel(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
         ui.group(|ui| {
             for (idx, p) in state.players.iter().enumerate() {
                 let me = p.id == state.you_id;
@@ -298,66 +298,118 @@ impl PokerOnlineScreen {
                     });
                 });
                 if me {
-                    if let Some(cards) = p.cards {
-                        ui.horizontal(|ui| {
-                            ui.add_space(12.0);
-                            card_chip(ui, cards[0]);
-                            card_chip(ui, cards[1]);
-                        });
-                    }
+                    ui.vertical(|ui| {
+                        // Render cards if available; otherwise still render spacer + separator
+                        if let Some(cards) = p.cards {
+                            ui.horizontal(|ui| {
+                                ui.add_space(12.0);
+                                card_chip(ui, cards[0]);
+                                card_chip(ui, cards[1]);
+                            });
+
+                            ui.add_space(6.0);
+                            ui.separator();
+                            ui.add_space(6.0);
+                        } else {
+                            // No cards (e.g. after hand) — keep the same visual spacing
+                            ui.add_space(6.0);
+                            ui.separator();
+                            ui.add_space(6.0);
+                        }
+
+                            // Action buttons placed below the player's cards
+                        if state.to_act == idx && state.stage != Stage::Showdown {
+                            // Normal active action buttons during the hand
+                            self.render_action_buttons(ui, p.id, true);
+                        } else if me && (state.stage == Stage::Showdown || p.cards.is_none()) {
+                            // After showdown or if there are no cards (hand finished), show a Next hand button
+                            // and the action buttons in a disabled state so the area doesn't disappear.
+                            ui.horizontal(|ui| {
+                                let next_label = RichText::new("▶ Next hand").size(16.0);
+                                if ui
+                                    .add(egui::Button::new(next_label).min_size(egui::vec2(140.0, 40.0)))
+                                    .clicked()
+                                {
+                                    self.send(&ClientMsg::NextHand { player_id: p.id });
+                                }
+                            });
+
+                            ui.add_space(6.0);
+
+                                self.render_action_buttons(ui, p.id, false);
+                        } else {
+                            // keep space for alignment when not active
+                            ui.add_space(8.0);
+                        }
+                    });
                 }
                 ui.add_space(8.0);
             }
         });
     }
 
-    fn render_panels(ui: &mut egui::Ui, state: &GameStatePublic) {
-        let narrow = ui.available_width() < 700.0;
+    fn render_panels(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
+        let narrow = ui.available_width() < 900.0;
         if narrow {
-            Self::render_table_panel(ui, state);
+            self.render_players_panel(ui, state);
             ui.add_space(8.0);
-            Self::render_players_panel(ui, state);
+            Self::render_table_panel(ui, state);
         } else {
             ui.columns(2, |cols| {
                 Self::render_table_panel(&mut cols[0], state);
-                Self::render_players_panel(&mut cols[1], state);
+                self.render_players_panel(&mut cols[1], state);
             });
         }
     }
 
-    fn render_action_row(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
+    // Centralized action buttons for a given player id.
+    // Callers should check whether the player is active and whether the stage allows actions.
+    fn render_action_buttons(&self, ui: &mut egui::Ui, player_id: usize, enabled: bool) {
         ui.horizontal(|ui| {
-            if ui.add(egui::Button::new("Check / Call")).clicked() {
-                self.send(&ClientMsg::Action {
-                    player_id: 0,
-                    action: PlayerAction::CheckCall,
-                });
-            }
-            if ui
-                .add(egui::Button::new("Bet 10"))
-                .on_hover_text("Place a small bet")
-                .clicked()
-            {
-                self.send(&ClientMsg::Action {
-                    player_id: 0,
-                    action: PlayerAction::Bet(10),
-                });
-            }
-            if ui.add(egui::Button::new("Fold")).clicked() {
-                self.send(&ClientMsg::Action {
-                    player_id: 0,
-                    action: PlayerAction::Fold,
-                });
-            }
-            ui.separator();
-            if state.stage == Stage::Showdown {
-                if ui.add(egui::Button::new("Next Hand")).clicked() {
-                    self.send(&ClientMsg::NextHand { player_id: 0 });
+            let check_label = RichText::new("✔ Check / Call").size(18.0);
+            if enabled {
+                if ui
+                    .add(egui::Button::new(check_label).min_size(egui::vec2(120.0, 40.0)))
+                    .clicked()
+                {
+                    self.send(&ClientMsg::Action {
+                        player_id,
+                        action: PlayerAction::CheckCall,
+                    });
                 }
-                ui.add_space(8.0);
+            } else {
+                ui.add_enabled(false, egui::Button::new(check_label).min_size(egui::vec2(120.0, 40.0)));
             }
-            if ui.add(egui::Button::new("Refresh")).clicked() {
-                self.send(&ClientMsg::RequestState { player_id: 0 });
+
+            let bet_label = RichText::new("💰 Bet 10").size(18.0);
+            if enabled {
+                if ui
+                    .add(egui::Button::new(bet_label).min_size(egui::vec2(120.0, 40.0)))
+                    .on_hover_text("Place a small bet")
+                    .clicked()
+                {
+                    self.send(&ClientMsg::Action {
+                        player_id,
+                        action: PlayerAction::Bet(10),
+                    });
+                }
+            } else {
+                ui.add_enabled(false, egui::Button::new(bet_label).min_size(egui::vec2(120.0, 40.0)));
+            }
+
+            let fold_label = RichText::new("✂ Fold").size(18.0);
+            if enabled {
+                if ui
+                    .add(egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)))
+                    .clicked()
+                {
+                    self.send(&ClientMsg::Action {
+                        player_id,
+                        action: PlayerAction::Fold,
+                    });
+                }
+            } else {
+                ui.add_enabled(false, egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)));
             }
         });
     }
@@ -414,9 +466,7 @@ impl ScreenWidget for PokerOnlineScreen {
 
         if let Some(state) = &self.state {
             self.render_showdown_banner(ui, state);
-            Self::render_panels(ui, state);
-            ui.separator();
-            self.render_action_row(ui, state);
+            self.render_panels(ui, state);
         } else {
             ui.label("No state yet. Click Connect to start a session.");
         }
