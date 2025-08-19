@@ -83,6 +83,13 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                     Some(Ok(Message::Text(txt))) => {
                         if let Ok(cm) = serde_json::from_str::<mcg_shared::ClientMsg>(&txt) {
                             process_client_msg(&name, &state, &mut socket, cm, you_id).await;
+                        } else {
+                            eprintln!("[WS] Failed to parse incoming ClientMsg JSON");
+                            // Debug: log raw incoming text so we can see what the client actually sends.
+                            // This helps diagnose why client actions may not be parsed/handled.
+                            println!("[WS RAW IN] {}", txt);
+                            // Optionally send an error back to client for visibility
+                            let _ = send_ws(&mut socket, &mcg_shared::ServerMsg::Error("Malformed ClientMsg JSON".into())).await;
                         }
                     }
                     Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,

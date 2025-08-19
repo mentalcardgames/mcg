@@ -257,6 +257,8 @@ impl App {
                 .show(ctx, |ui| {
                     ui.heading("Global Settings");
                     ui.add_space(8.0);
+                    ui.label(format!("Version: {}", env!("CARGO_PKG_VERSION")));
+                    ui.add_space(8.0);
                     ui.add(
                         egui::Slider::new(&mut self.pending_settings.dpi, 0.75..=2.0)
                             .text("UI scale (DPI)"),
