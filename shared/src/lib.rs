@@ -132,10 +132,16 @@ pub struct GameStatePublic {
 #[serde(tag = "type", content = "data")]
 pub enum ClientMsg {
     Join { name: String },
-    Action(PlayerAction),
-    RequestState,
-    NextHand,
-    ResetGame { bots: usize },
+    /// Player-initiated action: must specify which player is performing the action.
+    Action { player_id: usize, action: PlayerAction },
+    /// Request the current state for a particular player (you_id in State will reflect this).
+    RequestState { player_id: usize },
+    /// Request to advance to the next hand on behalf of a specific player.
+    NextHand { player_id: usize },
+    /// Reset the game with `bots` bots. `bots_auto` controls whether bots act automatically
+    /// (true = bots run automatically as before). If false, bots will not act automatically
+    /// and can be driven by messages from clients (ClientMsg::Action) addressed to their player ids.
+    ResetGame { bots: usize, bots_auto: bool },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

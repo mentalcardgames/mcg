@@ -50,25 +50,29 @@ pub async fn action_handler(
     Json(cm): Json<ClientMsg>,
 ) -> impl IntoResponse {
     match cm {
-        ClientMsg::Action(action) => {
-            // actor id is 0 for single-player CLI usage
-            if let Some(e) = crate::backend::apply_action_to_game(&state, 0, action.clone()).await {
-                let err = ServerMsg::Error(e);
-                return (StatusCode::BAD_REQUEST, Json(err)).into_response();
-            }
-            // Send state to requester immediately (we return it) and broadcast to subscribers.
-            if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
-                // Broadcast to other transports
-                crate::backend::broadcast_state(&state, 0).await;
-                // Drive bots in background (don't block the HTTP response)
-                let state_clone = state.clone();
-                tokio::spawn(async move {
-                    crate::backend::drive_bots_with_delays(&state_clone, 0, 500, 1500).await;
-                });
-                (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
-            } else {
-                let err = ServerMsg::Error("No game running".into());
-                (StatusCode::NOT_FOUND, Json(err)).into_response()
+        ClientMsg::Action { player_id, action } => {
+            // Use the provided player_id as the actor (validate centrally)
+            match crate::backend::validate_and_apply_action(&state, player_id, action.clone()).await {
+                Ok(()) => {
+                    // Send state to requester immediately (we return it) and broadcast to subscribers.
+                    if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
+                        // Broadcast current state immediately so other transports see the update.
+                        crate::backend::broadcast_state(&state, player_id).await;
+                        // Drive bots in background (don't block the HTTP response)
+                        let state_clone = state.clone();
+                        tokio::spawn(async move {
+                            crate::backend::broadcast_and_drive(&state_clone, player_id, 500, 1500).await;
+                        });
+                        (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
+                    } else {
+                        let err = ServerMsg::Error("No game running".into());
+                        (StatusCode::NOT_FOUND, Json(err)).into_response()
+                    }
+                }
+                Err(e) => {
+                    let err = ServerMsg::Error(e);
+                    (StatusCode::BAD_REQUEST, Json(err)).into_response()
+                }
             }
         }
         _ => {
@@ -100,12 +104,12 @@ pub async fn next_hand_handler(State(state): State<AppState>) -> impl IntoRespon
         )
             .into_response();
     }
-    if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
+        if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
         crate::backend::broadcast_state(&state, 0).await;
         // drive bots asynchronously
         let state_clone = state.clone();
         tokio::spawn(async move {
-            crate::backend::drive_bots_with_delays(&state_clone, 0, 500, 1500).await;
+            crate::backend::broadcast_and_drive(&state_clone, 0, 500, 1500).await;
         });
         (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
     } else {
@@ -124,9 +128,16 @@ pub async fn reset_handler(
     Json(cm): Json<ClientMsg>,
 ) -> impl IntoResponse {
     match cm {
-        ClientMsg::ResetGame { bots } => {
+        ClientMsg::ResetGame { bots, bots_auto } => {
             // Use a default name for HTTP-initiated resets
             let name = "HTTP";
+
+            // Persist bots_auto preference to lobby so drive_bots respects it
+            {
+                let mut lobby_w = state.lobby.write().await;
+                lobby_w.bots_auto = bots_auto;
+            }
+
             if let Err(e) = crate::backend::reset_game_with_bots(&state, name, bots, 0).await {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -136,6 +147,13 @@ pub async fn reset_handler(
             }
             if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
                 crate::backend::broadcast_state(&state, 0).await;
+                // Spawn bot driver only if bots_auto is true (drive_bots also checks but avoid unnecessary spawn)
+                if bots_auto {
+                    let state_clone = state.clone();
+                    tokio::spawn(async move {
+                        crate::backend::broadcast_and_drive(&state_clone, 0, 500, 1500).await;
+                    });
+                }
                 (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
             } else {
                 (

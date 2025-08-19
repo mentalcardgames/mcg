@@ -136,28 +136,34 @@ async fn process_client_msg(
     you_id: usize,
 ) {
     match cm {
-        mcg_shared::ClientMsg::Action(a) => {
-            println!("[WS] Action from {}: {:?}", name, a);
-            if let Some(e) = super::state::apply_action_to_game(state, 0, a.clone()).await {
-                let _ = send_ws(socket, &mcg_shared::ServerMsg::Error(e)).await;
-            } else {
-                // Send updated state immediately to the originating socket so the client sees its own action
-                send_state_to(socket, state, you_id).await;
-                // Broadcast latest state to all subscribers then drive bots stepwise with delays
-                super::state::broadcast_state(state, you_id).await;
-                super::state::drive_bots_with_delays(state, you_id, 500, 1500).await;
+        // ClientMsg::Action now has form: Action { player_id, action }
+        mcg_shared::ClientMsg::Action { player_id, action } => {
+            println!("[WS] Action from {}: player_id={} action={:?}", name, player_id, action);
+
+            match super::state::validate_and_apply_action(state, player_id, action.clone()).await {
+                Ok(()) => {
+                    // Send updated state immediately to the originating socket so the client sees its own action
+                    send_state_to(socket, state, player_id).await;
+                    // Broadcast and drive via centralized helper
+                    super::state::broadcast_and_drive(state, you_id, 500, 1500).await;
+                }
+                Err(e) => {
+                    let _ = send_ws(socket, &mcg_shared::ServerMsg::Error(e)).await;
+                }
             }
         }
-        mcg_shared::ClientMsg::RequestState => {
-            println!("[WS] State requested by {}", name);
-            // Send state to this socket immediately, then broadcast and drive bots if needed.
-            send_state_to(socket, state, you_id).await;
-            super::state::broadcast_state(state, you_id).await;
-            super::state::drive_bots_with_delays(state, you_id, 500, 1500).await;
+
+        // RequestState { player_id }
+        mcg_shared::ClientMsg::RequestState { player_id } => {
+            println!("[WS] State requested by {} for player {}", name, player_id);
+            send_state_to(socket, state, player_id).await;
+            super::state::broadcast_and_drive(state, you_id, 500, 1500).await;
         }
-        mcg_shared::ClientMsg::NextHand => {
-            println!("[WS] NextHand requested by {}", name);
-            if let Err(e) = super::state::start_new_hand_and_print(state, you_id).await {
+
+        // NextHand { player_id }
+        mcg_shared::ClientMsg::NextHand { player_id } => {
+            println!("[WS] NextHand requested by {} for player {}", name, player_id);
+            if let Err(e) = super::state::start_new_hand_and_print(state, player_id).await {
                 let _ = send_ws(
                     socket,
                     &mcg_shared::ServerMsg::Error(format!("Failed to start new hand: {}", e)),
@@ -165,12 +171,20 @@ async fn process_client_msg(
                 .await;
             }
             // Send updated state to the requesting socket, then broadcast and drive bots.
-            send_state_to(socket, state, you_id).await;
-            super::state::broadcast_state(state, you_id).await;
-            super::state::drive_bots_with_delays(state, you_id, 500, 1500).await;
+            send_state_to(socket, state, player_id).await;
+            super::state::broadcast_and_drive(state, you_id, 500, 1500).await;
         }
-        mcg_shared::ClientMsg::ResetGame { bots } => {
-            println!("[WS] ResetGame requested by {}: bots={} ", name, bots);
+
+        // ResetGame { bots, bots_auto }
+        mcg_shared::ClientMsg::ResetGame { bots, bots_auto } => {
+            println!("[WS] ResetGame requested by {}: bots={} bots_auto={}", name, bots, bots_auto);
+
+            // Persist the bots_auto preference in lobby so drive_bots can observe it.
+            {
+                let mut lobby_w = state.lobby.write().await;
+                lobby_w.bots_auto = bots_auto;
+            }
+
             if let Err(e) = super::state::reset_game_with_bots(state, name, bots, you_id).await {
                 let _ = send_ws(
                     socket,
@@ -180,10 +194,10 @@ async fn process_client_msg(
             } else {
                 // Send updated state to the requesting socket, then broadcast to others.
                 send_state_to(socket, state, you_id).await;
-                super::state::broadcast_state(state, you_id).await;
+                super::state::broadcast_and_drive(state, you_id, 500, 1500).await;
             }
-            super::state::drive_bots_with_delays(state, you_id, 500, 1500).await;
         }
+
         mcg_shared::ClientMsg::Join { .. } => {}
     }
 }

@@ -26,10 +26,21 @@ pub struct AppState {
     pub config_path: Option<PathBuf>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct Lobby {
     pub(crate) game: Option<Game>,
     pub(crate) last_printed_log_len: usize,
+    pub(crate) bots_auto: bool,
+}
+
+impl Default for Lobby {
+    fn default() -> Self {
+        Lobby {
+            game: None,
+            last_printed_log_len: 0,
+            bots_auto: true,
+        }
+    }
 }
 
 impl Default for AppState {
@@ -106,7 +117,43 @@ pub async fn apply_action_to_game(
     }
     None
 }
+ 
+/// Validate that the provided player_id is currently allowed to take an action
+/// and apply the action. Returns Ok(()) on success or Err(String) with an error
+/// message to send back to the client.
+pub async fn validate_and_apply_action(
+    state: &AppState,
+    player_id: usize,
+    action: mcg_shared::PlayerAction,
+) -> Result<(), String> {
+    // Ensure a game exists and that the requested player is allowed to act.
+    let allowed = {
+        let lobby_r = state.lobby.read().await;
+        if let Some(game) = &lobby_r.game {
+            game.stage != mcg_shared::Stage::Showdown && game.to_act == player_id
+        } else {
+            false
+        }
+    };
+    if !allowed {
+        return Err("Not your turn".into());
+    }
 
+    // Apply the action using the existing helper. translate underlying errors to String.
+    if let Some(e) = apply_action_to_game(state, player_id, action).await {
+        return Err(e);
+    }
+    Ok(())
+}
+ 
+/// Broadcast the current state (and trigger bots if enabled).
+pub async fn broadcast_and_drive(state: &AppState, you_id: usize, min_ms: u64, max_ms: u64) {
+    // Broadcast updated state to subscribers.
+    broadcast_state(state, you_id).await;
+    // Drive bots (drive_bots_with_delays itself respects lobby.bots_auto).
+    drive_bots_with_delays(state, you_id, min_ms, max_ms).await;
+}
+ 
 /// Advance to the next hand (increment dealer, start a new hand) and print a table header.
 pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result<()> {
     let mut lobby = state.lobby.write().await;
@@ -157,6 +204,14 @@ pub async fn reset_game_with_bots(
 /// Drive bots similarly to the websocket handler, but mutate shared state and
 /// broadcast resulting states. Exposed so iroh transport can reuse the same behaviour.
 pub async fn drive_bots_with_delays(state: &AppState, you_id: usize, min_ms: u64, max_ms: u64) {
+    // Respect per-game bots_auto setting: if false, do not run bots automatically.
+    {
+        let lobby_r = state.lobby.read().await;
+        if !lobby_r.bots_auto {
+            return;
+        }
+    }
+
     loop {
         // Perform a single bot action if it's their turn
         let did_act = {

@@ -296,36 +296,55 @@ async fn handle_iroh_connection(
                             Ok(cm) => {
                                 // Process the client message and use server-side broadcast functions
                                 match cm {
-                                    ClientMsg::Action(a) => {
-                                        println!("[IROH] Action from {}: {:?}", name, a);
-                                        if let Some(e) = crate::backend::apply_action_to_game(&state, 0, a.clone()).await {
-                                            let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(e)).await;
+                                    ClientMsg::Action { player_id, action } => {
+                                        println!("[IROH] Action from {}: player_id={} action={:?}", name, player_id, action);
+
+                                        match crate::backend::validate_and_apply_action(&state, player_id, action.clone()).await {
+                                            Ok(()) => {
+                                                // Send updated state to this client
+                                                if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
+                                                    let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
+                                                }
+                                                // Broadcast and drive via centralized helper (drive_bots respects bots_auto)
+                                                crate::backend::broadcast_and_drive(&state, you_id, 500, 1500).await;
+                                            }
+                                            Err(e) => {
+                                                let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(e)).await;
+                                            }
                                         }
-                                        // Broadcast latest state then drive bots stepwise with delays
-                                        crate::backend::broadcast_state(&state, you_id).await;
-                                        crate::backend::drive_bots_with_delays(&state, you_id, 500, 1500).await;
                                     }
-                                    ClientMsg::RequestState => {
-                                        println!("[IROH] State requested by {}", name);
-                                        crate::backend::broadcast_state(&state, you_id).await;
-                                        crate::backend::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                    ClientMsg::RequestState { player_id } => {
+                                        println!("[IROH] State requested by {} for player {}", name, player_id);
+                                        // Send state directly to this client
+                                        if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
+                                            let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
+                                        }
+                                        crate::backend::broadcast_and_drive(&state, you_id, 500, 1500).await;
                                     }
-                                    ClientMsg::NextHand => {
-                                        println!("[IROH] NextHand requested by {}", name);
-                                        if let Err(e) = crate::backend::start_new_hand_and_print(&state, you_id).await {
+                                    ClientMsg::NextHand { player_id } => {
+                                        println!("[IROH] NextHand requested by {} for player {}", name, player_id);
+                                        if let Err(e) = crate::backend::start_new_hand_and_print(&state, player_id).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
                                         }
-                                        crate::backend::broadcast_state(&state, you_id).await;
-                                        crate::backend::drive_bots_with_delays(&state, you_id, 500, 1500).await;
+                                        if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
+                                            let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
+                                        }
+                                        crate::backend::broadcast_and_drive(&state, you_id, 500, 1500).await;
                                     }
-                                    ClientMsg::ResetGame { bots } => {
-                                        println!("[IROH] ResetGame requested by {}: bots={} ", name, bots);
+                                    ClientMsg::ResetGame { bots, bots_auto } => {
+                                        println!("[IROH] ResetGame requested by {}: bots={} bots_auto={}", name, bots, bots_auto);
+
+                                        // Persist bots_auto preference in lobby
+                                        {
+                                            let mut lobby_w = state.lobby.write().await;
+                                            lobby_w.bots_auto = bots_auto;
+                                        }
+
                                         if let Err(e) = crate::backend::reset_game_with_bots(&state, &name, bots, you_id).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
                                         } else {
-                                            crate::backend::broadcast_state(&state, you_id).await;
+                                            crate::backend::broadcast_and_drive(&state, you_id, 500, 1500).await;
                                         }
-                                        crate::backend::drive_bots_with_delays(&state, you_id, 500, 1500).await;
                                     }
                                     ClientMsg::Join { .. } => {
                                         // Ignore subsequent joins
