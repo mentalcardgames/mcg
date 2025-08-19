@@ -2,6 +2,8 @@
 
 pub mod articles;
 pub mod game;
+pub mod store;
+pub mod effects;
 pub mod hardcoded_cards;
 pub mod qr_scanner;
 #[cfg(target_arch = "wasm32")]

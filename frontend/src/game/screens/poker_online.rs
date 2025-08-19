@@ -1,4 +1,5 @@
-use crate::game::connection::ConnectionService;
+use crate::store::{bootstrap_store, Store};
+use crate::effects::ConnectionEffect;
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
@@ -10,39 +11,33 @@ use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
-    connection: ConnectionService,
-    last_error: Option<String>,
-    last_info: Option<String>,
-    state: Option<GameStatePublic>,
-    name: String,
-    server_address: String,
-    bots: usize,
-    bots_auto: bool,
+    store: Store,
+    conn_eff: ConnectionEffect,
     show_error_popup: bool,
     scanner: QrScannerPopup,
+    // Local UI-only edit buffers (kept here so the immediate-mode UI can mutate them)
+    edit_name: String,
+    edit_server_address: String,
+    edit_bots: usize,
+    edit_bots_auto: bool,
 }
 impl PokerOnlineScreen {
     pub fn new() -> Self {
+        // bootstrap store and effects
+        let store = bootstrap_store();
+        let snapshot = store.get_snapshot();
+        let settings = snapshot.settings;
+        let conn_eff = ConnectionEffect::new(store.clone());
+
         Self {
-            connection: ConnectionService::new(),
-            last_error: None,
-            last_info: None,
-            state: None,
-            name: "Player".to_string(),
-            #[cfg(target_arch = "wasm32")]
-            server_address: {
-                let window = web_sys::window().expect("no global window exists");
-                let location = window.location();
-                let hostname = location.hostname().unwrap_or("127.0.0.1".into());
-                let port = location.port().unwrap_or("3000".into());
-                format!("{}:{}", hostname, port)
-            },
-            #[cfg(not(target_arch = "wasm32"))]
-            server_address: "127.0.0.1:3000".to_string(),
-            bots: 1,
-            bots_auto: true,
+            store,
+            conn_eff,
             show_error_popup: false,
             scanner: QrScannerPopup::new(),
+            edit_name: settings.name,
+            edit_server_address: settings.server_address,
+            edit_bots: settings.bots,
+            edit_bots_auto: settings.bots_auto,
         }
     }
 
@@ -50,18 +45,20 @@ impl PokerOnlineScreen {
         if !self.show_error_popup {
             return;
         }
+        // read last_error from store snapshot
+        let snapshot = self.store.get_snapshot();
         let mut open = true;
         egui::Window::new("Connection error")
             .collapsible(false)
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                if let Some(err) = &self.last_error {
+                if let Some(err) = &snapshot.last_error {
                     ui.label(err);
                 } else {
                     ui.label(format!(
                         "Failed to connect to server at {}. Is it running?",
-                        self.server_address
+                        snapshot.settings.server_address
                     ));
                 }
                 ui.add_space(8.0);
@@ -74,37 +71,18 @@ impl PokerOnlineScreen {
         }
     }
 
-    fn process_incoming_messages(&mut self) {
-        for msg in self.connection.drain_messages() {
-            match msg {
-                ServerMsg::Welcome { .. } => {
-                    self.last_info = Some("Connected".into());
-                    self.last_error = None;
-                    self.show_error_popup = false;
-                }
-                ServerMsg::State(gs) => {
-                    self.state = Some(gs);
-                    self.last_info = None;
-                }
-                ServerMsg::Error(err) => {
-                    self.last_error = Some(err);
-                    self.show_error_popup = true;
-                }
-            }
-        }
-
-        for e in self.connection.drain_errors() {
-            self.last_error = Some(e);
-            self.show_error_popup = true;
-        }
-    }
+    // Incoming messages are handled by ConnectionEffect which polls the ConnectionService
+    // and pushes ServerMsg events into the shared store. We no longer drain messages here.
 
     fn render_header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        // Read a snapshot from the store for rendering
+        let snapshot = self.store.get_snapshot();
+
         // Title row with current stage badge
         ui.horizontal(|ui| {
             ui.heading("Poker Online");
             ui.add_space(16.0);
-            if let Some(s) = &self.state {
+            if let Some(s) = &snapshot.game_state {
                 ui.label(stage_badge(s.stage));
                 ui.add_space(8.0);
                 ui.label(format!("Bots: {}", s.bot_count));
@@ -112,17 +90,17 @@ impl PokerOnlineScreen {
         });
 
         // Collapsible connection & session controls
-        let default_open = self.state.is_none();
+        let default_open = snapshot.game_state.is_none();
         egui::CollapsingHeader::new("Connection & session")
             .default_open(default_open)
             .show(ui, |ui| {
                 Self::render_connection_controls(self, ui, ctx);
             });
 
-        if let Some(err) = &self.last_error {
+        if let Some(err) = &snapshot.last_error {
             ui.colored_label(Color32::RED, err);
         }
-        if let Some(info) = &self.last_info {
+        if let Some(info) = &snapshot.last_info {
             ui.label(RichText::new(info));
         }
         ui.separator();
@@ -134,7 +112,7 @@ impl PokerOnlineScreen {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
                     ui.label("Name:");
-                    ui.text_edit_singleline(&mut self.name)
+                    ui.text_edit_singleline(&mut self.edit_name)
                         .on_hover_text("Your nickname");
                     if ui.button("Connect").clicked() {
                         self.connect(ctx);
@@ -142,15 +120,15 @@ impl PokerOnlineScreen {
                 });
                 ui.horizontal(|ui| {
                     ui.label("Server:");
-                    ui.text_edit_singleline(&mut self.server_address)
+                    ui.text_edit_singleline(&mut self.edit_server_address)
                         .on_hover_text("Server address (IP:PORT)");
                     self.scanner
-                        .button_and_popup(ui, ctx, &mut self.server_address);
+                        .button_and_popup(ui, ctx, &mut self.edit_server_address);
                 });
                 ui.horizontal(|ui| {
                     ui.label("Bots:");
                     ui.add(
-                        egui::DragValue::new(&mut self.bots)
+                        egui::DragValue::new(&mut self.edit_bots)
                             .range(0..=8)
                             .speed(0.1)
                             .suffix(" bots"),
@@ -161,45 +139,44 @@ impl PokerOnlineScreen {
                         .clicked()
                     {
                         self.send(&ClientMsg::ResetGame {
-                            bots: self.bots,
-                            bots_auto: self.bots_auto,
+                            bots: self.edit_bots,
+                            bots_auto: self.edit_bots_auto,
                         });
-                        self.last_info = Some(format!("Reset requested ({} bots)", self.bots));
-                        self.last_error = None;
+                        // notify store about reset intent
+                        self.store.dispatch(crate::store::AppAction::ResetGameRequested { bots: self.edit_bots, bots_auto: self.edit_bots_auto });
                     }
                 });
             });
         } else {
             ui.horizontal(|ui| {
                 ui.label("Name:");
-                ui.text_edit_singleline(&mut self.name)
+                ui.text_edit_singleline(&mut self.edit_name)
                     .on_hover_text("Your nickname");
                 ui.add_space(12.0);
                 ui.label("Server:");
-                ui.text_edit_singleline(&mut self.server_address)
+                ui.text_edit_singleline(&mut self.edit_server_address)
                     .on_hover_text("Server address (IP:PORT)");
                 self.scanner
-                    .button_and_popup(ui, ctx, &mut self.server_address);
+                    .button_and_popup(ui, ctx, &mut self.edit_server_address);
                 ui.add_space(12.0);
                 ui.label("Bots:");
                 ui.add(
-                    egui::DragValue::new(&mut self.bots)
+                    egui::DragValue::new(&mut self.edit_bots)
                         .range(0..=8)
                         .speed(0.1)
                         .suffix(" bots"),
                 );
-                ui.checkbox(&mut self.bots_auto, "Bots auto");
+                ui.checkbox(&mut self.edit_bots_auto, "Bots auto");
                 if ui
                     .add(egui::Button::new("Reset Game"))
                     .on_hover_text("Reset the game with the chosen number of bots")
                     .clicked()
                 {
                     self.send(&ClientMsg::ResetGame {
-                        bots: self.bots,
-                        bots_auto: self.bots_auto,
+                        bots: self.edit_bots,
+                        bots_auto: self.edit_bots_auto,
                     });
-                    self.last_info = Some(format!("Reset requested ({} bots)", self.bots));
-                    self.last_error = None;
+                    self.store.dispatch(crate::store::AppAction::ResetGameRequested { bots: self.edit_bots, bots_auto: self.edit_bots_auto });
                 }
                 if ui.button("Connect").clicked() {
                     self.connect(ctx);
@@ -428,14 +405,12 @@ impl PokerOnlineScreen {
     }
 
     fn connect(&mut self, ctx: &egui::Context) {
-        self.connection
-            .connect(&self.server_address, &self.name, ctx);
-        self.last_error = None;
+        self.conn_eff.start_connect(ctx, &self.edit_server_address, &self.edit_name);
         self.show_error_popup = false;
     }
 
     fn send(&self, msg: &ClientMsg) {
-        self.connection.send(msg);
+        self.conn_eff.send(msg);
     }
 }
 
@@ -470,12 +445,18 @@ impl Default for PokerOnlineScreen {
 impl ScreenWidget for PokerOnlineScreen {
     fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
-        self.draw_error_popup(&ctx);
-        self.process_incoming_messages();
 
+        // Poll the connection effect to drain incoming messages into the store
+        self.conn_eff.poll();
+
+        self.draw_error_popup(&ctx);
+
+        // Render header (it will read from the store snapshot internally)
         self.render_header(ui, &ctx);
 
-        if let Some(state) = &self.state {
+        // Render main content from the latest snapshot
+        let snapshot = self.store.get_snapshot();
+        if let Some(state) = &snapshot.game_state {
             self.render_showdown_banner(ui, state);
             self.render_panels(ui, state);
         } else {

@@ -48,7 +48,6 @@ pub enum SimpleCard {
     Masked(Option<usize>),
 }
 
-#[cfg(target_arch = "wasm32")]
 fn get_origin() -> String {
     let window = web_sys::window().expect("should have a window in this context");
     let location = window.location();
@@ -56,10 +55,6 @@ fn get_origin() -> String {
         .origin()
         .expect("should have an origin in this context");
     origin
-}
-#[cfg(not(target_arch = "wasm32"))]
-fn get_origin() -> String {
-    String::from("")
 }
 
 #[allow(non_snake_case)]

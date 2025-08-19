@@ -3,11 +3,8 @@ use mcg_shared::{ClientMsg, ServerMsg};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::closure::Closure;
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
-#[cfg(target_arch = "wasm32")]
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
 /// Small connection service that encapsulates WebSocket logic for the UI.
@@ -15,7 +12,6 @@ use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 /// - Keeps inbox/error buffers in Rc<RefCell<..>> so UI can consume them safely
 /// - On non-wasm targets this is a stub that records a helpful error
 pub struct ConnectionService {
-    #[cfg(target_arch = "wasm32")]
     ws: Option<WebSocket>,
 
     inbox: Rc<RefCell<Vec<ServerMsg>>>,
@@ -31,7 +27,6 @@ impl Default for ConnectionService {
 impl ConnectionService {
     pub fn new() -> Self {
         Self {
-            #[cfg(target_arch = "wasm32")]
             ws: None,
             inbox: Rc::new(RefCell::new(Vec::new())),
             error_inbox: Rc::new(RefCell::new(Vec::new())),
@@ -41,15 +36,6 @@ impl ConnectionService {
     /// Connect to a server (wasm) or record an error on native builds.
     /// `name` is sent as a Join message once the socket is open.
     pub fn connect(&mut self, _server_address: &str, _name: &str, ctx: &Context) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.error_inbox
-                .borrow_mut()
-                .push("Online mode is unavailable on native builds".into());
-            ctx.request_repaint();
-        }
-
-        #[cfg(target_arch = "wasm32")]
         {
             let ws_url = format!("ws://{}/ws", _server_address);
             match WebSocket::new(&ws_url) {
