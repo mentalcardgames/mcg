@@ -174,7 +174,6 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
 
 If you'd like, I can:
 - Add an explicit `--print-addr` flag to the server and wire it into `spawn_iroh_listener` so printing is opt-in, or
-- Add a short CLI-mode example under `server/examples/` demonstrating dialing the printed `NodeAddr` (including how to copy/paste the printed string).
 
 ## Findings from issue search (NodeAddr / CLI)
 

@@ -7,13 +7,16 @@ pub struct Cli {
     #[arg(short, long, default_value = "CLI")]
     pub name: String,
 
-    /// Transport to use and its address. Format:
-    /// - http:<ADDRESS>         (e.g. --transport 'http:http://localhost:3000')
-    /// - websocket:<ADDRESS>    (e.g. --transport 'websocket:ws://localhost:3000/ws')
-    /// - iroh:<PEER>            (e.g. --transport 'iroh:zb2...peerid...')
+    /// Transport to use and its address. Accepted forms:
+    /// - Full URL starting with http:// or https:// (treated as HTTP)
+    ///   (e.g. --transport 'http://localhost:3000' or '--transport https://example.com')
+    /// - Full URL starting with ws:// or wss:// (treated as WebSocket)
+    ///   (e.g. --transport 'ws://localhost:3000/ws' or '--transport wss://example.com/ws')
+    /// - iroh prefix for Iroh peer ids:
+    ///   - iroh:<PEER>            (e.g. --transport 'iroh:zb2...peerid...')
     ///
-    /// Default: http:http://localhost:3000
-    #[arg(long, default_value = "http:http://localhost:3000")]
+    /// Default: http://localhost:3000
+    #[arg(long, default_value = "http://localhost:3000")]
     pub transport: TransportKind,
 
     /// How long to wait for server state updates after sending a command (ms)
@@ -79,56 +82,85 @@ impl std::str::FromStr for TransportKind {
             return Err("transport cannot be empty".into());
         }
         let lower = s.to_ascii_lowercase();
-        if lower.starts_with("http:") {
-            let addr = s["http:".len()..].to_string();
-            if addr.is_empty() {
-                Err("http transport requires an address: --transport 'http:ADDRESS'".into())
-            } else {
-                Ok(TransportKind::Http(addr))
-            }
-        } else if lower.starts_with("websocket:")
-            || lower.starts_with("ws:")
-            || lower.starts_with("web-socket:")
-        {
-            // preserve original case for address portion
-            let prefix_len = if lower.starts_with("websocket:") {
-                "websocket:".len()
-            } else if lower.starts_with("web-socket:") {
-                "web-socket:".len()
-            } else {
-                "ws:".len()
-            };
-            let addr = s[prefix_len..].to_string();
-            if addr.is_empty() {
-                Err(
-                    "websocket transport requires an address: --transport 'websocket:ADDRESS'"
-                        .into(),
-                )
-            } else {
-                Ok(TransportKind::WebSocket(addr))
-            }
-        } else if lower.starts_with("iroh:") {
+
+        // Explicit iroh: prefix
+        if lower.starts_with("iroh:") {
             let peer = s["iroh:".len()..].to_string();
             if peer.is_empty() {
-                Err("iroh transport requires a peer id: --transport 'iroh:PEER'".into())
+                return Err("iroh transport requires a peer id: --transport 'iroh:PEER'".into());
             } else {
-                Ok(TransportKind::Iroh(peer))
+                return Ok(TransportKind::Iroh(peer));
             }
-        } else {
-            Err(format!(
-                "unknown transport '{}', expected forms: http:ADDR, websocket:ADDR, iroh:PEER",
-                s
-            ))
         }
+
+        // Full URL forms: http(s) -> Http, ws(s) -> WebSocket
+        if lower.starts_with("http://") || lower.starts_with("https://") {
+            return Ok(TransportKind::Http(s.to_string()));
+        }
+        if lower.starts_with("ws://") || lower.starts_with("wss://") {
+            return Ok(TransportKind::WebSocket(s.to_string()));
+        }
+
+        // No legacy prefixed forms supported anymore
+        Err(format!(
+            "unknown transport '{}', expected forms: http(s)://URL, ws(s)://URL, or iroh:PEER",
+            s
+        ))
     }
 }
 
 impl std::fmt::Display for TransportKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransportKind::WebSocket(addr) => write!(f, "websocket:{}", addr),
-            TransportKind::Http(addr) => write!(f, "http:{}", addr),
+            TransportKind::WebSocket(addr) => write!(f, "{}", addr),
+            TransportKind::Http(addr) => write!(f, "{}", addr),
             TransportKind::Iroh(peer) => write!(f, "iroh:{}", peer),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn parse_http_and_https() {
+        let h1 = TransportKind::from_str("http://localhost:3000").expect("should parse http");
+        assert!(matches!(h1, TransportKind::Http(ref a) if a == "http://localhost:3000"));
+        let h2 = TransportKind::from_str("https://example.com").expect("should parse https");
+        assert!(matches!(h2, TransportKind::Http(ref a) if a == "https://example.com"));
+    }
+
+    #[test]
+    fn parse_ws_and_wss() {
+        let w1 = TransportKind::from_str("ws://localhost:3000/ws").expect("should parse ws");
+        assert!(matches!(w1, TransportKind::WebSocket(ref a) if a == "ws://localhost:3000/ws"));
+        let w2 = TransportKind::from_str("wss://example.com/ws").expect("should parse wss");
+        assert!(matches!(w2, TransportKind::WebSocket(ref a) if a == "wss://example.com/ws"));
+    }
+
+    #[test]
+    fn parse_iroh() {
+        let i = TransportKind::from_str("iroh:zb2examplepeer").expect("should parse iroh");
+        assert!(matches!(i, TransportKind::Iroh(ref p) if p == "zb2examplepeer"));
+    }
+
+    #[test]
+    fn reject_legacy_prefixes() {
+        assert!(TransportKind::from_str("http:localhost:3000").is_err());
+        assert!(TransportKind::from_str("websocket:ws://localhost:3000/ws").is_err());
+        assert!(TransportKind::from_str("ws:localhost:3000").is_err());
+        assert!(TransportKind::from_str("web-socket:ws://localhost:3000/ws").is_err());
+    }
+
+    #[test]
+    fn display_formats() {
+        let h = TransportKind::from_str("http://localhost:3000").unwrap();
+        assert_eq!(h.to_string(), "http://localhost:3000");
+        let w = TransportKind::from_str("ws://localhost:3000/ws").unwrap();
+        assert_eq!(w.to_string(), "ws://localhost:3000/ws");
+        let i = TransportKind::from_str("iroh:zb2peer").unwrap();
+        assert_eq!(i.to_string(), "iroh:zb2peer");
     }
 }

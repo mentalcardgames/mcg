@@ -28,7 +28,7 @@ Build/run
   - just kill-server        # stop background server
 
 Notes
-- The server binds to the first available port starting at 3000 and logs the chosen URL (e.g., http://localhost:3000). Open that URL in the browser.
+- The backend binds to the first available port starting at 3000 and logs the chosen URL (e.g., http://localhost:3000). Open that URL in the browser.
 - The native node assumes current working directory is the repo root to serve ./pkg and ./media.
 - wasm-pack builds are run from the `frontend/` crate and emit to ../pkg (repo root). If a `frontend/pkg` directory exists, prefer the root `pkg` output.
 
@@ -48,7 +48,7 @@ Lint/format
 High-level architecture
 Workspace layout
 - frontend/: WASM/egui frontend and all UI/game/screen code (previously `client/`)
-- native_mcg/: Native node containing the backend (HTTP + WebSocket), CLI, and native-only helpers (previously `server/`)
+- native_mcg/: Native node containing the backend (HTTP + WebSocket), CLI, and native-only helpers
 - shared/: Types shared between frontend and native_mcg (serde-serializable protocol and game data)
 - pkg/: wasm-pack output (mcg.js, mcg_bg.wasm, mcg.d.ts) loaded by index.html
 - index.html: loads pkg/mcg.js and starts the game on a full-screen canvas
@@ -73,7 +73,7 @@ Frontend (frontend crate)
 Backend (native_mcg / backend)
 - Entry: native_mcg/src/main.rs
   - Parses --bots <N> (default 1). Chooses the first available port starting at 3000. Starts the backend with an AppState containing bot_count and a Lobby. The native node (`native_mcg`) includes both backend HTTP/WebSocket handlers and additional native-only CLI helpers.
-- HTTP/router: native_mcg/src/server.rs (or native_mcg/src/backend/http.rs)
+- HTTP/router: native_mcg/src/backend/http.rs
   - Routes:
     - GET /health -> { ok: true }
     - GET /ws -> WebSocket upgrade (game protocol)
