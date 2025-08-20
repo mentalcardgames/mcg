@@ -2,7 +2,7 @@ use eframe::egui;
 use mcg_shared::ClientMsg;
 
 use crate::game::connection::ConnectionService;
-use crate::store::{AppAction, Store};
+use crate::store::{SharedState, apply_server_msg};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
@@ -15,33 +15,40 @@ use wasm_bindgen_futures::spawn_local;
 /// If you later prefer background threads, replace the polling with a cross-thread channel + thread.
 pub struct ConnectionEffect {
     conn: Option<ConnectionService>,
-    store: Store,
+    state: SharedState,
     ctx: Option<egui::Context>,
 }
 
 impl ConnectionEffect {
-    /// Create a new ConnectionEffect bound to `store`.
-    pub fn new(store: Store) -> Self {
+    /// Create a new ConnectionEffect bound to `state`.
+    pub fn new(state: SharedState) -> Self {
         Self {
             conn: None,
-            store,
+            state,
             ctx: None,
         }
     }
 
     /// Start/establish a connection using ConnectionService.
     /// `ctx` is required by ConnectionService.connect for wasm/native UI integration.
-    /// This will create a new ConnectionService, call connect, and update the store with Connect action.
+    /// This will create a new ConnectionService, call connect, and mutate the shared state.
     pub fn start_connect(&mut self, ctx: &egui::Context, addr: &str, name: &str) {
         let mut conn = ConnectionService::new();
         conn.connect(addr, name, ctx);
         self.conn = Some(conn);
         self.ctx = Some(ctx.clone());
-        // notify the store about the attempted connection (reducer handles status)
-        self.store.dispatch(AppAction::Connect {
-            addr: addr.to_string(),
-            name: name.to_string(),
-        });
+        // update shared state directly
+        {
+            let mut s = self.state.borrow_mut();
+            s.connection_status = crate::store::ConnectionStatus::Connecting;
+            s.last_error = None;
+            s.last_info = Some(format!("Connecting to {}", addr));
+            s.settings.server_address = addr.to_string();
+            s.settings.name = name.to_string();
+        }
+        if let Some(ctx) = &self.ctx {
+            ctx.request_repaint();
+        }
     }
 
     /// Close and drop the active connection, if any.
@@ -49,34 +56,44 @@ impl ConnectionEffect {
         if let Some(mut c) = self.conn.take() {
             c.close();
         }
-        self.store.dispatch(AppAction::Disconnect);
-    }
-
-    /// Send a client message through the active ConnectionService.
-    /// Also dispatches a SendClientMsg action so reducers/effects can observe the outgoing intent.
-    pub fn send(&self, msg: &ClientMsg) {
-        if let Some(c) = &self.conn {
-            c.send(msg);
-            // Inform store (side-effects may observe this)
-            self.store.dispatch(AppAction::SendClientMsg(msg.clone()));
-        } else {
-            self.store
-                .dispatch(AppAction::ShowError("Not connected".into()));
+        {
+            let mut s = self.state.borrow_mut();
+            s.connection_status = crate::store::ConnectionStatus::Disconnected;
+            s.last_info = Some("Disconnected".into());
+        }
+        if let Some(ctx) = &self.ctx {
+            ctx.request_repaint();
         }
     }
 
-    /// Poll the ConnectionService once: drain messages and errors, forward them into the store.
-    /// This should be called each frame (or on a timer) from the UI thread so the store receives
-    /// incoming ServerMsg events and updates state accordingly.
+    /// Send a client message through the active ConnectionService.
+    pub fn send(&self, msg: &ClientMsg) {
+        if let Some(c) = &self.conn {
+            c.send(msg);
+            // update state with outgoing info
+            let mut s = self.state.borrow_mut();
+            s.last_info = Some("Outgoing message queued".into());
+        } else {
+            let mut s = self.state.borrow_mut();
+            s.last_error = Some("Not connected".into());
+        }
+        if let Some(ctx) = &self.ctx {
+            ctx.request_repaint();
+        }
+    }
+
+    /// Poll the ConnectionService once: drain messages and errors, forward them into the shared state.
+    /// This should be called each frame (or on a timer) from the UI thread so the UI observes mutated state.
     pub fn poll(&mut self) {
         if let Some(c) = &mut self.conn {
             for msg in c.drain_messages() {
-                // push into store as ServerMsgReceived so the reducer handles it
-                self.store.push_server_msg(msg);
+                // apply incoming server messages into the shared AppState
+                apply_server_msg(&self.state, msg);
             }
 
             for err in c.drain_errors() {
-                self.store.dispatch(AppAction::ShowError(err));
+                let mut s = self.state.borrow_mut();
+                s.last_error = Some(err);
             }
 
             // request repaint so the UI reflects new state quickly
@@ -108,29 +125,70 @@ impl ConnectionEffect {
    - On native spawns a blocking thread using reqwest::blocking
 */
 pub struct ArticlesEffect {
-    store: Store,
+    state: SharedState,
 }
 
 impl ArticlesEffect {
-    pub fn new(store: Store) -> Self {
-        Self { store }
+    pub fn new(state: SharedState) -> Self {
+        Self { state }
     }
 
-    /// Trigger fetching posts. Dispatches FetchPosts immediately, then PostsLoaded or PostsLoadError.
-    pub fn fetch_posts(&self) {
-        // mark loading in the store
-        self.store.dispatch(AppAction::FetchPosts);
+    /// Trigger fetching posts. Mutates shared state: Loading -> Loaded/Error.
+    pub fn fetch_posts(&self, ctx: Option<&egui::Context>) {
+        // mark loading in the shared state
+        {
+            let mut s = self.state.borrow_mut();
+            s.articles = crate::store::ArticlesLoading::Loading;
+            s.last_info = Some("Fetching posts...".into());
+        }
+        if let Some(ctx) = ctx {
+            ctx.request_repaint();
+        }
 
         #[cfg(target_arch = "wasm32")]
         {
-            let store = self.store.clone();
+            let state = self.state.clone();
+            let ctx = ctx.cloned();
             spawn_local(async move {
                 match crate::articles::fetch_posts().await {
                     Ok(posts) => {
-                        store.dispatch(AppAction::PostsLoaded(posts));
+                        {
+                            let mut s = state.borrow_mut();
+                            s.articles = crate::store::ArticlesLoading::Loaded(posts.clone());
+                            s.last_info = Some("Posts loaded".into());
+                        }
+                        if let Some(c) = &ctx {
+                            c.request_repaint();
+                        }
                     }
                     Err(e) => {
-                        store.dispatch(AppAction::PostsLoadError(e));
+                        {
+                            let mut s = state.borrow_mut();
+                            s.articles = crate::store::ArticlesLoading::Error(e.clone());
+                            s.last_error = Some(e.clone());
+                        }
+                        if let Some(c) = &ctx {
+                            c.request_repaint();
+                        }
+                    }
+                }
+            });
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let state = self.state.clone();
+            std::thread::spawn(move || {
+                match crate::articles::fetch_posts_blocking() {
+                    Ok(posts) => {
+                        let mut s = state.borrow_mut();
+                        s.articles = crate::store::ArticlesLoading::Loaded(posts.clone());
+                        s.last_info = Some("Posts loaded".into());
+                    }
+                    Err(e) => {
+                        let mut s = state.borrow_mut();
+                        s.articles = crate::store::ArticlesLoading::Error(e.clone());
+                        s.last_error = Some(e.clone());
                     }
                 }
             });

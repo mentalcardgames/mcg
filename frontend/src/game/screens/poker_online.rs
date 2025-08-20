@@ -1,17 +1,17 @@
-use crate::store::{bootstrap_store, Store};
+use crate::store::{bootstrap_state, SharedState, AppState};
 use crate::effects::ConnectionEffect;
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
     ActionEvent, ActionKind, BlindKind, ClientMsg, GameAction, GameStatePublic, PlayerAction,
-    PlayerPublic, ServerMsg, Stage,
+    PlayerPublic, Stage,
 };
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
-    store: Store,
+    state: SharedState,
     conn_eff: ConnectionEffect,
     show_error_popup: bool,
     scanner: QrScannerPopup,
@@ -23,14 +23,14 @@ pub struct PokerOnlineScreen {
 }
 impl PokerOnlineScreen {
     pub fn new() -> Self {
-        // bootstrap store and effects
-        let store = bootstrap_store();
-        let snapshot = store.get_snapshot();
+        // bootstrap shared state and effects
+        let state = bootstrap_state();
+        let snapshot = state.borrow().clone();
         let settings = snapshot.settings;
-        let conn_eff = ConnectionEffect::new(store.clone());
+        let conn_eff = ConnectionEffect::new(state.clone());
 
         Self {
-            store,
+            state,
             conn_eff,
             show_error_popup: false,
             scanner: QrScannerPopup::new(),
@@ -45,8 +45,8 @@ impl PokerOnlineScreen {
         if !self.show_error_popup {
             return;
         }
-        // read last_error from store snapshot
-        let snapshot = self.store.get_snapshot();
+        // read last_error from shared state snapshot
+        let snapshot = self.state.borrow().clone();
         let mut open = true;
         egui::Window::new("Connection error")
             .collapsible(false)
@@ -75,8 +75,8 @@ impl PokerOnlineScreen {
     // and pushes ServerMsg events into the shared store. We no longer drain messages here.
 
     fn render_header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        // Read a snapshot from the store for rendering
-        let snapshot = self.store.get_snapshot();
+        // Read a snapshot from the shared state for rendering
+        let snapshot = self.state.borrow().clone();
 
         // Title row with current stage badge
         ui.horizontal(|ui| {
@@ -142,8 +142,15 @@ impl PokerOnlineScreen {
                             bots: self.edit_bots,
                             bots_auto: self.edit_bots_auto,
                         });
-                        // notify store about reset intent
-                        self.store.dispatch(crate::store::AppAction::ResetGameRequested { bots: self.edit_bots, bots_auto: self.edit_bots_auto });
+                        // update shared state with reset intent
+                        {
+                            let mut s = self.state.borrow_mut();
+                            s.last_info = Some(format!("Reset requested ({} bots)", self.edit_bots));
+                            s.last_error = None;
+                            s.settings.bots = self.edit_bots;
+                            s.settings.bots_auto = self.edit_bots_auto;
+                        }
+                        ctx.request_repaint();
                     }
                 });
             });
@@ -171,13 +178,20 @@ impl PokerOnlineScreen {
                     .add(egui::Button::new("Reset Game"))
                     .on_hover_text("Reset the game with the chosen number of bots")
                     .clicked()
-                {
-                    self.send(&ClientMsg::ResetGame {
-                        bots: self.edit_bots,
-                        bots_auto: self.edit_bots_auto,
-                    });
-                    self.store.dispatch(crate::store::AppAction::ResetGameRequested { bots: self.edit_bots, bots_auto: self.edit_bots_auto });
-                }
+                    {
+                        self.send(&ClientMsg::ResetGame {
+                            bots: self.edit_bots,
+                            bots_auto: self.edit_bots_auto,
+                        });
+                        {
+                            let mut s = self.state.borrow_mut();
+                            s.last_info = Some(format!("Reset requested ({} bots)", self.edit_bots));
+                            s.last_error = None;
+                            s.settings.bots = self.edit_bots;
+                            s.settings.bots_auto = self.edit_bots_auto;
+                        }
+                        ctx.request_repaint();
+                    }
                 if ui.button("Connect").clicked() {
                     self.connect(ctx);
                 }
@@ -455,7 +469,7 @@ impl ScreenWidget for PokerOnlineScreen {
         self.render_header(ui, &ctx);
 
         // Render main content from the latest snapshot
-        let snapshot = self.store.get_snapshot();
+        let snapshot = self.state.borrow().clone();
         if let Some(state) = &snapshot.game_state {
             self.render_showdown_banner(ui, state);
             self.render_panels(ui, state);

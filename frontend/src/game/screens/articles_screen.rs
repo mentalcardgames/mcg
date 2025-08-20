@@ -5,26 +5,19 @@ use std::rc::Rc;
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::articles::Post;
 use crate::effects::ArticlesEffect;
-use crate::store::bootstrap_store;
-use crate::store::AppState;
+use crate::store::{bootstrap_state, SharedState, AppState};
 
 /// Thin UI for articles; application state and fetching is handled by the shared Store + ArticlesEffect.
 pub struct ArticlesScreen {
-    store: crate::store::Store,
-    articles_eff: crate::effects::ArticlesEffect,
-    // subscriber kept alive so we can request_repaint on updates
-    subscriber: Option<Rc<dyn Fn()>>,
+    state: SharedState,
+    articles_eff: ArticlesEffect,
 }
 
 impl ArticlesScreen {
     pub fn new() -> Self {
-        let store = bootstrap_store();
-        let articles_eff = ArticlesEffect::new(store.clone());
-        Self {
-            store,
-            articles_eff,
-            subscriber: None,
-        }
+        let state = bootstrap_state();
+        let articles_eff = ArticlesEffect::new(state.clone());
+        Self { state, articles_eff }
     }
 
     fn render_loading_ui(&self, ui: &mut egui::Ui) {
@@ -40,12 +33,12 @@ impl ArticlesScreen {
         ui.add_space(20.0);
     }
 
-    fn render_posts_list(&self, ui: &mut egui::Ui, posts: &[Post]) {
+    fn render_posts_list(&self, ui: &mut egui::Ui, posts: &[Post], ctx: &egui::Context) {
         if ui
             .add_sized(vec2(150.0, 30.0), egui::Button::new("Refresh"))
             .clicked()
         {
-            self.articles_eff.fetch_posts();
+            self.articles_eff.fetch_posts(Some(ctx));
         }
         ui.add_space(10.0);
         ui.label(RichText::new(format!("Found {} posts", posts.len())).color(Color32::GREEN));
@@ -84,14 +77,6 @@ impl ScreenWidget for ArticlesScreen {
     fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
 
-        // Ensure we have a subscriber that requests repaint on store updates.
-        if self.subscriber.is_none() {
-            let ctx_clone = ctx.clone();
-            let sub = self.store.subscribe(move || {
-                ctx_clone.request_repaint();
-            });
-            self.subscriber = Some(sub);
-        }
 
         ui.vertical_centered(|ui| {
             ui.add_space(20.0);
@@ -103,16 +88,16 @@ impl ScreenWidget for ArticlesScreen {
             );
             ui.add_space(20.0);
 
-            // Render based on store snapshot
-            let snapshot: AppState = self.store.get_snapshot();
+            // Render based on shared state snapshot
+            let snapshot: AppState = self.state.borrow().clone();
             match snapshot.articles {
                 crate::store::ArticlesLoading::NotStarted => {
-                    if ui
-                        .add_sized(vec2(150.0, 40.0), egui::Button::new("Fetch Posts"))
-                        .clicked()
-                    {
-                        self.articles_eff.fetch_posts();
-                    }
+                        if ui
+                            .add_sized(vec2(150.0, 40.0), egui::Button::new("Fetch Posts"))
+                            .clicked()
+                        {
+                            self.articles_eff.fetch_posts(Some(&ctx));
+                        }
                     ui.add_space(20.0);
                     ui.label("Click the button to fetch posts from JSONPlaceholder API.");
                     ui.add_space(10.0);
@@ -127,7 +112,7 @@ impl ScreenWidget for ArticlesScreen {
                 }
                 crate::store::ArticlesLoading::Loaded(posts) => {
                     let posts = posts.clone();
-                    self.render_posts_list(ui, &posts);
+                    self.render_posts_list(ui, &posts, &ctx);
                 }
                 crate::store::ArticlesLoading::Error(err) => {
                     let err = err.clone();
@@ -136,7 +121,7 @@ impl ScreenWidget for ArticlesScreen {
                         .add_sized(vec2(150.0, 40.0), egui::Button::new("Retry"))
                         .clicked()
                     {
-                        self.articles_eff.fetch_posts();
+                        self.articles_eff.fetch_posts(Some(&ctx));
                     }
                 }
             }

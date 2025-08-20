@@ -18,7 +18,7 @@ pub use example_screen::ExampleScreen;
 pub use game::{DNDSelector, DirectoryCardType, Game, GameConfig};
 pub use game_setup_screen::GameSetupScreen;
 pub use main_menu::MainMenu;
-pub use pairing_screen::{PairingScreen, Player};
+pub use pairing_screen::PairingScreen;
 pub use poker_online::PokerOnlineScreen;
 pub use qr_test::QrScreen;
 
