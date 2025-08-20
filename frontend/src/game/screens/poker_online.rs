@@ -1,5 +1,5 @@
-use crate::store::{bootstrap_state, SharedState, AppState};
 use crate::effects::ConnectionEffect;
+use crate::store::{bootstrap_state, AppState, SharedState};
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
@@ -145,7 +145,8 @@ impl PokerOnlineScreen {
                         // update shared state with reset intent
                         {
                             let mut s = self.state.borrow_mut();
-                            s.last_info = Some(format!("Reset requested ({} bots)", self.edit_bots));
+                            s.last_info =
+                                Some(format!("Reset requested ({} bots)", self.edit_bots));
                             s.last_error = None;
                             s.settings.bots = self.edit_bots;
                             s.settings.bots_auto = self.edit_bots_auto;
@@ -178,20 +179,20 @@ impl PokerOnlineScreen {
                     .add(egui::Button::new("Reset Game"))
                     .on_hover_text("Reset the game with the chosen number of bots")
                     .clicked()
+                {
+                    self.send(&ClientMsg::ResetGame {
+                        bots: self.edit_bots,
+                        bots_auto: self.edit_bots_auto,
+                    });
                     {
-                        self.send(&ClientMsg::ResetGame {
-                            bots: self.edit_bots,
-                            bots_auto: self.edit_bots_auto,
-                        });
-                        {
-                            let mut s = self.state.borrow_mut();
-                            s.last_info = Some(format!("Reset requested ({} bots)", self.edit_bots));
-                            s.last_error = None;
-                            s.settings.bots = self.edit_bots;
-                            s.settings.bots_auto = self.edit_bots_auto;
-                        }
-                        ctx.request_repaint();
+                        let mut s = self.state.borrow_mut();
+                        s.last_info = Some(format!("Reset requested ({} bots)", self.edit_bots));
+                        s.last_error = None;
+                        s.settings.bots = self.edit_bots;
+                        s.settings.bots_auto = self.edit_bots_auto;
                     }
+                    ctx.request_repaint();
+                }
                 if ui.button("Connect").clicked() {
                     self.connect(ctx);
                 }
@@ -308,7 +309,7 @@ impl PokerOnlineScreen {
                             ui.add_space(6.0);
                         }
 
-                            // Action buttons placed below the player's cards
+                        // Action buttons placed below the player's cards
                         if state.to_act == idx && state.stage != Stage::Showdown {
                             // Normal active action buttons during the hand
                             self.render_action_row(ui, p.id, true, false);
@@ -361,7 +362,10 @@ impl PokerOnlineScreen {
                     });
                 }
             } else {
-                ui.add_enabled(false, egui::Button::new(check_label).min_size(egui::vec2(120.0, 40.0)));
+                ui.add_enabled(
+                    false,
+                    egui::Button::new(check_label).min_size(egui::vec2(120.0, 40.0)),
+                );
             }
 
             let bet_label = RichText::new("💰 Bet 10").size(18.0);
@@ -377,7 +381,10 @@ impl PokerOnlineScreen {
                     });
                 }
             } else {
-                ui.add_enabled(false, egui::Button::new(bet_label).min_size(egui::vec2(120.0, 40.0)));
+                ui.add_enabled(
+                    false,
+                    egui::Button::new(bet_label).min_size(egui::vec2(120.0, 40.0)),
+                );
             }
 
             let fold_label = RichText::new("✂ Fold").size(18.0);
@@ -392,14 +399,23 @@ impl PokerOnlineScreen {
                     });
                 }
             } else {
-                ui.add_enabled(false, egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)));
+                ui.add_enabled(
+                    false,
+                    egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)),
+                );
             }
         });
     }
 }
 
 impl PokerOnlineScreen {
-    fn render_action_row(&self, ui: &mut egui::Ui, player_id: usize, enabled: bool, show_next: bool) {
+    fn render_action_row(
+        &self,
+        ui: &mut egui::Ui,
+        player_id: usize,
+        enabled: bool,
+        show_next: bool,
+    ) {
         ui.vertical(|ui| {
             if show_next {
                 ui.horizontal(|ui| {
@@ -419,7 +435,8 @@ impl PokerOnlineScreen {
     }
 
     fn connect(&mut self, ctx: &egui::Context) {
-        self.conn_eff.start_connect(ctx, &self.edit_server_address, &self.edit_name);
+        self.conn_eff
+            .start_connect(ctx, &self.edit_server_address, &self.edit_name);
         self.show_error_popup = false;
     }
 

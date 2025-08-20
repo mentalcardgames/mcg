@@ -2,7 +2,7 @@ use eframe::egui;
 use mcg_shared::ClientMsg;
 
 use crate::game::connection::ConnectionService;
-use crate::store::{SharedState, apply_server_msg};
+use crate::store::{apply_server_msg, SharedState};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
@@ -177,21 +177,22 @@ impl ArticlesEffect {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let state = self.state.clone();
-            std::thread::spawn(move || {
-                match crate::articles::fetch_posts_blocking() {
-                    Ok(posts) => {
-                        let mut s = state.borrow_mut();
-                        s.articles = crate::store::ArticlesLoading::Loaded(posts.clone());
-                        s.last_info = Some("Posts loaded".into());
-                    }
-                    Err(e) => {
-                        let mut s = state.borrow_mut();
-                        s.articles = crate::store::ArticlesLoading::Error(e.clone());
-                        s.last_error = Some(e.clone());
-                    }
+            // Perform blocking fetch on the current thread. This avoids moving the
+            // non-Send `Rc<RefCell<_>>` into a spawned thread. It will block the UI
+            // briefly while fetching; consider refactoring SharedState to a
+            // thread-safe wrapper (Arc<Mutex<...>>) if background threads are needed.
+            match crate::articles::fetch_posts_blocking() {
+                Ok(posts) => {
+                    let mut s = self.state.borrow_mut();
+                    s.articles = crate::store::ArticlesLoading::Loaded(posts.clone());
+                    s.last_info = Some("Posts loaded".into());
                 }
-            });
+                Err(e) => {
+                    let mut s = self.state.borrow_mut();
+                    s.articles = crate::store::ArticlesLoading::Error(e.clone());
+                    s.last_error = Some(e.clone());
+                }
+            }
         }
     }
 }

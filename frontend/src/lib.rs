@@ -1,13 +1,13 @@
 //! Client-side (WASM) library for the MCG app.
 
 pub mod articles;
-pub mod game;
-pub mod store;
 pub mod effects;
+pub mod game;
 pub mod hardcoded_cards;
 pub mod qr_scanner;
 #[cfg(target_arch = "wasm32")]
 pub mod router;
+pub mod store;
 pub mod utils;
 
 #[allow(unused_imports)]

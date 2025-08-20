@@ -10,4 +10,4 @@ mod engine;
 mod showdown;
 mod utils;
 
-pub use engine::Game;
+pub use engine::{Game, Player};

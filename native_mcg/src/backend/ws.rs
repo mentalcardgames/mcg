@@ -47,7 +47,19 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
         return;
     }
 
-    let you_id = 0usize;
+    // Register player and obtain server-assigned you_id. If registration fails, report error and close.
+    let you_id = match crate::backend::state::register_player_id(&state, &name).await {
+        Ok(id) => id,
+        Err(e) => {
+            let _ = send_ws(
+                &mut socket,
+                &mcg_shared::ServerMsg::Error(format!("Failed to register player: {}", e)),
+            )
+            .await;
+            return;
+        }
+    };
+
     send_ws(&mut socket, &mcg_shared::ServerMsg::Welcome { you: you_id }).await;
     // Send initial state directly to this socket (does local printing & bookkeeping).
     send_state_to(&mut socket, &state, you_id).await;

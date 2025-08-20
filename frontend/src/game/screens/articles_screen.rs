@@ -5,7 +5,7 @@ use std::rc::Rc;
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::articles::Post;
 use crate::effects::ArticlesEffect;
-use crate::store::{bootstrap_state, SharedState, AppState};
+use crate::store::{bootstrap_state, AppState, SharedState};
 
 /// Thin UI for articles; application state and fetching is handled by the shared Store + ArticlesEffect.
 pub struct ArticlesScreen {
@@ -17,7 +17,10 @@ impl ArticlesScreen {
     pub fn new() -> Self {
         let state = bootstrap_state();
         let articles_eff = ArticlesEffect::new(state.clone());
-        Self { state, articles_eff }
+        Self {
+            state,
+            articles_eff,
+        }
     }
 
     fn render_loading_ui(&self, ui: &mut egui::Ui) {
@@ -77,7 +80,6 @@ impl ScreenWidget for ArticlesScreen {
     fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
 
-
         ui.vertical_centered(|ui| {
             ui.add_space(20.0);
             ui.heading("Posts from JSONPlaceholder");
@@ -92,12 +94,12 @@ impl ScreenWidget for ArticlesScreen {
             let snapshot: AppState = self.state.borrow().clone();
             match snapshot.articles {
                 crate::store::ArticlesLoading::NotStarted => {
-                        if ui
-                            .add_sized(vec2(150.0, 40.0), egui::Button::new("Fetch Posts"))
-                            .clicked()
-                        {
-                            self.articles_eff.fetch_posts(Some(&ctx));
-                        }
+                    if ui
+                        .add_sized(vec2(150.0, 40.0), egui::Button::new("Fetch Posts"))
+                        .clicked()
+                    {
+                        self.articles_eff.fetch_posts(Some(&ctx));
+                    }
                     ui.add_space(20.0);
                     ui.label("Click the button to fetch posts from JSONPlaceholder API.");
                     ui.add_space(10.0);

@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
-use mcg_shared::{GameStatePublic, ServerMsg};
 use crate::articles::Post;
+use mcg_shared::{GameStatePublic, ServerMsg};
 
 /// Small, UI-friendly application state.
 ///

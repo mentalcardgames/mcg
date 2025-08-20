@@ -76,6 +76,68 @@ pub async fn current_state_public(state: &AppState, you_id: usize) -> Option<Gam
     lobby.game.as_ref().map(|g| g.public_for(you_id))
 }
 
+/// Lookup a player's id by their connection name. Returns Some(id) if a
+/// matching player is present in the current game, or None otherwise.
+///
+/// This centralizes the logic used by multiple transports to determine the
+/// per-connection `you_id` for Welcome/initial state messages.
+pub async fn player_id_for_name(state: &AppState, name: &str) -> Option<usize> {
+    let lobby = state.lobby.read().await;
+    if let Some(game) = &lobby.game {
+        game.players.iter().find(|p| p.name == name).map(|p| p.id)
+    } else {
+        None
+    }
+}
+
+/// Register a player for the given connection `name` and return the assigned
+/// player id. If a player with the same name already exists in the current
+/// game, return that player's id. If no game exists, this will attempt to
+/// create one via `ensure_game_started`.
+///
+/// NOTE: This is a minimal, focused helper to centralize "Join" behaviour
+/// and assign server-side player ids. Adding players to an in-progress game
+/// may have semantic implications (round_bets, to_act, etc). A more robust
+/// approach would be to only accept joins between hands or to defer new
+/// players until the next hand; this helper keeps the change minimal by
+/// appending a new player and ensuring per-player vectors are resized.
+pub async fn register_player_id(state: &AppState, name: &str) -> Result<usize> {
+    // Ensure a game exists (creates one if missing).
+    if let Err(e) = ensure_game_started(state, name).await {
+        return Err(anyhow::anyhow!("Failed to ensure game started: {}", e));
+    }
+
+    let mut lobby = state.lobby.write().await;
+    if let Some(game) = &mut lobby.game {
+        // If player already present by name, return existing id.
+        if let Some(p) = game.players.iter().find(|p| p.name == name) {
+            return Ok(p.id);
+        }
+
+        // Assign next available id (append to players).
+        let id = game.players.len();
+        let player = crate::game::Player {
+            id,
+            name: name.to_string(),
+            stack: 1000,
+            cards: [0, 0],
+            has_folded: false,
+            all_in: false,
+        };
+        game.players.push(player);
+
+        // Ensure round_bets (and any other per-player vectors) are sized to match players.
+        if game.round_bets.len() < game.players.len() {
+            game.round_bets.resize(game.players.len(), 0);
+        }
+
+        // Ensure pending_to_act / other bookkeeping won't panic on indexing; we avoid mutating them here.
+        Ok(id)
+    } else {
+        Err(anyhow::anyhow!("No game available after ensure_game_started"))
+    }
+}
+
 /// Broadcast the current state (and print new events to server console) to all subscribers.
 pub async fn broadcast_state(state: &AppState, you_id: usize) {
     if let Some(gs) = current_state_public(state, you_id).await {

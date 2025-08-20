@@ -4,8 +4,8 @@ use std::rc::Rc;
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::sprintln;
+use crate::store::{bootstrap_state, AppState, SharedState};
 use crate::utils::emoji_hash;
-use crate::store::{bootstrap_state, SharedState, AppState};
 
 /// Pairing screen refactored to use the central Store so UI remains thin.
 /// State is stored in `store` (pairing_players + confirm fields). UI only renders snapshots
@@ -30,7 +30,6 @@ impl Default for PairingScreen {
 impl ScreenWidget for PairingScreen {
     fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
-
 
         ui.heading("Player Pairing");
         ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
@@ -72,23 +71,23 @@ impl ScreenWidget for PairingScreen {
                             } else {
                                 Color32::from_rgb(180, 255, 180)
                             };
-                                if ui
-                                    .add(
-                                        Button::new(RichText::new(button_text).color(Color32::BLACK))
-                                            .fill(button_color)
-                                            .min_size(vec2(80.0, 24.0)),
-                                    )
-                                    .clicked()
+                            if ui
+                                .add(
+                                    Button::new(RichText::new(button_text).color(Color32::BLACK))
+                                        .fill(button_color)
+                                        .min_size(vec2(80.0, 24.0)),
+                                )
+                                .clicked()
+                            {
+                                let pname = player.name.clone();
+                                let action = !player.paired;
+                                // set confirm fields in the shared state
                                 {
-                                    let pname = player.name.clone();
-                                    let action = !player.paired;
-                                    // set confirm fields in the shared state
-                                    {
-                                        let mut s = self.state.borrow_mut();
-                                        s.pairing_confirm_player = Some(pname.clone());
-                                        s.pairing_confirm_action = Some(action);
-                                    }
+                                    let mut s = self.state.borrow_mut();
+                                    s.pairing_confirm_player = Some(pname.clone());
+                                    s.pairing_confirm_action = Some(action);
                                 }
+                            }
                             ui.end_row();
                         }
                     });

@@ -239,10 +239,18 @@ async fn handle_iroh_connection(
         return Ok(());
     }
 
-    // You id for now is 0
-    let you_id = 0usize;
-    if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::Welcome { you: you_id }).await
-    {
+    // Register player and obtain server-assigned you_id. If registration fails,
+    // send an error back to the client and close the connection.
+    let you_id = match crate::backend::state::register_player_id(&state, &name).await {
+        Ok(id) => id,
+        Err(e) => {
+            if let Err(e2) = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to register player: {}", e))).await {
+                eprintln!("iroh send error: {}", e2);
+            }
+            return Ok(());
+        }
+    };
+    if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::Welcome { you: you_id }).await {
         eprintln!("iroh send error: {}", e);
     }
 
