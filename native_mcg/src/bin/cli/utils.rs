@@ -60,7 +60,7 @@ pub fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
                     println!("{}", txt);
                 }
             } else {
-                // For human output we don't print anything special for Welcome
+                println!("Backend says Welcome!")
             }
         }
     }

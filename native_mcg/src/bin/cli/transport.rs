@@ -26,20 +26,20 @@ pub fn build_ws_url(base: &str) -> anyhow::Result<Url> {
     Ok(url)
 }
 
-/// Connect over websocket, send Join (and optional follow-up) and return the last State seen within `wait_ms`.
+/// Connect over websocket, send the provided ClientMsg and return the last State seen within `wait_ms`.
 /// Accepts an address string (e.g. "ws://host:port/ws" or "http://host:port") and builds the ws URL internally.
 pub async fn run_once_ws(
     ws_addr: &str,
-    after_join: Option<ClientMsg>,
+    client_msg: ClientMsg,
     wait_ms: u64,
 ) -> anyhow::Result<Option<GameStatePublic>> {
     let ws_url = build_ws_url(ws_addr)?;
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
     let (mut write, mut read) = ws_stream.split();
 
-    // Optional follow-up command
-    if let Some(msg) = after_join {
-        let txt = serde_json::to_string(&msg)?;
+    // Client message to send
+    {
+        let txt = serde_json::to_string(&client_msg)?;
         write.send(Message::Text(txt)).await?;
     }
 
@@ -74,14 +74,14 @@ pub async fn run_once_ws(
 /// actually required by the build.
 pub async fn run_once_iroh(
     peer_uri: &str,
-    after_join: Option<ClientMsg>,
+    client_msg: ClientMsg,
     wait_ms: u64,
 ) -> anyhow::Result<Option<GameStatePublic>> {
     // Implement a minimal iroh client that:
     // - creates a local endpoint
     // - connects to the supplied peer URI
     // - opens a bidirectional stream
-    // - sends newline-delimited JSON messages (Join + optional command)
+    // - sends newline-delimited JSON messages (provided client message)
     // - reads newline-delimited ServerMsg responses and returns the last State seen
     //
     // Note: iroh APIs are imported inside the function to limit compile-time
@@ -119,9 +119,9 @@ pub async fn run_once_iroh(
 
     let mut reader = BufReader::new(recv);
 
-    // Optional follow-up command
-    if let Some(msg) = after_join {
-        let txt = serde_json::to_string(&msg)?;
+    // Client message to send
+    {
+        let txt = serde_json::to_string(&client_msg)?;
         send.write_all(txt.as_bytes()).await?;
         send.write_all(b"\n").await?;
         send.flush().await?;
@@ -169,19 +169,19 @@ pub async fn run_once_iroh(
     Ok(latest_state)
 }
 
-/// Run a single HTTP-based join/action sequence and attempt to GET state.
+/// Run a single HTTP-based action sequence and attempt to GET state.
 pub async fn run_once_http(
     base: &str,
-    after_join: Option<ClientMsg>,
+    client_msg: ClientMsg,
     wait_ms: u64,
 ) -> anyhow::Result<Option<GameStatePublic>> {
     // Use reqwest to POST newgame and optional action, then GET state once with a timeout.
     let client = reqwest::Client::new();
-    // Optional follow-up command
-    if let Some(msg) = after_join {
+    // Client message to send
+    {
         let _ = client
             .post(format!("{}/api/action", base))
-            .json(&msg)
+            .json(&client_msg)
             .send()
             .await?;
     }
