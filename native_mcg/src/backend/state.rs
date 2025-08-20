@@ -235,15 +235,7 @@ pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result
 /// Drive bots similarly to the websocket handler, but mutate shared state and
 /// broadcast resulting states. Exposed so iroh transport can reuse the same behaviour.
 pub async fn drive_bots_with_delays(state: &AppState, _you_id: usize, min_ms: u64, max_ms: u64) {
-    // Single-invocation driver: ensures only one drive loop runs at a time and
-    // advances turn order by executing bot actions automatically until a human
-    // player's turn is reached (or bots_auto is disabled / game ended).
-    //
-    // This decouples bot-driving from transports: transports should call
-    // broadcast_and_drive after they mutate state, but the drive logic below
-    // decides whether to act further based on player.is_bot and lobby.bots_auto.
-
-    // Try to acquire the "driving" lock; if another drive loop is active, return.
+    // Ensure only one drive loop runs at a time.
     {
         let mut lobby = state.lobby.write().await;
         if lobby.driving {
@@ -252,30 +244,77 @@ pub async fn drive_bots_with_delays(state: &AppState, _you_id: usize, min_ms: u6
         lobby.driving = true;
     }
 
-    // Ensure we clear the driving flag on exit.
+    // Drive loop: keep acting while bots_auto is enabled and the player to act is a bot.
     loop {
-        // Respect per-game bots_auto setting: if false, do not run bots automatically.
+        // Exit if bots_auto disabled or no game present.
         {
             let lobby_r = state.lobby.read().await;
             if !lobby_r.bots_auto {
                 break;
             }
+            if lobby_r.game.is_none() {
+                break;
+            }
         }
 
-        // Determine whether there's a bot to act now by consulting lobby.bots.
-        // Note: game.to_act is an index into game.players; lobby.bots stores player IDs.
-        let should_bot_act = {
+        // Determine current actor (index) and whether it's a bot.
+        let maybe_actor = {
             let lobby_r = state.lobby.read().await;
             if let Some(game) = &lobby_r.game {
                 if game.stage == mcg_shared::Stage::Showdown {
+                    None
+                } else {
+                    let idx = game.to_act;
+                    game.players.get(idx).and_then(|p| {
+                        if lobby_r.bots.contains(&p.id) {
+                            Some((idx, p.id))
+                        } else {
+                            None
+                        }
+                    })
+                }
+            } else {
+                None
+            }
+        };
+
+        let (actor_idx, actor_id) = match maybe_actor {
+            Some(v) => v,
+            None => break, // no bot to act now
+        };
+
+        // Apply bot action under write lock, but re-check to_act to avoid races.
+        let applied_and_advanced = {
+            let mut lobby_w = state.lobby.write().await;
+            if let Some(game) = &mut lobby_w.game {
+                // Reconfirm conditions haven't changed.
+                if game.stage == mcg_shared::Stage::Showdown || game.to_act != actor_idx {
+                    // Another actor changed the state; resume loop to re-evaluate.
                     false
                 } else {
-                    // Convert current to_act index to player id and check membership.
-                    let idx = game.to_act;
-                    if let Some(p) = game.players.get(idx) {
-                        lobby_r.bots.contains(&p.id)
+                    // Decide action
+                    let need = game.current_bet.saturating_sub(game.round_bets[actor_idx]);
+                    let action = if need == 0 {
+                        mcg_shared::PlayerAction::Bet(game.bb)
                     } else {
-                        false
+                        mcg_shared::PlayerAction::CheckCall
+                    };
+
+                    let before_to_act = game.to_act;
+                    match game.apply_player_action(actor_idx, action) {
+                        Ok(_) => {
+                            // If apply didn't advance the turn (defensive), bail to avoid spin.
+                            if game.to_act == before_to_act {
+                                eprintln!("[BOT] apply_player_action did not advance to next player for actor idx {}; stopping bot drive to avoid spin.", actor_idx);
+                                false
+                            } else {
+                                true
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[BOT] failed to apply action for bot id {}: {}", actor_id, e);
+                            false
+                        }
                     }
                 }
             } else {
@@ -283,37 +322,15 @@ pub async fn drive_bots_with_delays(state: &AppState, _you_id: usize, min_ms: u6
             }
         };
 
-        if !should_bot_act {
-            break; // wait for human action (or game end)
+        if !applied_and_advanced {
+            // Stop driving bots for now; give control back to caller/human/other logic.
+            break;
         }
 
-        // Perform a single bot action while holding the write lock to mutate game.
-        // Also capture the actor's public id so we can broadcast using viewer id semantics.
-        let (actor_idx, actor_id) = {
-            let mut lobby_w = state.lobby.write().await;
-            if let Some(game) = &mut lobby_w.game {
-                let actor = game.to_act;
-                let actor_id = game.players[actor].id;
-                // Choose a simple bot action using same heuristic as before.
-                let need = game.current_bet.saturating_sub(game.round_bets[actor]);
-                let action = if need == 0 {
-                    mcg_shared::PlayerAction::Bet(game.bb)
-                } else {
-                    mcg_shared::PlayerAction::CheckCall
-                };
-                // Apply action (ignore individual failures for bot).
-                let _ = game.apply_player_action(actor, action);
-                (actor, actor_id)
-            } else {
-                // No game -> exit outer loop
-                break;
-            }
-        };
-
-        // Broadcast updated state to all subscribers after every action (use actor's player id)
+        // Broadcast updated state using the acting player's id (viewer-specific state)
         crate::backend::broadcast_state(state, actor_id).await;
 
-        // Sleep a pseudo-random-ish delay between actions without holding non-Send state
+        // Sleep between bot actions (randomized within given bounds)
         let now_ns = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
             Ok(d) => d.subsec_nanos() as u64,
             Err(_) => 0u64,

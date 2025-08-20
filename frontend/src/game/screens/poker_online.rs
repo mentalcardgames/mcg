@@ -4,7 +4,7 @@ use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
     ActionEvent, ActionKind, BlindKind, ClientMsg, GameAction, GameStatePublic, PlayerAction,
-    PlayerPublic, PlayerConfig, Stage,
+    PlayerConfig, PlayerPublic, Stage,
 };
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
@@ -28,6 +28,7 @@ impl PokerOnlineScreen {
     pub fn new() -> Self {
         // bootstrap shared state and effects
         let state = bootstrap_state();
+        //TODO: what is that? Why snapshot?
         let snapshot = state.borrow().clone();
         let settings = snapshot.settings;
         let conn_eff = ConnectionEffect::new(state.clone());
@@ -51,6 +52,7 @@ impl PokerOnlineScreen {
                     is_bot: true,
                 },
             ],
+            //TODO: why two?
             next_player_id: 2,
             new_player_name: String::new(),
             preferred_player: None,
@@ -144,7 +146,6 @@ impl PokerOnlineScreen {
                     self.scanner
                         .button_and_popup(ui, ctx, &mut self.edit_server_address);
                 });
-
             });
         } else {
             ui.horizontal(|ui| {
@@ -204,7 +205,11 @@ impl PokerOnlineScreen {
                                 ui.label("Bot");
                             } else {
                                 if ui
-                                    .radio_value(&mut self.preferred_player, Some(player.id), "Play as")
+                                    .radio_value(
+                                        &mut self.preferred_player,
+                                        Some(player.id),
+                                        "Play as",
+                                    )
                                     .on_hover_text("Select this player for this client")
                                     .changed()
                                 {
@@ -290,7 +295,9 @@ impl PokerOnlineScreen {
         }
 
         ui.add_space(8.0);
-        ui.label("This will connect to the server and start a new game with the configured players.");
+        ui.label(
+            "This will connect to the server and start a new game with the configured players.",
+        );
     }
 
     fn render_showdown_banner(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
@@ -543,18 +550,15 @@ impl PokerOnlineScreen {
 
         // Random name pool (defined here instead of in struct state)
         let random_names = [
-            "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry",
-            "Iris", "Jack", "Kate", "Leo", "Mia", "Noah", "Olivia", "Peter",
-            "Quinn", "Rose", "Sam", "Tina", "Uma", "Victor", "Wendy", "Xander",
-            "Yara", "Zoe", "Alex", "Blake", "Casey", "Dylan", "Erin", "Finn",
-            "Gabe", "Holly", "Ian", "Jade", "Kyle", "Luna", "Max", "Nora",
-            "Owen", "Piper", "Ryan", "Sage", "Tyler", "Violet", "Wyatt", "Zara"
+            "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry", "Iris", "Jack",
+            "Kate", "Leo", "Mia", "Noah", "Olivia", "Peter", "Quinn", "Rose", "Sam", "Tina", "Uma",
+            "Victor", "Wendy", "Xander", "Yara", "Zoe", "Alex", "Blake", "Casey", "Dylan", "Erin",
+            "Finn", "Gabe", "Holly", "Ian", "Jade", "Kyle", "Luna", "Max", "Nora", "Owen", "Piper",
+            "Ryan", "Sage", "Tyler", "Violet", "Wyatt", "Zara",
         ];
 
         // Create a set of existing names for quick lookup
-        let existing_names: HashSet<&str> = self.players.iter()
-            .map(|p| p.name.as_str())
-            .collect();
+        let existing_names: HashSet<&str> = self.players.iter().map(|p| p.name.as_str()).collect();
 
         // Try to find a name that's not already used
         for &name in &random_names {
@@ -565,7 +569,8 @@ impl PokerOnlineScreen {
 
         // If all names are used, append a number to the first available name
         for &base_name in &random_names {
-            for i in 2..100 { // Try numbers 2-99
+            for i in 2..100 {
+                // Try numbers 2-99
                 let candidate = format!("{} {}", base_name, i);
                 if !existing_names.contains(candidate.as_str()) {
                     return candidate;
@@ -574,10 +579,13 @@ impl PokerOnlineScreen {
         }
 
         // Fallback: use a timestamp-based name
-        format!("Player {}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs())
+        format!(
+            "Player {}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        )
     }
 }
 

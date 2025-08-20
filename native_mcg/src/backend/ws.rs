@@ -69,8 +69,22 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             biased_recv = rx.recv() => {
                 match biased_recv {
                     Ok(sm) => {
-                        // Forward to connected socket. Ignore send failures.
-                        send_ws(&mut socket, &sm).await;
+                        // If this is a State message, re-compute a personalized view
+                        // for this socket's primary_player_id before sending. This ensures
+                        // we don't broadcast a state that was generated for another viewer
+                        // (which would incorrectly change `you`/card visibility on recipients).
+                        match sm {
+                            mcg_shared::ServerMsg::State(_) => {
+                                // Re-send a viewer-specific state to this socket.
+                                // send_state_to will call current_state_public(viewer_id)
+                                // so the you_id and card visibility are correct per-client.
+                                send_state_to(&mut socket, &state, primary_player_id).await;
+                            }
+                            _ => {
+                                // Forward other server messages unchanged.
+                                send_ws(&mut socket, &sm).await;
+                            }
+                        }
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => {
                         // We missed messages; continue and try to catch up on next send.
