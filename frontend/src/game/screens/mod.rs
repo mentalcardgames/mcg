@@ -8,6 +8,7 @@ pub mod game;
 pub mod game_setup_screen;
 pub mod main_menu;
 pub mod pairing_screen;
+
 pub mod poker_online;
 pub mod qr_test;
 
@@ -99,6 +100,8 @@ impl ScreenRegistry {
         reg.register::<GameSetupScreen>();
         reg.register::<Game<DirectoryCardType>>();
         reg.register::<PairingScreen>();
+        // PlayerSetupScreen functionality moved to PokerOnlineScreen
+        // reg.register::<PlayerSetupScreen>();
         reg.register::<DNDTest>();
         reg.register::<CardsTestDND>();
         reg.register::<ArticlesScreen>();

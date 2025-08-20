@@ -45,6 +45,37 @@ pub struct Game {
 }
 
 impl Game {
+    pub fn with_players(players: Vec<Player>) -> Result<Self> {
+        let mut deck: Vec<u8> = (0..52).collect();
+        deck.shuffle(&mut rand::rng());
+        let player_count = players.len();
+
+        let mut g = Self {
+            players,
+            deck: VecDeque::from(deck.clone()),
+            community: vec![],
+
+            pot: 0,
+            stage: Stage::Preflop,
+            dealer_idx: 0,
+            to_act: 0,
+            current_bet: 0,
+            min_raise: 0,
+            round_bets: vec![0; player_count],
+
+            sb: 5,
+            bb: 10,
+
+            pending_to_act: Vec::new(),
+            recent_actions: Vec::new(),
+            winner_ids: Vec::new(),
+        };
+        // delegate dealing/init to sibling module
+        super::dealing::start_new_hand_from_deck(&mut g, deck)
+            .context("Failed to initialize new hand from deck")?;
+        Ok(g)
+    }
+
     pub fn new(human_name: String, bot_count: usize) -> Result<Self> {
         let mut deck: Vec<u8> = (0..52).collect();
         deck.shuffle(&mut rand::rng());

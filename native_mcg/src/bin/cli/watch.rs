@@ -13,11 +13,23 @@ pub async fn watch_ws(ws_addr: &str, name: &str, json: bool) -> anyhow::Result<(
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
     let (mut write, mut read) = ws_stream.split();
 
-    // Send Join
-    let join = serde_json::to_string(&ClientMsg::Join {
-        name: name.to_string(),
+    // Send NewGame
+    let players = vec![
+        mcg_shared::PlayerConfig {
+            id: 0,
+            name: name.to_string(),
+            is_bot: false,
+        },
+        mcg_shared::PlayerConfig {
+            id: 1,
+            name: "Bot 1".to_string(),
+            is_bot: true,
+        },
+    ];
+    let newgame = serde_json::to_string(&ClientMsg::NewGame {
+        players,
     })?;
-    write.send(Message::Text(join)).await?;
+    write.send(Message::Text(newgame)).await?;
 
     // Read messages forever (until socket closed or error) and handle them via
     // the shared handler. Track how many log entries we've printed so we only
@@ -45,12 +57,24 @@ pub async fn watch_ws(ws_addr: &str, name: &str, json: bool) -> anyhow::Result<(
 /// Implement a basic long-polling watcher over the HTTP API.
 pub async fn watch_http(base: &str, name: &str, json: bool) -> anyhow::Result<()> {
     let client = reqwest::Client::new();
-    let join = ClientMsg::Join {
-        name: name.to_string(),
+    let players = vec![
+        mcg_shared::PlayerConfig {
+            id: 0,
+            name: name.to_string(),
+            is_bot: false,
+        },
+        mcg_shared::PlayerConfig {
+            id: 1,
+            name: "Bot 1".to_string(),
+            is_bot: true,
+        },
+    ];
+    let newgame = ClientMsg::NewGame {
+        players,
     };
     let _ = client
-        .post(format!("{}/api/join", base))
-        .json(&join)
+        .post(format!("{}/api/newgame", base))
+        .json(&newgame)
         .send()
         .await?;
     let mut last_printed: usize = 0;
@@ -113,11 +137,23 @@ pub async fn watch_iroh(peer_uri: &str, name: &str, json: bool) -> anyhow::Resul
 
     let mut reader = BufReader::new(recv);
 
-    // Send Join
-    let join_txt = serde_json::to_string(&ClientMsg::Join {
-        name: name.to_string(),
+    // Send NewGame
+    let players = vec![
+        mcg_shared::PlayerConfig {
+            id: 0,
+            name: name.to_string(),
+            is_bot: false,
+        },
+        mcg_shared::PlayerConfig {
+            id: 1,
+            name: "Bot 1".to_string(),
+            is_bot: true,
+        },
+    ];
+    let newgame_txt = serde_json::to_string(&ClientMsg::NewGame {
+        players,
     })?;
-    send.write_all(join_txt.as_bytes()).await?;
+    send.write_all(newgame_txt.as_bytes()).await?;
     send.write_all(b"\n").await?;
     send.flush().await?;
 

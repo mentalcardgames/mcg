@@ -189,7 +189,7 @@ async fn handle_iroh_connection(
     // Wrap the read side in a buffered reader so we can read lines.
     let mut reader = BufReader::new(recv);
 
-    // Read the very first line from the client; expect a Join message.
+    // Read the very first line from the client; expect a NewGame message.
     let mut first_line = String::new();
     let n = reader.read_line(&mut first_line).await?;
     if n == 0 {
@@ -201,7 +201,7 @@ async fn handle_iroh_connection(
         Err(_) => {
             // Send error and close
             if let Err(e) =
-                send_server_msg_to_writer(&mut send, &ServerMsg::Error("Expected Join".into()))
+                send_server_msg_to_writer(&mut send, &ServerMsg::Error("Expected NewGame".into()))
                     .await
             {
                 eprintln!("iroh send error: {}", e);
@@ -210,11 +210,25 @@ async fn handle_iroh_connection(
         }
     };
 
-    let name = match cm {
-        ClientMsg::Join { name } => name,
+    let primary_player_id = match cm {
+        ClientMsg::NewGame { players } => {
+            // Create new game with the specified players
+            if let Err(e) = crate::backend::create_new_game(&state, players).await {
+                if let Err(e2) = send_server_msg_to_writer(
+                    &mut send,
+                    &ServerMsg::Error(format!("Failed to create game: {}", e)),
+                )
+                .await
+                {
+                    eprintln!("iroh send error: {}", e2);
+                }
+                return Ok(());
+            }
+            0 // Default player ID
+        },
         _ => {
             if let Err(e) =
-                send_server_msg_to_writer(&mut send, &ServerMsg::Error("Expected Join".into()))
+                send_server_msg_to_writer(&mut send, &ServerMsg::Error("Expected NewGame".into()))
                     .await
             {
                 eprintln!("iroh send error: {}", e);
@@ -224,38 +238,14 @@ async fn handle_iroh_connection(
     };
 
     // Log connect
-    println!("{} {}", "[IROH CONNECT]".bold().green(), name.bold());
+    println!("{} {}", "[IROH CONNECT]".bold().green(), "New Game Client".bold());
 
-    // Ensure game started similarly to the websocket handler
-    if let Err(e) = crate::backend::ensure_game_started(&state, &name).await {
-        if let Err(e2) = send_server_msg_to_writer(
-            &mut send,
-            &ServerMsg::Error(format!("Failed to start game: {}", e)),
-        )
-        .await
-        {
-            eprintln!("iroh send error: {}", e2);
-        }
-        return Ok(());
-    }
-
-    // Register player and obtain server-assigned you_id. If registration fails,
-    // send an error back to the client and close the connection.
-    let you_id = match crate::backend::state::register_player_id(&state, &name).await {
-        Ok(id) => id,
-        Err(e) => {
-            if let Err(e2) = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to register player: {}", e))).await {
-                eprintln!("iroh send error: {}", e2);
-            }
-            return Ok(());
-        }
-    };
-    if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::Welcome { you: you_id }).await {
+    if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::Welcome { you: 0 }).await {
         eprintln!("iroh send error: {}", e);
     }
 
     // Send initial state directly to this client (same behaviour as websocket)
-    if let Some(gs) = crate::backend::current_state_public(&state, you_id).await {
+    if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
         if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await {
             eprintln!("iroh send error: {}", e);
         }
@@ -304,8 +294,18 @@ async fn handle_iroh_connection(
                             Ok(cm) => {
                                 // Process the client message and use server-side broadcast functions
                                 match cm {
+                                    // Note: Join and ResetGame have been removed from ClientMsg enum
                                     ClientMsg::Action { player_id, action } => {
-                                        println!("[IROH] Action from {}: player_id={} action={:?}", name, player_id, action);
+                                        println!("[IROH] Action from player_id={} action={:?}", player_id, action);
+
+                                        // Check if there's an active game before processing actions
+                                        {
+                                            let lobby = state.lobby.read().await;
+                                            if lobby.game.is_none() {
+                                                let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error("No active game. Please start a new game first.".into())).await;
+                                                continue;
+                                            }
+                                        }
 
                                         match crate::backend::validate_and_apply_action(&state, player_id, action.clone()).await {
                                             Ok(()) => {
@@ -314,7 +314,7 @@ async fn handle_iroh_connection(
                                                     let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
                                                 }
                                                 // Broadcast and drive via centralized helper (drive_bots respects bots_auto)
-                                                crate::backend::broadcast_and_drive(&state, you_id, 500, 1500).await;
+                                                crate::backend::broadcast_and_drive(&state, player_id, 500, 1500).await;
                                             }
                                             Err(e) => {
                                                 let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(e)).await;
@@ -322,40 +322,45 @@ async fn handle_iroh_connection(
                                         }
                                     }
                                     ClientMsg::RequestState { player_id } => {
-                                        println!("[IROH] State requested by {} for player {}", name, player_id);
+                                        println!("[IROH] State requested for player {}", player_id);
                                         // Send state directly to this client
                                         if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
                                         }
-                                        crate::backend::broadcast_and_drive(&state, you_id, 500, 1500).await;
+                                        crate::backend::broadcast_and_drive(&state, player_id, 500, 1500).await;
                                     }
                                     ClientMsg::NextHand { player_id } => {
-                                        println!("[IROH] NextHand requested by {} for player {}", name, player_id);
+                                        println!("[IROH] NextHand requested for player {}", player_id);
+
+                                        // Check if there's an active game before processing NextHand
+                                        {
+                                            let lobby = state.lobby.read().await;
+                                            if lobby.game.is_none() {
+                                                let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error("No active game. Please start a new game first.".into())).await;
+                                                continue;
+                                            }
+                                        }
+
                                         if let Err(e) = crate::backend::start_new_hand_and_print(&state, player_id).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
-                                        }
-                                        if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
-                                            let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
-                                        }
-                                        crate::backend::broadcast_and_drive(&state, you_id, 500, 1500).await;
-                                    }
-                                    ClientMsg::ResetGame { bots, bots_auto } => {
-                                        println!("[IROH] ResetGame requested by {}: bots={} bots_auto={}", name, bots, bots_auto);
-
-                                        // Persist bots_auto preference in lobby
-                                        {
-                                            let mut lobby_w = state.lobby.write().await;
-                                            lobby_w.bots_auto = bots_auto;
-                                        }
-
-                                        if let Err(e) = crate::backend::reset_game_with_bots(&state, &name, bots, you_id).await {
-                                            let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to reset game: {}", e))).await;
                                         } else {
-                                            crate::backend::broadcast_and_drive(&state, you_id, 500, 1500).await;
+                                            if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
+                                                let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
+                                            }
+                                            crate::backend::broadcast_and_drive(&state, 0, 500, 1500).await;
                                         }
                                     }
-                                    ClientMsg::Join { .. } => {
-                                        // Ignore subsequent joins
+                                    ClientMsg::NewGame { players } => {
+                                        // Handle new game message - can override current game at any time
+                                        println!("[IROH] NewGame requested with {} players", players.len());
+                                        if let Err(e) = crate::backend::create_new_game(&state, players).await {
+                                            let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to create new game: {}", e))).await;
+                                        } else {
+                                            if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
+                                                let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
+                                            }
+                                            crate::backend::broadcast_and_drive(&state, 0, 500, 1500).await;
+                                        }
                                     }
                                 }
                             }
@@ -373,7 +378,7 @@ async fn handle_iroh_connection(
         }
     }
 
-    println!("{} {}", "[IROH DISCONNECT]".bold().red(), name.bold());
+    println!("{} {}", "[IROH DISCONNECT]".bold().red(), "New Game Client".bold());
     // Close the send side politely if available
     let _ = send.finish();
     connection.closed().await;

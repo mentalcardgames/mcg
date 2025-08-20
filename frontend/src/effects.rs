@@ -29,12 +29,12 @@ impl ConnectionEffect {
         }
     }
 
-    /// Start/establish a connection using ConnectionService.
+    /// Start/establish a connection using ConnectionService with configured players.
     /// `ctx` is required by ConnectionService.connect for wasm/native UI integration.
     /// This will create a new ConnectionService, call connect, and mutate the shared state.
-    pub fn start_connect(&mut self, ctx: &egui::Context, addr: &str, name: &str) {
+    pub fn start_connect(&mut self, ctx: &egui::Context, addr: &str, players: Vec<mcg_shared::PlayerConfig>) {
         let mut conn = ConnectionService::new();
-        conn.connect(addr, name, ctx);
+        conn.connect_with_players(addr, players.clone(), ctx);
         self.conn = Some(conn);
         self.ctx = Some(ctx.clone());
         // update shared state directly
@@ -44,7 +44,10 @@ impl ConnectionEffect {
             s.last_error = None;
             s.last_info = Some(format!("Connecting to {}", addr));
             s.settings.server_address = addr.to_string();
-            s.settings.name = name.to_string();
+            // Use the first player's name as the connection name
+            if let Some(first_player) = players.first() {
+                s.settings.name = first_player.name.clone();
+            }
         }
         if let Some(ctx) = &self.ctx {
             ctx.request_repaint();

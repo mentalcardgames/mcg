@@ -14,28 +14,28 @@ use axum::{
 use crate::backend::AppState;
 use mcg_shared::{ClientMsg, ServerMsg};
 
-/// Accept a Join-like ClientMsg (or JSON equivalent) and ensure a game exists.
+/// Accept a NewGame ClientMsg and create a new game.
 ///
 /// Example payload:
-///   { "type": "Join", "data": { "name": "CLI" } }
-pub async fn join_handler(
+///   { "type": "NewGame", "data": { "players": [...], "primary_player_id": 0 } }
+pub async fn newgame_handler(
     State(state): State<AppState>,
     Json(cm): Json<ClientMsg>,
 ) -> impl IntoResponse {
     match cm {
-        ClientMsg::Join { name } => {
-            if let Err(e) = crate::backend::ensure_game_started(&state, &name).await {
-                let err = ServerMsg::Error(format!("Failed to start game: {}", e));
+        ClientMsg::NewGame { players } => {
+            if let Err(e) = crate::backend::create_new_game(&state, players).await {
+                let err = ServerMsg::Error(format!("Failed to create game: {}", e));
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response();
             }
-            // Mirror websocket behavior: welcome the client (you_id = 0)
+            // Mirror websocket behavior: welcome the client with default player ID
             let welcome = ServerMsg::Welcome { you: 0 };
             // Also send initial state to broadcaster (backend printing/bookkeeping is done elsewhere)
             crate::backend::broadcast_state(&state, 0).await;
             (StatusCode::OK, Json(welcome)).into_response()
         }
         _ => {
-            let err = ServerMsg::Error("Expected Join message".into());
+            let err = ServerMsg::Error("Expected NewGame message".into());
             (StatusCode::BAD_REQUEST, Json(err)).into_response()
         }
     }
@@ -121,54 +121,5 @@ pub async fn next_hand_handler(State(state): State<AppState>) -> impl IntoRespon
             Json(ServerMsg::Error("No game running".into())),
         )
             .into_response()
-    }
-}
-
-/// Reset the game with N bots. Expects payload:
-///   { "type": "ResetGame", "data": { "bots": 2 } }
-pub async fn reset_handler(
-    State(state): State<AppState>,
-    Json(cm): Json<ClientMsg>,
-) -> impl IntoResponse {
-    match cm {
-        ClientMsg::ResetGame { bots, bots_auto } => {
-            // Use a default name for HTTP-initiated resets
-            let name = "HTTP";
-
-            // Persist bots_auto preference to lobby so drive_bots respects it
-            {
-                let mut lobby_w = state.lobby.write().await;
-                lobby_w.bots_auto = bots_auto;
-            }
-
-            if let Err(e) = crate::backend::reset_game_with_bots(&state, name, bots, 0).await {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ServerMsg::Error(format!("Failed to reset game: {}", e))),
-                )
-                    .into_response();
-            }
-            if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
-                crate::backend::broadcast_state(&state, 0).await;
-                // Spawn bot driver only if bots_auto is true (drive_bots also checks but avoid unnecessary spawn)
-                if bots_auto {
-                    let state_clone = state.clone();
-                    tokio::spawn(async move {
-                        crate::backend::broadcast_and_drive(&state_clone, 0, 500, 1500).await;
-                    });
-                }
-                (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
-            } else {
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(ServerMsg::Error("No game running".into())),
-                )
-                    .into_response()
-            }
-        }
-        _ => {
-            let err = ServerMsg::Error("Expected ResetGame message".into());
-            (StatusCode::BAD_REQUEST, Json(err)).into_response()
-        }
     }
 }

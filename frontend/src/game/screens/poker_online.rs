@@ -4,7 +4,7 @@ use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
     ActionEvent, ActionKind, BlindKind, ClientMsg, GameAction, GameStatePublic, PlayerAction,
-    PlayerPublic, Stage,
+    PlayerPublic, PlayerConfig, Stage,
 };
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
@@ -16,10 +16,11 @@ pub struct PokerOnlineScreen {
     show_error_popup: bool,
     scanner: QrScannerPopup,
     // Local UI-only edit buffers (kept here so the immediate-mode UI can mutate them)
-    edit_name: String,
     edit_server_address: String,
-    edit_bots: usize,
-    edit_bots_auto: bool,
+    // Player configuration
+    players: Vec<PlayerConfig>,
+    next_player_id: usize,
+    new_player_name: String,
 }
 impl PokerOnlineScreen {
     pub fn new() -> Self {
@@ -34,10 +35,22 @@ impl PokerOnlineScreen {
             conn_eff,
             show_error_popup: false,
             scanner: QrScannerPopup::new(),
-            edit_name: settings.name,
             edit_server_address: settings.server_address,
-            edit_bots: settings.bots,
-            edit_bots_auto: settings.bots_auto,
+            // Player configuration
+            players: vec![
+                PlayerConfig {
+                    id: 0,
+                    name: "You".to_string(),
+                    is_bot: false,
+                },
+                PlayerConfig {
+                    id: 1,
+                    name: "Bot 1".to_string(),
+                    is_bot: true,
+                },
+            ],
+            next_player_id: 2,
+            new_player_name: String::new(),
         }
     }
 
@@ -97,6 +110,13 @@ impl PokerOnlineScreen {
                 Self::render_connection_controls(self, ui, ctx);
             });
 
+        // Collapsible player setup section
+        egui::CollapsingHeader::new("Player Setup")
+            .default_open(false)
+            .show(ui, |ui| {
+                self.render_player_setup(ui, &ctx);
+            });
+
         if let Some(err) = &snapshot.last_error {
             ui.colored_label(Color32::RED, err);
         }
@@ -111,9 +131,6 @@ impl PokerOnlineScreen {
         if narrow {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Name:");
-                    ui.text_edit_singleline(&mut self.edit_name)
-                        .on_hover_text("Your nickname");
                     if ui.button("Connect").clicked() {
                         self.connect(ctx);
                     }
@@ -125,79 +142,130 @@ impl PokerOnlineScreen {
                     self.scanner
                         .button_and_popup(ui, ctx, &mut self.edit_server_address);
                 });
-                ui.horizontal(|ui| {
-                    ui.label("Bots:");
-                    ui.add(
-                        egui::DragValue::new(&mut self.edit_bots)
-                            .range(0..=8)
-                            .speed(0.1)
-                            .suffix(" bots"),
-                    );
-                    if ui
-                        .add(egui::Button::new("Reset Game"))
-                        .on_hover_text("Reset the game with the chosen number of bots")
-                        .clicked()
-                    {
-                        self.send(&ClientMsg::ResetGame {
-                            bots: self.edit_bots,
-                            bots_auto: self.edit_bots_auto,
-                        });
-                        // update shared state with reset intent
-                        {
-                            let mut s = self.state.borrow_mut();
-                            s.last_info =
-                                Some(format!("Reset requested ({} bots)", self.edit_bots));
-                            s.last_error = None;
-                            s.settings.bots = self.edit_bots;
-                            s.settings.bots_auto = self.edit_bots_auto;
-                        }
-                        ctx.request_repaint();
-                    }
-                });
+
             });
         } else {
             ui.horizontal(|ui| {
-                ui.label("Name:");
-                ui.text_edit_singleline(&mut self.edit_name)
-                    .on_hover_text("Your nickname");
-                ui.add_space(12.0);
                 ui.label("Server:");
                 ui.text_edit_singleline(&mut self.edit_server_address)
                     .on_hover_text("Server address (IP:PORT)");
                 self.scanner
                     .button_and_popup(ui, ctx, &mut self.edit_server_address);
                 ui.add_space(12.0);
-                ui.label("Bots:");
-                ui.add(
-                    egui::DragValue::new(&mut self.edit_bots)
-                        .range(0..=8)
-                        .speed(0.1)
-                        .suffix(" bots"),
-                );
-                ui.checkbox(&mut self.edit_bots_auto, "Bots auto");
-                if ui
-                    .add(egui::Button::new("Reset Game"))
-                    .on_hover_text("Reset the game with the chosen number of bots")
-                    .clicked()
-                {
-                    self.send(&ClientMsg::ResetGame {
-                        bots: self.edit_bots,
-                        bots_auto: self.edit_bots_auto,
-                    });
-                    {
-                        let mut s = self.state.borrow_mut();
-                        s.last_info = Some(format!("Reset requested ({} bots)", self.edit_bots));
-                        s.last_error = None;
-                        s.settings.bots = self.edit_bots;
-                        s.settings.bots_auto = self.edit_bots_auto;
-                    }
-                    ctx.request_repaint();
-                }
                 if ui.button("Connect").clicked() {
                     self.connect(ctx);
                 }
             });
         }
+    }
+
+    fn render_player_setup(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context) {
+        ui.heading("Player Setup");
+        ui.add_space(8.0);
+
+        // Players table
+        ui.group(|ui| {
+            ui.label(RichText::new("Players:").strong());
+            ui.add_space(4.0);
+
+            egui::Grid::new("players_grid")
+                .num_columns(4)
+                .spacing([8.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    // Header
+                    ui.label(RichText::new("ID").strong());
+                    ui.label(RichText::new("Name").strong());
+                    ui.label(RichText::new("Bot").strong());
+                    ui.label(RichText::new("Actions").strong());
+                    ui.end_row();
+
+                    // Player rows
+                    let mut to_remove = None;
+                    let mut to_rename = None;
+                    let mut bot_updates = Vec::new();
+
+                    for (idx, player) in self.players.iter().enumerate() {
+                        ui.label(format!("{}", player.id));
+                        ui.label(&player.name);
+
+                        let mut is_bot = player.is_bot;
+                        if ui.checkbox(&mut is_bot, "").changed() {
+                            bot_updates.push((idx, is_bot));
+                        }
+
+                        ui.horizontal(|ui| {
+                            if ui.button("✏").on_hover_text("Rename").clicked() {
+                                to_rename = Some(idx);
+                            }
+                            if self.players.len() > 1 {
+                                if ui.button("🗑").on_hover_text("Remove").clicked() {
+                                    to_remove = Some(idx);
+                                }
+                            }
+                        });
+                        ui.end_row();
+                    }
+
+                    // Apply bot status updates after iteration
+                    for (idx, is_bot) in bot_updates {
+                        if let Some(p) = self.players.get_mut(idx) {
+                            p.is_bot = is_bot;
+                        }
+                    }
+
+                    // Handle remove after iteration
+                    if let Some(idx) = to_remove {
+                        if idx < self.players.len() {
+                            self.players.remove(idx);
+                        }
+                    }
+
+                    // Handle rename after iteration
+                    if let Some(idx) = to_rename {
+                        if let Some(player) = self.players.get(idx) {
+                            // For now, just set the edit buffer to the current name
+                            // In a more complete implementation, you might want a popup
+                            self.new_player_name = player.name.clone();
+                        }
+                    }
+                });
+        });
+
+        ui.add_space(8.0);
+
+        // Add new player section
+        ui.group(|ui| {
+            ui.label(RichText::new("Add New Player:").strong());
+            ui.add_space(4.0);
+
+            ui.horizontal(|ui| {
+                ui.label("Name:");
+                ui.text_edit_singleline(&mut self.new_player_name);
+
+                if ui.button("Add Player").clicked() && !self.new_player_name.is_empty() {
+                    self.players.push(PlayerConfig {
+                        id: self.next_player_id,
+                        name: self.new_player_name.clone(),
+                        is_bot: false, // New players start as human by default
+                    });
+                    self.next_player_id += 1;
+                    self.new_player_name.clear();
+                }
+            });
+        });
+
+        ui.add_space(16.0);
+
+        // Connect button
+        if ui.button("Start Game").clicked() {
+            self.send(&ClientMsg::NewGame {
+                players: self.players.clone(),
+            });
+        }
+
+        ui.add_space(8.0);
+        ui.label("This will connect to the server and start a new game with the configured players.");
     }
 
     fn render_showdown_banner(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
@@ -436,7 +504,7 @@ impl PokerOnlineScreen {
 
     fn connect(&mut self, ctx: &egui::Context) {
         self.conn_eff
-            .start_connect(ctx, &self.edit_server_address, &self.edit_name);
+            .start_connect(ctx, &self.edit_server_address, self.players.clone());
         self.show_error_popup = false;
     }
 

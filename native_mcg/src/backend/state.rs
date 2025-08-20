@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 
-use crate::game::Game;
+use crate::game::{Game, Player};
 use crate::pretty;
 use mcg_shared::GameStatePublic;
 
@@ -56,18 +56,32 @@ impl Default for AppState {
     }
 }
 
-/// Ensure a game exists for the given player name (create if missing).
-pub async fn ensure_game_started(state: &AppState, name: &str) -> Result<()> {
+/// Create a new game with the specified players.
+pub async fn create_new_game(state: &AppState, players: Vec<mcg_shared::PlayerConfig>) -> Result<()> {
     let mut lobby = state.lobby.write().await;
-    if lobby.game.is_none() {
-        let g = Game::new(name.to_string(), state.bot_count)
-            .with_context(|| format!("creating new game for {}", name))?;
-        lobby.game = Some(g);
-        println!(
-            "[GAME] Created new game for {} with {} bot(s)",
-            name, state.bot_count
-        );
+    let player_count = players.len();
+
+    // Convert PlayerConfig to internal Player format
+    let mut game_players = Vec::new();
+    for config in &players {
+        let player = Player {
+            id: config.id,
+            name: config.name.clone(),
+            stack: 1000, // Default stack size
+            cards: [0, 0], // Empty cards initially
+            has_folded: false,
+            all_in: false,
+        };
+        game_players.push(player);
     }
+
+    // Create the game with the players
+    let game = Game::with_players(game_players)
+        .with_context(|| "creating new game with specified players")?;
+
+    lobby.game = Some(game);
+    println!("[GAME] Created new game with {} players", player_count);
+
     Ok(())
 }
 
@@ -91,51 +105,30 @@ pub async fn player_id_for_name(state: &AppState, name: &str) -> Option<usize> {
 }
 
 /// Register a player for the given connection `name` and return the assigned
-/// player id. If a player with the same name already exists in the current
-/// game, return that player's id. If no game exists, this will attempt to
-/// create one via `ensure_game_started`.
+/// player id. This function is kept for compatibility but is now deprecated.
+/// New code should use create_new_game instead.
 ///
-/// NOTE: This is a minimal, focused helper to centralize "Join" behaviour
-/// and assign server-side player ids. Adding players to an in-progress game
-/// may have semantic implications (round_bets, to_act, etc). A more robust
-/// approach would be to only accept joins between hands or to defer new
-/// players until the next hand; this helper keeps the change minimal by
-/// appending a new player and ensuring per-player vectors are resized.
+/// NOTE: This function is deprecated. Use create_new_game for new game creation.
 pub async fn register_player_id(state: &AppState, name: &str) -> Result<usize> {
-    // Ensure a game exists (creates one if missing).
-    if let Err(e) = ensure_game_started(state, name).await {
-        return Err(anyhow::anyhow!("Failed to ensure game started: {}", e));
-    }
-
-    let mut lobby = state.lobby.write().await;
-    if let Some(game) = &mut lobby.game {
-        // If player already present by name, return existing id.
-        if let Some(p) = game.players.iter().find(|p| p.name == name) {
-            return Ok(p.id);
-        }
-
-        // Assign next available id (append to players).
-        let id = game.players.len();
-        let player = crate::game::Player {
-            id,
+    // For backward compatibility, create a simple game with just this player and one bot
+    let players = vec![
+        mcg_shared::PlayerConfig {
+            id: 0,
             name: name.to_string(),
-            stack: 1000,
-            cards: [0, 0],
-            has_folded: false,
-            all_in: false,
-        };
-        game.players.push(player);
+            is_bot: false,
+        },
+        mcg_shared::PlayerConfig {
+            id: 1,
+            name: "Bot 1".to_string(),
+            is_bot: true,
+        },
+    ];
 
-        // Ensure round_bets (and any other per-player vectors) are sized to match players.
-        if game.round_bets.len() < game.players.len() {
-            game.round_bets.resize(game.players.len(), 0);
-        }
-
-        // Ensure pending_to_act / other bookkeeping won't panic on indexing; we avoid mutating them here.
-        Ok(id)
-    } else {
-        Err(anyhow::anyhow!("No game available after ensure_game_started"))
+    if let Err(e) = create_new_game(state, players).await {
+        return Err(anyhow::anyhow!("Failed to create game: {}", e));
     }
+
+    Ok(0) // Return the human player's ID
 }
 
 /// Broadcast the current state (and print new events to server console) to all subscribers.
@@ -188,7 +181,15 @@ pub async fn validate_and_apply_action(
     player_id: usize,
     action: mcg_shared::PlayerAction,
 ) -> Result<(), String> {
-    // Ensure a game exists and that the requested player is allowed to act.
+    // First, ensure a game exists
+    {
+        let lobby_r = state.lobby.read().await;
+        if lobby_r.game.is_none() {
+            return Err("No active game. Please start a new game first.".into());
+        }
+    }
+
+    // Ensure the requested player is allowed to act.
     let allowed = {
         let lobby_r = state.lobby.read().await;
         if let Some(game) = &lobby_r.game {

@@ -47,11 +47,8 @@ pub enum Commands {
     },
     /// Advance to the next hand
     NextHand,
-    /// Reset the game with N bots
-    Reset {
-        #[arg(long, short = 'b', default_value_t = 1)]
-        bots: usize,
-    },
+    /// Start a new game with default players
+    NewGame,
     /// Watch game events continuously and print them as they happen
     Watch,
 }

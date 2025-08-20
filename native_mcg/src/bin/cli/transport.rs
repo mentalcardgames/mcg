@@ -38,11 +38,23 @@ pub async fn run_once_ws(
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
     let (mut write, mut read) = ws_stream.split();
 
-    // Always join first
-    let join = serde_json::to_string(&ClientMsg::Join {
-        name: name.to_string(),
+    // Always send NewGame first with default players
+    let players = vec![
+        mcg_shared::PlayerConfig {
+            id: 0,
+            name: name.to_string(),
+            is_bot: false,
+        },
+        mcg_shared::PlayerConfig {
+            id: 1,
+            name: "Bot 1".to_string(),
+            is_bot: true,
+        },
+    ];
+    let newgame = serde_json::to_string(&ClientMsg::NewGame {
+        players,
     })?;
-    write.send(Message::Text(join)).await?;
+    write.send(Message::Text(newgame)).await?;
 
     // Optional follow-up command
     if let Some(msg) = after_join {
@@ -127,11 +139,23 @@ pub async fn run_once_iroh(
 
     let mut reader = BufReader::new(recv);
 
-    // Send Join
-    let join_txt = serde_json::to_string(&ClientMsg::Join {
-        name: name.to_string(),
+    // Send NewGame
+    let players = vec![
+        mcg_shared::PlayerConfig {
+            id: 0,
+            name: name.to_string(),
+            is_bot: false,
+        },
+        mcg_shared::PlayerConfig {
+            id: 1,
+            name: "Bot 1".to_string(),
+            is_bot: true,
+        },
+    ];
+    let newgame_txt = serde_json::to_string(&ClientMsg::NewGame {
+        players,
     })?;
-    send.write_all(join_txt.as_bytes()).await?;
+    send.write_all(newgame_txt.as_bytes()).await?;
     send.write_all(b"\n").await?;
     send.flush().await?;
 
@@ -192,15 +216,27 @@ pub async fn run_once_http(
     after_join: Option<ClientMsg>,
     wait_ms: u64,
 ) -> anyhow::Result<Option<GameStatePublic>> {
-    // Use reqwest to POST join and optional action, then GET state once with a timeout.
+    // Use reqwest to POST newgame and optional action, then GET state once with a timeout.
     let client = reqwest::Client::new();
-    let join = ClientMsg::Join {
-        name: name.to_string(),
+    let players = vec![
+        mcg_shared::PlayerConfig {
+            id: 0,
+            name: name.to_string(),
+            is_bot: false,
+        },
+        mcg_shared::PlayerConfig {
+            id: 1,
+            name: "Bot 1".to_string(),
+            is_bot: true,
+        },
+    ];
+    let newgame = ClientMsg::NewGame {
+        players,
     };
-    // Send Join
+    // Send NewGame
     let _ = client
-        .post(format!("{}/api/join", base))
-        .json(&join)
+        .post(format!("{}/api/newgame", base))
+        .json(&newgame)
         .send()
         .await?;
     // Optional follow-up command

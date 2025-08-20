@@ -129,11 +129,15 @@ pub struct GameStatePublic {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PlayerConfig {
+    pub id: usize,
+    pub name: String,
+    pub is_bot: bool, // true if driven by bot mechanisms, false if waits for messages
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum ClientMsg {
-    Join {
-        name: String,
-    },
     /// Player-initiated action: must specify which player is performing the action.
     Action {
         player_id: usize,
@@ -147,13 +151,11 @@ pub enum ClientMsg {
     NextHand {
         player_id: usize,
     },
-    /// Reset the game with `bots` bots. `bots_auto` controls whether bots act automatically
-    /// (true = bots run automatically as before). If false, bots will not act automatically
-    /// and can be driven by messages from clients (ClientMsg::Action) addressed to their player ids.
-    ResetGame {
-        bots: usize,
-        bots_auto: bool,
+    /// Start a new game with the specified players. Each player has an ID, name, and bot flag.
+    NewGame {
+        players: Vec<PlayerConfig>,
     },
+
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

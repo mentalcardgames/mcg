@@ -2,7 +2,7 @@ mod cli;
 
 use clap::Parser;
 
-use mcg_shared::{ClientMsg, PlayerAction};
+use mcg_shared::{ClientMsg, PlayerAction, PlayerConfig};
 
 use cli::{Cli, Commands, TransportKind};
 
@@ -146,15 +146,26 @@ async fn main() -> anyhow::Result<()> {
                 cli::output_state(&state, cli.json);
             }
         }
-        Commands::Reset { bots } => {
+        Commands::NewGame => {
+            let players = vec![
+                PlayerConfig {
+                    id: 0,
+                    name: cli.name.clone(),
+                    is_bot: false,
+                },
+                PlayerConfig {
+                    id: 1,
+                    name: "Bot 1".to_string(),
+                    is_bot: true,
+                },
+            ];
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
                     cli::run_once_iroh(
                         &peer,
                         &cli.name,
-                        Some(ClientMsg::ResetGame {
-                            bots,
-                            bots_auto: true,
+                        Some(ClientMsg::NewGame {
+                            players: players.clone(),
                         }),
                         cli.wait_ms,
                     )
@@ -164,9 +175,8 @@ async fn main() -> anyhow::Result<()> {
                     cli::run_once_http(
                         &addr,
                         &cli.name,
-                        Some(ClientMsg::ResetGame {
-                            bots,
-                            bots_auto: true,
+                        Some(ClientMsg::NewGame {
+                            players: players.clone(),
                         }),
                         cli.wait_ms,
                     )
@@ -176,9 +186,8 @@ async fn main() -> anyhow::Result<()> {
                     cli::run_once_ws(
                         &addr,
                         &cli.name,
-                        Some(ClientMsg::ResetGame {
-                            bots,
-                            bots_auto: true,
+                        Some(ClientMsg::NewGame {
+                            players: players.clone(),
                         }),
                         cli.wait_ms,
                     )

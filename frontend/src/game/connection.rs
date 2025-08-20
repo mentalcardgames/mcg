@@ -34,23 +34,23 @@ impl ConnectionService {
     }
 
     /// Connect to a server (wasm) or record an error on native builds.
-    /// `name` is sent as a Join message once the socket is open.
-    pub fn connect(&mut self, _server_address: &str, _name: &str, ctx: &Context) {
+    /// `players` is sent as a NewGame message once the socket is open.
+    pub fn connect_with_players(&mut self, _server_address: &str, _players: Vec<mcg_shared::PlayerConfig>, ctx: &Context) {
         {
             let ws_url = format!("ws://{}/ws", _server_address);
             match WebSocket::new(&ws_url) {
                 Ok(ws) => {
-                    // prepare join payload
-                    let join = serde_json::to_string(&ClientMsg::Join {
-                        name: _name.to_string(),
+                    // prepare newgame payload
+                    let newgame = serde_json::to_string(&ClientMsg::NewGame {
+                        players: _players.clone(),
                     })
                     .unwrap();
 
-                    // onopen -> send join
+                    // onopen -> send newgame
                     let ws_clone = ws.clone();
-                    let join_clone = join.clone();
+                    let newgame_clone = newgame.clone();
                     let onopen = Closure::<dyn FnMut()>::new(move || {
-                        let _ = ws_clone.send_with_str(&join_clone);
+                        let _ = ws_clone.send_with_str(&newgame_clone);
                     });
                     ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
                     onopen.forget();
