@@ -5,7 +5,6 @@ mod cli;
 mod config;
 mod eval;
 mod game;
-mod iroh_transport;
 mod pretty;
 mod transport;
 

@@ -3,6 +3,7 @@
 pub mod http;
 pub mod run;
 pub mod state;
+pub mod iroh;
 pub mod ws;
 
 // Re-export commonly used items so other modules can continue to reference

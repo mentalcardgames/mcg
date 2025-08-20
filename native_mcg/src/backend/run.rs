@@ -50,7 +50,7 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
     {
         let state_clone = state.clone();
         tokio::spawn(async move {
-            if let Err(e) = crate::iroh_transport::spawn_iroh_listener(state_clone).await {
+            if let Err(e) = crate::backend::iroh::spawn_iroh_listener(state_clone).await {
                 eprintln!("Iroh listener failed: {}", e);
             }
         });
