@@ -81,13 +81,13 @@ Backend (native_mcg / backend)
     - / -> serves index.html
     - Fallback -> serves index.html for SPA routes (non-asset, non-API)
   - WebSocket handler:
-    - On first message expects ClientMsg::Join; creates or reuses a single Lobby game, sends Welcome and current State; applies actions, advances bots, and broadcasts the latest State to the connecting client.
+    - On connect the server sends a `ServerMsg::Welcome` and an initial `ServerMsg::State` immediately; clients may then send any supported `ClientMsg` (for example `NewGame`, `Action`, or `RequestState`). All transports delegate handling to the centralized backend handler `crate::backend::handle_client_msg` to ensure consistent behavior across HTTP/WebSocket/iroh.
   - AppState holds a Lobby (RwLock) and bot_count.
 - Iroh transport (optional feature)
-  - Location: native_mcg/src/iroh_transport.rs (feature-gated behind the `iroh` Cargo feature)
+  - Location: `native_mcg/src/backend/iroh.rs` (feature-gated behind the `iroh` Cargo feature)
   - Behavior:
-    - The server spawns an iroh listener that accepts incoming iroh QUIC connections and speaks the same newline-delimited JSON protocol (ClientMsg / ServerMsg) used by the WebSocket handler.
-    - The iroh handler expects ClientMsg::Join as the first message, sends ServerMsg::Welcome and an initial ServerMsg::State, then processes ClientMsg messages (Action, RequestState, NextHand, ResetGame) and reuses the server's broadcast/drive-bots helpers.
+    - The server spawns an iroh listener that accepts incoming iroh QUIC connections and speaks the same newline-delimited JSON protocol (`ClientMsg` / `ServerMsg`) used by the WebSocket handler.
+    - On connect the iroh transport sends `ServerMsg::Welcome` and an initial `ServerMsg::State` immediately; subsequent `ClientMsg` messages are handled by the centralized backend handler `crate::backend::handle_client_msg` so iroh, WebSocket, and HTTP paths remain consistent.
     - The server prints the node's public key (z-base-32) on startup so CLI users can dial by public key. It intentionally does not print the raw Rust `NodeAddr` debug output (that form is brittle across iroh versions).
     - ALPN used: `b"mcg/iroh/1"` (clients must use the same ALPN when connecting).
   - CLI support:

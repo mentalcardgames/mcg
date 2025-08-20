@@ -4,10 +4,11 @@
 // newline-delimited JSON protocol where each JSON object is a
 // ClientMsg or ServerMsg (the same types used over the WebSocket).
 //
-// The implementation mirrors the WebSocket handler behaviour: it expects
-// the first message from the client to be ClientMsg::Join { name }, sends a
-// ServerMsg::Welcome and the initial ServerMsg::State, and then processes
-// subsequent ClientMsg messages by mutating the shared AppState.
+// The implementation mirrors the WebSocket handler behaviour: on connection
+// the transport sends a `ServerMsg::Welcome` and an initial `ServerMsg::State`.
+// Clients may then send any supported `ClientMsg` (for example `NewGame`,
+// `Action`, or `RequestState`). The handler delegates message processing to
+// centralized backend helpers so behavior is consistent across transports.
 //
 // Note: this file is feature-gated behind the iroh Cargo feature. It attempts
 // to follow the iroh API shown in the iroh docs. The exact iroh types and

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This repository contains the implementation of a "Mental Card Game" (MCG), primarily designed to run in a web browser using WebAssembly (WASM). The core application is written in Rust and uses the `egui` library for its user interface. The project also includes a separate WebSocket-based backend for multiplayer functionality, demonstrably used for a poker game.
+This repository contains the implementation of a "Mental Card Game" (MCG), primarily designed to run in a web browser using WebAssembly (WASM). The core application is written in Rust and uses the `egui` library for its user interface. The project also includes a native node (`native_mcg`) that provides HTTP, WebSocket, and optional iroh transports.
 
 The project is structured as a Cargo workspace with three main crates:
 - `frontend/`: The main WASM frontend application using `egui` and `eframe`. This is the core of the MCG experience (previously named `client/`).
@@ -43,12 +43,8 @@ This application is aimed to be peer to peer (p2p) in the future. Each player ge
       - Internally the `justfile` invokes: `cargo run -p native_mcg --bin native_mcg -- --bots {{BOTS}}`
 
 2.  **IROH (optional QUIC) transport**
-    *   `native_mcg` includes an optional iroh-based transport (QUIC) in addition to the HTTP/WebSocket backend. See `IROH.md` and `native_mcg/src/iroh_transport.rs` for details.
-    *   The iroh transport lets CLI clients and other nodes connect directly by PublicKey (z-base-32) using QUIC streams. The CLI provides an iroh client flow (`run_once_iroh`) that can dial a peer by PublicKey and exchange newline-delimited JSON `ClientMsg`/`ServerMsg`.
-    *   Notes:
-        - ALPN used by the iroh listener: `mcg/iroh/1` — clients must use the same ALPN when connecting.
-        - The server prints the node PublicKey (z-base-32). Dialing by the PublicKey is the recommended stable workflow; full NodeAddr representations are brittle across iroh versions.
-        - See `IROH.md` for examples, CLI usage, and recommendations (including `--print-addr` suggestions).
+    *   `native_mcg` includes an optional iroh-based transport (QUIC) in addition to the HTTP/WebSocket backend. See `IROH.md` and `native_mcg/src/backend/iroh.rs` for details.
+    *   The iroh transport speaks the same newline-delimited JSON protocol (`ClientMsg` / `ServerMsg`) used by the WebSocket handler. On connect the iroh transport sends `ServerMsg::Welcome` and an initial `ServerMsg::State`; subsequent `ClientMsg` messages are handled by the centralized backend handler so transports behave consistently.
 
 3.  **Run Server in Background (for AI agents):**
     *   `just server-bg` — runs the native node in the background.

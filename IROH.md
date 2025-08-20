@@ -19,7 +19,7 @@ Many of the behavioral notes below are drawn from the iroh docs (endpoint, Watch
 
 ## How this repo uses iroh (file mapping)
 - Server listener and per-connection handling:
-  - `native_mcg/src/iroh_transport.rs` implements the native node iroh listener, per-connection stream handling, and message processing (JSON newline-delimited ClientMsg / ServerMsg protocol).
+  - `native_mcg/src/backend/iroh.rs` implements the native node iroh listener, per-connection stream handling, and message processing (JSON newline-delimited ClientMsg / ServerMsg protocol).
 - CLI iroh client:
   - `native_mcg/src/bin/mcg-cli.rs` contains `run_once_iroh` which implements a minimal iroh client flow (bind local endpoint, connect by PublicKey, open a bi stream, send Join + optional command, read responses until timeout).
 - Shared protocol types:
@@ -53,7 +53,7 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
   - Purpose: Per-connection handler that performs the newline-delimited JSON protocol over a bidirectional stream.
   - Key behavior:
     - Accepts a bidirectional stream from the incoming `Connection` via `connection.accept_bi().await?`.
-    - Wraps the receive side in a `BufReader` and reads lines. The first line must be `ClientMsg::Join { name }`.
+    - Wraps the receive side in a `BufReader` and reads lines. The transport sends `ServerMsg::Welcome` and an initial `ServerMsg::State` immediately on connect; clients may then send any supported `ClientMsg`.
     - Ensures a game exists for the player (calls `ensure_game_started`).
     - Sends `Welcome` and initial `State` messages to the client, then processes subsequent messages by delegating to `process_client_msg_iroh`.
     - Closes the send side politely with `send.finish()` and awaits `connection.closed().await` when done.
@@ -104,7 +104,7 @@ Note: code excerpts reference the repo files to make it easy to inspect implemen
     - Parses the supplied `peer_uri` as an `iroh::PublicKey` via `PublicKey::from_str(peer_uri)`. Passing a `PublicKey` into `Endpoint::connect` converts to `NodeAddr` via `From<PublicKey> for NodeAddr`.
     - Calls `endpoint.connect(pk, ALPN).await` (ALPN must match server).
     - Opens a bidirectional stream via `connection.open_bi().await?`.
-    - Sends `ClientMsg::Join` and optional `after_join` message as newline-delimited JSON, flushes, and reads newline-delimited `ServerMsg` lines until timeout, returning the last received `State`.
+    - Sends `ClientMsg::Join` (if used) and optional `after_join` message as newline-delimited JSON, flushes, and reads newline-delimited `ServerMsg` lines until timeout, returning the last received `State`.
     - Calls `send.finish()` to close the send side politely.
   - See the implementation:
 ```native_mcg/src/bin/mcg-cli.rs#L154-258

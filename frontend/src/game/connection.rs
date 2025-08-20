@@ -51,22 +51,26 @@ impl ConnectionService {
                     })
                     .unwrap();
 
-                    // onopen -> send newgame
-                    let ws_clone = ws.clone();
-                    let newgame_clone = newgame.clone();
-                    let onopen = Closure::<dyn FnMut()>::new(move || {
-                        let _ = ws_clone.send_with_str(&newgame_clone);
-                    });
-                    ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
-                    onopen.forget();
+                    // Instead of sending NewGame immediately on `open`, wait for the
+                    // server `Welcome` message and send the `NewGame` then. This avoids
+                    // races where the server replies before the client has finished
+                    // wiring up message handlers.
 
-                    // onmessage -> push into inbox
+                    // onmessage -> push into inbox; if server sends Welcome, send NewGame
                     let inbox = Rc::clone(&self.inbox);
                     let ctx_for_msg = ctx.clone();
+                    let ws_clone_for_msg = ws.clone();
+                    let newgame_clone = newgame.clone();
                     let onmessage =
                         Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
                             if let Some(txt) = e.data().as_string() {
                                 if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {
+                                    // If the server welcomes us, send the NewGame payload
+                                    // so transports behave consistently (server accepts
+                                    // NewGame at any time after connect).
+                                    if let ServerMsg::Welcome = msg {
+                                        let _ = ws_clone_for_msg.send_with_str(&newgame_clone);
+                                    }
                                     inbox.borrow_mut().push(msg);
                                     ctx_for_msg.request_repaint();
                                 }

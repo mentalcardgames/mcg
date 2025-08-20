@@ -43,7 +43,7 @@ Global options
 
 Commands (examples)
 - Join and print first State:
-  - `just cli join`
+  - `just cli join` (the CLI will connect, wait for `ServerMsg::Welcome` and the initial `State`, then it may send follow-up `ClientMsg` commands)
 - Request latest State:
   - `just cli -- state`
 - Send actions:
