@@ -339,8 +339,8 @@ async fn handle_iroh_connection(
                                         }
                                         crate::backend::broadcast_and_drive(&state, 500, 1500).await;
                                     }
-                                    ClientMsg::NextHand { player_id } => {
-                                        println!("[IROH] NextHand requested for player {}", player_id);
+                                    ClientMsg::NextHand  => {
+                                        println!("[IROH] NextHand requested");
 
                                         // Check if there's an active game before processing NextHand
                                         {

@@ -221,10 +221,10 @@ async fn process_client_msg(
         }
 
         // NextHand { player_id }
-        mcg_shared::ClientMsg::NextHand { player_id } => {
+        mcg_shared::ClientMsg::NextHand => {
             println!(
-                "[WS] NextHand requested by primary_player_id={} for player {}",
-                primary_player_id, player_id
+                "[WS] NextHand requested by primary_player_id={} ",
+                primary_player_id
             );
 
             // Check if there's an active game before processing NextHand

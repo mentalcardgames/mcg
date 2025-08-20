@@ -2,9 +2,11 @@ mod cli;
 
 use clap::Parser;
 
-use mcg_shared::{ClientMsg, PlayerAction, PlayerConfig};
+use mcg_shared::{ClientMsg, PlayerAction};
 
 use cli::{Cli, Commands, TransportKind};
+
+use crate::cli::generate_demo_players;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -78,34 +80,13 @@ async fn main() -> anyhow::Result<()> {
         Commands::NextHand => {
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(
-                        &peer,
-                        ClientMsg::NextHand {
-                            player_id: mcg_shared::PlayerId(0),
-                        },
-                        cli.wait_ms,
-                    )
-                    .await?
+                    cli::run_once_iroh(&peer, ClientMsg::NextHand, cli.wait_ms).await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(
-                        &addr,
-                        ClientMsg::NextHand {
-                            player_id: mcg_shared::PlayerId(0),
-                        },
-                        cli.wait_ms,
-                    )
-                    .await?
+                    cli::run_once_http(&addr, ClientMsg::NextHand, cli.wait_ms).await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(
-                        &addr,
-                        ClientMsg::NextHand {
-                            player_id: mcg_shared::PlayerId(0),
-                        },
-                        cli.wait_ms,
-                    )
-                    .await?
+                    cli::run_once_ws(&addr, ClientMsg::NextHand, cli.wait_ms).await?
                 }
             };
             if let Some(state) = latest {
@@ -113,49 +94,12 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::NewGame => {
-            let players = vec![
-                PlayerConfig {
-                    id: mcg_shared::PlayerId(0),
-                    name: cli.name.clone(),
-                    is_bot: false,
-                },
-                PlayerConfig {
-                    id: mcg_shared::PlayerId(1),
-                    name: "Bot 1".to_string(),
-                    is_bot: true,
-                },
-            ];
+            let players = generate_demo_players(3);
+            let msg = ClientMsg::NewGame { players: players };
             let latest = match transport.clone() {
-                TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(
-                        &peer,
-                        ClientMsg::NewGame {
-                            players: players.clone(),
-                        },
-                        cli.wait_ms,
-                    )
-                    .await?
-                }
-                TransportKind::Http(addr) => {
-                    cli::run_once_http(
-                        &addr,
-                        ClientMsg::NewGame {
-                            players: players.clone(),
-                        },
-                        cli.wait_ms,
-                    )
-                    .await?
-                }
-                TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(
-                        &addr,
-                        ClientMsg::NewGame {
-                            players: players.clone(),
-                        },
-                        cli.wait_ms,
-                    )
-                    .await?
-                }
+                TransportKind::Iroh(peer) => cli::run_once_iroh(&peer, msg, cli.wait_ms).await?,
+                TransportKind::Http(addr) => cli::run_once_http(&addr, msg, cli.wait_ms).await?,
+                TransportKind::WebSocket(addr) => cli::run_once_ws(&addr, msg, cli.wait_ms).await?,
             };
             if let Some(state) = latest {
                 cli::output_state(&state, cli.json);
@@ -163,9 +107,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Watch => {
             match transport {
-                TransportKind::Iroh(peer) => cli::watch_iroh(&peer, &cli.name, cli.json).await?,
-                TransportKind::Http(addr) => cli::watch_http(&addr, &cli.name, cli.json).await?,
-                TransportKind::WebSocket(addr) => cli::watch_ws(&addr, &cli.name, cli.json).await?,
+                TransportKind::Iroh(peer) => cli::watch_iroh(&peer, cli.json).await?,
+                TransportKind::Http(addr) => cli::watch_http(&addr, cli.json).await?,
+                TransportKind::WebSocket(addr) => cli::watch_ws(&addr, cli.json).await?,
             };
         }
     }

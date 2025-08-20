@@ -1,6 +1,6 @@
-use std::io::IsTerminal;
+use std::{io::IsTerminal, num};
 
-use mcg_shared::{GameStatePublic, ServerMsg};
+use mcg_shared::{GameStatePublic, PlayerConfig, ServerMsg};
 
 use native_mcg::pretty::{format_event_human, format_state_human, format_table_header};
 
@@ -12,6 +12,23 @@ pub fn output_state(state: &GameStatePublic, json: bool) {
         let use_color = std::io::stdout().is_terminal();
         println!("{}", format_state_human(state, use_color));
     }
+}
+
+pub fn generate_demo_players(num_players: usize) -> Vec<PlayerConfig> {
+    let mut players = Vec::with_capacity(num_players);
+    players.push(PlayerConfig {
+        id: mcg_shared::PlayerId(0),
+        name: format!("Huuman player {}", 0 + 1),
+        is_bot: false,
+    });
+    for i in 1..num_players {
+        players.push(PlayerConfig {
+            id: mcg_shared::PlayerId(i),
+            name: format!("Player {}", i + 1),
+            is_bot: true,
+        });
+    }
+    players
 }
 
 /// Shared handler for server messages so the CLI doesn't duplicate logic.

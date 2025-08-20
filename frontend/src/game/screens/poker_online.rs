@@ -518,7 +518,7 @@ impl PokerOnlineScreen {
                         .add(egui::Button::new(next_label).min_size(egui::vec2(140.0, 40.0)))
                         .clicked()
                     {
-                        self.send(&ClientMsg::NextHand { player_id });
+                        self.send(&ClientMsg::NextHand);
                     }
                 });
                 ui.add_space(6.0);

@@ -166,7 +166,7 @@ pub enum ClientMsg {
     /// Request the current state for a particular player (you_id in State will reflect this).
     RequestState,
     /// Request to advance to the next hand on behalf of a specific player.
-    NextHand { player_id: PlayerId },
+    NextHand,
     /// Start a new game with the specified players. Each player has an ID, name, and bot flag.
     NewGame { players: Vec<PlayerConfig> },
 }
