@@ -313,95 +313,12 @@ async fn process_client_msg<W>(state: &AppState, send: &mut W, cm: ClientMsg) ->
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
-    match cm {
-        ClientMsg::Action { player_id, action } => {
-            println!(
-                "[IROH] Action from player_id={} action={:?}",
-                player_id, action
-            );
+    // Delegate handling to the centralized backend handler to ensure consistent behavior.
+    println!("[IROH] Received ClientMsg: {:?}", cm);
+    let resp = crate::backend::handle_client_msg(state, cm).await;
 
-            // Check if there's an active game before processing actions
-            {
-                let lobby = state.lobby.read().await;
-                if lobby.game.is_none() {
-                    let _ = send_server_msg_to_writer(
-                        send,
-                        &ServerMsg::Error("No active game. Please start a new game first.".into()),
-                    )
-                    .await;
-                    return Ok(());
-                }
-            }
-
-            match crate::backend::validate_and_apply_action(state, player_id.into(), action.clone())
-                .await
-            {
-                Ok(()) => {
-                    // Send updated state to this client
-                    if let Some(gs) = crate::backend::current_state_public(state).await {
-                        let _ = send_server_msg_to_writer(send, &ServerMsg::State(gs)).await;
-                    }
-                    // Broadcast and drive via centralized helper (drive_bots respects bots_auto)
-                    crate::backend::broadcast_and_drive(state, 500, 1500).await;
-                }
-                Err(e) => {
-                    let _ = send_server_msg_to_writer(send, &ServerMsg::Error(e)).await;
-                }
-            }
-        }
-        ClientMsg::RequestState => {
-            println!("[IROH] State requested");
-            // Send state directly to this client
-            if let Some(gs) = crate::backend::current_state_public(state).await {
-                let _ = send_server_msg_to_writer(send, &ServerMsg::State(gs)).await;
-            }
-            crate::backend::broadcast_and_drive(state, 500, 1500).await;
-        }
-        ClientMsg::NextHand => {
-            println!("[IROH] NextHand requested");
-
-            // Check if there's an active game before processing NextHand
-            {
-                let lobby = state.lobby.read().await;
-                if lobby.game.is_none() {
-                    let _ = send_server_msg_to_writer(
-                        send,
-                        &ServerMsg::Error("No active game. Please start a new game first.".into()),
-                    )
-                    .await;
-                    return Ok(());
-                }
-            }
-
-            if let Err(e) = crate::backend::start_new_hand_and_print(state).await {
-                let _ = send_server_msg_to_writer(
-                    send,
-                    &ServerMsg::Error(format!("Failed to start new hand: {}", e)),
-                )
-                .await;
-            } else {
-                if let Some(gs) = crate::backend::current_state_public(state).await {
-                    let _ = send_server_msg_to_writer(send, &ServerMsg::State(gs)).await;
-                }
-                crate::backend::broadcast_and_drive(state, 500, 1500).await;
-            }
-        }
-        ClientMsg::NewGame { players } => {
-            // Handle new game message - can override current game at any time
-            println!("[IROH] NewGame requested with {} players", players.len());
-            if let Err(e) = crate::backend::create_new_game(state, players).await {
-                let _ = send_server_msg_to_writer(
-                    send,
-                    &ServerMsg::Error(format!("Failed to create new game: {}", e)),
-                )
-                .await;
-            } else {
-                if let Some(gs) = crate::backend::current_state_public(state).await {
-                    let _ = send_server_msg_to_writer(send, &ServerMsg::State(gs)).await;
-                }
-                crate::backend::broadcast_and_drive(state, 500, 1500).await;
-            }
-        }
+    if let Err(e) = send_server_msg_to_writer(send, &resp).await {
+        eprintln!("iroh send error while forwarding response: {}", e);
     }
     Ok(())
 }

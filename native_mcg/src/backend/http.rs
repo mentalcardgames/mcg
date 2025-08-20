@@ -1,9 +1,9 @@
 // HTTP handlers for the MCG server API.
 //
 // Provides simple POST/GET endpoints that mirror existing websocket actions so
-// the server logic can remain transport-agnostic. Handlers reuse functions from
-// crate::backend::state to operate on the shared AppState and return the same
-// ServerMsg/ClientMsg shapes (mcg_shared) as other transports.
+// the server logic can remain transport-agnostic. Handlers reuse the centralized
+// backend handler `handle_client_msg` to ensure consistent behavior across
+// transports (iroh, websocket, HTTP).
 
 use axum::{
     extract::{Json, State},
@@ -17,114 +17,63 @@ use mcg_shared::{ClientMsg, ServerMsg};
 /// Accept a NewGame ClientMsg and create a new game.
 ///
 /// Example payload:
-///   { "type": "NewGame", "data": { "players": [...], "primary_player_id": 0 } }
+///   { "type": "NewGame", "data": { "players": [...]} }
 pub async fn newgame_handler(
     State(state): State<AppState>,
     Json(cm): Json<ClientMsg>,
 ) -> impl IntoResponse {
-    match cm {
-        ClientMsg::NewGame { players } => {
-            if let Err(e) = crate::backend::create_new_game(&state, players).await {
-                let err = ServerMsg::Error(format!("Failed to create game: {}", e));
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response();
-            }
-            // Mirror websocket behavior: welcome the client with default player ID
-            let welcome = ServerMsg::Welcome {
-                you: mcg_shared::PlayerId(0),
-            };
-            // Also send initial state to broadcaster (backend printing/bookkeeping is done elsewhere)
-            crate::backend::broadcast_state(&state).await;
-            (StatusCode::OK, Json(welcome)).into_response()
+    // Delegate to unified handler
+    let resp = crate::backend::handle_client_msg(&state, cm).await;
+    match resp {
+        ServerMsg::State(gs) => (StatusCode::OK, Json(ServerMsg::State(gs))).into_response(),
+        ServerMsg::Error(e) => {
+            // Creating a new game failing is server-side error historically.
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(ServerMsg::Error(e))).into_response()
         }
-        _ => {
-            let err = ServerMsg::Error("Expected NewGame message".into());
-            (StatusCode::BAD_REQUEST, Json(err)).into_response()
-        }
+        other => (StatusCode::OK, Json(other)).into_response(),
     }
 }
 
 /// Apply a player action.
 ///
-/// Body: { "type": "Action", "data": ... } or simply the action shape if you prefer.
+/// Body: { "type": "Action", "data": ... }
 /// Returns a ServerMsg::State on success or ServerMsg::Error on failure.
 pub async fn action_handler(
     State(state): State<AppState>,
     Json(cm): Json<ClientMsg>,
 ) -> impl IntoResponse {
-    match cm {
-        ClientMsg::Action { player_id, action } => {
-            // Use the provided player_id as the actor (validate centrally)
-            match crate::backend::validate_and_apply_action(
-                &state,
-                player_id.into(),
-                action.clone(),
-            )
-            .await
-            {
-                Ok(()) => {
-                    // Send state to requester immediately (we return it) and broadcast to subscribers.
-                    if let Some(gs) = crate::backend::current_state_public(&state).await {
-                        // Broadcast current state immediately so other transports see the update.
-                        crate::backend::broadcast_state(&state).await;
-                        // Drive bots in background (don't block the HTTP response)
-                        let state_clone = state.clone();
-                        tokio::spawn(async move {
-                            crate::backend::broadcast_and_drive(&state_clone, 500, 1500).await;
-                        });
-                        (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
-                    } else {
-                        let err = ServerMsg::Error("No game running".into());
-                        (StatusCode::NOT_FOUND, Json(err)).into_response()
-                    }
-                }
-                Err(e) => {
-                    let err = ServerMsg::Error(e);
-                    (StatusCode::BAD_REQUEST, Json(err)).into_response()
-                }
-            }
+    let resp = crate::backend::handle_client_msg(&state, cm).await;
+    match resp {
+        ServerMsg::State(gs) => {
+            // Broadcast/drive side-effects are handled by the unified handler.
+            (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
         }
-        _ => {
-            let err = ServerMsg::Error("Expected Action message".into());
-            (StatusCode::BAD_REQUEST, Json(err)).into_response()
-        }
+        ServerMsg::Error(e) => (StatusCode::BAD_REQUEST, Json(ServerMsg::Error(e))).into_response(),
+        other => (StatusCode::OK, Json(other)).into_response(),
     }
 }
 
-//TODO: document this
 pub async fn state_handler(State(state): State<AppState>) -> impl IntoResponse {
-    if let Some(gs) = crate::backend::current_state_public(&state).await {
-        (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
-    } else {
-        (
-            StatusCode::NOT_FOUND,
-            Json(ServerMsg::Error("No game running".into())),
-        )
-            .into_response()
+    // Reuse unified handler by requesting state
+    let resp = crate::backend::handle_client_msg(&state, ClientMsg::RequestState).await;
+    match resp {
+        ServerMsg::State(gs) => (StatusCode::OK, Json(ServerMsg::State(gs))).into_response(),
+        ServerMsg::Error(e) => {
+            // No active game historically returned NOT_FOUND; map error to NOT_FOUND when appropriate.
+            (StatusCode::NOT_FOUND, Json(ServerMsg::Error(e))).into_response()
+        }
+        other => (StatusCode::OK, Json(other)).into_response(),
     }
 }
 
 /// Advance to the next hand (server-side). Returns state after change.
 pub async fn next_hand_handler(State(state): State<AppState>) -> impl IntoResponse {
-    if let Err(e) = crate::backend::start_new_hand_and_print(&state).await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ServerMsg::Error(format!("Failed to start new hand: {}", e))),
-        )
-            .into_response();
-    }
-    if let Some(gs) = crate::backend::current_state_public(&state).await {
-        crate::backend::broadcast_state(&state).await;
-        // drive bots asynchronously
-        let state_clone = state.clone();
-        tokio::spawn(async move {
-            crate::backend::broadcast_and_drive(&state_clone, 500, 1500).await;
-        });
-        (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
-    } else {
-        (
-            StatusCode::NOT_FOUND,
-            Json(ServerMsg::Error("No game running".into())),
-        )
-            .into_response()
+    let resp = crate::backend::handle_client_msg(&state, ClientMsg::NextHand).await;
+    match resp {
+        ServerMsg::State(gs) => (StatusCode::OK, Json(ServerMsg::State(gs))).into_response(),
+        ServerMsg::Error(e) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(ServerMsg::Error(e))).into_response()
+        }
+        other => (StatusCode::OK, Json(other)).into_response(),
     }
 }

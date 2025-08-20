@@ -210,6 +210,78 @@ pub async fn broadcast_and_drive(state: &AppState, min_ms: u64, max_ms: u64) {
     drive_bots_with_delays(state, min_ms, max_ms).await;
 }
 
+/// Unified handler for ClientMsg coming from any transport.
+///
+/// Centralizes validation, state mutation, and side-effects (broadcasting and
+/// bot-driving). Returns a ServerMsg that the originating transport should send
+/// back to the client. Transports should delegate to this function rather than
+/// duplicating handling logic to ensure consistent behavior across transports.
+pub async fn handle_client_msg(state: &AppState, cm: mcg_shared::ClientMsg) -> mcg_shared::ServerMsg {
+    match cm {
+        mcg_shared::ClientMsg::Action { player_id, action } => {
+            // Validate & apply action
+            match validate_and_apply_action(state, player_id.into(), action.clone()).await {
+                Ok(()) => {
+                    // Broadcast updated state and drive bots
+                    broadcast_and_drive(state, 500, 1500).await;
+                    if let Some(gs) = current_state_public(state).await {
+                        mcg_shared::ServerMsg::State(gs)
+                    } else {
+                        mcg_shared::ServerMsg::Error("No active game after action".into())
+                    }
+                }
+                Err(e) => mcg_shared::ServerMsg::Error(e),
+            }
+        }
+
+        mcg_shared::ClientMsg::RequestState => {
+            // Return current state if exists, and trigger drive/broadcast for bots
+            if let Some(gs) = current_state_public(state).await {
+                broadcast_and_drive(state, 500, 1500).await;
+                mcg_shared::ServerMsg::State(gs)
+            } else {
+                mcg_shared::ServerMsg::Error("No active game. Please start a new game first.".into())
+            }
+        }
+
+        mcg_shared::ClientMsg::NextHand => {
+            // Ensure a game exists first
+            {
+                let lobby_r = state.lobby.read().await;
+                if lobby_r.game.is_none() {
+                    return mcg_shared::ServerMsg::Error("No active game. Please start a new game first.".into());
+                }
+            }
+
+            match start_new_hand_and_print(state).await {
+                Ok(()) => {
+                    broadcast_and_drive(state, 500, 1500).await;
+                    if let Some(gs) = current_state_public(state).await {
+                        mcg_shared::ServerMsg::State(gs)
+                    } else {
+                        mcg_shared::ServerMsg::Error("No active game after starting next hand".into())
+                    }
+                }
+                Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to start new hand: {}", e)),
+            }
+        }
+
+        mcg_shared::ClientMsg::NewGame { players } => {
+            match create_new_game(state, players).await {
+                Ok(()) => {
+                    broadcast_and_drive(state, 500, 1500).await;
+                    if let Some(gs) = current_state_public(state).await {
+                        mcg_shared::ServerMsg::State(gs)
+                    } else {
+                        mcg_shared::ServerMsg::Error("Failed to produce initial state after creating game".into())
+                    }
+                }
+                Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to create new game: {}", e)),
+            }
+        }
+    }
+}
+
 /// Advance to the next hand (increment dealer, start a new hand) and print a table header.
 pub async fn start_new_hand_and_print(state: &AppState) -> Result<()> {
     let mut lobby = state.lobby.write().await;

@@ -10,5 +10,5 @@ pub mod ws;
 pub use run::run_server;
 pub use state::{
     broadcast_and_drive, broadcast_state, create_new_game, current_state_public,
-    start_new_hand_and_print, validate_and_apply_action, AppState,
+    start_new_hand_and_print, validate_and_apply_action, handle_client_msg, AppState,
 };

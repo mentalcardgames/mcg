@@ -172,106 +172,18 @@ async fn process_client_msg(
     cm: mcg_shared::ClientMsg,
     primary_player_id: mcg_shared::PlayerId,
 ) {
-    match cm {
-        // ClientMsg::Action now has form: Action { player_id, action }
-        mcg_shared::ClientMsg::Action { player_id, action } => {
-            println!(
-                "[WS] Action from primary_player_id={}: player_id={} action={:?}",
-                primary_player_id, player_id, action
-            );
+    // Delegate handling to the centralized backend handler to ensure consistent behavior.
+    println!("[WS] Received ClientMsg from primary_player_id={}: {:?}", primary_player_id, cm);
+    let resp = crate::backend::handle_client_msg(state, cm).await;
 
-            // Check if there's an active game before processing actions
-            {
-                let lobby = state.lobby.read().await;
-                if lobby.game.is_none() {
-                    let _ = send_ws(
-                        socket,
-                        &mcg_shared::ServerMsg::Error(
-                            "No active game. Please start a new game first.".into(),
-                        ),
-                    )
-                    .await;
-                    return;
-                }
-            }
-
-            match super::state::validate_and_apply_action(state, player_id.into(), action.clone())
-                .await
-            {
-                Ok(()) => {
-                    // Send updated state immediately to the originating socket so the client sees its own action
-                    send_state_to(socket, state).await;
-                    // Broadcast and drive via centralized helper
-                    super::state::broadcast_and_drive(state, 500, 1500).await;
-                }
-                Err(e) => {
-                    let _ = send_ws(socket, &mcg_shared::ServerMsg::Error(e)).await;
-                }
-            }
-        }
-
-        // RequestState { player_id }
-        mcg_shared::ClientMsg::RequestState => {
-            println!(
-                "[WS] State requested by primary_player_id={}",
-                primary_player_id
-            );
+    match &resp {
+        // For websockets we compute a personalized state view for the requesting socket.
+        mcg_shared::ServerMsg::State(_) => {
             send_state_to(socket, state).await;
-            super::state::broadcast_and_drive(state, 500, 1500).await;
         }
-
-        // NextHand { player_id }
-        mcg_shared::ClientMsg::NextHand => {
-            println!(
-                "[WS] NextHand requested by primary_player_id={} ",
-                primary_player_id
-            );
-
-            // Check if there's an active game before processing NextHand
-            {
-                let lobby = state.lobby.read().await;
-                if lobby.game.is_none() {
-                    let _ = send_ws(
-                        socket,
-                        &mcg_shared::ServerMsg::Error(
-                            "No active game. Please start a new game first.".into(),
-                        ),
-                    )
-                    .await;
-                    return;
-                }
-            }
-
-            if let Err(e) = super::state::start_new_hand_and_print(state).await {
-                let _ = send_ws(
-                    socket,
-                    &mcg_shared::ServerMsg::Error(format!("Failed to start new hand: {}", e)),
-                )
-                .await;
-            } else {
-                // Send updated state to the requesting socket, then broadcast and drive bots.
-                send_state_to(socket, state).await;
-                super::state::broadcast_and_drive(state, 500, 1500).await;
-            }
+        // Forward other server messages unchanged.
+        other => {
+            let _ = send_ws(socket, other).await;
         }
-
-        // NewGame message - can override current game at any time
-        mcg_shared::ClientMsg::NewGame { players } => {
-            println!(
-                "[WS] NewGame requested by {} with {} players",
-                primary_player_id,
-                players.len()
-            );
-            if let Err(e) = super::state::create_new_game(state, players).await {
-                let _ = send_ws(
-                    socket,
-                    &mcg_shared::ServerMsg::Error(format!("Failed to create new game: {}", e)),
-                )
-                .await;
-            } else {
-                send_state_to(socket, state).await;
-                super::state::broadcast_and_drive(state, 500, 1500).await;
-            }
-        } // Note: Join and ResetGame have been removed from ClientMsg enum
     }
 }
