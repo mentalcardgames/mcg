@@ -53,6 +53,10 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     send_ws(&mut socket, &mcg_shared::ServerMsg::Welcome { you: primary_player_id }).await;
     // Send initial state directly to this socket (does local printing & bookkeeping).
     send_state_to(&mut socket, &state, primary_player_id).await;
+    // After creating a new game via the initial NewGame handshake, trigger broadcast
+    // and bot driving so server-side bots begin acting without requiring an extra
+    // client message (fixes stuck-game where bots don't advance play).
+    super::state::broadcast_and_drive(&state, primary_player_id, 500, 1500).await;
 
     // Subscribe to broadcasts so this socket receives state updates produced by other connections.
     let mut rx = state.broadcaster.subscribe();

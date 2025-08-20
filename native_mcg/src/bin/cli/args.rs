@@ -33,8 +33,6 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
-    /// Connect and send Join, then print the first State and exit
-    Join,
     /// Request the latest State and print it
     State,
     /// Send an action (Fold, Check/Call, Bet amount)

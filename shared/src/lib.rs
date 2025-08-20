@@ -121,8 +121,6 @@ pub struct GameStatePublic {
     pub stage: Stage,
     pub you_id: usize,
     #[serde(default)]
-    pub bot_count: usize,
-    #[serde(default)]
     pub winner_ids: Vec<usize>,
     #[serde(default)]
     pub action_log: Vec<ActionEvent>,

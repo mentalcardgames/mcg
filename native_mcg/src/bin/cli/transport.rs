@@ -30,31 +30,12 @@ pub fn build_ws_url(base: &str) -> anyhow::Result<Url> {
 /// Accepts an address string (e.g. "ws://host:port/ws" or "http://host:port") and builds the ws URL internally.
 pub async fn run_once_ws(
     ws_addr: &str,
-    name: &str,
     after_join: Option<ClientMsg>,
     wait_ms: u64,
 ) -> anyhow::Result<Option<GameStatePublic>> {
     let ws_url = build_ws_url(ws_addr)?;
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
     let (mut write, mut read) = ws_stream.split();
-
-    // Always send NewGame first with default players
-    let players = vec![
-        mcg_shared::PlayerConfig {
-            id: 0,
-            name: name.to_string(),
-            is_bot: false,
-        },
-        mcg_shared::PlayerConfig {
-            id: 1,
-            name: "Bot 1".to_string(),
-            is_bot: true,
-        },
-    ];
-    let newgame = serde_json::to_string(&ClientMsg::NewGame {
-        players,
-    })?;
-    write.send(Message::Text(newgame)).await?;
 
     // Optional follow-up command
     if let Some(msg) = after_join {
@@ -93,7 +74,6 @@ pub async fn run_once_ws(
 /// actually required by the build.
 pub async fn run_once_iroh(
     peer_uri: &str,
-    name: &str,
     after_join: Option<ClientMsg>,
     wait_ms: u64,
 ) -> anyhow::Result<Option<GameStatePublic>> {
@@ -138,26 +118,6 @@ pub async fn run_once_iroh(
         .context("opening bidirectional stream")?;
 
     let mut reader = BufReader::new(recv);
-
-    // Send NewGame
-    let players = vec![
-        mcg_shared::PlayerConfig {
-            id: 0,
-            name: name.to_string(),
-            is_bot: false,
-        },
-        mcg_shared::PlayerConfig {
-            id: 1,
-            name: "Bot 1".to_string(),
-            is_bot: true,
-        },
-    ];
-    let newgame_txt = serde_json::to_string(&ClientMsg::NewGame {
-        players,
-    })?;
-    send.write_all(newgame_txt.as_bytes()).await?;
-    send.write_all(b"\n").await?;
-    send.flush().await?;
 
     // Optional follow-up command
     if let Some(msg) = after_join {
@@ -212,33 +172,11 @@ pub async fn run_once_iroh(
 /// Run a single HTTP-based join/action sequence and attempt to GET state.
 pub async fn run_once_http(
     base: &str,
-    name: &str,
     after_join: Option<ClientMsg>,
     wait_ms: u64,
 ) -> anyhow::Result<Option<GameStatePublic>> {
     // Use reqwest to POST newgame and optional action, then GET state once with a timeout.
     let client = reqwest::Client::new();
-    let players = vec![
-        mcg_shared::PlayerConfig {
-            id: 0,
-            name: name.to_string(),
-            is_bot: false,
-        },
-        mcg_shared::PlayerConfig {
-            id: 1,
-            name: "Bot 1".to_string(),
-            is_bot: true,
-        },
-    ];
-    let newgame = ClientMsg::NewGame {
-        players,
-    };
-    // Send NewGame
-    let _ = client
-        .post(format!("{}/api/newgame", base))
-        .json(&newgame)
-        .send()
-        .await?;
     // Optional follow-up command
     if let Some(msg) = after_join {
         let _ = client

@@ -154,7 +154,6 @@ impl Game {
             to_act: self.to_act,
             stage: self.stage,
             you_id: viewer_id,
-            bot_count: self.players.len().saturating_sub(1),
             winner_ids: self.winner_ids.clone(),
             action_log: self.recent_actions.clone(),
         }

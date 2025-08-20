@@ -14,28 +14,11 @@ async fn main() -> anyhow::Result<()> {
     let transport = cli.transport.clone();
 
     match cli.command {
-        Commands::Join => {
-            let latest = match transport.clone() {
-                TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(&peer, &cli.name, None, cli.wait_ms).await?
-                }
-                TransportKind::Http(addr) => {
-                    cli::run_once_http(&addr, &cli.name, None, cli.wait_ms).await?
-                }
-                TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(&addr, &cli.name, None, cli.wait_ms).await?
-                }
-            };
-            if let Some(state) = latest {
-                cli::output_state(&state, cli.json);
-            }
-        }
         Commands::State => {
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
                     cli::run_once_iroh(
                         &peer,
-                        &cli.name,
                         Some(ClientMsg::RequestState { player_id: 0 }),
                         cli.wait_ms,
                     )
@@ -44,7 +27,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(
                         &addr,
-                        &cli.name,
                         Some(ClientMsg::RequestState { player_id: 0 }),
                         cli.wait_ms,
                     )
@@ -53,7 +35,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::WebSocket(addr) => {
                     cli::run_once_ws(
                         &addr,
-                        &cli.name,
                         Some(ClientMsg::RequestState { player_id: 0 }),
                         cli.wait_ms,
                     )
@@ -74,7 +55,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Iroh(peer) => {
                     cli::run_once_iroh(
                         &peer,
-                        &cli.name,
                         Some(ClientMsg::Action {
                             player_id: 0,
                             action: pa,
@@ -86,7 +66,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(
                         &addr,
-                        &cli.name,
                         Some(ClientMsg::Action {
                             player_id: 0,
                             action: pa,
@@ -98,7 +77,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::WebSocket(addr) => {
                     cli::run_once_ws(
                         &addr,
-                        &cli.name,
                         Some(ClientMsg::Action {
                             player_id: 0,
                             action: pa,
@@ -117,7 +95,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Iroh(peer) => {
                     cli::run_once_iroh(
                         &peer,
-                        &cli.name,
                         Some(ClientMsg::NextHand { player_id: 0 }),
                         cli.wait_ms,
                     )
@@ -126,7 +103,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(
                         &addr,
-                        &cli.name,
                         Some(ClientMsg::NextHand { player_id: 0 }),
                         cli.wait_ms,
                     )
@@ -135,7 +111,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::WebSocket(addr) => {
                     cli::run_once_ws(
                         &addr,
-                        &cli.name,
                         Some(ClientMsg::NextHand { player_id: 0 }),
                         cli.wait_ms,
                     )
@@ -163,7 +138,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Iroh(peer) => {
                     cli::run_once_iroh(
                         &peer,
-                        &cli.name,
                         Some(ClientMsg::NewGame {
                             players: players.clone(),
                         }),
@@ -174,7 +148,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(
                         &addr,
-                        &cli.name,
                         Some(ClientMsg::NewGame {
                             players: players.clone(),
                         }),
@@ -185,7 +158,6 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::WebSocket(addr) => {
                     cli::run_once_ws(
                         &addr,
-                        &cli.name,
                         Some(ClientMsg::NewGame {
                             players: players.clone(),
                         }),

@@ -21,6 +21,8 @@ pub struct PokerOnlineScreen {
     players: Vec<PlayerConfig>,
     next_player_id: usize,
     new_player_name: String,
+    // Preferred player this frontend would like to control (None = not requested)
+    preferred_player: Option<usize>,
 }
 impl PokerOnlineScreen {
     pub fn new() -> Self {
@@ -51,6 +53,7 @@ impl PokerOnlineScreen {
             ],
             next_player_id: 2,
             new_player_name: String::new(),
+            preferred_player: None,
         }
     }
 
@@ -98,7 +101,6 @@ impl PokerOnlineScreen {
             if let Some(s) = &snapshot.game_state {
                 ui.label(stage_badge(s.stage));
                 ui.add_space(8.0);
-                ui.label(format!("Bots: {}", s.bot_count));
             }
         });
 
@@ -185,7 +187,8 @@ impl PokerOnlineScreen {
                     let mut to_rename = None;
                     let mut bot_updates = Vec::new();
 
-                    for (idx, player) in self.players.iter().enumerate() {
+                    let players_snapshot = self.players.clone();
+                    for (idx, player) in players_snapshot.iter().enumerate() {
                         ui.label(format!("{}", player.id));
                         ui.label(&player.name);
 
@@ -195,6 +198,22 @@ impl PokerOnlineScreen {
                         }
 
                         ui.horizontal(|ui| {
+                            // Radio toggle to select which player the frontend would like to control.
+                            // Bot players cannot be selected.
+                            if player.is_bot {
+                                ui.label("Bot");
+                            } else {
+                                if ui
+                                    .radio_value(&mut self.preferred_player, Some(player.id), "Play as")
+                                    .on_hover_text("Select this player for this client")
+                                    .changed()
+                                {
+                                    if let Some(pid) = self.preferred_player {
+                                        self.send(&ClientMsg::RequestState { player_id: pid });
+                                    }
+                                }
+                            }
+
                             if ui.button("✏").on_hover_text("Rename").clicked() {
                                 to_rename = Some(idx);
                             }
