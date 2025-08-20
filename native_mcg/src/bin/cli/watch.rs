@@ -16,19 +16,17 @@ pub async fn watch_ws(ws_addr: &str, name: &str, json: bool) -> anyhow::Result<(
     // Send NewGame
     let players = vec![
         mcg_shared::PlayerConfig {
-            id: 0,
+            id: mcg_shared::PlayerId(0),
             name: name.to_string(),
             is_bot: false,
         },
         mcg_shared::PlayerConfig {
-            id: 1,
+            id: mcg_shared::PlayerId(1),
             name: "Bot 1".to_string(),
             is_bot: true,
         },
     ];
-    let newgame = serde_json::to_string(&ClientMsg::NewGame {
-        players,
-    })?;
+    let newgame = serde_json::to_string(&ClientMsg::NewGame { players })?;
     write.send(Message::Text(newgame)).await?;
 
     // Read messages forever (until socket closed or error) and handle them via
@@ -59,19 +57,17 @@ pub async fn watch_http(base: &str, name: &str, json: bool) -> anyhow::Result<()
     let client = reqwest::Client::new();
     let players = vec![
         mcg_shared::PlayerConfig {
-            id: 0,
+            id: mcg_shared::PlayerId(0),
             name: name.to_string(),
             is_bot: false,
         },
         mcg_shared::PlayerConfig {
-            id: 1,
+            id: mcg_shared::PlayerId(1),
             name: "Bot 1".to_string(),
             is_bot: true,
         },
     ];
-    let newgame = ClientMsg::NewGame {
-        players,
-    };
+    let newgame = ClientMsg::NewGame { players };
     let _ = client
         .post(format!("{}/api/newgame", base))
         .json(&newgame)
@@ -140,19 +136,17 @@ pub async fn watch_iroh(peer_uri: &str, name: &str, json: bool) -> anyhow::Resul
     // Send NewGame
     let players = vec![
         mcg_shared::PlayerConfig {
-            id: 0,
+            id: mcg_shared::PlayerId(0),
             name: name.to_string(),
             is_bot: false,
         },
         mcg_shared::PlayerConfig {
-            id: 1,
+            id: mcg_shared::PlayerId(1),
             name: "Bot 1".to_string(),
             is_bot: true,
         },
     ];
-    let newgame_txt = serde_json::to_string(&ClientMsg::NewGame {
-        players,
-    })?;
+    let newgame_txt = serde_json::to_string(&ClientMsg::NewGame { players })?;
     send.write_all(newgame_txt.as_bytes()).await?;
     send.write_all(b"\n").await?;
     send.flush().await?;

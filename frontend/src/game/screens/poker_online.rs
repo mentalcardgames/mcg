@@ -4,7 +4,7 @@ use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
     ActionEvent, ActionKind, BlindKind, ClientMsg, GameAction, GameStatePublic, PlayerAction,
-    PlayerConfig, PlayerPublic, Stage,
+    PlayerConfig, PlayerPublic, PlayerId, Stage,
 };
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
@@ -22,7 +22,7 @@ pub struct PokerOnlineScreen {
     next_player_id: usize,
     new_player_name: String,
     // Preferred player this frontend would like to control (None = not requested)
-    preferred_player: Option<usize>,
+    preferred_player: Option<mcg_shared::PlayerId>,
 }
 impl PokerOnlineScreen {
     pub fn new() -> Self {
@@ -42,12 +42,12 @@ impl PokerOnlineScreen {
             // Player configuration
             players: vec![
                 PlayerConfig {
-                    id: 0,
+                    id: mcg_shared::PlayerId(0),
                     name: "You".to_string(),
                     is_bot: false,
                 },
                 PlayerConfig {
-                    id: 1,
+                    id: mcg_shared::PlayerId(1),
                     name: "Bot 1".to_string(),
                     is_bot: true,
                 },
@@ -267,7 +267,7 @@ impl PokerOnlineScreen {
                 ui.label("Name:");
                 ui.text_edit_singleline(&mut self.new_player_name);
 
-                if ui.button("Add Player").clicked() {
+                    if ui.button("Add Player").clicked() {
                     let player_name = if self.new_player_name.is_empty() {
                         self.generate_random_name()
                     } else {
@@ -275,7 +275,7 @@ impl PokerOnlineScreen {
                     };
 
                     self.players.push(PlayerConfig {
-                        id: self.next_player_id,
+                        id: mcg_shared::PlayerId(self.next_player_id),
                         name: player_name,
                         is_bot: false, // New players start as human by default
                     });
@@ -370,7 +370,7 @@ impl PokerOnlineScreen {
             for (idx, p) in state.players.iter().enumerate() {
                 let me = p.id == state.you_id;
                 ui.horizontal(|ui| {
-                    if state.to_act == idx && state.stage != Stage::Showdown {
+                    if p.id == state.to_act && state.stage != Stage::Showdown {
                         ui.colored_label(Color32::from_rgb(255, 215, 0), "●");
                     } else {
                         ui.label("  ");
@@ -410,7 +410,7 @@ impl PokerOnlineScreen {
                         }
 
                         // Action buttons placed below the player's cards
-                        if state.to_act == idx && state.stage != Stage::Showdown {
+                        if p.id == state.to_act && state.stage != Stage::Showdown {
                             // Normal active action buttons during the hand
                             self.render_action_row(ui, p.id, true, false);
                             ui.add_space(6.0);
@@ -448,7 +448,12 @@ impl PokerOnlineScreen {
 
     // Centralized action buttons for a given player id.
     // Callers should check whether the player is active and whether the stage allows actions.
-    fn render_action_buttons(&self, ui: &mut egui::Ui, player_id: usize, enabled: bool) {
+    fn render_action_buttons(
+        &self,
+        ui: &mut egui::Ui,
+        player_id: mcg_shared::PlayerId,
+        enabled: bool,
+    ) {
         ui.horizontal(|ui| {
             let check_label = RichText::new("✔ Check / Call").size(18.0);
             if enabled {
@@ -512,7 +517,7 @@ impl PokerOnlineScreen {
     fn render_action_row(
         &self,
         ui: &mut egui::Ui,
-        player_id: usize,
+        player_id: mcg_shared::PlayerId,
         enabled: bool,
         show_next: bool,
     ) {
@@ -699,7 +704,7 @@ fn category_text(cat: &mcg_shared::HandRankCategory) -> &'static str {
     }
 }
 
-fn name_of(players: &[PlayerPublic], id: usize) -> String {
+fn name_of(players: &[PlayerPublic], id: mcg_shared::PlayerId) -> String {
     players
         .iter()
         .find(|p| p.id == id)
@@ -756,7 +761,7 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
     for (idx, p) in state.players.iter().enumerate() {
         let you = if p.id == state.you_id { " (you)" } else { "" };
         let folded = if p.has_folded { ", folded:true" } else { "" };
-        let to_act = if state.stage != Stage::Showdown && state.to_act == idx {
+        let to_act = if state.stage != Stage::Showdown && p.id == state.to_act {
             ", to_act:true"
         } else {
             ""
@@ -872,7 +877,7 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
     out
 }
 
-fn log_entry_row(ui: &mut egui::Ui, entry: &ActionEvent, players: &[PlayerPublic], you_id: usize) {
+fn log_entry_row(ui: &mut egui::Ui, entry: &ActionEvent, players: &[PlayerPublic], you_id: mcg_shared::PlayerId) {
     match entry {
         ActionEvent::PlayerAction { player_id, action } => {
             let who_id = Some(*player_id);

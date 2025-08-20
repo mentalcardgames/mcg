@@ -17,28 +17,16 @@ async fn main() -> anyhow::Result<()> {
         Commands::State => {
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(
-                        &peer,
-                        ClientMsg::RequestState { player_id: 0 },
-                        cli.wait_ms,
-                    )
-                    .await?
+                    cli::run_once_iroh(&peer, ClientMsg::RequestState { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
+                        .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(
-                        &addr,
-                        ClientMsg::RequestState { player_id: 0 },
-                        cli.wait_ms,
-                    )
-                    .await?
+                    cli::run_once_http(&addr, ClientMsg::RequestState { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
+                        .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(
-                        &addr,
-                        ClientMsg::RequestState { player_id: 0 },
-                        cli.wait_ms,
-                    )
-                    .await?
+                    cli::run_once_ws(&addr, ClientMsg::RequestState { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
+                        .await?
                 }
             };
             if let Some(state) = latest {
@@ -56,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
                     cli::run_once_iroh(
                         &peer,
                         ClientMsg::Action {
-                            player_id: 0,
+                            player_id: mcg_shared::PlayerId(0),
                             action: pa,
                         },
                         cli.wait_ms,
@@ -67,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
                     cli::run_once_http(
                         &addr,
                         ClientMsg::Action {
-                            player_id: 0,
+                            player_id: mcg_shared::PlayerId(0),
                             action: pa,
                         },
                         cli.wait_ms,
@@ -78,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
                     cli::run_once_ws(
                         &addr,
                         ClientMsg::Action {
-                            player_id: 0,
+                            player_id: mcg_shared::PlayerId(0),
                             action: pa,
                         },
                         cli.wait_ms,
@@ -93,28 +81,16 @@ async fn main() -> anyhow::Result<()> {
         Commands::NextHand => {
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(
-                        &peer,
-                        ClientMsg::NextHand { player_id: 0 },
-                        cli.wait_ms,
-                    )
-                    .await?
+                    cli::run_once_iroh(&peer, ClientMsg::NextHand { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
+                        .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(
-                        &addr,
-                        ClientMsg::NextHand { player_id: 0 },
-                        cli.wait_ms,
-                    )
-                    .await?
+                    cli::run_once_http(&addr, ClientMsg::NextHand { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
+                        .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(
-                        &addr,
-                        ClientMsg::NextHand { player_id: 0 },
-                        cli.wait_ms,
-                    )
-                    .await?
+                    cli::run_once_ws(&addr, ClientMsg::NextHand { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
+                        .await?
                 }
             };
             if let Some(state) = latest {
@@ -124,12 +100,12 @@ async fn main() -> anyhow::Result<()> {
         Commands::NewGame => {
             let players = vec![
                 PlayerConfig {
-                    id: 0,
+                    id: mcg_shared::PlayerId(0),
                     name: cli.name.clone(),
                     is_bot: false,
                 },
                 PlayerConfig {
-                    id: 1,
+                    id: mcg_shared::PlayerId(1),
                     name: "Bot 1".to_string(),
                     is_bot: true,
                 },

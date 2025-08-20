@@ -63,7 +63,10 @@ impl Default for AppState {
 }
 
 /// Create a new game with the specified players.
-pub async fn create_new_game(state: &AppState, players: Vec<mcg_shared::PlayerConfig>) -> Result<()> {
+pub async fn create_new_game(
+    state: &AppState,
+    players: Vec<mcg_shared::PlayerConfig>,
+) -> Result<()> {
     let mut lobby = state.lobby.write().await;
     let player_count = players.len();
 
@@ -71,20 +74,20 @@ pub async fn create_new_game(state: &AppState, players: Vec<mcg_shared::PlayerCo
     // is agnostic about bot status; the backend tracks bot-driven IDs separately.
     let mut game_players = Vec::new();
     let mut bot_ids: Vec<usize> = Vec::new();
-    for config in &players {
-        if config.is_bot {
-            bot_ids.push(config.id);
+        for config in &players {
+            if config.is_bot {
+                bot_ids.push(config.id.into());
+            }
+            let player = Player {
+                id: config.id.into(),
+                name: config.name.clone(),
+                stack: 1000,   // Default stack size
+                cards: [0, 0], // Empty cards initially
+                has_folded: false,
+                all_in: false,
+            };
+            game_players.push(player);
         }
-        let player = Player {
-            id: config.id,
-            name: config.name.clone(),
-            stack: 1000, // Default stack size
-            cards: [0, 0], // Empty cards initially
-            has_folded: false,
-            all_in: false,
-        };
-        game_players.push(player);
-    }
     // Store bot ids on the lobby so backend drive logic can consult it.
     lobby.bots = bot_ids;
 
@@ -98,33 +101,37 @@ pub async fn create_new_game(state: &AppState, players: Vec<mcg_shared::PlayerCo
     Ok(())
 }
 
-pub async fn current_state_public(state: &AppState, you_id: usize) -> Option<GameStatePublic> {
+pub async fn current_state_public(
+    state: &AppState,
+    viewer: mcg_shared::PlayerId,
+) -> Option<GameStatePublic> {
     let lobby_r = state.lobby.read().await;
     if let Some(game) = &lobby_r.game {
-        let gs = game.public_for(you_id);
+        let gs = game.public_for(viewer);
         Some(gs)
     } else {
         None
     }
 }
 
-
-
-
-
 /// Broadcast the current state (and print new events to server console) to all subscribers.
-pub async fn broadcast_state(state: &AppState, you_id: usize) {
-    if let Some(gs) = current_state_public(state, you_id).await {
+///
+/// The `viewer` parameter controls which personalized view (you/cards visibility) is
+/// computed before broadcasting. Transports should pass the relevant PlayerId for the
+/// socket/client that triggered the update.
+pub async fn broadcast_state(state: &AppState, viewer: mcg_shared::PlayerId) {
+    if let Some(gs) = current_state_public(state, viewer).await {
         // Print any newly added events to server console and update bookkeeping.
         let mut lobby = state.lobby.write().await;
         let already = lobby.last_printed_log_len;
         let total = gs.action_log.len();
         if total > already {
             for e in gs.action_log.iter().skip(already) {
+                // Use the provided viewer id when formatting server-side logs.
                 let line = pretty::format_event_human(
                     e,
                     &gs.players,
-                    gs.you_id,
+                    viewer.into(),
                     std::io::stdout().is_terminal(),
                 );
                 println!("{}", line);
@@ -204,15 +211,22 @@ pub async fn validate_and_apply_action(
 }
 
 /// Broadcast the current state (and trigger bots if enabled).
-pub async fn broadcast_and_drive(state: &AppState, you_id: usize, min_ms: u64, max_ms: u64) {
+///
+/// `viewer` should be the PlayerId used to compute the personalized view sent to clients.
+pub async fn broadcast_and_drive(
+    state: &AppState,
+    viewer: mcg_shared::PlayerId,
+    min_ms: u64,
+    max_ms: u64,
+) {
     // Broadcast updated state to subscribers.
-    broadcast_state(state, you_id).await;
+    broadcast_state(state, viewer).await;
     // Drive bots (drive_bots_with_delays itself respects lobby.bots_auto).
-    drive_bots_with_delays(state, you_id, min_ms, max_ms).await;
+    drive_bots_with_delays(state, min_ms, max_ms).await;
 }
 
 /// Advance to the next hand (increment dealer, start a new hand) and print a table header.
-pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result<()> {
+pub async fn start_new_hand_and_print(state: &AppState) -> Result<()> {
     let mut lobby = state.lobby.write().await;
     if let Some(game) = &mut lobby.game {
         let n = game.players.len();
@@ -222,7 +236,9 @@ pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result
         game.start_new_hand()?;
         let sb = game.sb;
         let bb = game.bb;
-        let gs = game.public_for(you_id);
+        // start_new_hand_and_print runs in server-side context; use a default viewer (PlayerId(0))
+        // for printing the table header and tracking printed log length.
+        let gs = game.public_for(mcg_shared::PlayerId(0));
         lobby.last_printed_log_len = gs.action_log.len();
         let header = pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
         println!("{}", header);
@@ -230,11 +246,9 @@ pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result
     Ok(())
 }
 
-
-
 /// Drive bots similarly to the websocket handler, but mutate shared state and
 /// broadcast resulting states. Exposed so iroh transport can reuse the same behaviour.
-pub async fn drive_bots_with_delays(state: &AppState, _you_id: usize, min_ms: u64, max_ms: u64) {
+pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) {
     // Ensure only one drive loop runs at a time.
     {
         let mut lobby = state.lobby.write().await;
@@ -312,7 +326,10 @@ pub async fn drive_bots_with_delays(state: &AppState, _you_id: usize, min_ms: u6
                             }
                         }
                         Err(e) => {
-                            eprintln!("[BOT] failed to apply action for bot id {}: {}", actor_id, e);
+                            eprintln!(
+                                "[BOT] failed to apply action for bot id {}: {}",
+                                actor_id, e
+                            );
                             false
                         }
                     }
@@ -322,13 +339,15 @@ pub async fn drive_bots_with_delays(state: &AppState, _you_id: usize, min_ms: u6
             }
         };
 
+        // Broadcast updated state using the acting player's id (viewer-specific state)
+        // Always broadcast the state resulting from the attempted bot action so clients
+        // observe the latest changes even if the bot's action didn't advance the turn.
+        crate::backend::broadcast_state(state, mcg_shared::PlayerId(actor_id)).await;
+
         if !applied_and_advanced {
             // Stop driving bots for now; give control back to caller/human/other logic.
             break;
         }
-
-        // Broadcast updated state using the acting player's id (viewer-specific state)
-        crate::backend::broadcast_state(state, actor_id).await;
 
         // Sleep between bot actions (randomized within given bounds)
         let now_ns = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {

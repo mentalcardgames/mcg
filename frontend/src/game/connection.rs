@@ -35,14 +35,19 @@ impl ConnectionService {
 
     /// Connect to a server (wasm) or record an error on native builds.
     /// `players` is sent as a NewGame message once the socket is open.
-    pub fn connect_with_players(&mut self, _server_address: &str, _players: Vec<mcg_shared::PlayerConfig>, ctx: &Context) {
+    pub fn connect_with_players(
+        &mut self,
+        server_address: &str,
+        players: Vec<mcg_shared::PlayerConfig>,
+        ctx: &Context,
+    ) {
         {
-            let ws_url = format!("ws://{}/ws", _server_address);
+            let ws_url = format!("ws://{}/ws", server_address);
             match WebSocket::new(&ws_url) {
                 Ok(ws) => {
                     // prepare newgame payload
                     let newgame = serde_json::to_string(&ClientMsg::NewGame {
-                        players: _players.clone(),
+                        players: players.clone(),
                     })
                     .unwrap();
 
@@ -73,7 +78,7 @@ impl ConnectionService {
                     // onerror -> push into error_inbox
                     let err_inbox = Rc::clone(&self.error_inbox);
                     let ctx_for_err = ctx.clone();
-                    let server_address_err = _server_address.to_string();
+                    let server_address_err = server_address.to_string();
                     let onerror = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
                         err_inbox.borrow_mut().push(format!(
                             "Failed to connect to server at {}.",
@@ -87,7 +92,7 @@ impl ConnectionService {
                     // onclose -> push into error_inbox
                     let err_inbox = Rc::clone(&self.error_inbox);
                     let ctx_for_close = ctx.clone();
-                    let server_address_close = _server_address.to_string();
+                    let server_address_close = server_address.to_string();
                     let onclose = Closure::<dyn FnMut(CloseEvent)>::new(move |e: CloseEvent| {
                         let code = e.code();
                         let reason = e.reason();

@@ -76,8 +76,6 @@ impl Game {
         Ok(g)
     }
 
-
-
     #[cfg(test)]
     #[allow(dead_code)]
     pub fn new_with_seed(human_name: String, bot_count: usize, seed: u64) -> Result<Self> {
@@ -128,19 +126,16 @@ impl Game {
         Ok(g)
     }
 
-    pub fn public_for(&self, viewer_id: usize) -> GameStatePublic {
+    pub fn public_for(&self, viewer: mcg_shared::PlayerId) -> GameStatePublic {
         let players = self
             .players
             .iter()
             .map(|p| PlayerPublic {
-                id: p.id,
+                id: mcg_shared::PlayerId(p.id),
                 name: p.name.clone(),
                 stack: p.stack,
-                cards: if p.id == viewer_id {
-                    Some(p.cards)
-                } else {
-                    None
-                },
+                // Expose hole cards for all players in the public state.
+                cards: Some(p.cards),
                 has_folded: p.has_folded,
             })
             .collect();
@@ -151,10 +146,15 @@ impl Game {
             pot: self.pot,
             sb: self.sb,
             bb: self.bb,
-            to_act: self.to_act,
+            you_id: viewer,
+            to_act: mcg_shared::PlayerId(self.to_act),
             stage: self.stage,
-            you_id: viewer_id,
-            winner_ids: self.winner_ids.clone(),
+            winner_ids: self
+                .winner_ids
+                .clone()
+                .into_iter()
+                .map(mcg_shared::PlayerId)
+                .collect(),
             action_log: self.recent_actions.clone(),
         }
     }

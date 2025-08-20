@@ -1,5 +1,5 @@
 use eframe::Frame;
-use egui::{Color32, RichText, Layout, Align, ScrollArea, Grid, Button, vec2};
+use egui::{vec2, Align, Button, Color32, Grid, Layout, RichText, ScrollArea};
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::sprintln;

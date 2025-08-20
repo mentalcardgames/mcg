@@ -152,7 +152,10 @@ impl App {
                     self.game_dnd.set_config(config);
                     self.change_route("/game-dnd");
                 }
-                AppEvent::StartGameWithPlayers { server_address, players } => {
+                AppEvent::StartGameWithPlayers {
+                    server_address,
+                    players,
+                } => {
                     // For now, just navigate to the game screen
                     // TODO: Pass the connection info to the game screen
                     self.change_route("/game");

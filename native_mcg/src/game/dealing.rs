@@ -43,7 +43,9 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()
         })?;
         p.cards = [c1, c2];
         // collect typed events to avoid mutable-borrow conflicts while iterating players
-        dealt_events.push(ActionEvent::game(GameAction::DealtHole { player_id: p.id }));
+        dealt_events.push(ActionEvent::game(GameAction::DealtHole {
+            player_id: mcg_shared::PlayerId(p.id),
+        }));
         println!(
             "[DEAL] {} gets {} {}",
             p.name,
@@ -100,7 +102,7 @@ fn post_blind(g: &mut Game, idx: usize, kind: BlindKind, amount: u32) {
         g.players[idx].all_in = true;
     }
     g.log(ActionEvent::player(
-        idx,
+        mcg_shared::PlayerId(idx),
         ActionKind::PostBlind { kind, amount: a },
     ));
     println!(

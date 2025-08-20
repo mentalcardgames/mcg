@@ -33,10 +33,10 @@ pub enum ActionKind {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GameAction {
     StageChanged(Stage),
-    DealtHole { player_id: usize },
+    DealtHole { player_id: PlayerId },
     DealtCommunity { cards: Vec<u8> },
     Showdown { hand_results: Vec<HandResult> },
-    PotAwarded { winners: Vec<usize>, amount: u32 },
+    PotAwarded { winners: Vec<PlayerId>, amount: u32 },
 }
 
 /// A single recorded action/event in the game. This is now the canonical,
@@ -45,7 +45,7 @@ pub enum GameAction {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ActionEvent {
     PlayerAction {
-        player_id: usize,
+        player_id: PlayerId,
         action: ActionKind,
     },
     GameAction(GameAction),
@@ -53,7 +53,7 @@ pub enum ActionEvent {
 
 impl ActionEvent {
     /// Helper to create a PlayerAction event from a player id + ActionKind
-    pub fn player(player_id: usize, action: ActionKind) -> Self {
+    pub fn player(player_id: PlayerId, action: ActionKind) -> Self {
         ActionEvent::PlayerAction { player_id, action }
     }
 
@@ -67,6 +67,26 @@ impl ActionEvent {
 pub enum BlindKind {
     SmallBlind,
     BigBlind,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct PlayerId(pub usize);
+
+impl From<usize> for PlayerId {
+    fn from(v: usize) -> Self {
+        PlayerId(v)
+    }
+}
+impl From<PlayerId> for usize {
+    fn from(pid: PlayerId) -> Self {
+        pid.0
+    }
+}
+
+impl std::fmt::Display for PlayerId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -90,7 +110,7 @@ pub struct HandRank {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HandResult {
-    pub player_id: usize,
+    pub player_id: PlayerId,
     pub rank: HandRank,
     pub best_five: [u8; 5],
 }
@@ -101,7 +121,7 @@ pub struct HandResult {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerPublic {
-    pub id: usize,
+    pub id: PlayerId,
     pub name: String,
     pub stack: u32,
     pub cards: Option<[u8; 2]>, // only set for the viewer
@@ -117,18 +137,19 @@ pub struct GameStatePublic {
     pub sb: u32,
     #[serde(default)]
     pub bb: u32,
-    pub to_act: usize,
+    /// The viewer/player this public state is tailored for.
+    pub you_id: PlayerId,
+    pub to_act: PlayerId,
     pub stage: Stage,
-    pub you_id: usize,
     #[serde(default)]
-    pub winner_ids: Vec<usize>,
+    pub winner_ids: Vec<PlayerId>,
     #[serde(default)]
     pub action_log: Vec<ActionEvent>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerConfig {
-    pub id: usize,
+    pub id: PlayerId,
     pub name: String,
     pub is_bot: bool, // true if driven by bot mechanisms, false if waits for messages
 }
@@ -138,28 +159,21 @@ pub struct PlayerConfig {
 pub enum ClientMsg {
     /// Player-initiated action: must specify which player is performing the action.
     Action {
-        player_id: usize,
+        player_id: PlayerId,
         action: PlayerAction,
     },
     /// Request the current state for a particular player (you_id in State will reflect this).
-    RequestState {
-        player_id: usize,
-    },
+    RequestState { player_id: PlayerId },
     /// Request to advance to the next hand on behalf of a specific player.
-    NextHand {
-        player_id: usize,
-    },
+    NextHand { player_id: PlayerId },
     /// Start a new game with the specified players. Each player has an ID, name, and bot flag.
-    NewGame {
-        players: Vec<PlayerConfig>,
-    },
-
+    NewGame { players: Vec<PlayerConfig> },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum ServerMsg {
-    Welcome { you: usize },
+    Welcome { you: PlayerId },
     State(GameStatePublic),
     Error(String),
 }

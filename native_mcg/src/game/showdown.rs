@@ -17,7 +17,7 @@ pub(crate) fn finish_showdown(g: &mut Game) {
         let rank = evaluate_best_hand(p.cards, &g.community);
         let best_five = pick_best_five(p.cards, &g.community, &rank);
         results.push(HandResult {
-            player_id: i,
+            player_id: mcg_shared::PlayerId(i),
             rank,
             best_five,
         });
@@ -25,7 +25,7 @@ pub(crate) fn finish_showdown(g: &mut Game) {
 
     // Determine winners (top rank; split on ties)
     results.sort_by(|a, b| a.rank.cmp(&b.rank));
-    let winners: Vec<usize> = if let Some(best) = results.last().cloned() {
+    let winners: Vec<mcg_shared::PlayerId> = if let Some(best) = results.last().cloned() {
         results
             .iter()
             .rev()
@@ -35,7 +35,7 @@ pub(crate) fn finish_showdown(g: &mut Game) {
     } else {
         vec![]
     };
-    g.winner_ids = winners.clone();
+    g.winner_ids = winners.clone().into_iter().map(|p| p.into()).collect();
 
     g.log(ActionEvent::game(GameAction::Showdown {
         hand_results: results.clone(),
@@ -50,7 +50,8 @@ pub(crate) fn finish_showdown(g: &mut Game) {
                 win += 1;
                 remainder -= 1;
             }
-            g.players[w].stack += win;
+            let w_idx: usize = w.into();
+            g.players[w_idx].stack += win;
         }
         g.log(ActionEvent::game(GameAction::PotAwarded {
             winners: winners.clone(),

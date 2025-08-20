@@ -224,7 +224,7 @@ async fn handle_iroh_connection(
                 }
                 return Ok(());
             }
-        },
+        }
         _ => {
             if let Err(e) =
                 send_server_msg_to_writer(&mut send, &ServerMsg::Error("Expected NewGame".into()))
@@ -237,14 +237,25 @@ async fn handle_iroh_connection(
     };
 
     // Log connect
-    println!("{} {}", "[IROH CONNECT]".bold().green(), "New Game Client".bold());
+    println!(
+        "{} {}",
+        "[IROH CONNECT]".bold().green(),
+        "New Game Client".bold()
+    );
 
-    if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::Welcome { you: 0 }).await {
+    if let Err(e) = send_server_msg_to_writer(
+        &mut send,
+        &ServerMsg::Welcome {
+            you: mcg_shared::PlayerId(0),
+        },
+    )
+    .await
+    {
         eprintln!("iroh send error: {}", e);
     }
 
     // Send initial state directly to this client (same behaviour as websocket)
-    if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
+    if let Some(gs) = crate::backend::current_state_public(&state, mcg_shared::PlayerId(0)).await {
         if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await {
             eprintln!("iroh send error: {}", e);
         }
@@ -306,7 +317,7 @@ async fn handle_iroh_connection(
                                             }
                                         }
 
-                                        match crate::backend::validate_and_apply_action(&state, player_id, action.clone()).await {
+                                        match crate::backend::validate_and_apply_action(&state, player_id.into(), action.clone()).await {
                                             Ok(()) => {
                                                 // Send updated state to this client
                                                 if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
@@ -340,13 +351,13 @@ async fn handle_iroh_connection(
                                             }
                                         }
 
-                                        if let Err(e) = crate::backend::start_new_hand_and_print(&state, player_id).await {
+                                        if let Err(e) = crate::backend::start_new_hand_and_print(&state).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
                                         } else {
                                             if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
                                                 let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
                                             }
-                                            crate::backend::broadcast_and_drive(&state, 0, 500, 1500).await;
+                                            crate::backend::broadcast_and_drive(&state, mcg_shared::PlayerId(0), 500, 1500).await;
                                         }
                                     }
                                     ClientMsg::NewGame { players } => {
@@ -355,10 +366,10 @@ async fn handle_iroh_connection(
                                         if let Err(e) = crate::backend::create_new_game(&state, players).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to create new game: {}", e))).await;
                                         } else {
-                                            if let Some(gs) = crate::backend::current_state_public(&state, 0).await {
+                                            if let Some(gs) = crate::backend::current_state_public(&state, mcg_shared::PlayerId(0)).await {
                                                 let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
                                             }
-                                            crate::backend::broadcast_and_drive(&state, 0, 500, 1500).await;
+                                            crate::backend::broadcast_and_drive(&state, mcg_shared::PlayerId(0), 500, 1500).await;
                                         }
                                     }
                                 }
@@ -377,7 +388,11 @@ async fn handle_iroh_connection(
         }
     }
 
-    println!("{} {}", "[IROH DISCONNECT]".bold().red(), "New Game Client".bold());
+    println!(
+        "{} {}",
+        "[IROH DISCONNECT]".bold().red(),
+        "New Game Client".bold()
+    );
     // Close the send side politely if available
     let _ = send.finish();
     connection.closed().await;

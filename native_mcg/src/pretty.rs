@@ -1,5 +1,5 @@
 use mcg_shared::{
-    ActionEvent, ActionKind as SharedActionKind, BlindKind, GameAction, GameStatePublic,
+    ActionEvent, ActionKind as SharedActionKind, BlindKind, GameAction, GameStatePublic, PlayerId,
     PlayerPublic, Stage,
 };
 use owo_colors::OwoColorize;
@@ -79,7 +79,7 @@ fn format_cards(cards: &[u8], color: bool) -> String {
         .join(", ")
 }
 
-fn player_name(players: &[PlayerPublic], id: usize, you_id: usize, color: bool) -> String {
+fn player_name(players: &[PlayerPublic], id: PlayerId, you_id: PlayerId, color: bool) -> String {
     let base = players
         .iter()
         .find(|p| p.id == id)
@@ -99,7 +99,7 @@ fn player_name(players: &[PlayerPublic], id: usize, you_id: usize, color: bool) 
 fn format_log_entry(
     entry: &ActionEvent,
     players: &[PlayerPublic],
-    you_id: usize,
+    you_id: PlayerId,
     color: bool,
 ) -> String {
     match entry {
@@ -192,7 +192,7 @@ fn format_log_entry(
 pub fn format_event_human(
     entry: &ActionEvent,
     players: &[PlayerPublic],
-    you_id: usize,
+    you_id: PlayerId,
     color: bool,
 ) -> String {
     match entry {
