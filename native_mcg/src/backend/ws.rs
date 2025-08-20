@@ -21,53 +21,22 @@ pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
-    let primary_player_id = match socket.next().await {
-        Some(Ok(Message::Text(t))) => match serde_json::from_str::<mcg_shared::ClientMsg>(&t) {
-            Ok(mcg_shared::ClientMsg::NewGame { players }) => {
-                // Create new game with the specified players
-                if let Err(e) = super::state::create_new_game(&state, players).await {
-                    let _ = send_ws(
-                        &mut socket,
-                        &mcg_shared::ServerMsg::Error(format!("Failed to create new game: {}", e)),
-                    )
-                    .await;
-                    return;
-                }
-                mcg_shared::PlayerId(0) // Default player ID for initial state
-            }
-            _ => {
-                send_ws(
-                    &mut socket,
-                    &mcg_shared::ServerMsg::Error("Expected NewGame message".into()),
-                )
-                .await;
-                return;
-            }
-        },
-        _ => return,
-    };
-
+    // Immediately accept the connection and perform a lightweight handshake.
+    // Do NOT require the first client message to be `NewGame` — transports
+    // should be able to send any supported `ClientMsg` after receiving a
+    // `Welcome`/initial `State` from the server. We keep the default viewer
+    // id as 0 for now; transports or future session managers can assign
+    // concrete player ids later without changing transport handlers.
     let hello = format!(
-        "{} {} (primary player: {})",
+        "{} {}",
         "[CONNECT]".bold().green(),
-        "New Game".bold(),
-        primary_player_id
+        "Client".bold(),
     );
     println!("{}", hello);
 
-    send_ws(
-        &mut socket,
-        &mcg_shared::ServerMsg::Welcome {
-            you: primary_player_id,
-        },
-    )
-    .await;
-    // Send initial state directly to this socket (does local printing & bookkeeping).
+    // Send welcome + initial state immediately (mirrors iroh behaviour).
+    let _ = send_ws(&mut socket, &mcg_shared::ServerMsg::Welcome).await;
     send_state_to(&mut socket, &state).await;
-    // After creating a new game via the initial NewGame handshake, trigger broadcast
-    // and bot driving so server-side bots begin acting without requiring an extra
-    // client message (fixes stuck-game where bots don't advance play).
-    super::state::broadcast_and_drive(&state, 500, 1500).await;
 
     // Subscribe to broadcasts so this socket receives state updates produced by other connections.
     let mut rx = state.broadcaster.subscribe();
@@ -80,22 +49,11 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
             biased_recv = rx.recv() => {
                 match biased_recv {
                     Ok(sm) => {
-                        // If this is a State message, re-compute a personalized view
-                        // for this socket's primary_player_id before sending. This ensures
-                        // we don't broadcast a state that was generated for another viewer
-                        // (which would incorrectly change `you`/card visibility on recipients).
-                        match sm {
-                            mcg_shared::ServerMsg::State(_) => {
-                                // Re-send a viewer-specific state to this socket.
-                                // send_state_to will call current_state_public(viewer_id)
-                                // so the you_id and card visibility are correct per-client.
-                                send_state_to(&mut socket, &state ).await;
-                            }
-                            _ => {
-                                // Forward other server messages unchanged.
-                                send_ws(&mut socket, &sm).await;
-                            }
-                        }
+                        // Forward all ServerMsg values unchanged. The backend no longer
+                        // maintains a notion of a per-connection primary player or a
+                        // personalized view — transports should forward server messages
+                        // as-is to their clients.
+                        send_ws(&mut socket, &sm).await;
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => {
                         // We missed messages; continue and try to catch up on next send.
@@ -113,7 +71,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                 match msg {
                     Some(Ok(Message::Text(txt))) => {
                         if let Ok(cm) = serde_json::from_str::<mcg_shared::ClientMsg>(&txt) {
-                            process_client_msg(&state, &mut socket, cm, primary_player_id).await;
+                            process_client_msg(&state, &mut socket, cm).await;
                         } else {
                             eprintln!("[WS] Failed to parse incoming ClientMsg JSON");
                             // Debug: log raw incoming text so we can see what the client actually sends.
@@ -166,24 +124,11 @@ async fn send_state_to(socket: &mut WebSocket, state: &AppState) {
     }
 }
 
-async fn process_client_msg(
-    state: &AppState,
-    socket: &mut WebSocket,
-    cm: mcg_shared::ClientMsg,
-    primary_player_id: mcg_shared::PlayerId,
-) {
+async fn process_client_msg(state: &AppState, socket: &mut WebSocket, cm: mcg_shared::ClientMsg) {
     // Delegate handling to the centralized backend handler to ensure consistent behavior.
-    println!("[WS] Received ClientMsg from primary_player_id={}: {:?}", primary_player_id, cm);
+    println!("[WS] Received ClientMsg: {:?}", cm);
     let resp = crate::backend::handle_client_msg(state, cm).await;
 
-    match &resp {
-        // For websockets we compute a personalized state view for the requesting socket.
-        mcg_shared::ServerMsg::State(_) => {
-            send_state_to(socket, state).await;
-        }
-        // Forward other server messages unchanged.
-        other => {
-            let _ = send_ws(socket, other).await;
-        }
-    }
+    // Forward the backend response to this socket unchanged.
+    let _ = send_ws(socket, &resp).await;
 }

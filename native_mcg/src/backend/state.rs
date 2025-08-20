@@ -112,9 +112,10 @@ pub async fn current_state_public(state: &AppState) -> Option<GameStatePublic> {
 
 /// Broadcast the current state (and print new events to server console) to all subscribers.
 ///
-/// The `viewer` parameter controls which personalized view (you/cards visibility) is
-/// computed before broadcasting. Transports should pass the relevant PlayerId for the
-/// socket/client that triggered the update.
+/// Transports receive the same `ServerMsg::State` payload; the backend does not
+/// embed per-connection personalization in the broadcast. If transports or a
+/// future session manager needs to expose client-specific views, they should
+/// compute those on the transport/session layer.
 pub async fn broadcast_state(state: &AppState) {
     if let Some(gs) = current_state_public(state).await {
         // Print any newly added events to server console and update bookkeeping.

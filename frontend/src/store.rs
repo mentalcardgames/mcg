@@ -123,7 +123,7 @@ pub fn bootstrap_state() -> SharedState {
 pub fn apply_server_msg(state: &SharedState, msg: ServerMsg) {
     let mut s = state.borrow_mut();
     match msg {
-        ServerMsg::Welcome { .. } => {
+        ServerMsg::Welcome => {
             s.connection_status = ConnectionStatus::Connected;
             s.last_info = Some("Connected".into());
             s.last_error = None;

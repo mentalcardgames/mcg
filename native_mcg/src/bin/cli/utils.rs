@@ -1,4 +1,4 @@
-use std::{io::IsTerminal, num};
+use std::io::IsTerminal;
 
 use mcg_shared::{GameStatePublic, PlayerConfig, ServerMsg};
 
@@ -65,7 +65,7 @@ pub fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
             }
         }
         ServerMsg::Error(e) => eprintln!("Server error: {}", e),
-        ServerMsg::Welcome { .. } => {
+        ServerMsg::Welcome => {
             if json {
                 // If user wants JSON, print the welcome message as JSON.
                 if let Ok(txt) = serde_json::to_string_pretty(sm) {

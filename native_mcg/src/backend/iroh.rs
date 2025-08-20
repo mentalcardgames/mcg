@@ -30,7 +30,7 @@ use mcg_shared::{ClientMsg, ServerMsg};
 pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // Keep the iroh-specific imports local to this function so the module does
     // not require iroh at compile time when the feature is disabled.
-    use getrandom::getrandom;
+    // `getrandom` will be imported in `load_or_generate_iroh_secret` where it's used.
     use iroh::SecretKey;
 
     // Application ALPN identifier (must match client)
@@ -205,7 +205,10 @@ async fn handle_iroh_connection(
         "New Game Client".bold()
     );
 
-    // Send welcome + initial state
+    // Send welcome + initial state immediately (do not require a Join/NewGame
+    // as the first client message). Transport-agnostic behaviour: each transport
+    // offers the same entrypoint: client can send any supported `ClientMsg`
+    // after receiving `Welcome` and an initial `State`.
     send_welcome_and_state(&state, &mut send).await;
 
     // Subscribe to global broadcasts so this iroh connection receives state updates
@@ -287,15 +290,7 @@ async fn send_welcome_and_state<W>(state: &AppState, send: &mut W)
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
-    if let Err(e) = send_server_msg_to_writer(
-        send,
-        //TODO: not 0
-        &ServerMsg::Welcome {
-            you: mcg_shared::PlayerId(0),
-        },
-    )
-    .await
-    {
+    if let Err(e) = send_server_msg_to_writer(send, &ServerMsg::Welcome).await {
         eprintln!("iroh send error: {}", e);
     }
 
