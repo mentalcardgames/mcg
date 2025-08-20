@@ -77,30 +77,22 @@ pub async fn run_once_iroh(
     client_msg: ClientMsg,
     wait_ms: u64,
 ) -> anyhow::Result<Option<GameStatePublic>> {
-    // Implement a minimal iroh client that:
-    // - creates a local endpoint
-    // - connects to the supplied peer URI
-    // - opens a bidirectional stream
-    // - sends newline-delimited JSON messages (provided client message)
-    // - reads newline-delimited ServerMsg responses and returns the last State seen
-    //
-    // Note: iroh APIs are imported inside the function to limit compile-time
-    // exposure when the feature is disabled.
+    // Note: keep iroh imports local to avoid compile-time requirement when feature is disabled.
     use iroh::endpoint::Endpoint;
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use iroh::PublicKey;
+    use std::str::FromStr;
+    use tokio::io::BufReader;
 
-    // ALPN must match the server's ALPN
     const ALPN: &[u8] = b"mcg/iroh/1";
 
-    // Bind a local endpoint (discovery_n0 for default settings)
+    // Build and bind local endpoint
     let endpoint = Endpoint::builder()
         .discovery_n0()
         .bind()
         .await
         .context("binding iroh endpoint for client")?;
 
-    use iroh::PublicKey;
-    use std::str::FromStr;
+    // Resolve peer public key and open connection + bidirectional stream
     let pk = PublicKey::from_str(peer_uri).context("parsing iroh public key (z-base-32)")?;
     let connection = endpoint
         .connect(pk, ALPN)
@@ -114,19 +106,47 @@ pub async fn run_once_iroh(
 
     let mut reader = BufReader::new(recv);
 
-    // Client message to send
-    {
-        let txt = serde_json::to_string(&client_msg)?;
-        send.write_all(txt.as_bytes()).await?;
-        send.write_all(b"\n").await?;
-        send.flush().await?;
-    }
+    // Send the client message using a small helper for clarity
+    send_client_msg_over_stream(&mut send, &client_msg).await?;
 
-    // Read newline-delimited JSON messages until timeout; track last State
+    // Read responses until timeout using a dedicated helper
+    let latest = read_iroh_responses_until_timeout(&mut reader, wait_ms).await?;
+
+    // Try to finish/close the send side politely if available
+    let _ = send.finish();
+
+    Ok(latest)
+}
+
+/// Write the provided ClientMsg as newline-delimited JSON to the given writer.
+async fn send_client_msg_over_stream<W>(send: &mut W, client_msg: &ClientMsg) -> anyhow::Result<()>
+where
+    W: tokio::io::AsyncWrite + Unpin + Send,
+{
+    use tokio::io::AsyncWriteExt;
+    let txt = serde_json::to_string(client_msg)?;
+    send.write_all(txt.as_bytes()).await?;
+    send.write_all(b"\n").await?;
+    send.flush().await?;
+    Ok(())
+}
+
+/// Read newline-delimited ServerMsg responses from `reader` until the timeout (ms)
+/// elapses. Returns the last seen GameStatePublic (if any).
+// TODO: this should skip the first welcome message
+async fn read_iroh_responses_until_timeout<R>(
+    reader: &mut R,
+    wait_ms: u64,
+) -> anyhow::Result<Option<GameStatePublic>>
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+{
+    use tokio::io::AsyncBufReadExt;
+
     let mut latest_state: Option<GameStatePublic> = None;
     let mut line = String::new();
+
     loop {
-        // read_line appends to the buffer so we clear before each call
         line.clear();
         match tokio::time::timeout(
             std::time::Duration::from_millis(wait_ms),
@@ -159,9 +179,6 @@ pub async fn run_once_iroh(
             Err(_) => break, // timeout
         }
     }
-
-    // Try to finish/close the send side politely if available
-    let _ = send.finish();
 
     Ok(latest_state)
 }

@@ -289,6 +289,7 @@ where
 {
     if let Err(e) = send_server_msg_to_writer(
         send,
+        //TODO: not 0
         &ServerMsg::Welcome {
             you: mcg_shared::PlayerId(0),
         },
