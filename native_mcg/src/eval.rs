@@ -1,19 +1,19 @@
-use mcg_shared::{HandRank, HandRankCategory};
+use mcg_shared::{Card, HandRank, HandRankCategory};
 
 /// Returns the rank index (0..=12) where 0 is Ace, 1 is 2, ..., 12 is King.
 #[inline]
-pub fn card_rank(c: u8) -> u8 {
-    c % 13
+pub fn card_rank(c: Card) -> u8 {
+    c.0 % 13
 }
 
 /// Returns the suit index (0..=3) where 0=Clubs, 1=Diamonds, 2=Hearts, 3=Spades.
 #[inline]
-pub fn card_suit(c: u8) -> u8 {
-    c / 13
+pub fn card_suit(c: Card) -> u8 {
+    c.0 / 13
 }
 
 /// Returns a string like "A♣", "T♦", etc.
-pub fn card_str(c: u8) -> String {
+pub fn card_str(c: Card) -> String {
     let rank_idx = card_rank(c) as usize;
     let suit_idx = card_suit(c) as usize;
     let ranks = [
@@ -25,12 +25,12 @@ pub fn card_str(c: u8) -> String {
 
 /// Evaluate the best 5-card hand from 2 hole + up to 5 community cards.
 /// Returns a HandRank with category and tiebreakers for comparison.
-pub fn evaluate_best_hand(hole: [u8; 2], community: &[u8]) -> HandRank {
+pub fn evaluate_best_hand(hole: [Card; 2], community: &[Card]) -> HandRank {
     let mut cards = Vec::with_capacity(7);
     cards.push(hole[0]);
     cards.push(hole[1]);
-    for &c in community {
-        cards.push(c);
+    for c in community {
+        cards.push(c.clone());
     }
     best_rank_from_seven(&cards)
 }
@@ -39,7 +39,7 @@ pub fn evaluate_best_hand(hole: [u8; 2], community: &[u8]) -> HandRank {
 /// Enumerates all 5-card combinations from the available cards (2 hole + up to 5 community),
 /// evaluates each with the same ranking logic, and returns the highest-ranked subset.
 /// If fewer than 5 cards are available (early streets), returns the highest-ranked available cards.
-pub fn pick_best_five(hole: [u8; 2], community: &[u8], _rank: &HandRank) -> [u8; 5] {
+pub fn pick_best_five(hole: [Card; 2], community: &[Card]) -> [Card; 5] {
     // Build list of available cards (2 hole + up to 5 community)
     let mut all = Vec::with_capacity(7);
     all.push(hole[0]);
@@ -53,7 +53,7 @@ pub fn pick_best_five(hole: [u8; 2], community: &[u8], _rank: &HandRank) -> [u8;
         all.sort_unstable_by(|a, b| {
             rank_value_high(card_rank(*b)).cmp(&rank_value_high(card_rank(*a)))
         });
-        let mut out = [0u8; 5];
+        let mut out = [Card(0); 5];
         let n = all.len().min(5);
         out[..n].copy_from_slice(&all[..n]);
         return out;
@@ -62,7 +62,7 @@ pub fn pick_best_five(hole: [u8; 2], community: &[u8], _rank: &HandRank) -> [u8;
     // Enumerate all 5-card combinations and select the one with the highest rank
     let n = all.len();
     let mut best_rank: Option<HandRank> = None;
-    let mut best_combo: [u8; 5] = [0; 5];
+    let mut best_combo: [Card; 5] = [Card(0); 5];
 
     for i in 0..(n - 4) {
         for j in (i + 1)..(n - 3) {
@@ -95,9 +95,9 @@ pub fn pick_best_five(hole: [u8; 2], community: &[u8], _rank: &HandRank) -> [u8;
 
 // ===== Internal helpers =====
 
-fn best_rank_from_seven(cards: &[u8]) -> HandRank {
+fn best_rank_from_seven(cards: &[Card]) -> HandRank {
     // Group by suit
-    let mut suit_cards: [Vec<u8>; 4] = [vec![], vec![], vec![], vec![]];
+    let mut suit_cards: [Vec<Card>; 4] = [vec![], vec![], vec![], vec![]];
     for &c in cards {
         suit_cards[card_suit(c) as usize].push(c);
     }
@@ -212,7 +212,7 @@ fn rank_value_high(r: u8) -> u8 {
     }
 }
 
-fn ranks_as_values_unique(cards: &[u8]) -> Vec<u8> {
+fn ranks_as_values_unique(cards: &[Card]) -> Vec<u8> {
     let mut v = cards
         .iter()
         .map(|&c| rank_value_high(card_rank(c)))

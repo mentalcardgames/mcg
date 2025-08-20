@@ -1,6 +1,6 @@
 use mcg_shared::{
-    ActionEvent, ActionKind as SharedActionKind, BlindKind, GameAction, GameStatePublic, PlayerId,
-    PlayerPublic, Stage,
+    ActionEvent, ActionKind as SharedActionKind, BlindKind, Card, GameAction, GameStatePublic,
+    PlayerId, PlayerPublic, Stage,
 };
 use owo_colors::OwoColorize;
 
@@ -49,9 +49,9 @@ fn rank_name(r: u8) -> &'static str {
     }
 }
 
-fn format_card(c: u8, color: bool) -> String {
-    let r = card_rank(c) as usize;
-    let s = card_suit(c);
+fn format_card(c: Card, color: bool) -> String {
+    let r = card_rank(c.0) as usize;
+    let s = card_suit(c.0);
     let face = card_faces()[r];
     let icon = suit_icon(s);
     let mut text = format!(
@@ -71,7 +71,7 @@ fn format_card(c: u8, color: bool) -> String {
 }
 
 #[allow(dead_code)]
-fn format_cards(cards: &[u8], color: bool) -> String {
+fn format_cards(cards: &[Card], color: bool) -> String {
     cards
         .iter()
         .map(|&c| format_card(c, color))

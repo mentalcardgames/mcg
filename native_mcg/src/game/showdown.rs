@@ -15,7 +15,7 @@ pub(crate) fn finish_showdown(g: &mut Game) {
             continue;
         }
         let rank = evaluate_best_hand(p.cards, &g.community);
-        let best_five = pick_best_five(p.cards, &g.community, &rank);
+        let best_five = pick_best_five(p.cards, &g.community);
         results.push(HandResult {
             player_id: mcg_shared::PlayerId(i),
             rank,

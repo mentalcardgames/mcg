@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
 
-use mcg_shared::{ActionEvent, ActionKind, BlindKind, GameAction};
+use mcg_shared::{ActionEvent, ActionKind, BlindKind, Card, GameAction};
 
 use super::Game;
 
@@ -12,7 +12,7 @@ use super::Game;
 impl Game {
     pub fn start_new_hand(&mut self) -> Result<()> {
         // Shuffle fresh deck
-        let mut deck: Vec<u8> = (0..52).collect();
+        let mut deck: Vec<Card> = (0..52).map(|i| Card(i)).collect();
         deck.shuffle(&mut rand::rng());
         start_new_hand_from_deck(self, deck).context("Failed to start new hand from shuffled deck")
     }
@@ -21,7 +21,7 @@ impl Game {
 /// Initialize a new hand using the provided deck order.
 /// This resets round state, deals hole cards, posts blinds and
 /// establishes the first player to act according to heads-up vs 3+ rules.
-pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<u8>) -> Result<()> {
+pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<Card>) -> Result<()> {
     g.deck = VecDeque::from(deck);
 
     // Deal hole cards
@@ -113,14 +113,14 @@ fn post_blind(g: &mut Game, idx: usize, kind: BlindKind, amount: u32) {
 
 #[cfg(test)]
 #[allow(dead_code)]
-pub(crate) fn shuffled_deck_with_seed(seed: u64) -> Vec<u8> {
+pub(crate) fn shuffled_deck_with_seed(seed: u64) -> Vec<Card> {
     // Simple LCG for deterministic shuffling in tests
     fn lcg(next: &mut u64) -> u32 {
         // Constants from Numerical Recipes
         *next = next.wrapping_mul(1664525).wrapping_add(1013904223);
         (*next >> 16) as u32
     }
-    let mut deck: Vec<u8> = (0..52).collect();
+    let mut deck: Vec<Card> = (0..52).map(|i| Card(i)).collect();
     let mut s = seed;
     // Fisher-Yates
     for i in (1..deck.len()).rev() {

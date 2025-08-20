@@ -3,7 +3,7 @@ use crate::store::{bootstrap_state, SharedState};
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
-    ActionEvent, ActionKind, BlindKind, ClientMsg, GameAction, GameStatePublic, PlayerAction,
+    ActionEvent, ActionKind, BlindKind, Card, ClientMsg, GameAction, GameStatePublic, PlayerAction,
     PlayerConfig, PlayerId, PlayerPublic, Stage,
 };
 
@@ -634,16 +634,17 @@ impl ScreenWidget for PokerOnlineScreen {
     }
 }
 
-fn card_chip(ui: &mut egui::Ui, c: u8) {
+//TODO: document this
+fn card_chip(ui: &mut egui::Ui, c: Card) {
     let (text, color) = card_text_and_color(c);
     let b = egui::widgets::Button::new(RichText::new(text).color(color).size(28.0))
         .min_size(egui::vec2(48.0, 40.0));
     ui.add(b);
 }
 
-fn card_text_and_color(c: u8) -> (String, Color32) {
-    let rank_idx = (c % 13) as usize;
-    let suit_idx = (c / 13) as usize;
+fn card_text_and_color(c: Card) -> (String, Color32) {
+    let rank_idx = (c.0 % 13) as usize;
+    let suit_idx = (c.0 / 13) as usize;
     let ranks = [
         "A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K",
     ];
@@ -701,7 +702,7 @@ fn name_of(players: &[PlayerPublic], id: mcg_shared::PlayerId) -> String {
         .unwrap_or_else(|| format!("Player {}", id))
 }
 
-fn card_text(c: u8) -> String {
+fn card_text(c: Card) -> String {
     card_text_and_color(c).0
 }
 

@@ -14,10 +14,6 @@ pub enum AppEvent {
     ChangeRoute(String),
     StartGame(screens::GameConfig<screens::DirectoryCardType>),
     StartDndGame(screens::GameConfig<screens::DirectoryCardType>),
-    StartGameWithPlayers {
-        server_address: String,
-        players: Vec<mcg_shared::PlayerConfig>,
-    },
     ExitGame,
 }
 
@@ -151,14 +147,6 @@ impl App {
                 AppEvent::StartDndGame(config) => {
                     self.game_dnd.set_config(config);
                     self.change_route("/game-dnd");
-                }
-                AppEvent::StartGameWithPlayers {
-                    server_address,
-                    players,
-                } => {
-                    // For now, just navigate to the game screen
-                    // TODO: Pass the connection info to the game screen
-                    self.change_route("/game");
                 }
                 AppEvent::ExitGame => {
                     self.change_route("/");

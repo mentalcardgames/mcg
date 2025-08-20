@@ -34,7 +34,7 @@ pub enum ActionKind {
 pub enum GameAction {
     StageChanged(Stage),
     DealtHole { player_id: PlayerId },
-    DealtCommunity { cards: Vec<u8> },
+    DealtCommunity { cards: Vec<Card> },
     Showdown { hand_results: Vec<HandResult> },
     PotAwarded { winners: Vec<PlayerId>, amount: u32 },
 }
@@ -71,6 +71,9 @@ pub enum BlindKind {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct PlayerId(pub usize);
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct Card(pub u8);
 
 impl From<usize> for PlayerId {
     fn from(v: usize) -> Self {
@@ -112,7 +115,7 @@ pub struct HandRank {
 pub struct HandResult {
     pub player_id: PlayerId,
     pub rank: HandRank,
-    pub best_five: [u8; 5],
+    pub best_five: [Card; 5],
 }
 
 /// LogEntry is a thin wrapper around the canonical ActionEvent. LogEntries
@@ -124,14 +127,14 @@ pub struct PlayerPublic {
     pub id: PlayerId,
     pub name: String,
     pub stack: u32,
-    pub cards: Option<[u8; 2]>, // only set for the viewer
+    pub cards: Option<[Card; 2]>, // only set for the viewer
     pub has_folded: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GameStatePublic {
     pub players: Vec<PlayerPublic>,
-    pub community: Vec<u8>,
+    pub community: Vec<Card>,
     pub pot: u32,
     #[serde(default)]
     pub sb: u32,

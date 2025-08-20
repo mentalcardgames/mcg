@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use mcg_shared::Card;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 
@@ -29,7 +30,6 @@ pub struct AppState {
 pub(crate) struct Lobby {
     pub(crate) game: Option<Game>,
     pub(crate) last_printed_log_len: usize,
-    pub(crate) bots_auto: bool,
     /// List of player IDs that should be driven by bots. Kept in the backend so
     /// the game engine remains unaware of bot status.
     pub(crate) bots: Vec<usize>,
@@ -43,7 +43,6 @@ impl Default for Lobby {
         Lobby {
             game: None,
             last_printed_log_len: 0,
-            bots_auto: true,
             bots: Vec::new(),
             driving: false,
         }
@@ -81,8 +80,8 @@ pub async fn create_new_game(
         let player = Player {
             id: config.id.into(),
             name: config.name.clone(),
-            stack: 1000,   // Default stack size
-            cards: [0, 0], // Empty cards initially
+            stack: 1000,               // Default stack size
+            cards: [Card(0), Card(0)], // Empty cards initially
             has_folded: false,
             all_in: false,
         };
@@ -249,15 +248,12 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
         // Exit if bots_auto disabled or no game present.
         {
             let lobby_r = state.lobby.read().await;
-            if !lobby_r.bots_auto {
-                break;
-            }
             if lobby_r.game.is_none() {
                 break;
             }
         }
 
-        // Determine current actor (index) and whether it's a bot.
+        // Determine current actor and whether it's a bot.
         let maybe_actor = {
             let lobby_r = state.lobby.read().await;
             if let Some(game) = &lobby_r.game {

@@ -17,7 +17,6 @@ pub struct Settings {
     pub name: String,
     pub server_address: String,
     pub bots: usize,
-    pub bots_auto: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -86,7 +85,6 @@ pub fn bootstrap_state() -> SharedState {
         // Default server address — set to a sensible local default here.
         server_address: "127.0.0.1:3000".to_string(),
         bots: 1,
-        bots_auto: true,
     };
 
     // initial pairing players (moved from UI default)
