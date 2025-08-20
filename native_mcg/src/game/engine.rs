@@ -76,55 +76,7 @@ impl Game {
         Ok(g)
     }
 
-    pub fn new(human_name: String, bot_count: usize) -> Result<Self> {
-        let mut deck: Vec<u8> = (0..52).collect();
-        deck.shuffle(&mut rand::rng());
 
-        let mut players = Vec::with_capacity(1 + bot_count);
-        players.push(Player {
-            id: 0,
-            name: human_name,
-            stack: 1000,
-            cards: [0, 0],
-            has_folded: false,
-            all_in: false,
-        });
-        for i in 0..bot_count {
-            players.push(Player {
-                id: i + 1,
-                name: format!("Bot {}", i + 1),
-                stack: 1000,
-                cards: [0, 0],
-                has_folded: false,
-                all_in: false,
-            });
-        }
-
-        let mut g = Self {
-            players,
-            deck: VecDeque::from(deck.clone()),
-            community: vec![],
-
-            pot: 0,
-            stage: Stage::Preflop,
-            dealer_idx: 0,
-            to_act: 0,
-            current_bet: 0,
-            min_raise: 0,
-            round_bets: vec![],
-
-            sb: 5,
-            bb: 10,
-
-            pending_to_act: Vec::new(),
-            recent_actions: Vec::new(),
-            winner_ids: Vec::new(),
-        };
-        // delegate dealing/init to sibling module
-        super::dealing::start_new_hand_from_deck(&mut g, deck)
-            .context("Failed to initialize new hand from deck")?;
-        Ok(g)
-    }
 
     #[cfg(test)]
     #[allow(dead_code)]

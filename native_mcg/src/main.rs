@@ -51,10 +51,7 @@ async fn main() -> anyhow::Result<()> {
     println!("Starting with {} bot(s)", bots);
 
     // Initialize shared state for the server and record config path for transports.
-    let mut state = AppState {
-        bot_count: bots,
-        ..Default::default()
-    };
+    let mut state = AppState::default();
     // Store config path and the loaded config into shared AppState so components
     // can access the single in-memory config instance.
     state.config_path = Some(config_path.clone());

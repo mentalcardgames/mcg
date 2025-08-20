@@ -1,6 +1,5 @@
 use eframe::Frame;
 use egui::{vec2, Color32, RichText, ScrollArea};
-use std::rc::Rc;
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::articles::Post;

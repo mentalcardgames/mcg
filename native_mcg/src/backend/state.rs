@@ -16,7 +16,6 @@ use mcg_shared::GameStatePublic;
 #[derive(Clone)]
 pub struct AppState {
     pub(crate) lobby: Arc<RwLock<Lobby>>,
-    pub bot_count: usize,
     pub broadcaster: broadcast::Sender<mcg_shared::ServerMsg>,
     /// In-memory shared Config instance. Holds the authoritative configuration
     /// for the running server. Use tokio::sync::RwLock for concurrent access.
@@ -48,7 +47,6 @@ impl Default for AppState {
         let (tx, _rx) = broadcast::channel(16);
         AppState {
             lobby: Arc::new(RwLock::new(Lobby::default())),
-            bot_count: 0,
             broadcaster: tx,
             config: std::sync::Arc::new(RwLock::new(crate::config::Config::default())),
             config_path: None,
@@ -90,46 +88,9 @@ pub async fn current_state_public(state: &AppState, you_id: usize) -> Option<Gam
     lobby.game.as_ref().map(|g| g.public_for(you_id))
 }
 
-/// Lookup a player's id by their connection name. Returns Some(id) if a
-/// matching player is present in the current game, or None otherwise.
-///
-/// This centralizes the logic used by multiple transports to determine the
-/// per-connection `you_id` for Welcome/initial state messages.
-pub async fn player_id_for_name(state: &AppState, name: &str) -> Option<usize> {
-    let lobby = state.lobby.read().await;
-    if let Some(game) = &lobby.game {
-        game.players.iter().find(|p| p.name == name).map(|p| p.id)
-    } else {
-        None
-    }
-}
 
-/// Register a player for the given connection `name` and return the assigned
-/// player id. This function is kept for compatibility but is now deprecated.
-/// New code should use create_new_game instead.
-///
-/// NOTE: This function is deprecated. Use create_new_game for new game creation.
-pub async fn register_player_id(state: &AppState, name: &str) -> Result<usize> {
-    // For backward compatibility, create a simple game with just this player and one bot
-    let players = vec![
-        mcg_shared::PlayerConfig {
-            id: 0,
-            name: name.to_string(),
-            is_bot: false,
-        },
-        mcg_shared::PlayerConfig {
-            id: 1,
-            name: "Bot 1".to_string(),
-            is_bot: true,
-        },
-    ];
 
-    if let Err(e) = create_new_game(state, players).await {
-        return Err(anyhow::anyhow!("Failed to create game: {}", e));
-    }
 
-    Ok(0) // Return the human player's ID
-}
 
 /// Broadcast the current state (and print new events to server console) to all subscribers.
 pub async fn broadcast_state(state: &AppState, you_id: usize) {
@@ -236,33 +197,7 @@ pub async fn start_new_hand_and_print(state: &AppState, you_id: usize) -> Result
     Ok(())
 }
 
-/// Reset the game with a new Game created for `name` with `bots` bots, and print header.
-pub async fn reset_game_with_bots(
-    state: &AppState,
-    name: &str,
-    bots: usize,
-    you_id: usize,
-) -> Result<()> {
-    let mut lobby = state.lobby.write().await;
-    match Game::new(name.to_string(), bots) {
-        Ok(g) => {
-            lobby.game = Some(g);
-            if let Some(game) = &mut lobby.game {
-                let sb = game.sb;
-                let bb = game.bb;
-                let gs = game.public_for(you_id);
-                lobby.last_printed_log_len = gs.action_log.len();
-                let header =
-                    pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
-                println!("{}", header);
-            }
-        }
-        Err(e) => {
-            return Err(e);
-        }
-    }
-    Ok(())
-}
+
 
 /// Drive bots similarly to the websocket handler, but mutate shared state and
 /// broadcast resulting states. Exposed so iroh transport can reuse the same behaviour.

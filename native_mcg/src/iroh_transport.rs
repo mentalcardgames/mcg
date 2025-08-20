@@ -210,7 +210,7 @@ async fn handle_iroh_connection(
         }
     };
 
-    let primary_player_id = match cm {
+    match cm {
         ClientMsg::NewGame { players } => {
             // Create new game with the specified players
             if let Err(e) = crate::backend::create_new_game(&state, players).await {
@@ -224,7 +224,6 @@ async fn handle_iroh_connection(
                 }
                 return Ok(());
             }
-            0 // Default player ID
         },
         _ => {
             if let Err(e) =

@@ -1,10 +1,9 @@
 use eframe::Frame;
-use egui::{vec2, Align, Button, Color32, Grid, Layout, RichText, ScrollArea};
-use std::rc::Rc;
+use egui::{Color32, RichText};
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::sprintln;
-use crate::store::{bootstrap_state, AppState, SharedState};
+use crate::store::{bootstrap_state, SharedState};
 use crate::utils::emoji_hash;
 
 /// Pairing screen refactored to use the central Store so UI remains thin.
