@@ -1,5 +1,5 @@
 use crate::effects::ConnectionEffect;
-use crate::store::{bootstrap_state, AppState, SharedState};
+use crate::store::{bootstrap_state, SharedState};
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
@@ -243,10 +243,16 @@ impl PokerOnlineScreen {
                 ui.label("Name:");
                 ui.text_edit_singleline(&mut self.new_player_name);
 
-                if ui.button("Add Player").clicked() && !self.new_player_name.is_empty() {
+                if ui.button("Add Player").clicked() {
+                    let player_name = if self.new_player_name.is_empty() {
+                        self.generate_random_name()
+                    } else {
+                        self.new_player_name.clone()
+                    };
+
                     self.players.push(PlayerConfig {
                         id: self.next_player_id,
-                        name: self.new_player_name.clone(),
+                        name: player_name,
                         is_bot: false, // New players start as human by default
                     });
                     self.next_player_id += 1;
@@ -510,6 +516,49 @@ impl PokerOnlineScreen {
 
     fn send(&self, msg: &ClientMsg) {
         self.conn_eff.send(msg);
+    }
+
+    // Generate a random name that doesn't conflict with existing player names
+    fn generate_random_name(&self) -> String {
+        use std::collections::HashSet;
+
+        // Random name pool (defined here instead of in struct state)
+        let random_names = [
+            "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry",
+            "Iris", "Jack", "Kate", "Leo", "Mia", "Noah", "Olivia", "Peter",
+            "Quinn", "Rose", "Sam", "Tina", "Uma", "Victor", "Wendy", "Xander",
+            "Yara", "Zoe", "Alex", "Blake", "Casey", "Dylan", "Erin", "Finn",
+            "Gabe", "Holly", "Ian", "Jade", "Kyle", "Luna", "Max", "Nora",
+            "Owen", "Piper", "Ryan", "Sage", "Tyler", "Violet", "Wyatt", "Zara"
+        ];
+
+        // Create a set of existing names for quick lookup
+        let existing_names: HashSet<&str> = self.players.iter()
+            .map(|p| p.name.as_str())
+            .collect();
+
+        // Try to find a name that's not already used
+        for &name in &random_names {
+            if !existing_names.contains(name) {
+                return name.to_string();
+            }
+        }
+
+        // If all names are used, append a number to the first available name
+        for &base_name in &random_names {
+            for i in 2..100 { // Try numbers 2-99
+                let candidate = format!("{} {}", base_name, i);
+                if !existing_names.contains(candidate.as_str()) {
+                    return candidate;
+                }
+            }
+        }
+
+        // Fallback: use a timestamp-based name
+        format!("Player {}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs())
     }
 }
 
