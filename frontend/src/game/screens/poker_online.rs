@@ -4,7 +4,7 @@ use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
     ActionEvent, ActionKind, BlindKind, ClientMsg, GameAction, GameStatePublic, PlayerAction,
-    PlayerConfig, PlayerPublic, PlayerId, Stage,
+    PlayerConfig, PlayerId, PlayerPublic, Stage,
 };
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
@@ -22,7 +22,7 @@ pub struct PokerOnlineScreen {
     next_player_id: usize,
     new_player_name: String,
     // Preferred player this frontend would like to control (None = not requested)
-    preferred_player: Option<mcg_shared::PlayerId>,
+    preferred_player: PlayerId,
 }
 impl PokerOnlineScreen {
     pub fn new() -> Self {
@@ -55,7 +55,7 @@ impl PokerOnlineScreen {
             //TODO: why two?
             next_player_id: 2,
             new_player_name: String::new(),
-            preferred_player: None,
+            preferred_player: PlayerId(0),
         }
     }
 
@@ -204,19 +204,8 @@ impl PokerOnlineScreen {
                             if player.is_bot {
                                 ui.label("Bot");
                             } else {
-                                if ui
-                                    .radio_value(
-                                        &mut self.preferred_player,
-                                        Some(player.id),
-                                        "Play as",
-                                    )
-                                    .on_hover_text("Select this player for this client")
-                                    .changed()
-                                {
-                                    if let Some(pid) = self.preferred_player {
-                                        self.send(&ClientMsg::RequestState { player_id: pid });
-                                    }
-                                }
+                                ui.radio_value(&mut self.preferred_player, player.id, "Play as")
+                                    .on_hover_text("Select this player for this client");
                             }
 
                             if ui.button("✏").on_hover_text("Rename").clicked() {
@@ -267,7 +256,7 @@ impl PokerOnlineScreen {
                 ui.label("Name:");
                 ui.text_edit_singleline(&mut self.new_player_name);
 
-                    if ui.button("Add Player").clicked() {
+                if ui.button("Add Player").clicked() {
                     let player_name = if self.new_player_name.is_empty() {
                         self.generate_random_name()
                     } else {
@@ -302,7 +291,7 @@ impl PokerOnlineScreen {
 
     fn render_showdown_banner(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
         if state.stage == Stage::Showdown {
-            let you_won = state.winner_ids.contains(&state.you_id);
+            let you_won = state.winner_ids.contains(&self.preferred_player);
             if you_won {
                 ui.colored_label(Color32::LIGHT_GREEN, "You won!");
             } else {
@@ -321,7 +310,7 @@ impl PokerOnlineScreen {
         }
     }
 
-    fn render_table_panel(ui: &mut egui::Ui, state: &GameStatePublic) {
+    fn render_table_panel(ui: &mut egui::Ui, state: &GameStatePublic, preferred_player: PlayerId) {
         ui.group(|ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Pot:").strong());
@@ -349,7 +338,7 @@ impl PokerOnlineScreen {
                         )
                         .clicked()
                     {
-                        let clip = format_game_for_clipboard(state);
+                        let clip = format_game_for_clipboard(state, preferred_player);
                         ui.ctx().copy_text(clip);
                     }
                 });
@@ -359,7 +348,7 @@ impl PokerOnlineScreen {
                 .max_height(200.0)
                 .show(ui, |ui| {
                     for entry in state.action_log.iter().rev().take(100) {
-                        log_entry_row(ui, entry, &state.players, state.you_id);
+                        log_entry_row(ui, entry, &state.players, preferred_player);
                     }
                 });
         });
@@ -367,8 +356,8 @@ impl PokerOnlineScreen {
 
     fn render_players_panel(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
         ui.group(|ui| {
-            for (idx, p) in state.players.iter().enumerate() {
-                let me = p.id == state.you_id;
+            for p in state.players.iter() {
+                let me = p.id == self.preferred_player;
                 ui.horizontal(|ui| {
                     if p.id == state.to_act && state.stage != Stage::Showdown {
                         ui.colored_label(Color32::from_rgb(255, 215, 0), "●");
@@ -437,10 +426,10 @@ impl PokerOnlineScreen {
         if narrow {
             self.render_players_panel(ui, state);
             ui.add_space(8.0);
-            Self::render_table_panel(ui, state);
+            Self::render_table_panel(ui, state, self.preferred_player);
         } else {
             ui.columns(2, |cols| {
-                Self::render_table_panel(&mut cols[0], state);
+                Self::render_table_panel(&mut cols[0], state, self.preferred_player);
                 self.render_players_panel(&mut cols[1], state);
             });
         }
@@ -737,13 +726,13 @@ fn stage_to_str(stage: Stage) -> &'static str {
     }
 }
 
-fn format_game_for_clipboard(state: &GameStatePublic) -> String {
+fn format_game_for_clipboard(state: &GameStatePublic, you: PlayerId) -> String {
     let mut out = String::new();
     // Summary
     out.push_str("Game summary\n");
     out.push_str(&format!("Stage: {}\n", stage_to_str(state.stage)));
     out.push_str(&format!("Pot: {}\n", state.pot));
-    if let Some(p) = state.players.iter().find(|p| p.id == state.you_id) {
+    if let Some(p) = state.players.iter().find(|p| p.id == you) {
         if let Some(cards) = p.cards {
             out.push_str(&format!(
                 "Your hole cards: {}, {}\n",
@@ -758,8 +747,8 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
 
     // Players
     out.push_str("Players\n");
-    for (idx, p) in state.players.iter().enumerate() {
-        let you = if p.id == state.you_id { " (you)" } else { "" };
+    for p in state.players.iter() {
+        let you_str = if p.id == you { " (you)" } else { "" };
         let folded = if p.has_folded { ", folded:true" } else { "" };
         let to_act = if state.stage != Stage::Showdown && p.id == state.to_act {
             ", to_act:true"
@@ -768,9 +757,9 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
         };
         out.push_str(&format!(
             "- id:{}, name:{}, stack:{}{}{}{}\n",
-            p.id, p.name, p.stack, you, folded, to_act
+            p.id, p.name, p.stack, you_str, folded, to_act
         ));
-        if p.id == state.you_id {
+        if p.id == you {
             if let Some(cards) = p.cards {
                 out.push_str(&format!(
                     "  hole: {}, {}\n",
@@ -877,7 +866,12 @@ fn format_game_for_clipboard(state: &GameStatePublic) -> String {
     out
 }
 
-fn log_entry_row(ui: &mut egui::Ui, entry: &ActionEvent, players: &[PlayerPublic], you_id: mcg_shared::PlayerId) {
+fn log_entry_row(
+    ui: &mut egui::Ui,
+    entry: &ActionEvent,
+    players: &[PlayerPublic],
+    you_id: mcg_shared::PlayerId,
+) {
     match entry {
         ActionEvent::PlayerAction { player_id, action } => {
             let who_id = Some(*player_id);

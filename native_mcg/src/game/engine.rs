@@ -126,7 +126,7 @@ impl Game {
         Ok(g)
     }
 
-    pub fn public_for(&self, viewer: mcg_shared::PlayerId) -> GameStatePublic {
+    pub fn public(&self) -> GameStatePublic {
         let players = self
             .players
             .iter()
@@ -146,7 +146,6 @@ impl Game {
             pot: self.pot,
             sb: self.sb,
             bb: self.bb,
-            you_id: viewer,
             to_act: mcg_shared::PlayerId(self.to_act),
             stage: self.stage,
             winner_ids: self

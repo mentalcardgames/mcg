@@ -40,12 +40,7 @@ pub fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
                     for e in gs.action_log.iter().skip(already) {
                         println!(
                             "{}",
-                            format_event_human(
-                                e,
-                                &gs.players,
-                                gs.you_id,
-                                std::io::stdout().is_terminal()
-                            )
+                            format_event_human(e, &gs.players, std::io::stdout().is_terminal())
                         );
                     }
                     *last_printed = total;

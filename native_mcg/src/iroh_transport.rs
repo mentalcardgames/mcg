@@ -255,7 +255,7 @@ async fn handle_iroh_connection(
     }
 
     // Send initial state directly to this client (same behaviour as websocket)
-    if let Some(gs) = crate::backend::current_state_public(&state, mcg_shared::PlayerId(0)).await {
+    if let Some(gs) = crate::backend::current_state_public(&state).await {
         if let Err(e) = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await {
             eprintln!("iroh send error: {}", e);
         }
@@ -320,24 +320,24 @@ async fn handle_iroh_connection(
                                         match crate::backend::validate_and_apply_action(&state, player_id.into(), action.clone()).await {
                                             Ok(()) => {
                                                 // Send updated state to this client
-                                                if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
+                                                if let Some(gs) = crate::backend::current_state_public(&state).await {
                                                     let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
                                                 }
                                                 // Broadcast and drive via centralized helper (drive_bots respects bots_auto)
-                                                crate::backend::broadcast_and_drive(&state, player_id, 500, 1500).await;
+                                                crate::backend::broadcast_and_drive(&state, 500, 1500).await;
                                             }
                                             Err(e) => {
                                                 let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(e)).await;
                                             }
                                         }
                                     }
-                                    ClientMsg::RequestState { player_id } => {
-                                        println!("[IROH] State requested for player {}", player_id);
+                                    ClientMsg::RequestState => {
+                                        println!("[IROH] State requested");
                                         // Send state directly to this client
-                                        if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
+                                        if let Some(gs) = crate::backend::current_state_public(&state).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
                                         }
-                                        crate::backend::broadcast_and_drive(&state, player_id, 500, 1500).await;
+                                        crate::backend::broadcast_and_drive(&state, 500, 1500).await;
                                     }
                                     ClientMsg::NextHand { player_id } => {
                                         println!("[IROH] NextHand requested for player {}", player_id);
@@ -354,10 +354,10 @@ async fn handle_iroh_connection(
                                         if let Err(e) = crate::backend::start_new_hand_and_print(&state).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to start new hand: {}", e))).await;
                                         } else {
-                                            if let Some(gs) = crate::backend::current_state_public(&state, player_id).await {
+                                            if let Some(gs) = crate::backend::current_state_public(&state).await {
                                                 let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
                                             }
-                                            crate::backend::broadcast_and_drive(&state, mcg_shared::PlayerId(0), 500, 1500).await;
+                                            crate::backend::broadcast_and_drive(&state, 500, 1500).await;
                                         }
                                     }
                                     ClientMsg::NewGame { players } => {
@@ -366,10 +366,10 @@ async fn handle_iroh_connection(
                                         if let Err(e) = crate::backend::create_new_game(&state, players).await {
                                             let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Failed to create new game: {}", e))).await;
                                         } else {
-                                            if let Some(gs) = crate::backend::current_state_public(&state, mcg_shared::PlayerId(0)).await {
+                                            if let Some(gs) = crate::backend::current_state_public(&state).await {
                                                 let _ = send_server_msg_to_writer(&mut send, &ServerMsg::State(gs)).await;
                                             }
-                                            crate::backend::broadcast_and_drive(&state, mcg_shared::PlayerId(0), 500, 1500).await;
+                                            crate::backend::broadcast_and_drive(&state, 500, 1500).await;
                                         }
                                     }
                                 }

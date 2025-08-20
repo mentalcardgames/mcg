@@ -33,7 +33,7 @@ pub async fn newgame_handler(
                 you: mcg_shared::PlayerId(0),
             };
             // Also send initial state to broadcaster (backend printing/bookkeeping is done elsewhere)
-            crate::backend::broadcast_state(&state, mcg_shared::PlayerId(0)).await;
+            crate::backend::broadcast_state(&state).await;
             (StatusCode::OK, Json(welcome)).into_response()
         }
         _ => {
@@ -63,15 +63,13 @@ pub async fn action_handler(
             {
                 Ok(()) => {
                     // Send state to requester immediately (we return it) and broadcast to subscribers.
-                    if let Some(gs) = crate::backend::current_state_public(&state, player_id).await
-                    {
+                    if let Some(gs) = crate::backend::current_state_public(&state).await {
                         // Broadcast current state immediately so other transports see the update.
-                        crate::backend::broadcast_state(&state, player_id).await;
+                        crate::backend::broadcast_state(&state).await;
                         // Drive bots in background (don't block the HTTP response)
                         let state_clone = state.clone();
                         tokio::spawn(async move {
-                            crate::backend::broadcast_and_drive(&state_clone, player_id, 500, 1500)
-                                .await;
+                            crate::backend::broadcast_and_drive(&state_clone, 500, 1500).await;
                         });
                         (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
                     } else {
@@ -92,9 +90,9 @@ pub async fn action_handler(
     }
 }
 
-/// Return the current public state for the (single) CLI player (you_id = 0).
+//TODO: document this
 pub async fn state_handler(State(state): State<AppState>) -> impl IntoResponse {
-    if let Some(gs) = crate::backend::current_state_public(&state, mcg_shared::PlayerId(0)).await {
+    if let Some(gs) = crate::backend::current_state_public(&state).await {
         (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
     } else {
         (
@@ -114,13 +112,12 @@ pub async fn next_hand_handler(State(state): State<AppState>) -> impl IntoRespon
         )
             .into_response();
     }
-    if let Some(gs) = crate::backend::current_state_public(&state, mcg_shared::PlayerId(0)).await {
-        crate::backend::broadcast_state(&state, mcg_shared::PlayerId(0)).await;
+    if let Some(gs) = crate::backend::current_state_public(&state).await {
+        crate::backend::broadcast_state(&state).await;
         // drive bots asynchronously
         let state_clone = state.clone();
         tokio::spawn(async move {
-            crate::backend::broadcast_and_drive(&state_clone, mcg_shared::PlayerId(0), 500, 1500)
-                .await;
+            crate::backend::broadcast_and_drive(&state_clone, 500, 1500).await;
         });
         (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
     } else {

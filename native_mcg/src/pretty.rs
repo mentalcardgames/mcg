@@ -79,32 +79,19 @@ fn format_cards(cards: &[u8], color: bool) -> String {
         .join(", ")
 }
 
-fn player_name(players: &[PlayerPublic], id: PlayerId, you_id: PlayerId, color: bool) -> String {
-    let base = players
+fn player_name(players: &[PlayerPublic], id: PlayerId) -> String {
+    let name = players
         .iter()
         .find(|p| p.id == id)
         .map(|p| p.name.clone())
         .unwrap_or_else(|| format!("P{}", id));
-    if id == you_id {
-        if color {
-            base.bold().to_string()
-        } else {
-            base
-        }
-    } else {
-        base
-    }
+    name
 }
 
-fn format_log_entry(
-    entry: &ActionEvent,
-    players: &[PlayerPublic],
-    you_id: PlayerId,
-    color: bool,
-) -> String {
+fn format_log_entry(entry: &ActionEvent, players: &[PlayerPublic], color: bool) -> String {
     match entry {
         ActionEvent::PlayerAction { player_id, action } => {
-            let who = player_name(players, *player_id, you_id, color);
+            let who = player_name(players, *player_id);
             match action {
                 SharedActionKind::Fold => format!(
                     "{} {} (fold)",
@@ -173,14 +160,14 @@ fn format_log_entry(
             format!("Board +[{}]", list)
         }
         ActionEvent::GameAction(GameAction::DealtHole { player_id }) => {
-            let who = player_name(players, *player_id, you_id, color);
+            let who = player_name(players, *player_id);
             format!("Dealt hole to {}", who)
         }
         ActionEvent::GameAction(GameAction::Showdown { .. }) => "Showdown".into(),
         ActionEvent::GameAction(GameAction::PotAwarded { winners, amount }) => {
             let names = winners
                 .iter()
-                .map(|id| player_name(players, *id, you_id, color))
+                .map(|id| player_name(players, *id))
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("Pot awarded {} -> [{}]", amount, names)
@@ -189,12 +176,7 @@ fn format_log_entry(
     }
 }
 
-pub fn format_event_human(
-    entry: &ActionEvent,
-    players: &[PlayerPublic],
-    you_id: PlayerId,
-    color: bool,
-) -> String {
+pub fn format_event_human(entry: &ActionEvent, players: &[PlayerPublic], color: bool) -> String {
     match entry {
         ActionEvent::GameAction(GameAction::StageChanged(s)) => {
             let sname = format!("== {:?} ==", s);
@@ -204,7 +186,7 @@ pub fn format_event_human(
                 sname
             }
         }
-        _ => format_log_entry(entry, players, you_id, color),
+        _ => format_log_entry(entry, players, color),
     }
 }
 
@@ -223,15 +205,7 @@ pub fn format_table_header(gs: &GameStatePublic, sb: u32, bb: u32, color: bool) 
     out.push_str(&format!("{}\n{}\n", title, blinds));
     out.push_str("Players:\n");
     for p in &gs.players {
-        let name = if p.id == gs.you_id {
-            if color {
-                format!("{}{}", p.name.bold(), " (You)".bold())
-            } else {
-                format!("{} (You)", p.name)
-            }
-        } else {
-            p.name.clone()
-        };
+        let name = p.name.clone();
         let folded = if p.has_folded {
             if color {
                 " [FOLDED]".red().to_string()
@@ -282,29 +256,17 @@ pub fn format_state_human(gs: &GameStatePublic, color: bool) -> String {
         let board = format_cards(&gs.community, color);
         out.push_str(&format!("Board: [{}]\n", board));
     }
-    if let Some(you) = gs.players.iter().find(|p| p.id == gs.you_id) {
-        if let Some(cards) = you.cards {
-            let you_cards = format_cards(&cards, color);
-            out.push_str(&format!("Your cards: [{}]\n", you_cards));
+    for p in &gs.players {
+        if let Some(cards) = p.cards {
+            let player_cards = format_cards(&cards, color);
+            out.push_str(&format!("{}'s cards: [{}]\n", p.name, player_cards));
         }
     }
 
     // Players
     out.push_str("Players:\n");
     for p in &gs.players {
-        let name = if p.id == gs.you_id {
-            format!(
-                "{}{}",
-                p.name,
-                if color {
-                    " (You)".bold().to_string()
-                } else {
-                    " (You)".to_string()
-                }
-            )
-        } else {
-            p.name.clone()
-        };
+        let name = p.name.clone();
         let folded = if p.has_folded {
             if color {
                 " [FOLDED]".red().to_string()
@@ -348,10 +310,7 @@ pub fn format_state_human(gs: &GameStatePublic, color: bool) -> String {
                 }
                 continue;
             }
-            out.push_str(&format!(
-                "  {}\n",
-                format_log_entry(e, &gs.players, gs.you_id, color)
-            ));
+            out.push_str(&format!("  {}\n", format_log_entry(e, &gs.players, color)));
         }
     }
 

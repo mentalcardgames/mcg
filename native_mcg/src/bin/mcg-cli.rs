@@ -17,16 +17,13 @@ async fn main() -> anyhow::Result<()> {
         Commands::State => {
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(&peer, ClientMsg::RequestState { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
-                        .await?
+                    cli::run_once_iroh(&peer, ClientMsg::RequestState, cli.wait_ms).await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(&addr, ClientMsg::RequestState { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
-                        .await?
+                    cli::run_once_http(&addr, ClientMsg::RequestState, cli.wait_ms).await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(&addr, ClientMsg::RequestState { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
-                        .await?
+                    cli::run_once_ws(&addr, ClientMsg::RequestState, cli.wait_ms).await?
                 }
             };
             if let Some(state) = latest {
@@ -81,16 +78,34 @@ async fn main() -> anyhow::Result<()> {
         Commands::NextHand => {
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => {
-                    cli::run_once_iroh(&peer, ClientMsg::NextHand { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
-                        .await?
+                    cli::run_once_iroh(
+                        &peer,
+                        ClientMsg::NextHand {
+                            player_id: mcg_shared::PlayerId(0),
+                        },
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(&addr, ClientMsg::NextHand { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
-                        .await?
+                    cli::run_once_http(
+                        &addr,
+                        ClientMsg::NextHand {
+                            player_id: mcg_shared::PlayerId(0),
+                        },
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(&addr, ClientMsg::NextHand { player_id: mcg_shared::PlayerId(0) }, cli.wait_ms)
-                        .await?
+                    cli::run_once_ws(
+                        &addr,
+                        ClientMsg::NextHand {
+                            player_id: mcg_shared::PlayerId(0),
+                        },
+                        cli.wait_ms,
+                    )
+                    .await?
                 }
             };
             if let Some(state) = latest {

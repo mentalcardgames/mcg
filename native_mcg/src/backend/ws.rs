@@ -63,11 +63,11 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     )
     .await;
     // Send initial state directly to this socket (does local printing & bookkeeping).
-    send_state_to(&mut socket, &state, primary_player_id).await;
+    send_state_to(&mut socket, &state).await;
     // After creating a new game via the initial NewGame handshake, trigger broadcast
     // and bot driving so server-side bots begin acting without requiring an extra
     // client message (fixes stuck-game where bots don't advance play).
-    super::state::broadcast_and_drive(&state, primary_player_id, 500, 1500).await;
+    super::state::broadcast_and_drive(&state, 500, 1500).await;
 
     // Subscribe to broadcasts so this socket receives state updates produced by other connections.
     let mut rx = state.broadcaster.subscribe();
@@ -89,7 +89,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                                 // Re-send a viewer-specific state to this socket.
                                 // send_state_to will call current_state_public(viewer_id)
                                 // so the you_id and card visibility are correct per-client.
-                                send_state_to(&mut socket, &state, primary_player_id).await;
+                                send_state_to(&mut socket, &state ).await;
                             }
                             _ => {
                                 // Forward other server messages unchanged.
@@ -147,20 +147,16 @@ async fn send_ws(socket: &mut WebSocket, msg: &mcg_shared::ServerMsg) {
     }
 }
 
-async fn send_state_to(socket: &mut WebSocket, state: &AppState, you_id: mcg_shared::PlayerId) {
-    if let Some(gs) = super::state::current_state_public(state, you_id).await {
+async fn send_state_to(socket: &mut WebSocket, state: &AppState) {
+    if let Some(gs) = super::state::current_state_public(state).await {
         // Only print newly added events since the last print, to avoid repeating "Preflop"
         let mut lobby = state.lobby.write().await;
         let already = lobby.last_printed_log_len;
         let total = gs.action_log.len();
         if total > already {
             for e in gs.action_log.iter().skip(already) {
-                let line = pretty::format_event_human(
-                    e,
-                    &gs.players,
-                    gs.you_id,
-                    std::io::stdout().is_terminal(),
-                );
+                let line =
+                    pretty::format_event_human(e, &gs.players, std::io::stdout().is_terminal());
                 println!("{}", line);
             }
             lobby.last_printed_log_len = total;
@@ -204,9 +200,9 @@ async fn process_client_msg(
             {
                 Ok(()) => {
                     // Send updated state immediately to the originating socket so the client sees its own action
-                    send_state_to(socket, state, player_id).await;
+                    send_state_to(socket, state).await;
                     // Broadcast and drive via centralized helper
-                    super::state::broadcast_and_drive(state, player_id, 500, 1500).await;
+                    super::state::broadcast_and_drive(state, 500, 1500).await;
                 }
                 Err(e) => {
                     let _ = send_ws(socket, &mcg_shared::ServerMsg::Error(e)).await;
@@ -215,13 +211,13 @@ async fn process_client_msg(
         }
 
         // RequestState { player_id }
-        mcg_shared::ClientMsg::RequestState { player_id } => {
+        mcg_shared::ClientMsg::RequestState => {
             println!(
-                "[WS] State requested by primary_player_id={} for player {}",
-                primary_player_id, player_id
+                "[WS] State requested by primary_player_id={}",
+                primary_player_id
             );
-            send_state_to(socket, state, player_id).await;
-            super::state::broadcast_and_drive(state, player_id, 500, 1500).await;
+            send_state_to(socket, state).await;
+            super::state::broadcast_and_drive(state, 500, 1500).await;
         }
 
         // NextHand { player_id }
@@ -254,8 +250,8 @@ async fn process_client_msg(
                 .await;
             } else {
                 // Send updated state to the requesting socket, then broadcast and drive bots.
-                send_state_to(socket, state, player_id).await;
-                super::state::broadcast_and_drive(state, player_id, 500, 1500).await;
+                send_state_to(socket, state).await;
+                super::state::broadcast_and_drive(state, 500, 1500).await;
             }
         }
 
@@ -273,8 +269,8 @@ async fn process_client_msg(
                 )
                 .await;
             } else {
-                send_state_to(socket, state, primary_player_id).await;
-                super::state::broadcast_and_drive(state, primary_player_id, 500, 1500).await;
+                send_state_to(socket, state).await;
+                super::state::broadcast_and_drive(state, 500, 1500).await;
             }
         } // Note: Join and ResetGame have been removed from ClientMsg enum
     }

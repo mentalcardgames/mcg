@@ -74,20 +74,20 @@ pub async fn create_new_game(
     // is agnostic about bot status; the backend tracks bot-driven IDs separately.
     let mut game_players = Vec::new();
     let mut bot_ids: Vec<usize> = Vec::new();
-        for config in &players {
-            if config.is_bot {
-                bot_ids.push(config.id.into());
-            }
-            let player = Player {
-                id: config.id.into(),
-                name: config.name.clone(),
-                stack: 1000,   // Default stack size
-                cards: [0, 0], // Empty cards initially
-                has_folded: false,
-                all_in: false,
-            };
-            game_players.push(player);
+    for config in &players {
+        if config.is_bot {
+            bot_ids.push(config.id.into());
         }
+        let player = Player {
+            id: config.id.into(),
+            name: config.name.clone(),
+            stack: 1000,   // Default stack size
+            cards: [0, 0], // Empty cards initially
+            has_folded: false,
+            all_in: false,
+        };
+        game_players.push(player);
+    }
     // Store bot ids on the lobby so backend drive logic can consult it.
     lobby.bots = bot_ids;
 
@@ -101,13 +101,10 @@ pub async fn create_new_game(
     Ok(())
 }
 
-pub async fn current_state_public(
-    state: &AppState,
-    viewer: mcg_shared::PlayerId,
-) -> Option<GameStatePublic> {
+pub async fn current_state_public(state: &AppState) -> Option<GameStatePublic> {
     let lobby_r = state.lobby.read().await;
     if let Some(game) = &lobby_r.game {
-        let gs = game.public_for(viewer);
+        let gs = game.public();
         Some(gs)
     } else {
         None
@@ -119,8 +116,8 @@ pub async fn current_state_public(
 /// The `viewer` parameter controls which personalized view (you/cards visibility) is
 /// computed before broadcasting. Transports should pass the relevant PlayerId for the
 /// socket/client that triggered the update.
-pub async fn broadcast_state(state: &AppState, viewer: mcg_shared::PlayerId) {
-    if let Some(gs) = current_state_public(state, viewer).await {
+pub async fn broadcast_state(state: &AppState) {
+    if let Some(gs) = current_state_public(state).await {
         // Print any newly added events to server console and update bookkeeping.
         let mut lobby = state.lobby.write().await;
         let already = lobby.last_printed_log_len;
@@ -128,12 +125,8 @@ pub async fn broadcast_state(state: &AppState, viewer: mcg_shared::PlayerId) {
         if total > already {
             for e in gs.action_log.iter().skip(already) {
                 // Use the provided viewer id when formatting server-side logs.
-                let line = pretty::format_event_human(
-                    e,
-                    &gs.players,
-                    viewer.into(),
-                    std::io::stdout().is_terminal(),
-                );
+                let line =
+                    pretty::format_event_human(e, &gs.players, std::io::stdout().is_terminal());
                 println!("{}", line);
             }
             lobby.last_printed_log_len = total;
@@ -211,16 +204,9 @@ pub async fn validate_and_apply_action(
 }
 
 /// Broadcast the current state (and trigger bots if enabled).
-///
-/// `viewer` should be the PlayerId used to compute the personalized view sent to clients.
-pub async fn broadcast_and_drive(
-    state: &AppState,
-    viewer: mcg_shared::PlayerId,
-    min_ms: u64,
-    max_ms: u64,
-) {
+pub async fn broadcast_and_drive(state: &AppState, min_ms: u64, max_ms: u64) {
     // Broadcast updated state to subscribers.
-    broadcast_state(state, viewer).await;
+    broadcast_state(state).await;
     // Drive bots (drive_bots_with_delays itself respects lobby.bots_auto).
     drive_bots_with_delays(state, min_ms, max_ms).await;
 }
@@ -236,9 +222,9 @@ pub async fn start_new_hand_and_print(state: &AppState) -> Result<()> {
         game.start_new_hand()?;
         let sb = game.sb;
         let bb = game.bb;
-        // start_new_hand_and_print runs in server-side context; use a default viewer (PlayerId(0))
+        // start_new_hand_and_print runs in server-side context
         // for printing the table header and tracking printed log length.
-        let gs = game.public_for(mcg_shared::PlayerId(0));
+        let gs = game.public();
         lobby.last_printed_log_len = gs.action_log.len();
         let header = pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
         println!("{}", header);
@@ -342,7 +328,7 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
         // Broadcast updated state using the acting player's id (viewer-specific state)
         // Always broadcast the state resulting from the attempted bot action so clients
         // observe the latest changes even if the bot's action didn't advance the turn.
-        crate::backend::broadcast_state(state, mcg_shared::PlayerId(actor_id)).await;
+        crate::backend::broadcast_state(state).await;
 
         if !applied_and_advanced {
             // Stop driving bots for now; give control back to caller/human/other logic.

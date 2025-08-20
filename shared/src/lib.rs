@@ -137,8 +137,6 @@ pub struct GameStatePublic {
     pub sb: u32,
     #[serde(default)]
     pub bb: u32,
-    /// The viewer/player this public state is tailored for.
-    pub you_id: PlayerId,
     pub to_act: PlayerId,
     pub stage: Stage,
     #[serde(default)]
@@ -163,7 +161,7 @@ pub enum ClientMsg {
         action: PlayerAction,
     },
     /// Request the current state for a particular player (you_id in State will reflect this).
-    RequestState { player_id: PlayerId },
+    RequestState,
     /// Request to advance to the next hand on behalf of a specific player.
     NextHand { player_id: PlayerId },
     /// Start a new game with the specified players. Each player has an ID, name, and bot flag.
