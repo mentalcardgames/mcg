@@ -99,19 +99,14 @@ pub async fn run_once_iroh(
         .await
         .context("binding iroh endpoint for client")?;
 
-    // Connect to the target peer. Expect the peer_uri to be a valid iroh target.
-    // Interpret peer_uri as a public key (NodeId). Use discovery/relay to dial by public key.
     use iroh::PublicKey;
     use std::str::FromStr;
-    // Expect the supplied peer_uri to be a PublicKey (z-base-32). The CLI
-    // accepts only the PublicKey form for dialing.
     let pk = PublicKey::from_str(peer_uri).context("parsing iroh public key (z-base-32)")?;
     let connection = endpoint
         .connect(pk, ALPN)
         .await
         .context("connecting to iroh peer (public key)")?;
 
-    // Open a bidirectional stream
     let (mut send, recv) = connection
         .open_bi()
         .await
@@ -149,7 +144,9 @@ pub async fn run_once_iroh(
                     match sm {
                         ServerMsg::State(gs) => latest_state = Some(gs),
                         ServerMsg::Error(e) => eprintln!("Server error: {}", e),
-                        ServerMsg::Welcome { .. } => {}
+                        ServerMsg::Welcome { .. } => {
+                            println!("Server says welcome!");
+                        }
                     }
                 } else {
                     eprintln!("Invalid JSON from iroh peer: {}", trimmed);
