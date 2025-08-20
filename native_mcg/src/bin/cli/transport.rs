@@ -110,7 +110,16 @@ pub async fn run_once_iroh(
     send_client_msg_over_stream(&mut send, &client_msg).await?;
 
     // Read responses until timeout using a dedicated helper
-    let latest = read_iroh_responses_until_timeout(&mut reader, wait_ms).await?;
+    let server_msg_opt = read_iroh_responses_until_timeout(&mut reader, wait_ms).await?;
+
+    let latest = match server_msg_opt {
+        Some(ServerMsg::State(gs)) => Some(gs),
+        Some(ServerMsg::Error(e)) => {
+            eprintln!("Server error: {}", e);
+            None
+        }
+        _ => None,
+    };
 
     // Try to finish/close the send side politely if available
     let _ = send.finish();
@@ -132,18 +141,17 @@ where
 }
 
 /// Read newline-delimited ServerMsg responses from `reader` until the timeout (ms)
-/// elapses. Returns the last seen GameStatePublic (if any).
-// TODO: this should skip the first welcome message
+/// Returns the last ServerMsg received (if any) and leaves handling to the caller.
 async fn read_iroh_responses_until_timeout<R>(
     reader: &mut R,
     wait_ms: u64,
-) -> anyhow::Result<Option<GameStatePublic>>
+) -> anyhow::Result<Option<ServerMsg>>
 where
     R: tokio::io::AsyncBufRead + Unpin,
 {
     use tokio::io::AsyncBufReadExt;
 
-    let mut latest_state: Option<GameStatePublic> = None;
+    let mut last_sm: Option<ServerMsg> = None;
     let mut line = String::new();
 
     loop {
@@ -160,16 +168,14 @@ where
                 if trimmed.is_empty() {
                     continue;
                 }
-                if let Ok(sm) = serde_json::from_str::<ServerMsg>(trimmed) {
-                    match sm {
-                        ServerMsg::State(gs) => latest_state = Some(gs),
-                        ServerMsg::Error(e) => eprintln!("Server error: {}", e),
-                        ServerMsg::Welcome { .. } => {
-                            println!("Server says welcome!");
-                        }
+                match serde_json::from_str::<ServerMsg>(trimmed) {
+                    Ok(sm) => {
+                        // Store the last ServerMsg and leave handling to caller
+                        last_sm = Some(sm);
                     }
-                } else {
-                    eprintln!("Invalid JSON from iroh peer: {}", trimmed);
+                    Err(_) => {
+                        eprintln!("Invalid JSON from iroh peer: {}", trimmed);
+                    }
                 }
             }
             Ok(Err(e)) => {
@@ -180,7 +186,7 @@ where
         }
     }
 
-    Ok(latest_state)
+    Ok(last_sm)
 }
 
 /// Run a single HTTP-based action sequence and attempt to GET state.
