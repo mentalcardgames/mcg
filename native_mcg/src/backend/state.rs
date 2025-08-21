@@ -224,7 +224,7 @@ pub async fn handle_client_msg(state: &AppState, cm: mcg_shared::ClientMsg) -> m
             match validate_and_apply_action(state, player_id.into(), action.clone()).await {
                 Ok(()) => {
                     // Broadcast updated state and drive bots
-                    broadcast_and_drive(state, 500, 1500).await;
+                    broadcast_and_drive(state, 50, 150).await;
                     if let Some(gs) = current_state_public(state).await {
                         mcg_shared::ServerMsg::State(gs)
                     } else {
@@ -238,7 +238,7 @@ pub async fn handle_client_msg(state: &AppState, cm: mcg_shared::ClientMsg) -> m
         mcg_shared::ClientMsg::RequestState => {
             // Return current state if exists, and trigger drive/broadcast for bots
             if let Some(gs) = current_state_public(state).await {
-                broadcast_and_drive(state, 500, 1500).await;
+                broadcast_and_drive(state, 50, 150).await;
                 mcg_shared::ServerMsg::State(gs)
             } else {
                 mcg_shared::ServerMsg::Error("No active game. Please start a new game first.".into())
@@ -256,7 +256,7 @@ pub async fn handle_client_msg(state: &AppState, cm: mcg_shared::ClientMsg) -> m
 
             match start_new_hand_and_print(state).await {
                 Ok(()) => {
-                    broadcast_and_drive(state, 500, 1500).await;
+                    broadcast_and_drive(state, 50, 150).await;
                     if let Some(gs) = current_state_public(state).await {
                         mcg_shared::ServerMsg::State(gs)
                     } else {
@@ -270,7 +270,7 @@ pub async fn handle_client_msg(state: &AppState, cm: mcg_shared::ClientMsg) -> m
         mcg_shared::ClientMsg::NewGame { players } => {
             match create_new_game(state, players).await {
                 Ok(()) => {
-                    broadcast_and_drive(state, 500, 1500).await;
+                    broadcast_and_drive(state, 50, 150).await;
                     if let Some(gs) = current_state_public(state).await {
                         mcg_shared::ServerMsg::State(gs)
                     } else {
