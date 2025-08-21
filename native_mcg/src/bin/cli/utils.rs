@@ -22,7 +22,7 @@ pub fn generate_demo_players(num_players: usize) -> Vec<PlayerConfig> {
     let mut players = Vec::with_capacity(num_players);
     players.push(PlayerConfig {
         id: mcg_shared::PlayerId(0),
-        name: format!("Huuman player {}", 0 + 1),
+        name: format!("Huuman player {}", 1),
         is_bot: false,
     });
     for i in 1..num_players {

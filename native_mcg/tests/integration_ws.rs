@@ -3,6 +3,7 @@ use futures_util::{SinkExt, StreamExt};
 use mcg_shared::{ClientMsg, PlayerConfig, PlayerId, ServerMsg};
 use std::time::Duration;
 
+#[allow(clippy::collapsible_match)]
 #[tokio::test]
 async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
     // Start an axum server on an OS-assigned port using the same router as the binary.
@@ -50,12 +51,12 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
                 tokio::time::timeout(Duration::from_millis(200), read.next()).await
             {
                 if let tokio_tungstenite::tungstenite::Message::Text(txt) = msg {
+                    if let Ok(ServerMsg::State(_)) = serde_json::from_str::<ServerMsg>(&txt) {
+                        last_state = Some(serde_json::from_str::<ServerMsg>(&txt).unwrap());
+                        break;
+                    }
+                    // record other msgs (e.g., Welcome)
                     if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
-                        if let ServerMsg::State(_) = &sm {
-                            last_state = Some(sm);
-                            break;
-                        }
-                        // record other msgs (e.g., Welcome)
                         last_state = Some(sm);
                     }
                 }
