@@ -47,9 +47,8 @@ pub struct Game {
 impl Game {
     pub fn with_players(players: Vec<Player>) -> Result<Self> {
         let mut deck: Vec<Card> = (0..52).map(Card).collect();
-        // Use thread-local RNG via rand::thread_rng() through rand::rngs::ThreadRng
-        let mut rng = rand::thread_rng();
-        deck.shuffle(&mut rng);
+        // Use a seeded StdRng for non-deterministic shuffles from entropy
+        deck.shuffle(&mut rand::rng());
         let player_count = players.len();
 
         let mut g = Self {
@@ -230,23 +229,24 @@ mod tests {
     fn blind_caps_to_stack_and_marks_all_in() -> Result<()> {
         // Build a minimal game manually so we can set stack small before dealing.
         let deck = dealing::shuffled_deck_with_seed(123);
-        let mut players = Vec::with_capacity(2);
-        players.push(Player {
-            id: 0,
-            name: "Short".to_owned(),
-            stack: 3, // less than small blind (5)
-            cards: [Card(0), Card(0)],
-            has_folded: false,
-            all_in: false,
-        });
-        players.push(Player {
-            id: 1,
-            name: "Normal".to_owned(),
-            stack: 1000,
-            cards: [Card(0), Card(0)],
-            has_folded: false,
-            all_in: false,
-        });
+        let players = vec![
+            Player {
+                id: 0,
+                name: "Short".to_owned(),
+                stack: 3, // less than small blind (5)
+                cards: [Card(0), Card(0)],
+                has_folded: false,
+                all_in: false,
+            },
+            Player {
+                id: 1,
+                name: "Normal".to_owned(),
+                stack: 1000,
+                cards: [Card(0), Card(0)],
+                has_folded: false,
+                all_in: false,
+            },
+        ];
 
         let mut g = Game {
             players,

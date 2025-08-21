@@ -13,8 +13,7 @@ impl Game {
     pub fn start_new_hand(&mut self) -> Result<()> {
         // Shuffle fresh deck
         let mut deck: Vec<Card> = (0..52).map(Card).collect();
-        let mut rng = rand::thread_rng();
-        deck.shuffle(&mut rng);
+        deck.shuffle(&mut rand::rng());
         start_new_hand_from_deck(self, deck).context("Failed to start new hand from shuffled deck")
     }
 }
@@ -113,7 +112,7 @@ pub(crate) fn shuffled_deck_with_seed(seed: u64) -> Vec<Card> {
         *next = next.wrapping_mul(1664525).wrapping_add(1013904223);
         (*next >> 16) as u32
     }
-    let mut deck: Vec<Card> = (0..52).map(|i| Card(i)).collect();
+    let mut deck: Vec<Card> = (0..52).map(Card).collect();
     let mut s = seed;
     // Fisher-Yates
     for i in (1..deck.len()).rev() {

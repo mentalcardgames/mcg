@@ -46,15 +46,11 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(config = %config_path.display(), bots);
 
     // Initialize shared state for the server and record config path for transports.
-    let mut state = AppState::default();
-    // Store config path and the loaded config into shared AppState so components
-    // can access the single in-memory config instance.
-    state.config_path = Some(config_path.clone());
-    // Overwrite the default in-memory config with the loaded one
-    {
-        let mut cg = state.config.write().await;
-        *cg = cfg.clone();
-    }
+    let state = AppState {
+        config: std::sync::Arc::new(tokio::sync::RwLock::new(cfg.clone())),
+        config_path: Some(config_path.clone()),
+        ..Default::default()
+    };
 
     // Find first available port starting from 3000
     let port = find_available_port(3000)

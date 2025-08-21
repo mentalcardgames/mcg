@@ -29,8 +29,8 @@ pub fn evaluate_best_hand(hole: [Card; 2], community: &[Card]) -> HandRank {
     let mut cards = Vec::with_capacity(7);
     cards.push(hole[0]);
     cards.push(hole[1]);
-    for c in community {
-        cards.push(c.clone());
+    for &c in community {
+        cards.push(c);
     }
     best_rank_from_seven(&cards)
 }

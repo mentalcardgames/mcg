@@ -23,7 +23,7 @@ use tokio::io::BufReader;
 use crate::backend::AppState;
 use crate::transport::send_server_msg_to_writer;
 use mcg_shared::{ClientMsg, ServerMsg};
-use owo_colors::OwoColorize;
+// owo_colors not used after replacing prints with tracing
 
 /// Public entrypoint spawned by server startup
 ///
@@ -78,7 +78,7 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
                 if bytes.len() >= 32 {
                     let mut arr = [0u8; 32];
                     arr.copy_from_slice(&bytes[..32]);
-                    return SecretKey::from_bytes(&arr);
+                    SecretKey::from_bytes(&arr)
                 } else {
                     // Invalid length in-memory config; fall through to generate-and-save below.
                     drop(cfg_r);
@@ -109,7 +109,7 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
                     if let Some(bytes) = cfg_w.iroh_key_bytes() {
                         let mut arr = [0u8; 32];
                         arr.copy_from_slice(&bytes[..32]);
-                        return SecretKey::from_bytes(&arr);
+                        SecretKey::from_bytes(&arr)
                     } else {
                         // Unlikely: fall back to generated key
                         sk
