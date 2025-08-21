@@ -14,12 +14,11 @@ crate contains the serialized message types and supporting structures.
   - `just build dev`          # debug/dev
   - `just build profiling`    # profiling (same flags as debug currently)
 
-- Run the backend server (serves /, /pkg, /media, and /ws):
-  - `just server`             # default 1 bot
-  - `just server 3`           # with 3 bots
+- Run the native backend (serves /, /pkg, /media, and /ws):
+  - `just backend`            # runs backend (bots configured via config file)
 
 - Build then run together:
-  - `just start`              # release + server with 1 bot
+  - `just start`              # release build + backend
 
 Notes
 - The server binds to the first available port starting at 3000 and logs the chosen URL (e.g., http://localhost:3000). Open that URL in the browser.
@@ -62,7 +61,7 @@ Output
 ## Workspace layout
 
 - `frontend/`: WASM/egui frontend and all UI/game/screen code (previously `client/`)
-- `native_mcg/`: Native node containing the backend (HTTP + WebSocket), CLI, and native-only helpers (previously `server/`)
+- `native_mcg/`: Native node containing the backend (HTTP + WebSocket + iroh), CLI, and native-only helpers (previously `server/`)
 - `shared/`: Types shared between frontend and native_mcg (serde-serializable protocol and game data)
 - `pkg/`: wasm-pack output (mcg.js, mcg_bg.wasm, mcg.d.ts) loaded by `index.html`
 - `index.html`: loads `pkg/mcg.js` and starts the game on a full-screen canvas
@@ -181,25 +180,30 @@ The easiest way is to run a dev build and start the server, then open the printe
 - One command (recommended):
   - `just start dev`
     - Builds the WASM bundle with wasm-pack into `./pkg/`
-    - Starts the Axum server that serves `/`, `/pkg`, `/media`, and the WebSocket endpoint at `/ws`
+    - Starts the native backend that serves `/`, `/pkg`, `/media`, and the WebSocket endpoint at `/ws`
     - Binds to the first available port starting at 3000 and prints the chosen URL
 - Manual alternative:
   - `just build dev`
-  - `just server` (or `just server 3` to run with 3 bots)
+  - `just backend`
 
 Then open the printed URL in your browser (e.g., http://localhost:3000).
 
 Hot reload loop
 - After frontend changes: `just build dev` and refresh the browser tab.
-- If the native node is already running, it will serve the updated `./pkg` artifacts.
+- If the native backend is already running, it will serve the updated `./pkg` artifacts.
+
+Configuration
+- Bots are configured via the `mcg-server.toml` config file in the current directory
+- The config file is created automatically on first run with default values (1 bot)
+- Edit the config file to change the number of bots or other settings
 
 Troubleshooting
 - Blank page or missing game:
   - Ensure `wasm-pack` is installed and in PATH.
   - Confirm `./pkg/mcg.js` exists and `index.html` loads it.
   - Check the browser console for WASM load errors.
-- Can’t connect from the Poker Online screen:
-  - Verify the server log shows the bound URL and that the Server field uses that exact URL.
+- Can't connect from the Poker Online screen:
+  - Verify the backend log shows the bound URL and that the Server field uses that exact URL.
   - The WebSocket endpoint is `/ws` under the same origin.
 - Camera/QR issues:
   - Allow camera permission when asked. Some browsers restrict camera on non-secure origins; localhost is typically permitted.
@@ -210,7 +214,7 @@ Troubleshooting
 
 1) `just start dev` to build and run
 2) Open the printed URL (e.g., http://localhost:3000)
-3) Iterate on client changes with `just build dev` and refresh the browser
+3) Iterate on frontend changes with `just build dev` and refresh the browser
 
 ## Testing and linting
 

@@ -9,9 +9,7 @@ pub struct ServerCli {
     #[arg(long, default_value = "mcg-server.toml")]
     pub config: PathBuf,
 
-    /// Number of bots to start with (overrides config)
-    #[arg(long)]
-    pub bots: Option<usize>,
+
 
     /// Iroh key as hex (overrides config.iroh_key)
     #[arg(long)]

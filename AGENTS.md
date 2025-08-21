@@ -28,7 +28,7 @@ This application is aimed to be peer to peer (p2p) in the future. Each player ge
     *   There is no dedicated `just serve` recipe in the current repo. The recommended end-to-end command is:
         - `just start [PROFILE] [BOTS]` — builds the frontend and runs the native node (see below) to serve the SPA and provide the WebSocket endpoint.
     *   If you only want to serve static files without running the native node, note:
-        - Important: Use the `native_mcg` backend to serve the frontend (recommended). Run `just server`, `just start`, or `cargo run -p native_mcg --bin native_mcg` to start the HTTP/WebSocket backend which serves `/`, `/pkg`, `/media` and exposes the WebSocket endpoint `/ws`. 
+        - Important: Use the `native_mcg` backend to serve the frontend (recommended). Run `just backend`, `just start`, or `cargo run -p native_mcg --bin native_mcg` to start the HTTP/WebSocket backend which serves `/`, `/pkg`, `/media` and exposes the WebSocket endpoint `/ws`.
     *   Examples:
         - `just start` — release build + native node with 1 bot
         - `just start dev` — dev build + native node with 1 bot
@@ -38,17 +38,17 @@ This application is aimed to be peer to peer (p2p) in the future. Each player ge
 
 ### Native Backend (native_mcg)
 
-1.  **Run native node / backend:**
-    *   `just server [BOTS]` — runs the `native_mcg` binary which starts the HTTP/WebSocket backend (typically binds starting at port 3000). It accepts `--bots <N>` to specify the number of AI bots included in games.
-      - Internally the `justfile` invokes: `cargo run -p native_mcg --bin native_mcg -- --bots {{BOTS}}`
+1.  **Run native backend:**
+    *   `just backend` — runs the `native_mcg` binary which starts the HTTP/WebSocket backend (typically binds starting at port 3000). Bots are configured via the `mcg-server.toml` config file.
 
 2.  **IROH (optional QUIC) transport**
     *   `native_mcg` includes an optional iroh-based transport (QUIC) in addition to the HTTP/WebSocket backend. See `IROH.md` and `native_mcg/src/backend/iroh.rs` for details.
     *   The iroh transport speaks the same newline-delimited JSON protocol (`ClientMsg` / `ServerMsg`) used by the WebSocket handler. On connect the iroh transport sends `ServerMsg::Welcome` and an initial `ServerMsg::State`; subsequent `ClientMsg` messages are handled by the centralized backend handler so transports behave consistently.
+    *   The server prints the node's public key (z-base-32) for clients to connect by PublicKey. The CLI accepts `--iroh-peer <pubkey>` to connect via iroh transport.
 
-3.  **Run Server in Background (for AI agents):**
-    *   `just server-bg` — runs the native node in the background.
-    *   `just kill-server` — stops the background native node process.
+3.  **Run Backend in Background (for AI agents):**
+    *   `just backend-bg` — runs the native backend in the background.
+    *   `just kill-backend` — stops the background native backend process.
 
 ## Development Conventions
 

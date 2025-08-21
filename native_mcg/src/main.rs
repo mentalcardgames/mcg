@@ -18,7 +18,7 @@ use std::path::PathBuf;
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///
 /// Usage:
-///   mcg-server [--config PATH] [--bots N]
+///   mcg-server [--config PATH]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Use clap-based CLI for parsing
@@ -31,9 +31,6 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("loading or creating config '{}'", config_path.display()))?;
 
     // Apply CLI overrides in-memory (non-persistent by default)
-    if let Some(b) = cli.bots {
-        cfg.bots = b;
-    }
     if let Some(k) = cli.iroh_key {
         cfg.iroh_key = Some(k);
     }

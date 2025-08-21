@@ -30,27 +30,28 @@ build PROFILE="release":
         ;;
     esac
 
-# Build then serve using the Rust server in one step
-# Usage: just start [PROFILE] [BOTS]
+# Build then serve using the Rust backend in one step
+# Usage: just start [PROFILE]
 # Examples:
-#   just start                # release build with 1 bot
-#   just start dev            # dev build with 1 bot
-#   just start release 3      # release build with 3 bots
-start PROFILE="release" BOTS="1":
+#   just start                # release build
+#   just start dev            # dev build
+# Note: Bots are configured via mcg-server.toml config file
+start PROFILE="release":
     just build {{PROFILE}}
-    just server {{BOTS}}
+    just backend
 
-# Run the native server (serves frontend + WebSocket backend)
-# Usage: just server [BOTS]
-server BOTS="1":
-    cargo run -p native_mcg --bin native_mcg -- --bots {{BOTS}}
+# Run the native backend (serves frontend + WebSocket backend)
+# Usage: just backend
+# Note: Bots are configured via mcg-server.toml config file
+backend:
+    cargo run -p native_mcg --bin native_mcg
 
-# Run the server in the background for AI agent testing
-server-bg:
+# Run the backend in the background for AI agent testing
+backend-bg:
     cargo run -p native_mcg --bin native_mcg &
 
-# Kill the background server process
-kill-server:
+# Kill the background backend process
+kill-backend:
     pkill -f "native_mcg" || true
 
 # Run the headless CLI with arbitrary arguments
