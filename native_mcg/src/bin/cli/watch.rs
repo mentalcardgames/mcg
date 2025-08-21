@@ -1,5 +1,5 @@
 use anyhow::Context;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 
 use mcg_shared::ServerMsg;

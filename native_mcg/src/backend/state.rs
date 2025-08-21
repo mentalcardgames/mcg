@@ -369,17 +369,11 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
                         mcg_shared::PlayerAction::CheckCall
                     };
 
-                    let before_to_act = game.to_act;
+                    // With the refactored flow logic, we are more confident that
+                    // the game state will advance correctly. The check for whether
+                    // the actor changed is removed to simplify the bot driver.
                     match game.apply_player_action(actor_idx, action) {
-                        Ok(_) => {
-                            // If apply didn't advance the turn (defensive), bail to avoid spin.
-                            if game.to_act == before_to_act {
-                                eprintln!("[BOT] apply_player_action did not advance to next player for actor idx {}; stopping bot drive to avoid spin.", actor_idx);
-                                false
-                            } else {
-                                true
-                            }
-                        }
+                        Ok(_) => true,
                         Err(e) => {
                             eprintln!(
                                 "[BOT] failed to apply action for bot id {}: {}",

@@ -154,46 +154,7 @@ impl Game {
             }
         }
 
-        // If bet/raise increased the current bet, rebuild the pending_to_act order
-        if self.current_bet > prev_current_bet {
-            let n = self.players.len();
-            self.pending_to_act.clear();
-            for i in 1..=n {
-                let idx = (actor + i) % n;
-                if !self.players[idx].has_folded
-                    && !self.players[idx].all_in
-                    && self.round_bets[idx] < self.current_bet
-                {
-                    self.pending_to_act.push(idx);
-                }
-            }
-            if let Some(&nxt) = self.pending_to_act.first() {
-                self.to_act = nxt;
-            }
-        }
-
-        // Remove actor from pending list if matched requirement, folded, or all-in
-        self.remove_from_pending(actor);
-
-        // If only one player remains, end the hand
-        if self.active_players().len() <= 1 {
-            self.stage = mcg_shared::Stage::Showdown;
-            // delegate to showdown module
-            crate::game::showdown::finish_showdown(self);
-            return Ok(());
-        }
-
-        // If betting round complete, advance stage
-        if self.is_betting_round_complete() {
-            self.advance_stage()?;
-            if self.stage == mcg_shared::Stage::Showdown {
-                crate::game::showdown::finish_showdown(self);
-                return Ok(());
-            }
-            self.init_round_for_stage();
-        } else if let Some(&nxt) = self.pending_to_act.first() {
-            self.to_act = nxt;
-        }
-        Ok(())
+        // Delegate to the new centralized flow control function.
+        self.post_action_update(actor, prev_current_bet)
     }
 }
