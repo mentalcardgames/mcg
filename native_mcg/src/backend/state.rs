@@ -371,6 +371,7 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
                         // There is a bet to call. Use a simple heuristic to sometimes fold:
                         // - If calling would be all-in or the need is small relative to stack, call.
                         // - Otherwise fold probabilistically based on need/stack.
+                        // Add a base 10% fold chance to make bots fold more often.
                         let player_stack = game.players[actor_idx].stack;
                         if need >= player_stack {
                             // calling requires all-in: call as all-in
@@ -378,8 +379,11 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
                         } else {
                             // probabilistic fold: higher relative need -> more likely to fold
                             let mut rng = rand::thread_rng();
-                            let fold_chance = (need as f64) / ((player_stack + game.current_bet) as f64);
-                            if rng.gen_bool(fold_chance.min(0.9)) {
+                            let base_fold = 0.10_f64; // 10% baseline fold chance
+                            let relative = (need as f64) / ((player_stack + game.current_bet) as f64);
+                            // Blend base chance with relative need-based chance and cap reasonably
+                            let fold_chance = (base_fold + relative * (1.0 - base_fold)).min(0.95);
+                            if rng.gen_bool(fold_chance) {
                                 mcg_shared::PlayerAction::Fold
                             } else {
                                 mcg_shared::PlayerAction::CheckCall
