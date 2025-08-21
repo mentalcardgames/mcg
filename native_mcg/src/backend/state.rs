@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use mcg_shared::Card;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
+use rand::Rng;
 
 use crate::game::{Game, Player};
 use crate::pretty;
@@ -364,9 +365,26 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
                     // Decide action
                     let need = game.current_bet.saturating_sub(game.round_bets[actor_idx]);
                     let action = if need == 0 {
+                        // No outstanding bet: bet the BB
                         mcg_shared::PlayerAction::Bet(game.bb)
                     } else {
-                        mcg_shared::PlayerAction::CheckCall
+                        // There is a bet to call. Use a simple heuristic to sometimes fold:
+                        // - If calling would be all-in or the need is small relative to stack, call.
+                        // - Otherwise fold probabilistically based on need/stack.
+                        let player_stack = game.players[actor_idx].stack;
+                        if need >= player_stack {
+                            // calling requires all-in: call as all-in
+                            mcg_shared::PlayerAction::CheckCall
+                        } else {
+                            // probabilistic fold: higher relative need -> more likely to fold
+                            let mut rng = rand::thread_rng();
+                            let fold_chance = (need as f64) / ((player_stack + game.current_bet) as f64);
+                            if rng.gen_bool(fold_chance.min(0.9)) {
+                                mcg_shared::PlayerAction::Fold
+                            } else {
+                                mcg_shared::PlayerAction::CheckCall
+                            }
+                        }
                     };
 
                     // With the refactored flow logic, we are more confident that
