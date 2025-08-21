@@ -52,6 +52,11 @@ pub fn start_game(
 ) -> Result<(), JsValue> {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
+
+    // Initialize a wasm-friendly tracing subscriber so tracing::info!/warn!/error!
+    // are forwarded to the browser console. tracing-wasm provides such a subscriber.
+    tracing_wasm::set_as_global_default();
+
     let web_options = WebOptions::default();
     spawn_local(async move {
         if let Err(e) = WebRunner::new().start(canvas, web_options, init).await {
