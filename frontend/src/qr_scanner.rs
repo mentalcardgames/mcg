@@ -73,7 +73,10 @@ impl Camera {
     #[cfg(target_arch = "wasm32")]
     pub async fn start(&mut self) -> Result<HtmlVideoElement, JsValue> {
         if self.is_active {
-            return Ok(self.video_element.clone().unwrap());
+            return self
+                .video_element
+                .clone()
+                .ok_or_else(|| JsValue::from_str("video element not initialized"));
         }
         let window = web_sys::window().expect("no global window");
         let document = window.document().expect("no document");

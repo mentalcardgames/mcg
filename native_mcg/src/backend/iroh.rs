@@ -16,13 +16,14 @@
 // scaffolding that can be adjusted for the installed iroh crate.
 
 use anyhow::{Context, Result};
-use owo_colors::OwoColorize;
+
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 
 use crate::backend::AppState;
 use crate::transport::send_server_msg_to_writer;
 use mcg_shared::{ClientMsg, ServerMsg};
+use owo_colors::OwoColorize;
 
 /// Public entrypoint spawned by server startup
 ///
@@ -45,15 +46,12 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
 
     // Print node id for CLI users
     let pk = endpoint.node_id();
-    println!("🔑 Iroh NodeId (public key): {}", pk);
+    tracing::info!(iroh_node_id = %pk);
 
     // Start the accept loop which will spawn a handler per connection
     start_iroh_accept_loop(endpoint, state.clone());
 
-    println!(
-        "🔗 Iroh listener started (ALPN {:?})",
-        std::str::from_utf8(ALPN).unwrap_or("mcg/iroh/1")
-    );
+    tracing::info!(alpn = %std::str::from_utf8(ALPN).unwrap_or("mcg/iroh/1"), "iroh listener started");
     Ok(())
 }
 
@@ -67,7 +65,7 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
     let generate_new_key = || -> SecretKey {
         let mut arr = [0u8; 32];
         if let Err(e) = getrandom(&mut arr) {
-            eprintln!("Failed to get randomness for iroh key: {}", e);
+            tracing::error!(error = %e, "failed to get randomness for iroh key");
         }
         SecretKey::from_bytes(&arr)
     };
@@ -87,18 +85,11 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
                     let sk = generate_new_key();
                     let mut cfg_w = state.config.write().await;
                     if let Err(e) = cfg_w.set_iroh_key_bytes_and_save(&cfg_path, &sk.to_bytes()) {
-                        eprintln!(
-                            "Failed to save generated iroh key to config '{}': {}",
-                            cfg_path.display(),
-                            e
-                        );
+                        tracing::error!(error = %e, "Failed to save generated iroh key to config '{}'", cfg_path.display());
                     } else {
-                        println!(
-                            "Saved generated iroh key into config '{}'",
-                            cfg_path.display()
-                        );
+                        tracing::info!(config_path = %cfg_path.display(), "Saved generated iroh key into config");
                     }
-                    return sk;
+                    sk
                 }
             } else {
                 // No key in memory: upgrade to write lock and generate + persist.
@@ -108,18 +99,11 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
                 // Double-check another writer didn't set the key while we waited for the write lock.
                 if cfg_w.iroh_key_bytes().is_none() {
                     if let Err(e) = cfg_w.set_iroh_key_bytes_and_save(&cfg_path, &sk.to_bytes()) {
-                        eprintln!(
-                            "Failed to save generated iroh key to config '{}': {}",
-                            cfg_path.display(),
-                            e
-                        );
+                        tracing::error!(error = %e, "Failed to save generated iroh key to config '{}'", cfg_path.display());
                     } else {
-                        println!(
-                            "Saved generated iroh key into config '{}'",
-                            cfg_path.display()
-                        );
+                        tracing::info!(config_path = %cfg_path.display(), "Saved generated iroh key into config");
                     }
-                    return sk;
+                    sk
                 } else {
                     // Another writer added the key: use that one instead.
                     if let Some(bytes) = cfg_w.iroh_key_bytes() {
@@ -128,14 +112,16 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
                         return SecretKey::from_bytes(&arr);
                     } else {
                         // Unlikely: fall back to generated key
-                        return sk;
+                        sk
                     }
                 }
             }
         }
     } else {
         // No config path available: generate an ephemeral key (do not persist).
-        eprintln!("No server config path provided; generating ephemeral iroh key (not persisted).");
+        tracing::warn!(
+            "no server config path provided; generating ephemeral iroh key (not persisted)"
+        );
         generate_new_key()
     }
 }
@@ -171,12 +157,12 @@ fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, state: AppState) {
                         let state_for_conn = state_clone.clone();
                         tokio::spawn(async move {
                             if let Err(e) = handle_iroh_connection(state_for_conn, conn).await {
-                                eprintln!("iroh connection handler error: {}", e);
+                                tracing::error!(error = %e, "iroh connection handler error");
                             }
                         });
                     }
                     Err(e) => {
-                        eprintln!("iroh accept/connect error: {}", e);
+                        tracing::error!(error = %e, "iroh accept/connect error");
                     }
                 },
                 None => {
@@ -200,11 +186,7 @@ async fn handle_iroh_connection(
     let mut reader = BufReader::new(recv);
 
     // Log connect
-    println!(
-        "{} {}",
-        "[IROH CONNECT]".bold().green(),
-        "New Game Client".bold()
-    );
+    tracing::info!("[IROH CONNECT] New Game Client");
 
     // Send welcome + initial state immediately (do not require a Join/NewGame
     // as the first client message). Transport-agnostic behaviour: each transport
@@ -227,7 +209,7 @@ async fn handle_iroh_connection(
                 match recv {
                     Ok(sm) => {
                         if let Err(e) = send_server_msg_to_writer(&mut send, &sm).await {
-                            eprintln!("iroh send error while forwarding broadcast: {}", e);
+                            tracing::error!(error = %e, "iroh send error while forwarding broadcast");
                             // On write failure, break the connection loop
                             break;
                         }
@@ -255,7 +237,7 @@ async fn handle_iroh_connection(
                             Ok(cm) => {
                                 // Delegate processing of client messages to a helper.
                                 if let Err(e) = process_client_msg(&state, &mut send, cm).await {
-                                    eprintln!("error processing client message: {}", e);
+                                    tracing::error!(error = %e, "error processing client message");
                                     // On unexpected processing error, break the loop to close connection.
                                     break;
                                 }
@@ -266,7 +248,7 @@ async fn handle_iroh_connection(
                         }
                     }
                     Err(e) => {
-                        eprintln!("iroh read error: {}", e);
+                        tracing::error!(error = %e, "iroh read error");
                         break;
                     }
                 }
@@ -274,11 +256,7 @@ async fn handle_iroh_connection(
         }
     }
 
-    println!(
-        "{} {}",
-        "[IROH DISCONNECT]".bold().red(),
-        "New Game Client".bold()
-    );
+    tracing::info!("[IROH DISCONNECT] New Game Client");
     // Close the send side politely if available
     let _ = send.finish();
     connection.closed().await;
@@ -292,13 +270,13 @@ where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
     if let Err(e) = send_server_msg_to_writer(send, &ServerMsg::Welcome).await {
-        eprintln!("iroh send error: {}", e);
+        tracing::error!(error = %e, "iroh send error");
     }
 
     // Send initial state directly to this client (same behaviour as websocket)
     if let Some(gs) = crate::backend::current_state_public(state).await {
         if let Err(e) = send_server_msg_to_writer(send, &ServerMsg::State(gs)).await {
-            eprintln!("iroh send error: {}", e);
+            tracing::error!(error = %e, "iroh send error");
         }
     }
 }
@@ -310,11 +288,11 @@ where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
     // Delegate handling to the centralized backend handler to ensure consistent behavior.
-    println!("[IROH] Received ClientMsg: {:?}", cm);
+    tracing::debug!(client_msg = ?cm, "iroh received client message");
     let resp = crate::backend::handle_client_msg(state, cm).await;
 
     if let Err(e) = send_server_msg_to_writer(send, &resp).await {
-        eprintln!("iroh send error while forwarding response: {}", e);
+        tracing::error!(error = %e, "iroh send error while forwarding response");
     }
     Ok(())
 }

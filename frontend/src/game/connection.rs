@@ -53,7 +53,13 @@ impl ConnectionService {
                 let newgame_msg = ClientMsg::NewGame {
                     players: players.clone(),
                 };
-                let newgame_json = serde_json::to_string(&newgame_msg).unwrap();
+                let newgame_json = match serde_json::to_string(&newgame_msg) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        crate::sprintln!("Failed to serialize NewGame message: {:?}", e);
+                        String::new()
+                    }
+                };
 
                 // Clone shared resources for the event handlers.
                 let event_queue_for_msg = event_queue.clone();
@@ -84,9 +90,12 @@ impl ConnectionService {
                 let event_queue_for_err = event_queue.clone();
                 let server_address_err = server_address.to_string();
                 let onerror = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
-                    event_queue_for_err.borrow_mut().push_back(ServerMsg::Error(
-                        format!("Failed to connect to {}.", server_address_err),
-                    ));
+                    event_queue_for_err
+                        .borrow_mut()
+                        .push_back(ServerMsg::Error(format!(
+                            "Failed to connect to {}.",
+                            server_address_err
+                        )));
                 });
                 ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
                 onerror.forget();
@@ -110,9 +119,10 @@ impl ConnectionService {
             }
             Err(err) => {
                 // Handle initial WebSocket creation error.
-                event_queue.borrow_mut().push_back(ServerMsg::Error(
-                    format!("WebSocket connect error: {:?}", err),
-                ));
+                event_queue.borrow_mut().push_back(ServerMsg::Error(format!(
+                    "WebSocket connect error: {:?}",
+                    err
+                )));
             }
         }
         // The Rc is now held by self, so we don't need to unwrap it.

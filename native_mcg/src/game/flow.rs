@@ -211,10 +211,16 @@ mod tests {
         assert_eq!(game.stage, Stage::Preflop);
 
         // Both players call, ending the pre-flop betting round.
-        game.apply_player_action(0, PlayerAction::CheckCall).unwrap();
-        game.apply_player_action(1, PlayerAction::CheckCall).unwrap();
+        game.apply_player_action(0, PlayerAction::CheckCall)
+            .unwrap();
+        game.apply_player_action(1, PlayerAction::CheckCall)
+            .unwrap();
 
         // The stage should advance to Flop.
-        assert_eq!(game.stage, Stage::Flop, "Stage should have advanced to Flop");
+        assert_eq!(
+            game.stage,
+            Stage::Flop,
+            "Stage should have advanced to Flop"
+        );
     }
 }

@@ -46,8 +46,10 @@ pub struct Game {
 
 impl Game {
     pub fn with_players(players: Vec<Player>) -> Result<Self> {
-        let mut deck: Vec<Card> = (0..52).map(|i| Card(i)).collect();
-        deck.shuffle(&mut rand::rng());
+        let mut deck: Vec<Card> = (0..52).map(Card).collect();
+        // Use thread-local RNG via rand::thread_rng() through rand::rngs::ThreadRng
+        let mut rng = rand::thread_rng();
+        deck.shuffle(&mut rng);
         let player_count = players.len();
 
         let mut g = Self {
@@ -81,25 +83,28 @@ impl Game {
     pub fn new_with_seed(human_name: String, bot_count: usize, seed: u64) -> Result<Self> {
         let deck = super::dealing::shuffled_deck_with_seed(seed);
 
-        let mut players = Vec::with_capacity(1 + bot_count);
-        players.push(Player {
-            id: 0,
-            name: human_name,
-            stack: 1000,
-            cards: [Card(0), Card(0)],
-            has_folded: false,
-            all_in: false,
-        });
-        for i in 0..bot_count {
-            players.push(Player {
-                id: i + 1,
-                name: format!("Bot {}", i + 1),
+        let players = {
+            let mut v = Vec::with_capacity(1 + bot_count);
+            v.push(Player {
+                id: 0,
+                name: human_name,
                 stack: 1000,
                 cards: [Card(0), Card(0)],
                 has_folded: false,
                 all_in: false,
             });
-        }
+            for i in 0..bot_count {
+                v.push(Player {
+                    id: i + 1,
+                    name: format!("Bot {}", i + 1),
+                    stack: 1000,
+                    cards: [Card(0), Card(0)],
+                    has_folded: false,
+                    all_in: false,
+                });
+            }
+            v
+        };
 
         let mut g = Self {
             players,

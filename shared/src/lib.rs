@@ -166,7 +166,9 @@ pub enum ClientMsg {
     },
     RequestState,
     NextHand,
-    NewGame { players: Vec<PlayerConfig> },
+    NewGame {
+        players: Vec<PlayerConfig>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

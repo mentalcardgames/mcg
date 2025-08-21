@@ -4,11 +4,12 @@ use egui::{vec2, Color32, RichText, ScrollArea};
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::articles::Post;
 use crate::effects::fetch_articles_effect;
-use crate::store::{ArticlesLoading, AppState};
+use crate::store::{AppState, ArticlesLoading};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct ArticlesScreen {
+    #[allow(clippy::type_complexity)]
     pending_result: Rc<RefCell<Option<Result<Vec<Post>, String>>>>,
 }
 

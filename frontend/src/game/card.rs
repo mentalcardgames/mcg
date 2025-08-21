@@ -51,10 +51,7 @@ pub enum SimpleCard {
 fn get_origin() -> String {
     let window = web_sys::window().expect("should have a window in this context");
     let location = window.location();
-    let origin = location
-        .origin()
-        .expect("should have an origin in this context");
-    origin
+    location.origin().expect("should have an origin in this context")
 }
 
 #[allow(non_snake_case)]
@@ -76,11 +73,17 @@ pub trait CardConfig {
 impl CardConfig for DirectoryCardType {
     fn img(&self, t: &impl CardEncoding) -> Image<'_> {
         let origin = get_origin();
+        let card_index = t.t().unwrap_or(0);
+        let card_name = self
+            .img_names
+            .get(card_index)
+            .cloned()
+            .unwrap_or_else(|| self.img_names.first().cloned().unwrap_or_default());
         let path = format!(
             "{origin}/media/{folder}/{card}",
             origin = origin,
             folder = self.path,
-            card = self.img_names[t.t().unwrap_or(0)]
+            card = card_name
         );
         Image::new(path)
             .show_loading_spinner(true)

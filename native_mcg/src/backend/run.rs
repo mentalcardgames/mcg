@@ -62,9 +62,9 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
         addr.to_string()
     };
 
-    println!("🌐 MCG Server running at http://{}", display_addr);
-    println!("📱 Open your browser and navigate to the above URL");
-    println!();
+    tracing::info!(display_addr = %display_addr, "MCG Server running");
+    tracing::info!("open your browser and navigate to the above URL");
+    tracing::debug!("blank line");
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .with_context(|| format!("Failed to bind to {}", display_addr))?;

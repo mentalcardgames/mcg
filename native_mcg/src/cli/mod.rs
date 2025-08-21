@@ -9,8 +9,6 @@ pub struct ServerCli {
     #[arg(long, default_value = "mcg-server.toml")]
     pub config: PathBuf,
 
-
-
     /// Iroh key as hex (overrides config.iroh_key)
     #[arg(long)]
     pub iroh_key: Option<String>,

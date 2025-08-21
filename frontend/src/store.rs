@@ -7,29 +7,21 @@ pub struct Settings {
     pub server_address: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum ConnectionStatus {
+    #[default]
     Disconnected,
     Connecting,
     Connected,
 }
-impl Default for ConnectionStatus {
-    fn default() -> Self {
-        ConnectionStatus::Disconnected
-    }
-}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum ArticlesLoading {
+    #[default]
     NotStarted,
     Loading,
     Loaded(Vec<Post>),
     Error(String),
-}
-impl Default for ArticlesLoading {
-    fn default() -> Self {
-        ArticlesLoading::NotStarted
-    }
 }
 
 /// Pairing UI state moved into the central store so UI widgets remain thin.

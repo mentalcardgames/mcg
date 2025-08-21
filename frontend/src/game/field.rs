@@ -189,7 +189,7 @@ impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
             );
         }
         if self.draggable && !self.cards.is_empty() {
-            let card = self.cards.last().expect("Tested for emptiness");
+            let card = self.cards.last().unwrap();
             ui.allocate_new_ui(
                 egui::UiBuilder::new().max_rect(Rect::from_min_size(
                     origin.add(self.card_pos(self.cards.len())),

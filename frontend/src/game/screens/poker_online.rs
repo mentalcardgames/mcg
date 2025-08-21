@@ -109,7 +109,7 @@ impl PokerOnlineScreen {
         egui::CollapsingHeader::new("Player Setup")
             .default_open(false)
             .show(ui, |ui| {
-                self.render_player_setup(ui, &ctx);
+                self.render_player_setup(ui, ctx);
             });
 
         if let Some(err) = &app_state.last_error {
@@ -213,10 +213,8 @@ impl PokerOnlineScreen {
                             if ui.button("✏").on_hover_text("Rename").clicked() {
                                 to_rename = Some(idx);
                             }
-                            if self.players.len() > 1 {
-                                if ui.button("🗑").on_hover_text("Remove").clicked() {
+                            if self.players.len() > 1 && ui.button("🗑").on_hover_text("Remove").clicked() {
                                     to_remove = Some(idx);
-                                }
                             }
                         });
                         ui.end_row();
@@ -356,7 +354,12 @@ impl PokerOnlineScreen {
         });
     }
 
-    fn render_player_status_and_bet(&self, ui: &mut egui::Ui, state: &GameStatePublic, p: &PlayerPublic) {
+    fn render_player_status_and_bet(
+        &self,
+        ui: &mut egui::Ui,
+        state: &GameStatePublic,
+        p: &PlayerPublic,
+    ) {
         if p.id == state.to_act && state.stage != Stage::Showdown {
             ui.colored_label(Color32::from_rgb(255, 215, 0), "●");
         } else {
@@ -385,7 +388,12 @@ impl PokerOnlineScreen {
         });
     }
 
-    fn render_my_cards_and_actions(&self, ui: &mut egui::Ui, state: &GameStatePublic, p: &PlayerPublic) {
+    fn render_my_cards_and_actions(
+        &self,
+        ui: &mut egui::Ui,
+        state: &GameStatePublic,
+        p: &PlayerPublic,
+    ) {
         ui.vertical(|ui| {
             if let Some(cards) = p.cards {
                 ui.horizontal(|ui| {
@@ -406,7 +414,9 @@ impl PokerOnlineScreen {
                 self.render_action_row(ui, p.id, true, false);
                 ui.add_space(6.0);
                 ui.separator();
-            } else if p.id == self.preferred_player && (state.stage == Stage::Showdown || p.cards.is_none()) {
+            } else if p.id == self.preferred_player
+                && (state.stage == Stage::Showdown || p.cards.is_none())
+            {
                 self.render_action_row(ui, p.id, false, true);
                 ui.add_space(6.0);
                 ui.separator();

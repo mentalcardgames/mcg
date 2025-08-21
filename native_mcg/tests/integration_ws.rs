@@ -36,12 +36,19 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
     // Drain initial welcome/state messages from both clients
     async fn drain_welcome_and_state<R>(read: &mut R) -> Option<ServerMsg>
     where
-        R: StreamExt<Item = Result<tokio_tungstenite::tungstenite::Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+        R: StreamExt<
+                Item = Result<
+                    tokio_tungstenite::tungstenite::Message,
+                    tokio_tungstenite::tungstenite::Error,
+                >,
+            > + Unpin,
     {
         let mut last_state: Option<ServerMsg> = None;
         let start = tokio::time::Instant::now();
         while start.elapsed() < Duration::from_secs(2) {
-            if let Ok(Some(Ok(msg))) = tokio::time::timeout(Duration::from_millis(200), read.next()).await {
+            if let Ok(Some(Ok(msg))) =
+                tokio::time::timeout(Duration::from_millis(200), read.next()).await
+            {
                 if let tokio_tungstenite::tungstenite::Message::Text(txt) = msg {
                     if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
                         if let ServerMsg::State(_) = &sm {
@@ -79,13 +86,17 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
 
     let cm = ClientMsg::NewGame { players };
     let txt = serde_json::to_string(&cm)?;
-    write1.send(tokio_tungstenite::tungstenite::Message::Text(txt)).await?;
+    write1
+        .send(tokio_tungstenite::tungstenite::Message::Text(txt))
+        .await?;
 
     // Now assert client 2 receives a State message within a short timeout
     let mut got_state = false;
     let start = tokio::time::Instant::now();
     while start.elapsed() < Duration::from_secs(3) {
-        if let Ok(Some(Ok(msg))) = tokio::time::timeout(Duration::from_millis(300), read2.next()).await {
+        if let Ok(Some(Ok(msg))) =
+            tokio::time::timeout(Duration::from_millis(300), read2.next()).await
+        {
             if let tokio_tungstenite::tungstenite::Message::Text(txt) = msg {
                 if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
                     if let ServerMsg::State(_) = sm {
@@ -100,6 +111,9 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
     // Clean up server
     server_handle.abort();
 
-    assert!(got_state, "client2 did not receive a State after client1 NewGame");
+    assert!(
+        got_state,
+        "client2 did not receive a State after client1 NewGame"
+    );
     Ok(())
 }

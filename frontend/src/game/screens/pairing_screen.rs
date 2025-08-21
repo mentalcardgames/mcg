@@ -112,7 +112,7 @@ impl ScreenWidget for PairingScreen {
                         }
                         if perform_action {
                             let target = player_name_clone.clone();
-                            let pair_action = pair_action;
+                            let _pair_action_local = pair_action;
                             for p in app_state.pairing_players.iter_mut() {
                                 if p.name == target {
                                     p.paired = pair_action;

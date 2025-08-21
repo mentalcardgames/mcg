@@ -41,7 +41,7 @@ macro_rules! sprintln {
 		#[cfg(target_arch = "wasm32")]
 		$crate::log(format!($($arg)*).as_str());
 		#[cfg(not(target_arch = "wasm32"))]
-		println!($($arg)*);
+		tracing::info!($($arg)*);
 	}};
 }
 
@@ -54,10 +54,10 @@ pub fn start_game(
     console_error_panic_hook::set_once();
     let web_options = WebOptions::default();
     spawn_local(async move {
-        WebRunner::new()
-            .start(canvas, web_options, init)
-            .await
-            .expect("Failed to start eframe");
+        if let Err(e) = WebRunner::new().start(canvas, web_options, init).await {
+            // Avoid panicking inside wasm task; log instead
+            crate::sprintln!("Failed to start eframe: {:?}", e);
+        }
     });
     Ok(())
 }

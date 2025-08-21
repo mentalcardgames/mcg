@@ -43,8 +43,7 @@ async fn main() -> anyhow::Result<()> {
 
     let bots = cfg.bots;
 
-    println!("Using config: {}", config_path.display());
-    println!("Starting with {} bot(s)", bots);
+    tracing::info!(config = %config_path.display(), bots);
 
     // Initialize shared state for the server and record config path for transports.
     let mut state = AppState::default();
@@ -62,13 +61,15 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Could not find an available port: {}", e))?;
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
 
-    println!("🚀 Starting server on port {}", port);
+    tracing::info!(port, "starting server");
     if port != 3000 {
-        println!(
-            "⚠️  Port 3000 was not available, using port {} instead",
-            port
-        );
+        tracing::warn!(port, "port 3000 was not available, using alternative port");
     }
+
+    // Initialize tracing subscriber for logging
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     // Run the server
     backend::run_server(addr, state).await?;

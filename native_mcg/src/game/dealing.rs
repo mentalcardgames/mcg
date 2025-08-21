@@ -12,8 +12,9 @@ use super::Game;
 impl Game {
     pub fn start_new_hand(&mut self) -> Result<()> {
         // Shuffle fresh deck
-        let mut deck: Vec<Card> = (0..52).map(|i| Card(i)).collect();
-        deck.shuffle(&mut rand::rng());
+        let mut deck: Vec<Card> = (0..52).map(Card).collect();
+        let mut rng = rand::thread_rng();
+        deck.shuffle(&mut rng);
         start_new_hand_from_deck(self, deck).context("Failed to start new hand from shuffled deck")
     }
 }
@@ -46,12 +47,7 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<Card>) -> Result<
         dealt_events.push(ActionEvent::game(GameAction::DealtHole {
             player_id: mcg_shared::PlayerId(p.id),
         }));
-        println!(
-            "[DEAL] {} gets {} {}",
-            p.name,
-            super::super::eval::card_str(p.cards[0]),
-            super::super::eval::card_str(p.cards[1])
-        );
+        tracing::info!(player = %p.name, card0 = %super::super::eval::card_str(p.cards[0]), card1 = %super::super::eval::card_str(p.cards[1]), "dealt hole cards");
     }
 
     // Reset table state
@@ -105,10 +101,7 @@ fn post_blind(g: &mut Game, idx: usize, kind: BlindKind, amount: u32) {
         mcg_shared::PlayerId(idx),
         ActionKind::PostBlind { kind, amount: a },
     ));
-    println!(
-        "[BLIND] {} posts {:?} {} -> stack {}",
-        g.players[idx].name, kind, a, g.players[idx].stack
-    );
+    tracing::info!(player = %g.players[idx].name, kind = ?kind, amount = a, stack = g.players[idx].stack, "posted blind");
 }
 
 #[cfg(test)]

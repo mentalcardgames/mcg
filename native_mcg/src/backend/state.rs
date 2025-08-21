@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use mcg_shared::Card;
+// rand import removed; use rand::random::<f64>() for probabilistic decisions
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
-use rand::Rng;
 
 use crate::game::{Game, Player};
 use crate::pretty;
@@ -27,7 +27,7 @@ pub struct AppState {
     pub config_path: Option<PathBuf>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct Lobby {
     pub(crate) game: Option<Game>,
     pub(crate) last_printed_log_len: usize,
@@ -39,16 +39,7 @@ pub(crate) struct Lobby {
     pub(crate) driving: bool,
 }
 
-impl Default for Lobby {
-    fn default() -> Self {
-        Lobby {
-            game: None,
-            last_printed_log_len: 0,
-            bots: Vec::new(),
-            driving: false,
-        }
-    }
-}
+
 
 impl Default for AppState {
     fn default() -> Self {
@@ -96,7 +87,7 @@ pub async fn create_new_game(
         .with_context(|| "creating new game with specified players")?;
 
     lobby.game = Some(game);
-    println!("[GAME] Created new game with {} players", player_count);
+    tracing::info!(player_count = player_count, "created new game");
 
     Ok(())
 }
@@ -128,7 +119,7 @@ pub async fn broadcast_state(state: &AppState) {
                 // Use the provided viewer id when formatting server-side logs.
                 let line =
                     pretty::format_event_human(e, &gs.players, std::io::stdout().is_terminal());
-                println!("{}", line);
+                tracing::info!(%line);
             }
             lobby.last_printed_log_len = total;
         }
@@ -218,7 +209,10 @@ pub async fn broadcast_and_drive(state: &AppState, min_ms: u64, max_ms: u64) {
 /// bot-driving). Returns a ServerMsg that the originating transport should send
 /// back to the client. Transports should delegate to this function rather than
 /// duplicating handling logic to ensure consistent behavior across transports.
-pub async fn handle_client_msg(state: &AppState, cm: mcg_shared::ClientMsg) -> mcg_shared::ServerMsg {
+pub async fn handle_client_msg(
+    state: &AppState,
+    cm: mcg_shared::ClientMsg,
+) -> mcg_shared::ServerMsg {
     match cm {
         mcg_shared::ClientMsg::Action { player_id, action } => {
             // Validate & apply action
@@ -242,7 +236,9 @@ pub async fn handle_client_msg(state: &AppState, cm: mcg_shared::ClientMsg) -> m
                 broadcast_and_drive(state, 50, 150).await;
                 mcg_shared::ServerMsg::State(gs)
             } else {
-                mcg_shared::ServerMsg::Error("No active game. Please start a new game first.".into())
+                mcg_shared::ServerMsg::Error(
+                    "No active game. Please start a new game first.".into(),
+                )
             }
         }
 
@@ -251,7 +247,9 @@ pub async fn handle_client_msg(state: &AppState, cm: mcg_shared::ClientMsg) -> m
             {
                 let lobby_r = state.lobby.read().await;
                 if lobby_r.game.is_none() {
-                    return mcg_shared::ServerMsg::Error("No active game. Please start a new game first.".into());
+                    return mcg_shared::ServerMsg::Error(
+                        "No active game. Please start a new game first.".into(),
+                    );
                 }
             }
 
@@ -261,26 +259,28 @@ pub async fn handle_client_msg(state: &AppState, cm: mcg_shared::ClientMsg) -> m
                     if let Some(gs) = current_state_public(state).await {
                         mcg_shared::ServerMsg::State(gs)
                     } else {
-                        mcg_shared::ServerMsg::Error("No active game after starting next hand".into())
+                        mcg_shared::ServerMsg::Error(
+                            "No active game after starting next hand".into(),
+                        )
                     }
                 }
                 Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to start new hand: {}", e)),
             }
         }
 
-        mcg_shared::ClientMsg::NewGame { players } => {
-            match create_new_game(state, players).await {
-                Ok(()) => {
-                    broadcast_and_drive(state, 50, 150).await;
-                    if let Some(gs) = current_state_public(state).await {
-                        mcg_shared::ServerMsg::State(gs)
-                    } else {
-                        mcg_shared::ServerMsg::Error("Failed to produce initial state after creating game".into())
-                    }
+        mcg_shared::ClientMsg::NewGame { players } => match create_new_game(state, players).await {
+            Ok(()) => {
+                broadcast_and_drive(state, 50, 150).await;
+                if let Some(gs) = current_state_public(state).await {
+                    mcg_shared::ServerMsg::State(gs)
+                } else {
+                    mcg_shared::ServerMsg::Error(
+                        "Failed to produce initial state after creating game".into(),
+                    )
                 }
-                Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to create new game: {}", e)),
             }
-        }
+            Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to create new game: {}", e)),
+        },
     }
 }
 
@@ -300,7 +300,7 @@ pub async fn start_new_hand_and_print(state: &AppState) -> Result<()> {
         let gs = game.public();
         lobby.last_printed_log_len = gs.action_log.len();
         let header = pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
-        println!("{}", header);
+        tracing::info!("{}", header);
     }
     Ok(())
 }
@@ -378,12 +378,12 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
                             mcg_shared::PlayerAction::CheckCall
                         } else {
                             // probabilistic fold: higher relative need -> more likely to fold
-                            let mut rng = rand::thread_rng();
                             let base_fold = 0.10_f64; // 10% baseline fold chance
-                            let relative = (need as f64) / ((player_stack + game.current_bet) as f64);
+                            let relative =
+                                (need as f64) / ((player_stack + game.current_bet) as f64);
                             // Blend base chance with relative need-based chance and cap reasonably
                             let fold_chance = (base_fold + relative * (1.0 - base_fold)).min(0.95);
-                            if rng.gen_bool(fold_chance) {
+                            if rand::random::<f64>() < fold_chance {
                                 mcg_shared::PlayerAction::Fold
                             } else {
                                 mcg_shared::PlayerAction::CheckCall

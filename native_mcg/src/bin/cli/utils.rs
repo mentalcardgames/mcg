@@ -7,7 +7,11 @@ use native_mcg::pretty::{format_event_human, format_state_human, format_table_he
 /// Print a state either as JSON or human-friendly text.
 pub fn output_state(state: &GameStatePublic, json: bool) {
     if json {
-        println!("{}", serde_json::to_string_pretty(state).unwrap());
+        if let Ok(txt) = serde_json::to_string_pretty(state) {
+            println!("{}", txt);
+        } else {
+            tracing::error!("failed to serialize state to json");
+        }
     } else {
         let use_color = std::io::stdout().is_terminal();
         println!("{}", format_state_human(state, use_color));
@@ -64,7 +68,7 @@ pub fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
                 }
             }
         }
-        ServerMsg::Error(e) => eprintln!("Server error: {}", e),
+        ServerMsg::Error(e) => tracing::error!(error = %e, "server error"),
         ServerMsg::Welcome => {
             if json {
                 // If user wants JSON, print the welcome message as JSON.
