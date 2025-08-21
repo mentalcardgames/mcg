@@ -130,13 +130,15 @@ impl Game {
         let players = self
             .players
             .iter()
-            .map(|p| PlayerPublic {
+            .enumerate()
+            .map(|(idx, p)| PlayerPublic {
                 id: mcg_shared::PlayerId(p.id),
                 name: p.name.clone(),
                 stack: p.stack,
                 // Expose hole cards for all players in the public state.
                 cards: Some(p.cards),
                 has_folded: p.has_folded,
+                bet_this_round: self.round_bets[idx],
             })
             .collect();
 

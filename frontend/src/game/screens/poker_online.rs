@@ -356,69 +356,81 @@ impl PokerOnlineScreen {
         });
     }
 
+    fn render_player_status_and_bet(&self, ui: &mut egui::Ui, state: &GameStatePublic, p: &PlayerPublic) {
+        if p.id == state.to_act && state.stage != Stage::Showdown {
+            ui.colored_label(Color32::from_rgb(255, 215, 0), "●");
+        } else {
+            ui.label("  ");
+        }
+
+        if p.id == self.preferred_player {
+            ui.colored_label(Color32::LIGHT_GREEN, "You");
+        }
+        ui.label(RichText::new(&p.name).strong());
+
+        if p.bet_this_round > 0 {
+            ui.label(format!("Bet: {}", p.bet_this_round));
+        }
+
+        if p.has_folded {
+            ui.colored_label(Color32::LIGHT_RED, "(folded)");
+        }
+
+        if state.stage == Stage::Showdown && state.winner_ids.contains(&p.id) {
+            ui.colored_label(Color32::YELLOW, "WINNER");
+        }
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.monospace(format!("stack: {}", p.stack));
+        });
+    }
+
+    fn render_my_cards_and_actions(&self, ui: &mut egui::Ui, state: &GameStatePublic, p: &PlayerPublic) {
+        ui.vertical(|ui| {
+            if let Some(cards) = p.cards {
+                ui.horizontal(|ui| {
+                    ui.add_space(12.0);
+                    card_chip(ui, cards[0]);
+                    card_chip(ui, cards[1]);
+                });
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(6.0);
+            } else {
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(6.0);
+            }
+
+            if p.id == state.to_act && state.stage != Stage::Showdown {
+                self.render_action_row(ui, p.id, true, false);
+                ui.add_space(6.0);
+                ui.separator();
+            } else if p.id == self.preferred_player && (state.stage == Stage::Showdown || p.cards.is_none()) {
+                self.render_action_row(ui, p.id, false, true);
+                ui.add_space(6.0);
+                ui.separator();
+            } else {
+                ui.add_space(8.0);
+            }
+        });
+    }
+
+    fn render_player(&self, ui: &mut egui::Ui, state: &GameStatePublic, p: &PlayerPublic) {
+        ui.horizontal(|ui| {
+            self.render_player_status_and_bet(ui, state, p);
+        });
+
+        if p.id == self.preferred_player {
+            self.render_my_cards_and_actions(ui, state, p);
+        }
+        ui.add_space(8.0);
+    }
+
     fn render_players_panel(&self, ui: &mut egui::Ui, state: &GameStatePublic) {
         ui.group(|ui| {
             for p in state.players.iter() {
-                let me = p.id == self.preferred_player;
-                ui.horizontal(|ui| {
-                    if p.id == state.to_act && state.stage != Stage::Showdown {
-                        ui.colored_label(Color32::from_rgb(255, 215, 0), "●");
-                    } else {
-                        ui.label("  ");
-                    }
-                    if me {
-                        ui.colored_label(Color32::LIGHT_GREEN, "You");
-                    }
-                    ui.label(RichText::new(&p.name).strong());
-                    if p.has_folded {
-                        ui.colored_label(Color32::LIGHT_RED, "(folded)");
-                    }
-                    if state.stage == Stage::Showdown && state.winner_ids.contains(&p.id) {
-                        ui.colored_label(Color32::YELLOW, "WINNER");
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.monospace(format!("stack: {}", p.stack));
-                    });
-                });
-                if me {
-                    ui.vertical(|ui| {
-                        // Render cards if available; otherwise still render spacer + separator
-                        if let Some(cards) = p.cards {
-                            ui.horizontal(|ui| {
-                                ui.add_space(12.0);
-                                card_chip(ui, cards[0]);
-                                card_chip(ui, cards[1]);
-                            });
-
-                            ui.add_space(6.0);
-                            ui.separator();
-                            ui.add_space(6.0);
-                        } else {
-                            // No cards (e.g. after hand) — keep the same visual spacing
-                            ui.add_space(6.0);
-                            ui.separator();
-                            ui.add_space(6.0);
-                        }
-
-                        // Action buttons placed below the player's cards
-                        if p.id == state.to_act && state.stage != Stage::Showdown {
-                            // Normal active action buttons during the hand
-                            self.render_action_row(ui, p.id, true, false);
-                            ui.add_space(6.0);
-                            ui.separator();
-                        } else if me && (state.stage == Stage::Showdown || p.cards.is_none()) {
-                            // After showdown or if there are no cards (hand finished), show a Next hand button
-                            // and the action buttons in a disabled state so the area doesn't disappear.
-                            self.render_action_row(ui, p.id, false, true);
-                            ui.add_space(6.0);
-                            ui.separator();
-                        } else {
-                            // keep space for alignment when not active
-                            ui.add_space(8.0);
-                        }
-                    });
-                }
-                ui.add_space(8.0);
+                self.render_player(ui, state, p);
             }
         });
     }
