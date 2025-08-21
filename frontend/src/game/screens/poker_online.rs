@@ -1,5 +1,5 @@
-use crate::effects::ConnectionEffect;
-use crate::store::{bootstrap_state, SharedState};
+use crate::game::connection::ConnectionService;
+use crate::store::{AppState, ConnectionStatus};
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
@@ -11,35 +11,27 @@ use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
-    state: SharedState,
-    conn_eff: ConnectionEffect,
-    show_error_popup: bool,
+    conn: ConnectionService,
     scanner: QrScannerPopup,
-    // Local UI-only edit buffers (kept here so the immediate-mode UI can mutate them)
+    // Local UI-only edit buffers
     edit_server_address: String,
     // Player configuration
     players: Vec<PlayerConfig>,
     next_player_id: usize,
     new_player_name: String,
-    // Preferred player this frontend would like to control (None = not requested)
+    // Preferred player this frontend would like to control
     preferred_player: PlayerId,
 }
+
 impl PokerOnlineScreen {
     pub fn new() -> Self {
-        // bootstrap shared state and effects
-        let state = bootstrap_state();
-        //TODO: what is that? Why snapshot?
-        let snapshot = state.borrow().clone();
-        let settings = snapshot.settings;
-        let conn_eff = ConnectionEffect::new(state.clone());
+        let app_state = AppState::new();
+        let settings = app_state.settings;
 
         Self {
-            state,
-            conn_eff,
-            show_error_popup: false,
+            conn: ConnectionService::new(),
             scanner: QrScannerPopup::new(),
             edit_server_address: settings.server_address,
-            // Player configuration
             players: vec![
                 PlayerConfig {
                     id: mcg_shared::PlayerId(0),
@@ -52,66 +44,55 @@ impl PokerOnlineScreen {
                     is_bot: true,
                 },
             ],
-            //TODO: why two?
             next_player_id: 2,
             new_player_name: String::new(),
             preferred_player: PlayerId(0),
         }
     }
 
-    fn draw_error_popup(&mut self, ctx: &egui::Context) {
-        if !self.show_error_popup {
+    fn draw_error_popup(&mut self, app_state: &mut AppState, ctx: &egui::Context) {
+        if app_state.last_error.is_none() {
             return;
         }
-        // read last_error from shared state snapshot
-        let snapshot = self.state.borrow().clone();
+
         let mut open = true;
+        let mut close_popup = false;
         egui::Window::new("Connection error")
             .collapsible(false)
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                if let Some(err) = &snapshot.last_error {
+                if let Some(err) = &app_state.last_error {
                     ui.label(err);
-                } else {
-                    ui.label(format!(
-                        "Failed to connect to server at {}. Is it running?",
-                        snapshot.settings.server_address
-                    ));
                 }
                 ui.add_space(8.0);
                 if ui.button("Close").clicked() {
-                    self.show_error_popup = false;
+                    close_popup = true;
                 }
             });
-        if !open {
-            self.show_error_popup = false;
+
+        if !open || close_popup {
+            app_state.last_error = None;
         }
     }
 
-    // Incoming messages are handled by ConnectionEffect which polls the ConnectionService
-    // and pushes ServerMsg events into the shared store. We no longer drain messages here.
-
-    fn render_header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        // Read a snapshot from the shared state for rendering
-        let snapshot = self.state.borrow().clone();
-
+    fn render_header(&mut self, app_state: &mut AppState, ui: &mut egui::Ui, ctx: &egui::Context) {
         // Title row with current stage badge
         ui.horizontal(|ui| {
             ui.heading("Poker Online");
             ui.add_space(16.0);
-            if let Some(s) = &snapshot.game_state {
+            if let Some(s) = &app_state.game_state {
                 ui.label(stage_badge(s.stage));
                 ui.add_space(8.0);
             }
         });
 
         // Collapsible connection & session controls
-        let default_open = snapshot.game_state.is_none();
+        let default_open = app_state.game_state.is_none();
         egui::CollapsingHeader::new("Connection & session")
             .default_open(default_open)
             .show(ui, |ui| {
-                Self::render_connection_controls(self, ui, ctx);
+                self.render_connection_controls(app_state, ui, ctx);
             });
 
         // Collapsible player setup section
@@ -121,22 +102,30 @@ impl PokerOnlineScreen {
                 self.render_player_setup(ui, &ctx);
             });
 
-        if let Some(err) = &snapshot.last_error {
+        if let Some(err) = &app_state.last_error {
             ui.colored_label(Color32::RED, err);
         }
-        if let Some(info) = &snapshot.last_info {
+        if let Some(info) = &app_state.last_info {
             ui.label(RichText::new(info));
         }
         ui.separator();
     }
 
-    fn render_connection_controls(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    fn render_connection_controls(
+        &mut self,
+        app_state: &mut AppState,
+        ui: &mut egui::Ui,
+        ctx: &egui::Context,
+    ) {
         let narrow = ui.available_width() < 900.0;
         if narrow {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
                     if ui.button("Connect").clicked() {
-                        self.connect(ctx);
+                        self.connect(app_state, ctx);
+                    }
+                    if ui.button("Disconnect").clicked() {
+                        self.disconnect();
                     }
                 });
                 ui.horizontal(|ui| {
@@ -156,7 +145,10 @@ impl PokerOnlineScreen {
                     .button_and_popup(ui, ctx, &mut self.edit_server_address);
                 ui.add_space(12.0);
                 if ui.button("Connect").clicked() {
-                    self.connect(ctx);
+                    self.connect(app_state, ctx);
+                }
+                if ui.button("Disconnect").clicked() {
+                    self.disconnect();
                 }
             });
         }
@@ -528,14 +520,22 @@ impl PokerOnlineScreen {
         });
     }
 
-    fn connect(&mut self, ctx: &egui::Context) {
-        self.conn_eff
-            .start_connect(ctx, &self.edit_server_address, self.players.clone());
-        self.show_error_popup = false;
+    fn connect(&mut self, app_state: &mut AppState, _ctx: &egui::Context) {
+        app_state.connection_status = ConnectionStatus::Connecting;
+        app_state.last_error = None;
+        app_state.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
+        app_state.settings.server_address = self.edit_server_address.clone();
+
+        self.conn
+            .connect(&self.edit_server_address, self.players.clone());
+    }
+
+    fn disconnect(&mut self) {
+        self.conn.close();
     }
 
     fn send(&self, msg: &ClientMsg) {
-        self.conn_eff.send(msg);
+        self.conn.send(msg);
     }
 
     // Generate a random name that doesn't conflict with existing player names
@@ -612,20 +612,21 @@ impl Default for PokerOnlineScreen {
 }
 
 impl ScreenWidget for PokerOnlineScreen {
-    fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
+        let app_state = &mut app_interface.app_state;
 
-        // Poll the connection effect to drain incoming messages into the store
-        self.conn_eff.poll();
+        for msg in self.conn.poll_messages() {
+            app_state.apply_server_msg(msg);
+        }
 
-        self.draw_error_popup(&ctx);
+        self.draw_error_popup(app_state, &ctx);
 
         // Render header (it will read from the store snapshot internally)
-        self.render_header(ui, &ctx);
+        self.render_header(app_state, ui, &ctx);
 
         // Render main content from the latest snapshot
-        let snapshot = self.state.borrow().clone();
-        if let Some(state) = &snapshot.game_state {
+        if let Some(state) = &app_state.game_state {
             self.render_showdown_banner(ui, state);
             self.render_panels(ui, state);
         } else {

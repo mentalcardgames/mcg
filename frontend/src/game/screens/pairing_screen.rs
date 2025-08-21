@@ -3,20 +3,13 @@ use egui::{vec2, Align, Button, Color32, Grid, Layout, RichText, ScrollArea};
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::sprintln;
-use crate::store::{bootstrap_state, SharedState};
 use crate::utils::emoji_hash;
 
-/// Pairing screen refactored to use the central Store so UI remains thin.
-/// State is stored in `store` (pairing_players + confirm fields). UI only renders snapshots
-/// and issues intent via `store.update(...)`.
-pub struct PairingScreen {
-    state: SharedState,
-}
+pub struct PairingScreen;
 
 impl PairingScreen {
     pub fn new() -> Self {
-        let state = bootstrap_state();
-        Self { state }
+        Self
     }
 }
 
@@ -27,16 +20,15 @@ impl Default for PairingScreen {
 }
 
 impl ScreenWidget for PairingScreen {
-    fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+        let app_state = &mut app_interface.app_state;
         ui.heading("Player Pairing");
         ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
             // Global Back button is provided by the layout
             ui.add_space(0.0);
         });
 
-        // Get a snapshot for rendering
-        let snapshot = self.state.borrow().clone();
-        let players = snapshot.pairing_players.clone();
+        let players = app_state.pairing_players.clone();
 
         ScrollArea::vertical()
             .auto_shrink([false, false])
@@ -78,12 +70,8 @@ impl ScreenWidget for PairingScreen {
                             {
                                 let pname = player.name.clone();
                                 let action = !player.paired;
-                                // set confirm fields in the shared state
-                                {
-                                    let mut s = self.state.borrow_mut();
-                                    s.pairing_confirm_player = Some(pname.clone());
-                                    s.pairing_confirm_action = Some(action);
-                                }
+                                app_state.pairing_confirm_player = Some(pname.clone());
+                                app_state.pairing_confirm_action = Some(action);
                             }
                             ui.end_row();
                         }
@@ -91,10 +79,9 @@ impl ScreenWidget for PairingScreen {
             });
 
         // Render confirmation window if requested in shared state
-        let snapshot = self.state.borrow().clone();
         if let (Some(player_name), Some(pair_action)) = (
-            snapshot.pairing_confirm_player.clone(),
-            snapshot.pairing_confirm_action,
+            app_state.pairing_confirm_player.clone(),
+            app_state.pairing_confirm_action,
         ) {
             let action_text = if pair_action { "pair" } else { "unpair" };
             let player_name_clone = player_name.clone();
@@ -116,9 +103,8 @@ impl ScreenWidget for PairingScreen {
                     ));
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
-                            let mut s = self.state.borrow_mut();
-                            s.pairing_confirm_player = None;
-                            s.pairing_confirm_action = None;
+                            app_state.pairing_confirm_player = None;
+                            app_state.pairing_confirm_action = None;
                         }
                         let mut perform_action = false;
                         if ui.button("Confirm").clicked() {
@@ -127,23 +113,20 @@ impl ScreenWidget for PairingScreen {
                         if perform_action {
                             let target = player_name_clone.clone();
                             let pair_action = pair_action;
-                            {
-                                let mut s = self.state.borrow_mut();
-                                for p in s.pairing_players.iter_mut() {
-                                    if p.name == target {
-                                        p.paired = pair_action;
-                                        sprintln!(
-                                            "Player {} ({}) is now {}",
-                                            p.name,
-                                            emoji_hash(p.name.as_bytes(), ui.ctx()),
-                                            if p.paired { "paired" } else { "unpaired" }
-                                        );
-                                        break;
-                                    }
+                            for p in app_state.pairing_players.iter_mut() {
+                                if p.name == target {
+                                    p.paired = pair_action;
+                                    sprintln!(
+                                        "Player {} ({}) is now {}",
+                                        p.name,
+                                        emoji_hash(p.name.as_bytes(), ui.ctx()),
+                                        if p.paired { "paired" } else { "unpaired" }
+                                    );
+                                    break;
                                 }
-                                s.pairing_confirm_player = None;
-                                s.pairing_confirm_action = None;
                             }
+                            app_state.pairing_confirm_player = None;
+                            app_state.pairing_confirm_action = None;
                         }
                     });
                 });

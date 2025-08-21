@@ -3,22 +3,19 @@ use egui::{vec2, Color32, RichText, ScrollArea};
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::articles::Post;
-use crate::effects::ArticlesEffect;
-use crate::store::{bootstrap_state, AppState, SharedState};
+use crate::effects::fetch_articles_effect;
+use crate::store::{ArticlesLoading, AppState};
+use std::cell::RefCell;
+use std::rc::Rc;
 
-/// Thin UI for articles; application state and fetching is handled by the shared Store + ArticlesEffect.
 pub struct ArticlesScreen {
-    state: SharedState,
-    articles_eff: ArticlesEffect,
+    pending_result: Rc<RefCell<Option<Result<Vec<Post>, String>>>>,
 }
 
 impl ArticlesScreen {
     pub fn new() -> Self {
-        let state = bootstrap_state();
-        let articles_eff = ArticlesEffect::new(state.clone());
         Self {
-            state,
-            articles_eff,
+            pending_result: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -35,12 +32,21 @@ impl ArticlesScreen {
         ui.add_space(20.0);
     }
 
-    fn render_posts_list(&self, ui: &mut egui::Ui, posts: &[Post], ctx: &egui::Context) {
+    fn render_posts_list(
+        &mut self,
+        app_state: &mut AppState,
+        ui: &mut egui::Ui,
+        posts: &[Post],
+        _ctx: &egui::Context,
+    ) {
         if ui
             .add_sized(vec2(150.0, 30.0), egui::Button::new("Refresh"))
             .clicked()
         {
-            self.articles_eff.fetch_posts(Some(ctx));
+            let pending_result = self.pending_result.clone();
+            fetch_articles_effect(app_state, move |result| {
+                *pending_result.borrow_mut() = Some(result);
+            });
         }
         ui.add_space(10.0);
         ui.label(RichText::new(format!("Found {} posts", posts.len())).color(Color32::GREEN));
@@ -76,8 +82,18 @@ impl Default for ArticlesScreen {
 }
 
 impl ScreenWidget for ArticlesScreen {
-    fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
+        let app_state = &mut app_interface.app_state;
+
+        if let Some(result) = self.pending_result.borrow_mut().take() {
+            match result {
+                Ok(posts) => app_state.articles = ArticlesLoading::Loaded(posts),
+                Err(e) => {
+                    app_state.articles = ArticlesLoading::Error(e);
+                }
+            }
+        }
 
         ui.vertical_centered(|ui| {
             ui.add_space(20.0);
@@ -89,15 +105,16 @@ impl ScreenWidget for ArticlesScreen {
             );
             ui.add_space(20.0);
 
-            // Render based on shared state snapshot
-            let snapshot: AppState = self.state.borrow().clone();
-            match snapshot.articles {
-                crate::store::ArticlesLoading::NotStarted => {
+            match &app_state.articles {
+                ArticlesLoading::NotStarted => {
                     if ui
                         .add_sized(vec2(150.0, 40.0), egui::Button::new("Fetch Posts"))
                         .clicked()
                     {
-                        self.articles_eff.fetch_posts(Some(&ctx));
+                        let pending_result = self.pending_result.clone();
+                        fetch_articles_effect(app_state, move |result| {
+                            *pending_result.borrow_mut() = Some(result);
+                        });
                     }
                     ui.add_space(20.0);
                     ui.label("Click the button to fetch posts from JSONPlaceholder API.");
@@ -107,22 +124,25 @@ impl ScreenWidget for ArticlesScreen {
                             .color(Color32::GRAY),
                     );
                 }
-                crate::store::ArticlesLoading::Loading => {
+                ArticlesLoading::Loading => {
                     self.render_loading_ui(ui);
                     ctx.request_repaint();
                 }
-                crate::store::ArticlesLoading::Loaded(posts) => {
+                ArticlesLoading::Loaded(posts) => {
                     let posts = posts.clone();
-                    self.render_posts_list(ui, &posts, &ctx);
+                    self.render_posts_list(app_state, ui, &posts, &ctx);
                 }
-                crate::store::ArticlesLoading::Error(err) => {
+                ArticlesLoading::Error(err) => {
                     let err = err.clone();
                     self.render_error_ui(ui, &err);
                     if ui
                         .add_sized(vec2(150.0, 40.0), egui::Button::new("Retry"))
                         .clicked()
                     {
-                        self.articles_eff.fetch_posts(Some(&ctx));
+                        let pending_result = self.pending_result.clone();
+                        fetch_articles_effect(app_state, move |result| {
+                            *pending_result.borrow_mut() = Some(result);
+                        });
                     }
                 }
             }
