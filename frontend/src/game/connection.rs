@@ -1,5 +1,7 @@
 use mcg_shared::{ClientMsg, PlayerConfig, ServerMsg};
+use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::rc::Rc;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
@@ -12,7 +14,7 @@ use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 /// This makes the architecture event-driven and removes the need for polling.
 pub struct ConnectionService {
     ws: Option<WebSocket>,
-    event_queue: VecDeque<ServerMsg>,
+    event_queue: Rc<RefCell<VecDeque<ServerMsg>>>,
 }
 
 impl Default for ConnectionService {
@@ -21,18 +23,16 @@ impl Default for ConnectionService {
     }
 }
 
-use std::cell::RefCell;
-use std::rc::Rc;
 impl ConnectionService {
     pub fn new() -> Self {
         Self {
             ws: None,
-            event_queue: VecDeque::new(),
+            event_queue: Rc::new(RefCell::new(VecDeque::new())),
         }
     }
 
     pub fn poll_messages(&mut self) -> impl Iterator<Item = ServerMsg> {
-        std::mem::take(&mut self.event_queue).into_iter()
+        std::mem::take(&mut self.event_queue.borrow_mut()).into_iter()
     }
 
     /// Connect to a WebSocket server.
@@ -42,7 +42,8 @@ impl ConnectionService {
     pub fn connect(&mut self, server_address: &str, players: Vec<PlayerConfig>) {
         // Close any existing connection before starting a new one.
         self.close();
-        let event_queue = Rc::new(RefCell::new(VecDeque::new()));
+        // The event queue is now part of `self`, so we just clone it for the closures.
+        let event_queue = self.event_queue.clone();
 
         let ws_url = format!("ws://{}/ws", server_address);
         match WebSocket::new(&ws_url) {
@@ -113,9 +114,8 @@ impl ConnectionService {
                 ));
             }
         }
-        self.event_queue = Rc::try_unwrap(event_queue)
-            .unwrap_or_else(|_| panic!("Failed to unwrap Rc"))
-            .into_inner();
+        // The Rc is now held by self, so we don't need to unwrap it.
+        // This was the source of the panic.
     }
 
     /// Send a `ClientMsg` to the server if connected.
