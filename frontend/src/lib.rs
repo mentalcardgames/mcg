@@ -10,7 +10,6 @@ pub mod router;
 pub mod store;
 pub mod utils;
 
-#[allow(unused_imports)]
 use eframe::AppCreator;
 #[cfg(target_arch = "wasm32")]
 use eframe::{WebOptions, WebRunner};
