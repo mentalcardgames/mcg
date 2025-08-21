@@ -12,7 +12,7 @@ use mcg_shared::{GameStatePublic, ServerMsg};
 /// snapshot each frame by calling `state.borrow().clone()` (AppState derives Clone)
 /// and render from that snapshot. Effects that mutate state should call
 /// `ctx.request_repaint()` themselves when they have access to an egui::Context.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Settings {
     pub name: String,
     pub server_address: String,

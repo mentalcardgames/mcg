@@ -1,5 +1,5 @@
-use crate::effects::ConnectionEffect;
-use crate::store::{bootstrap_state, SharedState};
+use crate::game::connection::ConnectionService;
+use crate::store::{bootstrap_state, ConnectionStatus, SharedState};
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
@@ -11,39 +11,32 @@ use std::rc::Rc;
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
-use gloo_timers::callback::Interval;
 
 pub struct PokerOnlineScreen {
     state: SharedState,
-    conn_eff: Rc<RefCell<ConnectionEffect>>,
-    show_error_popup: bool,
+    conn: ConnectionService,
     scanner: QrScannerPopup,
-    // Local UI-only edit buffers (kept here so the immediate-mode UI can mutate them)
+    // Local UI-only edit buffers
     edit_server_address: String,
     // Player configuration
     players: Vec<PlayerConfig>,
     next_player_id: usize,
     new_player_name: String,
-    // Preferred player this frontend would like to control (None = not requested)
+    // Preferred player this frontend would like to control
     preferred_player: PlayerId,
-    poll_timer: Option<Interval>,
 }
+
 impl PokerOnlineScreen {
     pub fn new() -> Self {
-        // bootstrap shared state and effects
         let state = bootstrap_state();
-        //TODO: what is that? Why snapshot?
         let snapshot = state.borrow().clone();
         let settings = snapshot.settings;
-        let conn_eff = Rc::new(RefCell::new(ConnectionEffect::new(state.clone())));
 
         Self {
             state,
-            conn_eff,
-            show_error_popup: false,
+            conn: ConnectionService::new(),
             scanner: QrScannerPopup::new(),
             edit_server_address: settings.server_address,
-            // Player configuration
             players: vec![
                 PlayerConfig {
                     id: mcg_shared::PlayerId(0),
@@ -56,21 +49,20 @@ impl PokerOnlineScreen {
                     is_bot: true,
                 },
             ],
-            //TODO: why two?
             next_player_id: 2,
             new_player_name: String::new(),
             preferred_player: PlayerId(0),
-            poll_timer: None,
         }
     }
 
     fn draw_error_popup(&mut self, ctx: &egui::Context) {
-        if !self.show_error_popup {
+        let mut snapshot = self.state.borrow_mut();
+        if snapshot.last_error.is_none() {
             return;
         }
-        // read last_error from shared state snapshot
-        let snapshot = self.state.borrow().clone();
+
         let mut open = true;
+        let mut close_popup = false;
         egui::Window::new("Connection error")
             .collapsible(false)
             .resizable(false)
@@ -78,24 +70,17 @@ impl PokerOnlineScreen {
             .show(ctx, |ui| {
                 if let Some(err) = &snapshot.last_error {
                     ui.label(err);
-                } else {
-                    ui.label(format!(
-                        "Failed to connect to server at {}. Is it running?",
-                        snapshot.settings.server_address
-                    ));
                 }
                 ui.add_space(8.0);
                 if ui.button("Close").clicked() {
-                    self.show_error_popup = false;
+                    close_popup = true;
                 }
             });
-        if !open {
-            self.show_error_popup = false;
+
+        if !open || close_popup {
+            snapshot.last_error = None;
         }
     }
-
-    // Incoming messages are handled by ConnectionEffect which polls the ConnectionService
-    // and pushes ServerMsg events into the shared store. We no longer drain messages here.
 
     fn render_header(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         // Read a snapshot from the shared state for rendering
@@ -540,27 +525,32 @@ impl PokerOnlineScreen {
     }
 
     fn connect(&mut self, ctx: &egui::Context) {
-        // any existing timer is dropped here
-        self.poll_timer = None;
-        self.conn_eff
-            .borrow_mut()
-            .start_connect(ctx, &self.edit_server_address, self.players.clone());
-        self.show_error_popup = false;
+        // Update the shared state to reflect the connecting status.
+        {
+            let mut s = self.state.borrow_mut();
+            s.connection_status = ConnectionStatus::Connecting;
+            s.last_error = None;
+            s.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
+            s.settings.server_address = self.edit_server_address.clone();
+        }
 
-        let conn_eff = self.conn_eff.clone();
-        let timer = Interval::new(100, move || {
-            conn_eff.borrow_mut().poll_once();
-        });
-        self.poll_timer = Some(timer);
+        // Initiate the connection. The ConnectionService is now fully event-driven
+        // and will mutate the shared state directly from its callbacks.
+        self.conn.connect(
+            &self.edit_server_address,
+            self.players.clone(),
+            self.state.clone(),
+            ctx,
+        );
     }
 
     fn disconnect(&mut self) {
-        self.conn_eff.borrow_mut().close();
-        self.poll_timer = None; // drop the timer
+        self.conn.close();
+        // The onclose handler in ConnectionService will update the state.
     }
 
     fn send(&self, msg: &ClientMsg) {
-        self.conn_eff.borrow_mut().send(msg);
+        self.conn.send(msg);
     }
 
     // Generate a random name that doesn't conflict with existing player names
