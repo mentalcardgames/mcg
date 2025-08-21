@@ -6,13 +6,16 @@ use mcg_shared::{
     ActionEvent, ActionKind, BlindKind, Card, ClientMsg, GameAction, GameStatePublic, PlayerAction,
     PlayerConfig, PlayerId, PlayerPublic, Stage,
 };
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
+use gloo_timers::callback::Interval;
 
 pub struct PokerOnlineScreen {
     state: SharedState,
-    conn_eff: ConnectionEffect,
+    conn_eff: Rc<RefCell<ConnectionEffect>>,
     show_error_popup: bool,
     scanner: QrScannerPopup,
     // Local UI-only edit buffers (kept here so the immediate-mode UI can mutate them)
@@ -23,6 +26,7 @@ pub struct PokerOnlineScreen {
     new_player_name: String,
     // Preferred player this frontend would like to control (None = not requested)
     preferred_player: PlayerId,
+    poll_timer: Option<Interval>,
 }
 impl PokerOnlineScreen {
     pub fn new() -> Self {
@@ -31,7 +35,7 @@ impl PokerOnlineScreen {
         //TODO: what is that? Why snapshot?
         let snapshot = state.borrow().clone();
         let settings = snapshot.settings;
-        let conn_eff = ConnectionEffect::new(state.clone());
+        let conn_eff = Rc::new(RefCell::new(ConnectionEffect::new(state.clone())));
 
         Self {
             state,
@@ -56,6 +60,7 @@ impl PokerOnlineScreen {
             next_player_id: 2,
             new_player_name: String::new(),
             preferred_player: PlayerId(0),
+            poll_timer: None,
         }
     }
 
@@ -138,6 +143,9 @@ impl PokerOnlineScreen {
                     if ui.button("Connect").clicked() {
                         self.connect(ctx);
                     }
+                    if ui.button("Disconnect").clicked() {
+                        self.disconnect();
+                    }
                 });
                 ui.horizontal(|ui| {
                     ui.label("Server:");
@@ -157,6 +165,9 @@ impl PokerOnlineScreen {
                 ui.add_space(12.0);
                 if ui.button("Connect").clicked() {
                     self.connect(ctx);
+                }
+                if ui.button("Disconnect").clicked() {
+                    self.disconnect();
                 }
             });
         }
@@ -529,13 +540,27 @@ impl PokerOnlineScreen {
     }
 
     fn connect(&mut self, ctx: &egui::Context) {
+        // any existing timer is dropped here
+        self.poll_timer = None;
         self.conn_eff
+            .borrow_mut()
             .start_connect(ctx, &self.edit_server_address, self.players.clone());
         self.show_error_popup = false;
+
+        let conn_eff = self.conn_eff.clone();
+        let timer = Interval::new(100, move || {
+            conn_eff.borrow_mut().poll_once();
+        });
+        self.poll_timer = Some(timer);
+    }
+
+    fn disconnect(&mut self) {
+        self.conn_eff.borrow_mut().close();
+        self.poll_timer = None; // drop the timer
     }
 
     fn send(&self, msg: &ClientMsg) {
-        self.conn_eff.send(msg);
+        self.conn_eff.borrow_mut().send(msg);
     }
 
     // Generate a random name that doesn't conflict with existing player names
@@ -614,9 +639,6 @@ impl Default for PokerOnlineScreen {
 impl ScreenWidget for PokerOnlineScreen {
     fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
-
-        // Poll the connection effect to drain incoming messages into the store
-        self.conn_eff.poll();
 
         self.draw_error_popup(&ctx);
 

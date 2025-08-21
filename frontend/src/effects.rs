@@ -3,7 +3,8 @@ use mcg_shared::ClientMsg;
 
 use crate::game::connection::ConnectionService;
 use crate::store::{apply_server_msg, SharedState};
-
+#[cfg(target_arch = "wasm32")]
+use gloo_timers::callback::Interval;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
@@ -32,6 +33,35 @@ impl ConnectionEffect {
     /// Start/establish a connection using ConnectionService with configured players.
     /// `ctx` is required by ConnectionService.connect for wasm/native UI integration.
     /// This will create a new ConnectionService, call connect, and mutate the shared state.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn start_connect(
+        &mut self,
+        ctx: &egui::Context,
+        addr: &str,
+        players: Vec<mcg_shared::PlayerConfig>,
+    ) {
+        let mut conn = ConnectionService::new();
+        conn.connect_with_players(addr, players.clone(), ctx);
+        self.conn = Some(conn);
+        self.ctx = Some(ctx.clone());
+        // update shared state directly
+        {
+            let mut s = self.state.borrow_mut();
+            s.connection_status = crate::store::ConnectionStatus::Connecting;
+            s.last_error = None;
+            s.last_info = Some(format!("Connecting to {}", addr));
+            s.settings.server_address = addr.to_string();
+            // Use the first player's name as the connection name
+            if let Some(first_player) = players.first() {
+                s.settings.name = first_player.name.clone();
+            }
+        }
+        if let Some(ctx) = &self.ctx {
+            ctx.request_repaint();
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
     pub fn start_connect(
         &mut self,
         ctx: &egui::Context,
@@ -92,7 +122,7 @@ impl ConnectionEffect {
 
     /// Poll the ConnectionService once: drain messages and errors, forward them into the shared state.
     /// This should be called each frame (or on a timer) from the UI thread so the UI observes mutated state.
-    pub fn poll(&mut self) {
+    pub fn poll_once(&mut self) {
         if let Some(c) = &mut self.conn {
             for msg in c.drain_messages() {
                 // apply incoming server messages into the shared AppState
