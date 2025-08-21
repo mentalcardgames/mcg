@@ -7,11 +7,7 @@ use native_mcg::pretty::{format_event_human, format_state_human, format_table_he
 /// Print a state either as JSON or human-friendly text.
 pub fn output_state(state: &GameStatePublic, json: bool) {
     if json {
-        if let Ok(txt) = serde_json::to_string_pretty(state) {
-            println!("{}", txt);
-        } else {
-            tracing::error!("failed to serialize state to json");
-        }
+        println!("{}", serde_json::to_string_pretty(state).unwrap());
     } else {
         let use_color = std::io::stdout().is_terminal();
         println!("{}", format_state_human(state, use_color));
@@ -22,7 +18,7 @@ pub fn generate_demo_players(num_players: usize) -> Vec<PlayerConfig> {
     let mut players = Vec::with_capacity(num_players);
     players.push(PlayerConfig {
         id: mcg_shared::PlayerId(0),
-        name: format!("Huuman player {}", 1),
+        name: format!("Huuman player {}", 0 + 1),
         is_bot: false,
     });
     for i in 1..num_players {
@@ -68,7 +64,7 @@ pub fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
                 }
             }
         }
-        ServerMsg::Error(e) => tracing::error!(error = %e, "server error"),
+        ServerMsg::Error(e) => eprintln!("Server error: {}", e),
         ServerMsg::Welcome => {
             if json {
                 // If user wants JSON, print the welcome message as JSON.

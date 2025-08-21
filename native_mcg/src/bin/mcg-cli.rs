@@ -95,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::NewGame => {
             let players = generate_demo_players(3);
-            let msg = ClientMsg::NewGame { players };
+            let msg = ClientMsg::NewGame { players: players };
             let latest = match transport.clone() {
                 TransportKind::Iroh(peer) => cli::run_once_iroh(&peer, msg, cli.wait_ms).await?,
                 TransportKind::Http(addr) => cli::run_once_http(&addr, msg, cli.wait_ms).await?,

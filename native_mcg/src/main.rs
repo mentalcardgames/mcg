@@ -62,9 +62,11 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!(port, "port 3000 was not available, using alternative port");
     }
 
-    // Initialize tracing subscriber for logging
+    // Initialize tracing subscriber for logging; default to INFO if RUST_LOG not set
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(env_filter)
         .init();
 
     // Run the server
