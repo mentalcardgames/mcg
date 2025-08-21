@@ -43,8 +43,18 @@ impl PokerOnlineScreen {
                     name: "Bot 1".to_string(),
                     is_bot: true,
                 },
+                PlayerConfig {
+                    id: mcg_shared::PlayerId(2),
+                    name: "Bot 2".to_string(),
+                    is_bot: true,
+                },
+                PlayerConfig {
+                    id: mcg_shared::PlayerId(3),
+                    name: "Bot 3".to_string(),
+                    is_bot: true,
+                },
             ],
-            next_player_id: 2,
+            next_player_id: 4,
             new_player_name: String::new(),
             preferred_player: PlayerId(0),
         }
@@ -258,7 +268,7 @@ impl PokerOnlineScreen {
                     self.players.push(PlayerConfig {
                         id: mcg_shared::PlayerId(self.next_player_id),
                         name: player_name,
-                        is_bot: false, // New players start as human by default
+                        is_bot: true, // New players start as bots by default
                     });
                     self.next_player_id += 1;
                     self.new_player_name.clear();

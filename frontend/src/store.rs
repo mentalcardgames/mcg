@@ -5,7 +5,6 @@ use mcg_shared::{GameStatePublic, ServerMsg};
 pub struct Settings {
     pub name: String,
     pub server_address: String,
-    pub bots: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -76,7 +75,6 @@ impl AppState {
             name: "Player".to_string(),
             // Default server address — set to a sensible local default here.
             server_address: "127.0.0.1:3000".to_string(),
-            bots: 1,
         };
 
         // initial pairing players (moved from UI default)
