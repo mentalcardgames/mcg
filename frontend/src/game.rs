@@ -1,3 +1,4 @@
+use crate::store::AppState;
 use egui::Context;
 pub mod card;
 pub mod connection;
@@ -22,28 +23,6 @@ pub enum AppEvent {
 pub struct Settings {
     pub dpi: f32,
     pub dark_mode: bool,
-}
-
-/// Application state that owns non-UI state
-#[derive(Clone)]
-pub struct AppState {
-    pub settings: Settings,
-}
-impl AppState {
-    pub fn new() -> Self {
-        Self {
-            settings: Settings {
-                dpi: crate::calculate_dpi_scale(),
-                dark_mode: true,
-            },
-        }
-    }
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 /// Application UI/Screen manager
@@ -71,9 +50,6 @@ pub struct App {
     #[allow(dead_code)]
     #[cfg(not(target_arch = "wasm32"))]
     router: Option<()>,
-
-    // Event queue for handling screen transitions
-    pending_events: Vec<AppEvent>,
 }
 
 impl Default for App {
@@ -107,6 +83,7 @@ impl App {
         #[cfg(not(target_arch = "wasm32"))]
         let current_path = "/".to_string();
 
+        let app_state = AppState::new();
         Self {
             current_screen_path: current_path,
             screens: std::collections::HashMap::new(),
@@ -118,40 +95,11 @@ impl App {
                 dpi: crate::calculate_dpi_scale(),
                 dark_mode: true,
             },
-            app_state: AppState::new(),
+            app_state,
             #[cfg(target_arch = "wasm32")]
             router,
             #[cfg(not(target_arch = "wasm32"))]
             router,
-            pending_events: Vec::new(),
-        }
-    }
-
-    /// Queue an event to be processed
-    pub fn queue_event(&mut self, event: AppEvent) {
-        self.pending_events.push(event);
-    }
-
-    /// Process all pending events
-    fn process_events(&mut self) {
-        let events = std::mem::take(&mut self.pending_events);
-        for event in events {
-            match event {
-                AppEvent::ChangeRoute(path) => {
-                    self.change_route(&path);
-                }
-                AppEvent::StartGame(config) => {
-                    self.game.set_config(config);
-                    self.change_route("/game");
-                }
-                AppEvent::StartDndGame(config) => {
-                    self.game_dnd.set_config(config);
-                    self.change_route("/game-dnd");
-                }
-                AppEvent::ExitGame => {
-                    self.change_route("/");
-                }
-            }
         }
     }
 
@@ -240,7 +188,6 @@ impl App {
                                 .on_hover_text("Open global settings")
                                 .clicked()
                             {
-                                self.pending_settings = self.app_state.settings.clone();
                                 self.settings_open = true;
                             }
                         },
@@ -270,18 +217,16 @@ impl App {
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
                         if ui.button("Apply").clicked() {
-                            self.app_state.settings = self.pending_settings.clone();
-                            ctx.set_pixels_per_point(self.app_state.settings.dpi);
-                            if self.app_state.settings.dark_mode {
+                            ctx.set_pixels_per_point(self.pending_settings.dpi);
+                            if self.pending_settings.dark_mode {
                                 ctx.set_visuals(egui::Visuals::dark());
                             } else {
                                 ctx.set_visuals(egui::Visuals::light());
                             }
                         }
                         if ui.button("OK").clicked() {
-                            self.app_state.settings = self.pending_settings.clone();
-                            ctx.set_pixels_per_point(self.app_state.settings.dpi);
-                            if self.app_state.settings.dark_mode {
+                            ctx.set_pixels_per_point(self.pending_settings.dpi);
+                            if self.pending_settings.dark_mode {
                                 ctx.set_visuals(egui::Visuals::dark());
                             } else {
                                 ctx.set_visuals(egui::Visuals::light());
@@ -302,14 +247,13 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
-        ctx.set_pixels_per_point(self.app_state.settings.dpi);
-        if self.app_state.settings.dark_mode {
+        ctx.set_pixels_per_point(self.pending_settings.dpi);
+        if self.pending_settings.dark_mode {
             ctx.set_visuals(egui::Visuals::dark());
         } else {
             ctx.set_visuals(egui::Visuals::light());
         }
         self.check_url_changes();
-        self.process_events();
 
         let mut events = Vec::new();
 
@@ -351,13 +295,24 @@ impl eframe::App for App {
                 mm.ui(&mut app_interface, ui, frame);
             }
         });
-
+        let events = std::mem::take(app_interface.events);
         for event in events {
-            self.queue_event(event);
+            match event {
+                AppEvent::ChangeRoute(path) => {
+                    self.change_route(&path);
+                }
+                AppEvent::StartGame(config) => {
+                    self.game.set_config(config);
+                    self.change_route("/game");
+                }
+                AppEvent::StartDndGame(config) => {
+                    self.game_dnd.set_config(config);
+                    self.change_route("/game-dnd");
+                }
+                AppEvent::ExitGame => {
+                    self.change_route("/");
+                }
+            }
         }
-
-        // Process newly-queued events immediately so UI transitions (like StartGame)
-        // take effect within the same frame instead of waiting one frame.
-        self.process_events();
     }
 }

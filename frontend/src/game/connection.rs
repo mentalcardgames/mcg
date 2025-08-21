@@ -1,6 +1,5 @@
-use crate::store::{apply_server_msg, ConnectionStatus, SharedState};
-use egui::Context;
 use mcg_shared::{ClientMsg, PlayerConfig, ServerMsg};
+use std::collections::VecDeque;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
@@ -13,6 +12,7 @@ use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 /// This makes the architecture event-driven and removes the need for polling.
 pub struct ConnectionService {
     ws: Option<WebSocket>,
+    event_queue: VecDeque<ServerMsg>,
 }
 
 impl Default for ConnectionService {
@@ -21,18 +21,28 @@ impl Default for ConnectionService {
     }
 }
 
+use std::cell::RefCell;
+use std::rc::Rc;
 impl ConnectionService {
     pub fn new() -> Self {
-        Self { ws: None }
+        Self {
+            ws: None,
+            event_queue: VecDeque::new(),
+        }
+    }
+
+    pub fn poll_messages(&mut self) -> impl Iterator<Item = ServerMsg> {
+        std::mem::take(&mut self.event_queue).into_iter()
     }
 
     /// Connect to a WebSocket server.
     ///
     /// Establishes a connection and sets up event handlers (`onmessage`, `onerror`, `onclose`)
     /// that directly mutate the provided `SharedState` and request UI repaints.
-    pub fn connect(&mut self, server_address: &str, players: Vec<PlayerConfig>, state: SharedState, ctx: &Context) {
+    pub fn connect(&mut self, server_address: &str, players: Vec<PlayerConfig>) {
         // Close any existing connection before starting a new one.
         self.close();
+        let event_queue = Rc::new(RefCell::new(VecDeque::new()));
 
         let ws_url = format!("ws://{}/ws", server_address);
         match WebSocket::new(&ws_url) {
@@ -44,8 +54,7 @@ impl ConnectionService {
                 let newgame_json = serde_json::to_string(&newgame_msg).unwrap();
 
                 // Clone shared resources for the event handlers.
-                let state_for_msg = state.clone();
-                let ctx_for_msg = ctx.clone();
+                let event_queue_for_msg = event_queue.clone();
                 let ws_clone_for_msg = ws.clone();
 
                 // onmessage: Parse ServerMsg, apply to state, and request repaint.
@@ -55,14 +64,14 @@ impl ConnectionService {
                             // If the server sends Welcome, respond with the NewGame message.
                             if let ServerMsg::Welcome = &msg {
                                 if let Err(e) = ws_clone_for_msg.send_with_str(&newgame_json) {
-                                     // Handle potential send error
-                                    let mut s = state_for_msg.borrow_mut();
-                                    s.last_error = Some(format!("Error sending NewGame: {:?}", e));
+                                    // Handle potential send error
+                                    event_queue_for_msg.borrow_mut().push_back(ServerMsg::Error(
+                                        format!("Error sending NewGame: {:?}", e),
+                                    ));
                                 }
                             }
                             // Apply the message to the shared state.
-                            apply_server_msg(&state_for_msg, msg);
-                            ctx_for_msg.request_repaint();
+                            event_queue_for_msg.borrow_mut().push_back(msg);
                         }
                     }
                 });
@@ -70,31 +79,27 @@ impl ConnectionService {
                 onmessage.forget(); // Leaks the closure to keep it alive.
 
                 // onerror: Update state with the error and request repaint.
-                let state_for_err = state.clone();
-                let ctx_for_err = ctx.clone();
+                let event_queue_for_err = event_queue.clone();
                 let server_address_err = server_address.to_string();
                 let onerror = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
-                    let mut s = state_for_err.borrow_mut();
-                    s.connection_status = ConnectionStatus::Disconnected;
-                    s.last_error = Some(format!("Failed to connect to {}.", server_address_err));
-                    ctx_for_err.request_repaint();
+                    event_queue_for_err.borrow_mut().push_back(ServerMsg::Error(
+                        format!("Failed to connect to {}.", server_address_err),
+                    ));
                 });
                 ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
                 onerror.forget();
 
                 // onclose: Update state with close info and request repaint.
-                let state_for_close = state.clone();
-                let ctx_for_close = ctx.clone();
+                let event_queue_for_close = event_queue.clone();
                 let onclose = Closure::<dyn FnMut(CloseEvent)>::new(move |e: CloseEvent| {
-                    let mut s = state_for_close.borrow_mut();
-                    s.connection_status = ConnectionStatus::Disconnected;
                     let reason = if e.reason().is_empty() {
                         format!("Connection closed (code {}).", e.code())
                     } else {
                         format!("Connection closed (code {}): {}", e.code(), e.reason())
                     };
-                    s.last_error = Some(reason);
-                    ctx_for_close.request_repaint();
+                    event_queue_for_close
+                        .borrow_mut()
+                        .push_back(ServerMsg::Error(reason));
                 });
                 ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
                 onclose.forget();
@@ -103,12 +108,14 @@ impl ConnectionService {
             }
             Err(err) => {
                 // Handle initial WebSocket creation error.
-                let mut s = state.borrow_mut();
-                s.connection_status = ConnectionStatus::Disconnected;
-                s.last_error = Some(format!("WebSocket connect error: {:?}", err));
-                ctx.request_repaint();
+                event_queue.borrow_mut().push_back(ServerMsg::Error(
+                    format!("WebSocket connect error: {:?}", err),
+                ));
             }
         }
+        self.event_queue = Rc::try_unwrap(event_queue)
+            .unwrap_or_else(|_| panic!("Failed to unwrap Rc"))
+            .into_inner();
     }
 
     /// Send a `ClientMsg` to the server if connected.
