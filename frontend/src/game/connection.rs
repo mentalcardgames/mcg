@@ -32,7 +32,8 @@ impl ConnectionService {
     }
 
     pub fn poll_messages(&mut self) -> impl Iterator<Item = ServerMsg> {
-        std::mem::take(&mut self.event_queue.borrow_mut()).into_iter()
+        let mut queue = self.event_queue.borrow_mut();
+        std::mem::take(&mut *queue).into_iter()
     }
 
     /// Connect to a WebSocket server.
