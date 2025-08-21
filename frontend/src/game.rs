@@ -139,6 +139,15 @@ impl App {
 }
 
 impl App {
+    fn apply_settings(&self, ctx: &Context) {
+        ctx.set_pixels_per_point(self.pending_settings.dpi);
+        if self.pending_settings.dark_mode {
+            ctx.set_visuals(egui::Visuals::dark());
+        } else {
+            ctx.set_visuals(egui::Visuals::light());
+        }
+    }
+
     fn render_top_bar(&mut self, ctx: &Context, events: &mut Vec<AppEvent>) {
         egui::TopBottomPanel::top("global_top_bar")
             .show_separator_line(false)
@@ -217,20 +226,10 @@ impl App {
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
                         if ui.button("Apply").clicked() {
-                            ctx.set_pixels_per_point(self.pending_settings.dpi);
-                            if self.pending_settings.dark_mode {
-                                ctx.set_visuals(egui::Visuals::dark());
-                            } else {
-                                ctx.set_visuals(egui::Visuals::light());
-                            }
+                            self.apply_settings(ctx);
                         }
                         if ui.button("OK").clicked() {
-                            ctx.set_pixels_per_point(self.pending_settings.dpi);
-                            if self.pending_settings.dark_mode {
-                                ctx.set_visuals(egui::Visuals::dark());
-                            } else {
-                                ctx.set_visuals(egui::Visuals::light());
-                            }
+                            self.apply_settings(ctx);
                             self.settings_open = false;
                         }
                         if ui.button("Cancel").clicked() {
