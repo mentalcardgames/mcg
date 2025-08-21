@@ -30,3 +30,10 @@ getrandom = "0.2"
 
 # Required helper for async trait usage in iroh handler
 async-trait = "0.1"
+
+[dev-dependencies]
+tokio-tungstenite = { version = "0.24.0", default-features = false }
+tokio = { version = "1", features = ["full"] }
+tokio-test = "0.4"
+hyper = { version = "1", features = ["server"] }
+hyper-util = { version = "0.1", features = ["server"] }

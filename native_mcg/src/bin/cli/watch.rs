@@ -2,7 +2,7 @@ use anyhow::Context;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
-use mcg_shared::{ClientMsg, ServerMsg};
+use mcg_shared::ServerMsg;
 
 use super::utils::handle_server_msg;
 
@@ -71,7 +71,7 @@ pub async fn watch_http(base: &str, json: bool) -> anyhow::Result<()> {
 pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
     // Import iroh APIs inside the function to limit compile-time exposure.
     use iroh::endpoint::Endpoint;
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::io::{AsyncBufReadExt, BufReader};
 
     // ALPN must match the server's ALPN
     const ALPN: &[u8] = b"mcg/iroh/1";

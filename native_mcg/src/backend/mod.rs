@@ -10,6 +10,5 @@ pub mod ws;
 // `crate::backend::AppState`, `crate::backend::broadcast_state`, etc.
 pub use run::run_server;
 pub use state::{
-    broadcast_and_drive, broadcast_state, create_new_game, current_state_public,
-    start_new_hand_and_print, validate_and_apply_action, handle_client_msg, AppState,
+    broadcast_state, current_state_public, handle_client_msg, AppState,
 };
