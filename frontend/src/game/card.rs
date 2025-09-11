@@ -51,7 +51,9 @@ pub enum SimpleCard {
 fn get_origin() -> String {
     let window = web_sys::window().expect("should have a window in this context");
     let location = window.location();
-    location.origin().expect("should have an origin in this context")
+    location
+        .origin()
+        .expect("should have an origin in this context")
 }
 
 #[allow(non_snake_case)]

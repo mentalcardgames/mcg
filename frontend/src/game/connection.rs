@@ -15,6 +15,10 @@ use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 pub struct ConnectionService {
     ws: Option<WebSocket>,
     event_queue: Rc<RefCell<VecDeque<ServerMsg>>>,
+    // Store closure handles to prevent memory leaks
+    _onmessage: Option<Closure<dyn FnMut(MessageEvent)>>,
+    _onerror: Option<Closure<dyn FnMut(Event)>>,
+    _onclose: Option<Closure<dyn FnMut(CloseEvent)>>,
 }
 
 impl Default for ConnectionService {
@@ -28,6 +32,9 @@ impl ConnectionService {
         Self {
             ws: None,
             event_queue: Rc::new(RefCell::new(VecDeque::new())),
+            _onmessage: None,
+            _onerror: None,
+            _onclose: None,
         }
     }
 
@@ -84,7 +91,6 @@ impl ConnectionService {
                     }
                 });
                 ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-                onmessage.forget(); // Leaks the closure to keep it alive.
 
                 // onerror: Update state with the error and request repaint.
                 let event_queue_for_err = event_queue.clone();
@@ -98,7 +104,6 @@ impl ConnectionService {
                         )));
                 });
                 ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
-                onerror.forget();
 
                 // onclose: Update state with close info and request repaint.
                 let event_queue_for_close = event_queue.clone();
@@ -113,8 +118,11 @@ impl ConnectionService {
                         .push_back(ServerMsg::Error(reason));
                 });
                 ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
-                onclose.forget();
 
+                // Store the closures to manage their lifetime properly
+                self._onmessage = Some(onmessage);
+                self._onerror = Some(onerror);
+                self._onclose = Some(onclose);
                 self.ws = Some(ws);
             }
             Err(err) => {
@@ -145,8 +153,26 @@ impl ConnectionService {
     /// Close the WebSocket connection.
     pub fn close(&mut self) {
         if let Some(ws) = self.ws.take() {
+            // Clear event handlers before closing to prevent leaks
+            ws.set_onmessage(None);
+            ws.set_onerror(None);
+            ws.set_onclose(None);
+
             // The onclose event will handle state updates.
             let _ = ws.close();
         }
+
+        // Drop the closure handles to free memory
+        self._onmessage = None;
+        self._onerror = None;
+        self._onclose = None;
+    }
+}
+
+/// Implement Drop to ensure proper cleanup even if close() isn't called explicitly
+impl Drop for ConnectionService {
+    fn drop(&mut self) {
+        // Calling close() here handles all cleanup and is idempotent.
+        self.close();
     }
 }

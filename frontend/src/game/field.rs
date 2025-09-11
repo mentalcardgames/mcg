@@ -210,7 +210,7 @@ impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
                     }
                     response
                         .dnd_release_payload::<DNDSelector>()
-                        .iter()
+                        .into_iter()
                         .for_each(|payload| {
                             sprintln!("Received Payload in {:?} over dnd_drag_source", self.kind);
                             sprintln!("Payload: {payload:?}");
@@ -273,7 +273,11 @@ impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
                                     .img(card)
                                     .maintain_aspect_ratio(false)
                                     .sense(Sense::click_and_drag())
-                                    .tint(Color32::from_hex("#0000007f").unwrap()),
+                                    .tint(
+                                        Color32::from_hex("#0000007f").unwrap_or(
+                                            Color32::from_rgba_unmultiplied(0, 0, 0, 127),
+                                        ),
+                                    ),
                             )
                         });
                     if DragAndDrop::has_any_payload(ui.ctx())
@@ -284,7 +288,7 @@ impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
                     drag_source
                         .response
                         .dnd_release_payload::<DNDSelector>()
-                        .iter()
+                        .into_iter()
                         .for_each(|payload| {
                             sprintln!("Received Payload at card {:?} over dnd_drag_source", idx);
                             sprintln!("Payload: {payload:?}");

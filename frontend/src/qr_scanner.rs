@@ -85,7 +85,9 @@ impl Camera {
             .dyn_into::<HtmlVideoElement>()?;
         video.set_autoplay(true);
         video.set_muted(true);
-        video.set_attribute("playsinline", "true").unwrap();
+        if let Err(e) = video.set_attribute("playsinline", "true") {
+            crate::sprintln!("Failed to set playsinline attribute: {:?}", e);
+        }
         video.set_width(640);
         video.set_height(480);
         let canvas = document
@@ -95,7 +97,7 @@ impl Camera {
         canvas.set_height(480);
         let context = canvas
             .get_context("2d")?
-            .unwrap()
+            .ok_or_else(|| JsValue::from_str("Failed to get 2d context"))?
             .dyn_into::<CanvasRenderingContext2d>()?;
         let navigator = window.navigator();
         let media_devices = navigator

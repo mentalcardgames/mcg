@@ -39,8 +39,6 @@ pub(crate) struct Lobby {
     pub(crate) driving: bool,
 }
 
-
-
 impl Default for AppState {
     fn default() -> Self {
         let (tx, _rx) = broadcast::channel(16);
@@ -226,7 +224,7 @@ pub async fn handle_client_msg(
                         mcg_shared::ServerMsg::Error("No active game after action".into())
                     }
                 }
-                Err(e) => mcg_shared::ServerMsg::Error(e),
+                Err(e) => mcg_shared::ServerMsg::Error(e.to_string()),
             }
         }
 

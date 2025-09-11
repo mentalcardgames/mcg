@@ -80,12 +80,11 @@ fn format_cards(cards: &[Card], color: bool) -> String {
 }
 
 fn player_name(players: &[PlayerPublic], id: PlayerId) -> String {
-    let name = players
+    players
         .iter()
         .find(|p| p.id == id)
         .map(|p| p.name.clone())
-        .unwrap_or_else(|| format!("P{}", id));
-    name
+        .unwrap_or_else(|| format!("P{}", id))
 }
 
 fn format_log_entry(entry: &ActionEvent, players: &[PlayerPublic], color: bool) -> String {

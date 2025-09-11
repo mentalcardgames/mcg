@@ -65,9 +65,7 @@ async fn main() -> anyhow::Result<()> {
     // Initialize tracing subscriber for logging; default to INFO if RUST_LOG not set
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Run the server
     backend::run_server(addr, state).await?;

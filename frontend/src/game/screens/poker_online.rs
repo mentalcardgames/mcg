@@ -213,8 +213,10 @@ impl PokerOnlineScreen {
                             if ui.button("✏").on_hover_text("Rename").clicked() {
                                 to_rename = Some(idx);
                             }
-                            if self.players.len() > 1 && ui.button("🗑").on_hover_text("Remove").clicked() {
-                                    to_remove = Some(idx);
+                            if self.players.len() > 1
+                                && ui.button("🗑").on_hover_text("Remove").clicked()
+                            {
+                                to_remove = Some(idx);
                             }
                         });
                         ui.end_row();

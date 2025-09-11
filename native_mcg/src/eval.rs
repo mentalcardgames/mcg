@@ -362,6 +362,6 @@ fn find_two_pair(counts: &[u8; 15], all_values: &[u8]) -> Option<(u8, u8, u8)> {
         .collect::<Vec<u8>>();
     kickers.sort_unstable_by(|a, b| b.cmp(a));
     kickers.dedup();
-    let kicker = *kickers.first().unwrap_or(&2);
+    let kicker = kickers.first().copied().unwrap_or(2);
     Some((p_high, p_low, kicker))
 }
