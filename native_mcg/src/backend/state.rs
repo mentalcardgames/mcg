@@ -10,6 +10,7 @@ use mcg_shared::Card;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 
+use crate::bot::{BotContext, BotManager};
 use crate::game::{Game, Player};
 use crate::pretty;
 use mcg_shared::GameStatePublic;
@@ -27,7 +28,23 @@ pub struct AppState {
     pub config_path: Option<PathBuf>,
 }
 
-#[derive(Clone, Default)]
+impl AppState {
+    /// Create a new AppState with the given config and optional config path
+    pub fn new(
+        config: crate::config::Config,
+        config_path: Option<PathBuf>,
+    ) -> Self {
+        let (tx, _rx) = broadcast::channel(16);
+        Self {
+            lobby: Arc::new(RwLock::new(Lobby::default())),
+            broadcaster: tx,
+            config: std::sync::Arc::new(RwLock::new(config)),
+            config_path,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct Lobby {
     pub(crate) game: Option<Game>,
     pub(crate) last_printed_log_len: usize,
@@ -37,6 +54,21 @@ pub(crate) struct Lobby {
     /// Indicates whether a server-side turn-driving loop is currently running.
     /// Prevents concurrent drive loops from multiple transports.
     pub(crate) driving: bool,
+    /// Bot manager for AI decision making
+    pub(crate) bot_manager: BotManager,
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for Lobby {
+    fn default() -> Self {
+        Self {
+            game: None,
+            last_printed_log_len: 0,
+            bots: Vec::new(),
+            driving: false,
+            bot_manager: BotManager::default(),
+        }
+    }
 }
 
 impl Default for AppState {
@@ -354,37 +386,37 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
         // Apply bot action under write lock, but re-check to_act to avoid races.
         let applied_and_advanced = {
             let mut lobby_w = state.lobby.write().await;
+            
+            // Clone the bot manager first to avoid borrowing conflicts
+            let bot_manager = lobby_w.bot_manager.clone();
+            
             if let Some(game) = &mut lobby_w.game {
                 // Reconfirm conditions haven't changed.
                 if game.stage == mcg_shared::Stage::Showdown || game.to_act != actor_idx {
                     // Another actor changed the state; resume loop to re-evaluate.
                     false
                 } else {
-                    // Decide action
+                    // Generate bot action using the bot manager
                     let need = game.current_bet.saturating_sub(game.round_bets[actor_idx]);
-                    let action = if need == 0 {
-                        // No outstanding bet: bet the BB
-                        mcg_shared::PlayerAction::Bet(game.bb)
-                    } else {
-                        // There is a bet to call. Use a simple heuristic to sometimes fold:
-                        // - If calling would be all-in or the need is small relative to stack, call.
-                        // - Otherwise fold probabilistically based on need/stack.
-                        // Add a base 10% fold chance to make bots fold more often.
-                        let player_stack = game.players[actor_idx].stack;
-                        if need >= player_stack {
-                            // calling requires all-in: call as all-in
-                            mcg_shared::PlayerAction::CheckCall
-                        } else {
-                            // probabilistic fold: higher relative need -> more likely to fold
-                            let base_fold = 0.10_f64; // 10% baseline fold chance
-                            let relative =
-                                (need as f64) / ((player_stack + game.current_bet) as f64);
-                            // Blend base chance with relative need-based chance and cap reasonably
-                            let fold_chance = (base_fold + relative * (1.0 - base_fold)).min(0.95);
-                            if rand::random::<f64>() < fold_chance {
-                                mcg_shared::PlayerAction::Fold
-                            } else {
+                    let context = BotContext {
+                        stack: game.players[actor_idx].stack,
+                        call_amount: need,
+                        current_bet: game.current_bet,
+                        big_blind: game.bb,
+                        stage: game.stage,
+                        position: actor_idx,
+                        total_players: game.players.len(),
+                    };
+                    
+                    let action = match bot_manager.generate_action(&context) {
+                        Ok(action) => action,
+                        Err(e) => {
+                            tracing::error!("Bot manager failed to generate action: {}", e);
+                            // Fallback to a safe action
+                            if need == 0 {
                                 mcg_shared::PlayerAction::CheckCall
+                            } else {
+                                mcg_shared::PlayerAction::Fold
                             }
                         }
                     };

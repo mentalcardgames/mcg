@@ -1,12 +1,8 @@
 mod cli;
 
 use clap::Parser;
-
 use mcg_shared::{ClientMsg, PlayerAction};
-
-use cli::{Cli, Commands, TransportKind};
-
-use crate::cli::generate_demo_players;
+use cli::{Cli, Commands, TransportKind, generate_demo_players};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

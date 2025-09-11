@@ -1,14 +1,8 @@
 //! Main entry point for the MCG poker server.
 
-mod backend;
-mod cli;
-mod config;
-mod eval;
-mod game;
-mod pretty;
-mod transport;
+use native_mcg::{backend, cli, config};
 
-use crate::config::Config;
+use config::Config;
 use anyhow::Context;
 use backend::AppState;
 use clap::Parser;
@@ -22,7 +16,7 @@ use std::path::PathBuf;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Use clap-based CLI for parsing
-    let cli = crate::cli::ServerCli::parse();
+    let cli = cli::ServerCli::parse();
 
     let config_path: PathBuf = cli.config.clone();
 
@@ -46,11 +40,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(config = %config_path.display(), bots);
 
     // Initialize shared state for the server and record config path for transports.
-    let state = AppState {
-        config: std::sync::Arc::new(tokio::sync::RwLock::new(cfg.clone())),
-        config_path: Some(config_path.clone()),
-        ..Default::default()
-    };
+    let state = AppState::new(cfg.clone(), Some(config_path.clone()));
 
     // Find first available port starting from 3000
     let port = find_available_port(3000)
