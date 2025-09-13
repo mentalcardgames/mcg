@@ -8,6 +8,8 @@ use crate::game::{Game, Player};
 use anyhow::{Context, Result};
 use mcg_shared::{Card, GameStatePublic, PlayerId};
 
+pub const CHANNEL_BUFFER_SIZE: usize = 256;
+
 /// Shared application state exposed to handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -24,7 +26,7 @@ pub struct AppState {
 impl AppState {
     /// Create a new AppState with the given config and optional config path
     pub fn new(config: crate::config::Config, config_path: Option<PathBuf>) -> Self {
-        let (tx, _rx) = broadcast::channel(16);
+        let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
         Self {
             lobby: Arc::new(RwLock::new(Lobby::default())),
             broadcaster: tx,
@@ -63,7 +65,7 @@ impl Default for Lobby {
 
 impl Default for AppState {
     fn default() -> Self {
-        let (tx, _rx) = broadcast::channel(16);
+        let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
         AppState {
             lobby: Arc::new(RwLock::new(Lobby::default())),
             broadcaster: tx,

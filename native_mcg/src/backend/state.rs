@@ -15,6 +15,8 @@ use crate::game::{Game, Player};
 use crate::pretty;
 use mcg_shared::GameStatePublic;
 
+use crate::server::state::CHANNEL_BUFFER_SIZE;
+
 /// Shared application state exposed to handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -70,7 +72,7 @@ impl Default for Lobby {
 
 impl Default for AppState {
     fn default() -> Self {
-        let (tx, _rx) = broadcast::channel(16);
+        let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
         AppState {
             lobby: Arc::new(RwLock::new(Lobby::default())),
             broadcaster: tx,

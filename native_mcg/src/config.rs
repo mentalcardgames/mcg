@@ -8,7 +8,7 @@ use std::path::Path;
 /// Fields:
 /// - bots: number of bot players to start with
 /// - iroh_key: optional iroh key stored as hex string of 32 bytes
-/// - bot_delay: average bot acting delay in milliseconds (default: 100)
+/// - bot_delay: average bot acting delay in milliseconds (default: 200)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub bots: usize,
@@ -21,7 +21,7 @@ impl Default for Config {
         Config {
             bots: 1,
             iroh_key: None,
-            bot_delay: 100,
+            bot_delay: 200, // Increased from 100ms to 200ms for better UX during bot turns
         }
     }
 }
