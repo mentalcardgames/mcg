@@ -3,7 +3,6 @@ use egui::Context;
 pub mod card;
 pub mod connection;
 pub mod field;
-pub mod screen;
 pub mod screens;
 #[cfg(target_arch = "wasm32")]
 use crate::router::Router;

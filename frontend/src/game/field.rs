@@ -1,6 +1,6 @@
 use crate::game::card::SimpleCard::Open;
 use crate::game::card::{CardConfig, CardEncoding};
-use crate::game::screen::DNDSelector;
+use crate::game::screens::DNDSelector;
 use crate::sprintln;
 use eframe::emath::{vec2, Rect};
 use egui::{frame, Color32, DragAndDrop, Sense, Vec2};
