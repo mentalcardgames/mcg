@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
+use egui::Vec2;
 
 pub mod communication;
+
+pub const CARD_NATURAL_SIZE: Vec2 = Vec2::new(140.0, 190.0);
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Stage {

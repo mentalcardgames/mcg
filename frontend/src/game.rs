@@ -4,6 +4,8 @@ pub mod card;
 pub mod connection;
 pub mod field;
 pub mod screens;
+pub mod theme;
+use theme::*;
 #[cfg(target_arch = "wasm32")]
 use crate::router::Router;
 use screens::{AppInterface, MainMenu, ScreenWidget};
@@ -149,16 +151,16 @@ impl App {
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
                     let avail = ui.available_width();
-                    let left_w = 120.0;
-                    let right_w = 140.0;
+                    let left_w = NAVBAR_WIDTH_LEFT;
+                    let right_w = NAVBAR_WIDTH_RIGHT;
                     let center_w = (avail - left_w - right_w).max(0.0);
-                    let row_h = ui.spacing().interact_size.y + 12.0;
+                    let row_h = ui.spacing().interact_size.y + NAVBAR_ROW_HEIGHT_EXTRA;
 
                     ui.allocate_ui_with_layout(
                         egui::vec2(left_w, row_h),
                         egui::Layout::left_to_right(egui::Align::Min),
                         |ui| {
-                            ui.add_space(8.0);
+                            ui.add_space(MARGIN_SM);
                             if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
                                 events.push(AppEvent::ChangeRoute("/".to_string()));
                             }
@@ -181,7 +183,7 @@ impl App {
                         egui::vec2(right_w, row_h),
                         egui::Layout::right_to_left(egui::Align::Center),
                         |ui| {
-                            ui.add_space(8.0);
+                            ui.add_space(MARGIN_SM);
                             if ui
                                 .button("⚙ Settings")
                                 .on_hover_text("Open global settings")
@@ -202,9 +204,9 @@ impl App {
                 .resizable(false)
                 .show(ctx, |ui| {
                     ui.heading("Global Settings");
-                    ui.add_space(8.0);
+                    ui.add_space(MARGIN_SM);
                     ui.label(format!("Version: {}", env!("CARGO_PKG_VERSION")));
-                    ui.add_space(8.0);
+                    ui.add_space(MARGIN_SM);
                     ui.add(
                         egui::Slider::new(&mut self.pending_settings.dpi, 0.75..=2.0)
                             .text("UI scale (DPI)"),
@@ -213,7 +215,7 @@ impl App {
                         self.pending_settings.dpi = crate::calculate_dpi_scale();
                     }
                     ui.checkbox(&mut self.pending_settings.dark_mode, "Dark mode");
-                    ui.add_space(8.0);
+                    ui.add_space(MARGIN_SM);
                     ui.horizontal(|ui| {
                         if ui.button("Apply").clicked() {
                             ctx.set_pixels_per_point(self.pending_settings.dpi);

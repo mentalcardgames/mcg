@@ -1,6 +1,6 @@
 use crate::game::card::DirectoryCardType;
 use crate::sprintln;
-use egui::Vec2;
+use mcg_shared::CARD_NATURAL_SIZE;
 
 pub const AVAILABLE_THEMES: &[&str] = &["img_cards", "alt_cards"];
 pub const DEFAULT_THEME: &str = "img_cards";
@@ -125,14 +125,14 @@ pub fn create_deck(theme: &str) -> DirectoryCardType {
             let path = "img_cards".to_string();
             let img_names: Vec<String> = STANDARD_CARDS.iter().map(|&s| s.to_string()).collect();
             sprintln!("Created standard deck with {} cards", img_names.len());
-            let natural_size = Vec2::new(140.0, 190.0);
+            let natural_size = CARD_NATURAL_SIZE;
             DirectoryCardType::new(path, img_names, natural_size)
         }
         "alt_cards" => {
             let path = "alt_cards".to_string();
             let img_names: Vec<String> = ALT_CARDS.iter().map(|&s| s.to_string()).collect();
             sprintln!("Created alternative deck with {} cards", img_names.len());
-            let natural_size = Vec2::new(140.0, 190.0);
+            let natural_size = CARD_NATURAL_SIZE;
             DirectoryCardType::new(path, img_names, natural_size)
         }
         _ => {

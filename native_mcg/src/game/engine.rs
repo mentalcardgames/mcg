@@ -226,7 +226,7 @@ mod tests {
         let deck = dealing::shuffled_deck_with_seed(123);
         let players = vec![
             Player {
-                id: 0,
+                id: PlayerId(0),
                 name: "Short".to_owned(),
                 stack: 3, // less than small blind (5)
                 cards: [Card(0), Card(0)],
@@ -234,7 +234,7 @@ mod tests {
                 all_in: false,
             },
             Player {
-                id: 1,
+                id: PlayerId(1),
                 name: "Normal".to_owned(),
                 stack: 1000,
                 cards: [Card(0), Card(0)],
