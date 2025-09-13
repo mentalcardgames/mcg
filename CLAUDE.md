@@ -75,11 +75,24 @@ Frontend (frontend crate)
   - ScreenMetadata (display name, icon, URL path, description, show_in_menu) is provided by each screen via the ScreenDef trait.
   - Each screen implements a runtime ScreenWidget trait (ui()) and a compile-time ScreenDef trait (metadata() and create()).
   - ScreenRegistry caches metadata and factories (path -> factory) so App can lazily instantiate Box<dyn ScreenWidget> by path at runtime.
+- Modular poker screen: frontend/src/game/screens/poker/
+  - screen.rs: Main PokerOnlineScreen struct implementing ScreenWidget trait
+  - player_manager.rs: Player configuration and management
+  - connection_manager.rs: WebSocket and server communication
+  - game_rendering.rs: UI rendering logic for poker tables
+  - ui_components.rs: Reusable UI components
+  - name_generator.rs: Random name generation utilities
 - Cards/config: frontend/src/hardcoded_cards.rs and related game types handle themes and deck configuration used by setup/game screens.
 
 Backend (native_mcg / backend)
 - Entry: native_mcg/src/main.rs
    - Parses CLI arguments and config. Chooses the first available port starting at 3000. Starts the backend with an AppState containing bot_count (from config file) and a Lobby.
+- Modular backend structure: native_mcg/src/backend/
+  - state.rs: Core application state and message handling logic
+  - http.rs: HTTP server and routing
+  - ws.rs: WebSocket handlers
+  - iroh.rs: P2P networking transport (optional feature)
+  - run.rs: Server startup and configuration
 - HTTP/router: native_mcg/src/backend/http.rs
    - Routes:
      - GET /health -> { ok: true }
@@ -90,7 +103,13 @@ Backend (native_mcg / backend)
    - WebSocket handler:
      - On connect the server sends a `ServerMsg::Welcome` and an initial `ServerMsg::State` immediately; clients may then send any supported `ClientMsg`.
      - All transports delegate handling to the centralized backend handler `crate::backend::handle_client_msg` to ensure consistent behavior across HTTP/WebSocket/iroh.
-   - AppState holds a Lobby (RwLock) and bot_count.
+   - AppState holds a Lobby (RwLock) and bot configuration.
+- Modular server components: native_mcg/src/server/
+  - state.rs: Core AppState and Lobby structs
+  - game_ops.rs: Game operations and state management functions
+  - bot_driver.rs: Bot AI logic and automated driving
+  - lobby.rs: Lobby management (stub for future expansion)
+  - session.rs: Session management (stub for future expansion)
 - Iroh transport (optional feature)
    - Location: `native_mcg/src/backend/iroh.rs` (feature-gated behind the `iroh` Cargo feature)
    - Behavior:
@@ -111,6 +130,18 @@ Shared protocol/types (shared crate)
   - Stage, PlayerAction, ActionKind/LogEvent, GameStatePublic, ClientMsg, ServerMsg
 - shared/src/communication.rs: strongly-typed structures modeling ElGamal-based messaging primitives (ModularElement, ElgamalCiphertext, BitString, CardDeck, CommunicationPacket). These are domain data structures for secure cryptographic communication.
 
+Poker game logic (native_mcg / poker)
+- Modular poker components: native_mcg/src/poker/
+  - cards.rs: Card representation and utilities (CardRank, CardSuit, card_rank, card_suit, card_str)
+  - constants.rs: Game constants (NUM_SUITS, NUM_RANKS, RANK_COUNT_ARRAY_SIZE)
+  - evaluation.rs: Hand evaluation algorithms (evaluate_best_hand, pick_best_five)
+  - hand_ranking.rs: Hand ranking utilities and comparisons
+- Game engine: native_mcg/src/game/
+  - engine.rs: Core Game and Player definitions
+  - flow.rs: Game flow logic and turn management
+  - dealing.rs: Card dealing and table initialization
+  - showdown.rs: Showdown resolution and pot awarding
+
 Key development flows
 - Build and run end-to-end (recommended):
   1) just start dev
@@ -126,10 +157,17 @@ Key development flows
 
 Extending the UI with a new screen
 - Create a new screen file in frontend/src/game/screens/
+- For complex screens, consider creating a dedicated module directory (e.g., poker/)
 - Implement the ScreenDef trait (metadata() and create())
 - Implement the ScreenWidget trait (ui())
-- Register the screen in the module system
+- Register the screen in frontend/src/game/screens/mod.rs
 - The Router will automatically handle routing based on the screen's URL path
+
+Module organization guidelines
+- Frontend: Group related UI components into dedicated modules under screens/
+- Backend: Separate transport logic (http, ws, iroh) from business logic (server/)
+- Game logic: Organize by functionality (cards, evaluation, constants) under poker/
+- Avoid backward compatibility re-exports - prefer direct imports from clear module paths
 
 CI and editor assistants
 - No Cursor or Copilot instruction files were found at the time of writing.
