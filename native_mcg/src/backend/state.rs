@@ -226,10 +226,12 @@ pub async fn validate_and_apply_action(
 }
 
 /// Broadcast the current state (and trigger bots if enabled).
-pub async fn broadcast_and_drive(state: &AppState, min_ms: u64, max_ms: u64) {
+pub async fn broadcast_and_drive(state: &AppState) {
     // Broadcast updated state to subscribers.
     broadcast_state(state).await;
     // Drive bots (drive_bots_with_delays itself respects lobby.bots_auto).
+    let config = state.config.read().await;
+    let (min_ms, max_ms) = config.bot_delay_range();
     drive_bots_with_delays(state, min_ms, max_ms).await;
 }
 
@@ -241,7 +243,7 @@ async fn handle_action(
 ) -> mcg_shared::ServerMsg {
     match validate_and_apply_action(state, player_id, action.clone()).await {
         Ok(()) => {
-            broadcast_and_drive(state, 50, 150).await;
+            broadcast_and_drive(state).await;
             if let Some(gs) = current_state_public(state).await {
                 mcg_shared::ServerMsg::State(gs)
             } else {
@@ -255,7 +257,7 @@ async fn handle_action(
 /// Handle a RequestState message from a client
 async fn handle_request_state(state: &AppState) -> mcg_shared::ServerMsg {
     if let Some(gs) = current_state_public(state).await {
-        broadcast_and_drive(state, 50, 150).await;
+        broadcast_and_drive(state).await;
         mcg_shared::ServerMsg::State(gs)
     } else {
         mcg_shared::ServerMsg::Error(
@@ -278,7 +280,7 @@ async fn handle_next_hand(state: &AppState) -> mcg_shared::ServerMsg {
 
     match start_new_hand_and_print(state).await {
         Ok(()) => {
-            broadcast_and_drive(state, 50, 150).await;
+            broadcast_and_drive(state).await;
             if let Some(gs) = current_state_public(state).await {
                 mcg_shared::ServerMsg::State(gs)
             } else {
@@ -298,7 +300,7 @@ async fn handle_new_game(
 ) -> mcg_shared::ServerMsg {
     match create_new_game(state, players).await {
         Ok(()) => {
-            broadcast_and_drive(state, 50, 150).await;
+            broadcast_and_drive(state).await;
             if let Some(gs) = current_state_public(state).await {
                 mcg_shared::ServerMsg::State(gs)
             } else {

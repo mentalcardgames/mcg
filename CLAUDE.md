@@ -32,7 +32,10 @@ Notes
 - The backend binds to the first available port starting at 3000 and logs the chosen URL (e.g., http://localhost:3000). Open that URL in the browser.
 - The native node assumes current working directory is the repo root to serve ./pkg and ./media.
 - wasm-pack builds are run from the `frontend/` crate and emit to ../pkg (repo root). If a `frontend/pkg` directory exists, prefer the root `pkg` output.
-- Bot configuration is managed through mcg-server.toml file.
+- Bot configuration is managed through mcg-server.toml file. Available settings:
+- bots: number of bot players to start with (default: 1)
+- bot_delay: average bot acting delay in milliseconds (default: 100, range: 50-150ms)
+- iroh_key: optional iroh key for P2P networking
 
 Testing
 - Workspace tests (if present):
