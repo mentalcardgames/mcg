@@ -1,10 +1,10 @@
 use crate::store::AppState;
 use egui::Context;
 pub mod card;
-pub mod connection;
 pub mod field;
 pub mod screens;
 pub mod theme;
+pub mod websocket;
 use theme::*;
 #[cfg(target_arch = "wasm32")]
 use crate::router::Router;

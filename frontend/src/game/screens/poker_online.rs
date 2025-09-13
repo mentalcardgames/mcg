@@ -1,17 +1,17 @@
-use crate::game::connection::ConnectionService;
+use crate::game::websocket::WebSocketConnection;
 use crate::store::{AppState, ConnectionStatus};
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
     ActionEvent, ActionKind, BlindKind, Card, ClientMsg, GameAction, GameStatePublic, HandResult, PlayerAction,
-    PlayerConfig, PlayerId, PlayerPublic, Stage,
+    PlayerConfig, PlayerId, PlayerPublic, ServerMsg, Stage,
 };
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
-    conn: ConnectionService,
+    conn: WebSocketConnection,
     scanner: QrScannerPopup,
     // Local UI-only edit buffers
     edit_server_address: String,
@@ -29,7 +29,7 @@ impl PokerOnlineScreen {
         let settings = app_state.settings;
 
         Self {
-            conn: ConnectionService::new(),
+            conn: WebSocketConnection::new(),
             scanner: QrScannerPopup::new(),
             edit_server_address: settings.server_address,
             players: vec![
@@ -606,14 +606,56 @@ impl PokerOnlineScreen {
         });
     }
 
-    fn connect(&mut self, app_state: &mut AppState, _ctx: &egui::Context) {
+    fn connect(&mut self, app_state: &mut AppState, ctx: &egui::Context) {
         app_state.connection_status = ConnectionStatus::Connecting;
         app_state.last_error = None;
         app_state.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
         app_state.settings.server_address = self.edit_server_address.clone();
 
-        self.conn
-            .connect(&self.edit_server_address, self.players.clone());
+        let ctx_for_callback = ctx.clone();
+        let app_state_ptr = std::rc::Rc::new(std::cell::RefCell::new(app_state as *mut AppState));
+
+        // Clone for each closure to avoid move issues
+        let ctx_for_msg = ctx_for_callback.clone();
+        let app_state_ptr_for_msg = app_state_ptr.clone();
+        let ctx_for_error = ctx_for_callback.clone();
+        let app_state_ptr_for_error = app_state_ptr.clone();
+        let ctx_for_close = ctx_for_callback.clone();
+        let app_state_ptr_for_close = app_state_ptr.clone();
+
+        self.conn.connect(
+            &self.edit_server_address,
+            self.players.clone(),
+            move |msg: ServerMsg| {
+                // handle_msg - immediate processing
+                unsafe {
+                    if let Some(app_state) = app_state_ptr_for_msg.borrow_mut().as_mut() {
+                        app_state.apply_server_msg(msg);
+                        ctx_for_msg.request_repaint(); // immediate UI update
+                    }
+                }
+            },
+            move |error: String| {
+                // handle error
+                unsafe {
+                    if let Some(app_state) = app_state_ptr_for_error.borrow_mut().as_mut() {
+                        app_state.last_error = Some(error);
+                        app_state.connection_status = ConnectionStatus::Disconnected;
+                        ctx_for_error.request_repaint();
+                    }
+                }
+            },
+            move |reason: String| {
+                // handle close
+                unsafe {
+                    if let Some(app_state) = app_state_ptr_for_close.borrow_mut().as_mut() {
+                        app_state.connection_status = ConnectionStatus::Disconnected;
+                        app_state.last_error = Some(reason);
+                        ctx_for_close.request_repaint();
+                    }
+                }
+            }
+        );
     }
 
     fn disconnect(&mut self) {
@@ -621,7 +663,7 @@ impl PokerOnlineScreen {
     }
 
     fn send(&self, msg: &ClientMsg) {
-        self.conn.send(msg);
+        self.conn.send_msg(msg);
     }
 
     // Generate a random name that doesn't conflict with existing player names
@@ -730,10 +772,6 @@ impl ScreenWidget for PokerOnlineScreen {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
         let app_state = &mut app_interface.app_state;
-
-        for msg in self.conn.poll_messages() {
-            app_state.apply_server_msg(msg);
-        }
 
         self.draw_error_popup(app_state, &ctx);
 
