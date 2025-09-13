@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use mcg_shared::Card;
+use mcg_shared::{Card, PlayerId};
 // rand import removed; use rand::random::<f64>() for probabilistic decisions
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
@@ -50,7 +50,7 @@ pub(crate) struct Lobby {
     pub(crate) last_printed_log_len: usize,
     /// List of player IDs that should be driven by bots. Kept in the backend so
     /// the game engine remains unaware of bot status.
-    pub(crate) bots: Vec<usize>,
+    pub(crate) bots: Vec<PlayerId>,
     /// Indicates whether a server-side turn-driving loop is currently running.
     /// Prevents concurrent drive loops from multiple transports.
     pub(crate) driving: bool,
@@ -94,13 +94,13 @@ pub async fn create_new_game(
     // Convert PlayerConfig to internal Player format. The engine's Player type
     // is agnostic about bot status; the backend tracks bot-driven IDs separately.
     let mut game_players = Vec::new();
-    let mut bot_ids: Vec<usize> = Vec::new();
+    let mut bot_ids: Vec<PlayerId> = Vec::new();
     for config in &players {
         if config.is_bot {
-            bot_ids.push(config.id.into());
+            bot_ids.push(config.id);
         }
         let player = Player {
-            id: config.id.into(),
+            id: config.id,
             name: config.name.clone(),
             stack: 1000,               // Default stack size
             cards: [Card(0), Card(0)], // Empty cards initially
@@ -181,7 +181,7 @@ pub async fn apply_action_to_game(
 /// message to send back to the client.
 pub async fn validate_and_apply_action(
     state: &AppState,
-    player_id: usize,
+    player_id: PlayerId,
     action: mcg_shared::PlayerAction,
 ) -> Result<(), String> {
     // First, ensure a game exists
@@ -246,7 +246,7 @@ pub async fn handle_client_msg(
     match cm {
         mcg_shared::ClientMsg::Action { player_id, action } => {
             // Validate & apply action
-            match validate_and_apply_action(state, player_id.into(), action.clone()).await {
+            match validate_and_apply_action(state, player_id, action.clone()).await {
                 Ok(()) => {
                     // Broadcast updated state and drive bots
                     broadcast_and_drive(state, 50, 150).await;

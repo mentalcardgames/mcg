@@ -44,7 +44,7 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<Card>) -> Result<
         p.cards = [c1, c2];
         // collect typed events to avoid mutable-borrow conflicts while iterating players
         dealt_events.push(ActionEvent::game(GameAction::DealtHole {
-            player_id: mcg_shared::PlayerId(p.id),
+            player_id: p.id,
         }));
         tracing::info!(player = %p.name, card0 = %super::super::eval::card_str(p.cards[0]), card1 = %super::super::eval::card_str(p.cards[1]), "dealt hole cards");
     }

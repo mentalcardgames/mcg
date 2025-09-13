@@ -1,7 +1,7 @@
 //! Core Game and Player definitions + constructors and small helpers.
 
 use anyhow::{Context, Result};
-use mcg_shared::{ActionEvent, Card, GameStatePublic, PlayerPublic, Stage};
+use mcg_shared::{ActionEvent, Card, GameStatePublic, PlayerId, PlayerPublic, Stage};
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
 
@@ -9,7 +9,7 @@ pub(crate) const MAX_RECENT_ACTIONS: usize = 50;
 
 #[derive(Clone, Debug)]
 pub struct Player {
-    pub id: usize,
+    pub id: PlayerId,
     pub name: String,
     pub stack: u32,
     pub cards: [Card; 2],
@@ -41,7 +41,7 @@ pub struct Game {
     pub pending_to_act: Vec<usize>, // players that still need to act this street (non-folded, non-all-in)
     // canonical in-memory store of typed events
     pub recent_actions: Vec<ActionEvent>,
-    pub winner_ids: Vec<usize>,
+    pub winner_ids: Vec<PlayerId>,
 }
 
 impl Game {
@@ -85,7 +85,7 @@ impl Game {
         let players = {
             let mut v = Vec::with_capacity(1 + bot_count);
             v.push(Player {
-                id: 0,
+                id: PlayerId(0),
                 name: human_name,
                 stack: 1000,
                 cards: [Card(0), Card(0)],
@@ -94,7 +94,7 @@ impl Game {
             });
             for i in 0..bot_count {
                 v.push(Player {
-                    id: i + 1,
+                    id: PlayerId(i + 1),
                     name: format!("Bot {}", i + 1),
                     stack: 1000,
                     cards: [Card(0), Card(0)],
@@ -136,7 +136,7 @@ impl Game {
             .iter()
             .enumerate()
             .map(|(idx, p)| PlayerPublic {
-                id: mcg_shared::PlayerId(p.id),
+                id: p.id,
                 name: p.name.clone(),
                 stack: p.stack,
                 // Expose hole cards for all players in the public state.
@@ -152,14 +152,9 @@ impl Game {
             pot: self.pot,
             sb: self.sb,
             bb: self.bb,
-            to_act: mcg_shared::PlayerId(self.to_act),
+            to_act: self.players[self.to_act].id,
             stage: self.stage,
-            winner_ids: self
-                .winner_ids
-                .clone()
-                .into_iter()
-                .map(mcg_shared::PlayerId)
-                .collect(),
+            winner_ids: self.winner_ids.clone(),
             action_log: self.recent_actions.clone(),
         }
     }
