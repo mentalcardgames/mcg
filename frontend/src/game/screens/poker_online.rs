@@ -3,7 +3,7 @@ use crate::store::{AppState, ConnectionStatus};
 use eframe::Frame;
 use egui::{Color32, RichText};
 use mcg_shared::{
-    ActionEvent, ActionKind, BlindKind, Card, ClientMsg, GameAction, GameStatePublic, PlayerAction,
+    ActionEvent, ActionKind, BlindKind, Card, ClientMsg, GameAction, GameStatePublic, HandResult, PlayerAction,
     PlayerConfig, PlayerId, PlayerPublic, Stage,
 };
 
@@ -168,7 +168,17 @@ impl PokerOnlineScreen {
         ui.heading("Player Setup");
         ui.add_space(8.0);
 
-        // Players table
+        self.render_players_table(ui);
+        ui.add_space(8.0);
+
+        self.render_add_player_section(ui);
+        ui.add_space(16.0);
+
+        self.render_start_game_button(ui);
+        self.add_game_instructions(ui);
+    }
+
+    fn render_players_table(&mut self, ui: &mut egui::Ui) {
         ui.group(|ui| {
             ui.label(RichText::new("Players:").strong());
             ui.add_space(4.0);
@@ -178,78 +188,115 @@ impl PokerOnlineScreen {
                 .spacing([8.0, 4.0])
                 .striped(true)
                 .show(ui, |ui| {
-                    // Header
-                    ui.label(RichText::new("ID").strong());
-                    ui.label(RichText::new("Name").strong());
-                    ui.label(RichText::new("Bot").strong());
-                    ui.label(RichText::new("Actions").strong());
-                    ui.end_row();
-
-                    // Player rows
-                    let mut to_remove = None;
-                    let mut to_rename = None;
-                    let mut bot_updates = Vec::new();
-
-                    let players_snapshot = self.players.clone();
-                    for (idx, player) in players_snapshot.iter().enumerate() {
-                        ui.label(format!("{}", player.id));
-                        ui.label(&player.name);
-
-                        let mut is_bot = player.is_bot;
-                        if ui.checkbox(&mut is_bot, "").changed() {
-                            bot_updates.push((idx, is_bot));
-                        }
-
-                        ui.horizontal(|ui| {
-                            // Radio toggle to select which player the frontend would like to control.
-                            // Bot players cannot be selected.
-                            if player.is_bot {
-                                ui.label("Bot");
-                            } else {
-                                ui.radio_value(&mut self.preferred_player, player.id, "Play as")
-                                    .on_hover_text("Select this player for this client");
-                            }
-
-                            if ui.button("✏").on_hover_text("Rename").clicked() {
-                                to_rename = Some(idx);
-                            }
-                            if self.players.len() > 1
-                                && ui.button("🗑").on_hover_text("Remove").clicked()
-                            {
-                                to_remove = Some(idx);
-                            }
-                        });
-                        ui.end_row();
-                    }
-
-                    // Apply bot status updates after iteration
-                    for (idx, is_bot) in bot_updates {
-                        if let Some(p) = self.players.get_mut(idx) {
-                            p.is_bot = is_bot;
-                        }
-                    }
-
-                    // Handle remove after iteration
-                    if let Some(idx) = to_remove {
-                        if idx < self.players.len() {
-                            self.players.remove(idx);
-                        }
-                    }
-
-                    // Handle rename after iteration
-                    if let Some(idx) = to_rename {
-                        if let Some(player) = self.players.get(idx) {
-                            // For now, just set the edit buffer to the current name
-                            // In a more complete implementation, you might want a popup
-                            self.new_player_name = player.name.clone();
-                        }
-                    }
+                    self.render_players_table_header(ui);
+                    self.render_players_table_rows(ui);
                 });
         });
+    }
 
-        ui.add_space(8.0);
+    //TODO: this does not need to be its own function
+    fn render_players_table_header(&mut self, ui: &mut egui::Ui) {
+        ui.label(RichText::new("ID").strong());
+        ui.label(RichText::new("Name").strong());
+        ui.label(RichText::new("Bot").strong());
+        ui.label(RichText::new("Actions").strong());
+        ui.end_row();
+    }
 
-        // Add new player section
+    fn render_players_table_rows(&mut self, ui: &mut egui::Ui) {
+        let mut to_remove = None;
+        let mut to_rename = None;
+        let mut bot_updates = Vec::new();
+
+        let players_snapshot = self.players.clone();
+        for (idx, player) in players_snapshot.iter().enumerate() {
+            self.render_player_row(ui, &player, idx, &mut bot_updates, &mut to_remove, &mut to_rename);
+        }
+
+        self.apply_player_updates(bot_updates, to_remove, to_rename);
+    }
+
+    fn render_player_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        player: &PlayerConfig,
+        idx: usize,
+        bot_updates: &mut Vec<(usize, bool)>,
+        to_remove: &mut Option<usize>,
+        to_rename: &mut Option<usize>
+    ) {
+        ui.label(format!("{}", player.id));
+        ui.label(&player.name);
+
+        let mut is_bot = player.is_bot;
+        if ui.checkbox(&mut is_bot, "").changed() {
+            bot_updates.push((idx, is_bot));
+        }
+
+        ui.horizontal(|ui| {
+            self.render_player_actions(ui, player, idx, to_remove, to_rename);
+        });
+        ui.end_row();
+    }
+
+    fn render_player_actions(
+        &mut self,
+        ui: &mut egui::Ui,
+        player: &PlayerConfig,
+        idx: usize,
+        to_remove: &mut Option<usize>,
+        to_rename: &mut Option<usize>
+    ) {
+        // Radio toggle to select which player the frontend would like to control.
+        // Bot players cannot be selected.
+        if player.is_bot {
+            ui.label("Bot");
+        } else {
+            ui.radio_value(&mut self.preferred_player, player.id, "Play as")
+                .on_hover_text("Select this player for this client");
+        }
+
+        if ui.button("✏").on_hover_text("Rename").clicked() {
+            *to_rename = Some(idx);
+        }
+        if self.players.len() > 1
+            && ui.button("🗑").on_hover_text("Remove").clicked()
+        {
+            *to_remove = Some(idx);
+        }
+    }
+
+    fn apply_player_updates(
+        &mut self,
+        bot_updates: Vec<(usize, bool)>,
+        to_remove: Option<usize>,
+        to_rename: Option<usize>
+    ) {
+        // Apply bot status updates after iteration
+        for (idx, is_bot) in bot_updates {
+            if let Some(p) = self.players.get_mut(idx) {
+                p.is_bot = is_bot;
+            }
+        }
+
+        // Handle remove after iteration
+        if let Some(idx) = to_remove {
+            if idx < self.players.len() {
+                self.players.remove(idx);
+            }
+        }
+
+        // Handle rename after iteration
+        if let Some(idx) = to_rename {
+            if let Some(player) = self.players.get(idx) {
+                // For now, just set the edit buffer to the current name
+                // In a more complete implementation, you might want a popup
+                self.new_player_name = player.name.clone();
+            }
+        }
+    }
+
+    fn render_add_player_section(&mut self, ui: &mut egui::Ui) {
         ui.group(|ui| {
             ui.label(RichText::new("Add New Player:").strong());
             ui.add_space(4.0);
@@ -259,32 +306,37 @@ impl PokerOnlineScreen {
                 ui.text_edit_singleline(&mut self.new_player_name);
 
                 if ui.button("Add Player").clicked() {
-                    let player_name = if self.new_player_name.is_empty() {
-                        self.generate_random_name()
-                    } else {
-                        self.new_player_name.clone()
-                    };
-
-                    self.players.push(PlayerConfig {
-                        id: mcg_shared::PlayerId(self.next_player_id),
-                        name: player_name,
-                        is_bot: true, // New players start as bots by default
-                    });
-                    self.next_player_id += 1;
-                    self.new_player_name.clear();
+                    self.add_new_player();
                 }
             });
         });
+    }
 
-        ui.add_space(16.0);
+    fn add_new_player(&mut self) {
+        let player_name = if self.new_player_name.is_empty() {
+            self.generate_random_name()
+        } else {
+            self.new_player_name.clone()
+        };
 
-        // Connect button
+        self.players.push(PlayerConfig {
+            id: mcg_shared::PlayerId(self.next_player_id),
+            name: player_name,
+            is_bot: true, // New players start as bots by default
+        });
+        self.next_player_id += 1;
+        self.new_player_name.clear();
+    }
+
+    fn render_start_game_button(&mut self, ui: &mut egui::Ui) {
         if ui.button("Start Game").clicked() {
             self.send(&ClientMsg::NewGame {
                 players: self.players.clone(),
             });
         }
+    }
 
+    fn add_game_instructions(&self, ui: &mut egui::Ui) {
         ui.add_space(8.0);
         ui.label(
             "This will connect to the server and start a new game with the configured players.",
@@ -574,39 +626,68 @@ impl PokerOnlineScreen {
 
     // Generate a random name that doesn't conflict with existing player names
     fn generate_random_name(&self) -> String {
-        use std::collections::HashSet;
+        let random_names = Self::get_random_name_pool();
+        let existing_names: std::collections::HashSet<&str> = self.get_existing_names();
 
-        // Random name pool (defined here instead of in struct state)
-        let random_names = [
+        // Try to find a name that's not already used
+        if let Some(name) = self.find_unused_name(&random_names, &existing_names) {
+            return name;
+        }
+
+        // If all names are used, append a number
+        if let Some(name) = self.find_available_name_with_number(&random_names, &existing_names) {
+            return name;
+        }
+
+        // Fallback: use a timestamp-based name
+        self.generate_timestamp_name()
+    }
+
+    fn get_random_name_pool() -> [&'static str; 48] {
+        [
             "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry", "Iris", "Jack",
             "Kate", "Leo", "Mia", "Noah", "Olivia", "Peter", "Quinn", "Rose", "Sam", "Tina", "Uma",
             "Victor", "Wendy", "Xander", "Yara", "Zoe", "Alex", "Blake", "Casey", "Dylan", "Erin",
             "Finn", "Gabe", "Holly", "Ian", "Jade", "Kyle", "Luna", "Max", "Nora", "Owen", "Piper",
             "Ryan", "Sage", "Tyler", "Violet", "Wyatt", "Zara",
-        ];
+        ]
+    }
 
-        // Create a set of existing names for quick lookup
-        let existing_names: HashSet<&str> = self.players.iter().map(|p| p.name.as_str()).collect();
+    fn get_existing_names(&self) -> std::collections::HashSet<&str> {
+        self.players.iter().map(|p| p.name.as_str()).collect()
+    }
 
-        // Try to find a name that's not already used
-        for &name in &random_names {
+    fn find_unused_name(
+        &self,
+        random_names: &[&str],
+        existing_names: &std::collections::HashSet<&str>
+    ) -> Option<String> {
+        for &name in random_names {
             if !existing_names.contains(name) {
-                return name.to_string();
+                return Some(name.to_string());
             }
         }
+        None
+    }
 
-        // If all names are used, append a number to the first available name
-        for &base_name in &random_names {
+    fn find_available_name_with_number(
+        &self,
+        random_names: &[&str],
+        existing_names: &std::collections::HashSet<&str>
+    ) -> Option<String> {
+        for &base_name in random_names {
             for i in 2..100 {
                 // Try numbers 2-99
                 let candidate = format!("{} {}", base_name, i);
                 if !existing_names.contains(candidate.as_str()) {
-                    return candidate;
+                    return Some(candidate);
                 }
             }
         }
+        None
+    }
 
-        // Fallback: use a timestamp-based name
+    fn generate_timestamp_name(&self) -> String {
         format!(
             "Player {}",
             std::time::SystemTime::now()
@@ -737,6 +818,7 @@ fn name_of(players: &[PlayerPublic], id: mcg_shared::PlayerId) -> String {
         .unwrap_or_else(|| format!("Player {}", id))
 }
 
+//TODO: this does not need to be its own function
 fn card_text(c: Card) -> String {
     card_text_and_color(c).0
 }
@@ -764,10 +846,20 @@ fn stage_to_str(stage: Stage) -> &'static str {
 
 fn format_game_for_clipboard(state: &GameStatePublic, you: PlayerId) -> String {
     let mut out = String::new();
-    // Summary
+
+    format_game_summary(&mut out, state, you);
+    format_players_section(&mut out, state, you);
+    format_board_section(&mut out, state);
+    format_action_log(&mut out, state);
+
+    out
+}
+
+fn format_game_summary(out: &mut String, state: &GameStatePublic, you: PlayerId) {
     out.push_str("Game summary\n");
     out.push_str(&format!("Stage: {}\n", stage_to_str(state.stage)));
     out.push_str(&format!("Pot: {}\n", state.pot));
+
     if let Some(p) = state.players.iter().find(|p| p.id == you) {
         if let Some(cards) = p.cards {
             out.push_str(&format!(
@@ -780,34 +872,41 @@ fn format_game_for_clipboard(state: &GameStatePublic, you: PlayerId) -> String {
         }
     }
     out.push('\n');
+}
 
-    // Players
+fn format_players_section(out: &mut String, state: &GameStatePublic, you: PlayerId) {
     out.push_str("Players\n");
     for p in state.players.iter() {
-        let you_str = if p.id == you { " (you)" } else { "" };
-        let folded = if p.has_folded { ", folded:true" } else { "" };
-        let to_act = if state.stage != Stage::Showdown && p.id == state.to_act {
-            ", to_act:true"
-        } else {
-            ""
-        };
-        out.push_str(&format!(
-            "- id:{}, name:{}, stack:{}{}{}{}\n",
-            p.id, p.name, p.stack, you_str, folded, to_act
-        ));
-        if p.id == you {
-            if let Some(cards) = p.cards {
-                out.push_str(&format!(
-                    "  hole: {}, {}\n",
-                    card_text(cards[0]),
-                    card_text(cards[1])
-                ));
-            }
-        }
+        format_player_entry(out, state, p, you);
     }
     out.push('\n');
+}
 
-    // Board
+fn format_player_entry(out: &mut String, state: &GameStatePublic, player: &PlayerPublic, you: PlayerId) {
+    let you_str = if player.id == you { " (you)" } else { "" };
+    let folded = if player.has_folded { ", folded:true" } else { "" };
+    let to_act = if state.stage != Stage::Showdown && player.id == state.to_act {
+        ", to_act:true"
+    } else {
+        ""
+    };
+    out.push_str(&format!(
+        "- id:{}, name:{}, stack:{}{}{}{}\n",
+        player.id, player.name, player.stack, you_str, folded, to_act
+    ));
+
+    if player.id == you {
+        if let Some(cards) = player.cards {
+            out.push_str(&format!(
+                "  hole: {}, {}\n",
+                card_text(cards[0]),
+                card_text(cards[1])
+            ));
+        }
+    }
+}
+
+fn format_board_section(out: &mut String, state: &GameStatePublic) {
     out.push_str("Board\n");
     if state.community.is_empty() {
         out.push_str("- (no community cards yet)\n");
@@ -821,85 +920,120 @@ fn format_game_for_clipboard(state: &GameStatePublic, you: PlayerId) -> String {
         out.push_str(&format!("- {}\n", board));
     }
     out.push('\n');
+}
 
-    // Action log (chronological)
+fn format_action_log(out: &mut String, state: &GameStatePublic) {
     out.push_str("Action log (chronological)\n");
     for entry in &state.action_log {
-        match entry {
-            ActionEvent::PlayerAction { player_id, action } => {
-                let who_name = name_of(&state.players, *player_id);
-                match action {
-                    ActionKind::Fold => out.push_str(&format!("- {} folds\n", who_name)),
-                    ActionKind::Check => out.push_str(&format!("- {} checks\n", who_name)),
-                    ActionKind::Call(n) => out.push_str(&format!("- {} calls {}\n", who_name, n)),
-                    ActionKind::Bet(n) => out.push_str(&format!("- {} bets {}\n", who_name, n)),
-                    ActionKind::Raise { to, by } => {
-                        out.push_str(&format!("- {} raises to {} (+{})\n", who_name, to, by))
-                    }
-                    ActionKind::PostBlind { kind, amount } => match kind {
-                        BlindKind::SmallBlind => {
-                            out.push_str(&format!("- {} posts small blind {}\n", who_name, amount))
-                        }
-                        BlindKind::BigBlind => {
-                            out.push_str(&format!("- {} posts big blind {}\n", who_name, amount))
-                        }
-                    },
-                }
-            }
-            ActionEvent::GameAction(GameAction::StageChanged(s)) => {
-                out.push_str(&format!("== Stage: {} ==\\n", stage_to_str(*s)));
-            }
-            ActionEvent::GameAction(GameAction::DealtHole { player_id }) => {
-                let who = name_of(&state.players, *player_id);
-                out.push_str(&format!("- Dealt hole cards to {}\n", who));
-            }
-            ActionEvent::GameAction(GameAction::DealtCommunity { cards }) => match cards.len() {
-                3 => out.push_str(&format!(
-                    "- Flop: {}, {}, {}\n",
-                    card_text(cards[0]),
-                    card_text(cards[1]),
-                    card_text(cards[2])
-                )),
-                4 => out.push_str(&format!("- Turn: {}\n", card_text(cards[3]))),
-                5 => out.push_str(&format!("- River: {}\n", card_text(cards[4]))),
-                _ => {
-                    let s = cards
-                        .iter()
-                        .map(|&c| card_text(c))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    out.push_str(&format!("- Community: {}\n", s));
-                }
-            },
-            ActionEvent::GameAction(GameAction::Showdown { hand_results }) => {
-                if hand_results.is_empty() {
-                    out.push_str("- Showdown\n");
-                } else {
-                    for hr in hand_results {
-                        let who = name_of(&state.players, hr.player_id);
-                        let cat = category_text(&hr.rank.category);
-                        let best = hr
-                            .best_five
-                            .iter()
-                            .map(|&c| card_text(c))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        out.push_str(&format!("- Showdown: {} -> {} [{}]\n", who, cat, best));
-                    }
-                }
-            }
-            ActionEvent::GameAction(GameAction::PotAwarded { winners, amount }) => {
-                let names = winners
-                    .iter()
-                    .map(|&id| name_of(&state.players, id))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                out.push_str(&format!("- Pot {} awarded to {}\n", amount, names));
-            }
+        format_action_log_entry(out, entry, state);
+    }
+}
+
+fn format_action_log_entry(out: &mut String, entry: &ActionEvent, state: &GameStatePublic) {
+    match entry {
+        ActionEvent::PlayerAction { player_id, action } => {
+            format_player_action_entry(out, *player_id, action, state);
+        }
+        ActionEvent::GameAction(game_action) => {
+            format_game_action_entry(out, game_action, state);
         }
     }
+}
 
-    out
+fn format_player_action_entry(out: &mut String, player_id: PlayerId, action: &ActionKind, state: &GameStatePublic) {
+    let who_name = name_of(&state.players, player_id);
+    match action {
+        ActionKind::Fold => out.push_str(&format!("- {} folds\n", who_name)),
+        ActionKind::Check => out.push_str(&format!("- {} checks\n", who_name)),
+        ActionKind::Call(n) => out.push_str(&format!("- {} calls {}\n", who_name, n)),
+        ActionKind::Bet(n) => out.push_str(&format!("- {} bets {}\n", who_name, n)),
+        ActionKind::Raise { to, by } => {
+            out.push_str(&format!("- {} raises to {} (+{})\n", who_name, to, by))
+        }
+        ActionKind::PostBlind { kind, amount } => {
+            format_blind_entry(out, &who_name, kind, amount);
+        }
+    }
+}
+
+fn format_blind_entry(out: &mut String, who_name: &str, kind: &BlindKind, amount: &u32) {
+    match kind {
+        BlindKind::SmallBlind => {
+            out.push_str(&format!("- {} posts small blind {}\n", who_name, amount))
+        }
+        BlindKind::BigBlind => {
+            out.push_str(&format!("- {} posts big blind {}\n", who_name, amount))
+        }
+    }
+}
+
+fn format_game_action_entry(out: &mut String, game_action: &GameAction, state: &GameStatePublic) {
+    match game_action {
+        GameAction::StageChanged(s) => {
+            out.push_str(&format!("== Stage: {} ==\\n", stage_to_str(*s)));
+        }
+        GameAction::DealtHole { player_id } => {
+            let who = name_of(&state.players, *player_id);
+            out.push_str(&format!("- Dealt hole cards to {}\n", who));
+        }
+        GameAction::DealtCommunity { cards } => {
+            format_community_cards_entry(out, cards);
+        }
+        GameAction::Showdown { hand_results } => {
+            format_showdown_entry(out, hand_results, state);
+        }
+        GameAction::PotAwarded { winners, amount } => {
+            format_pot_awarded_entry(out, winners, amount, state);
+        }
+    }
+}
+
+fn format_community_cards_entry(out: &mut String, cards: &[Card]) {
+    match cards.len() {
+        3 => out.push_str(&format!(
+            "- Flop: {}, {}, {}\n",
+            card_text(cards[0]),
+            card_text(cards[1]),
+            card_text(cards[2])
+        )),
+        4 => out.push_str(&format!("- Turn: {}\n", card_text(cards[3]))),
+        5 => out.push_str(&format!("- River: {}\n", card_text(cards[4]))),
+        _ => {
+            let s = cards
+                .iter()
+                .map(|&c| card_text(c))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!("- Community: {}\n", s));
+        }
+    }
+}
+
+fn format_showdown_entry(out: &mut String, hand_results: &[HandResult], state: &GameStatePublic) {
+    if hand_results.is_empty() {
+        out.push_str("- Showdown\n");
+    } else {
+        for hr in hand_results {
+            let who = name_of(&state.players, hr.player_id);
+            let cat = category_text(&hr.rank.category);
+            let best = hr
+                .best_five
+                .iter()
+                .map(|&c| card_text(c))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!("- Showdown: {} -> {} [{}]\n", who, cat, best));
+        }
+    }
+}
+
+fn format_pot_awarded_entry(out: &mut String, winners: &[PlayerId], amount: &u32, state: &GameStatePublic) {
+    let names = winners
+        .iter()
+        .map(|&id| name_of(&state.players, id))
+        .collect::<Vec<_>>()
+        .join(", ");
+    out.push_str(&format!("- Pot {} awarded to {}\n", amount, names));
 }
 
 fn log_entry_row(

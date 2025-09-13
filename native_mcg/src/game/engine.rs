@@ -81,30 +81,36 @@ impl Game {
     #[allow(dead_code)]
     pub fn new_with_seed(human_name: String, bot_count: usize, seed: u64) -> Result<Self> {
         let deck = super::dealing::shuffled_deck_with_seed(seed);
+        let players = Self::create_test_players(human_name, bot_count);
+        Self::from_players_and_deck(players, deck)
+    }
 
-        let players = {
-            let mut v = Vec::with_capacity(1 + bot_count);
+    /// Create test players for deterministic testing
+    fn create_test_players(human_name: String, bot_count: usize) -> Vec<Player> {
+        let mut v = Vec::with_capacity(1 + bot_count);
+        v.push(Player {
+            id: PlayerId(0),
+            name: human_name,
+            stack: 1000,
+            cards: [Card(0), Card(0)],
+            has_folded: false,
+            all_in: false,
+        });
+        for i in 0..bot_count {
             v.push(Player {
-                id: PlayerId(0),
-                name: human_name,
+                id: PlayerId(i + 1),
+                name: format!("Bot {}", i + 1),
                 stack: 1000,
                 cards: [Card(0), Card(0)],
                 has_folded: false,
                 all_in: false,
             });
-            for i in 0..bot_count {
-                v.push(Player {
-                    id: PlayerId(i + 1),
-                    name: format!("Bot {}", i + 1),
-                    stack: 1000,
-                    cards: [Card(0), Card(0)],
-                    has_folded: false,
-                    all_in: false,
-                });
-            }
-            v
-        };
+        }
+        v
+    }
 
+    /// Create a game from existing players and deck
+    fn from_players_and_deck(players: Vec<Player>, deck: Vec<Card>) -> Result<Self> {
         let mut g = Self {
             players,
             deck: VecDeque::new(),

@@ -1,15 +1,34 @@
 use mcg_shared::{Card, HandRank, HandRankCategory};
 
+/// Constants for card deck configuration
+pub const NUM_SUITS: usize = 4;
+pub const NUM_RANKS: usize = 13;
+pub const RANK_COUNT_ARRAY_SIZE: usize = 15; // 2..14 + unused 0..1
+
+/// Card rank values (0=Ace, 1=2, ..., 12=King)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CardRank {
+    Ace = 0, Two = 1, Three = 2, Four = 3, Five = 4,
+    Six = 5, Seven = 6, Eight = 7, Nine = 8, Ten = 9,
+    Jack = 10, Queen = 11, King = 12
+}
+
+/// Card suit values (0=Clubs, 1=Diamonds, 2=Hearts, 3=Spades)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CardSuit {
+    Clubs = 0, Diamonds = 1, Hearts = 2, Spades = 3
+}
+
 /// Returns the rank index (0..=12) where 0 is Ace, 1 is 2, ..., 12 is King.
 #[inline]
 pub fn card_rank(c: Card) -> u8 {
-    c.0 % 13
+    c.0 % NUM_RANKS as u8
 }
 
 /// Returns the suit index (0..=3) where 0=Clubs, 1=Diamonds, 2=Hearts, 3=Spades.
 #[inline]
 pub fn card_suit(c: Card) -> u8 {
-    c.0 / 13
+    c.0 / NUM_RANKS as u8
 }
 
 /// Returns a string like "A♣", "T♦", etc.
@@ -96,103 +115,160 @@ pub fn pick_best_five(hole: [Card; 2], community: &[Card]) -> [Card; 5] {
 // ===== Internal helpers =====
 
 fn best_rank_from_seven(cards: &[Card]) -> HandRank {
+    let flush_suit = analyze_suits_for_flush(cards);
+
+    // Check for straight flush
+    if let Some(sflush) = check_straight_flush(cards, flush_suit) {
+        return sflush;
+    }
+
+    let (counts, all_values) = analyze_card_values(cards);
+
+    // Check hands in descending rank order
+    if let Some(four_kind) = check_four_of_a_kind(&counts, &all_values) {
+        return four_kind;
+    }
+
+    if let Some(full_house) = check_full_house(&counts) {
+        return full_house;
+    }
+
+    if let Some(flush) = check_flush(cards, flush_suit) {
+        return flush;
+    }
+
+    if let Some(straight) = check_straight(cards) {
+        return straight;
+    }
+
+    if let Some(three_kind) = check_three_of_a_kind(&counts, &all_values) {
+        return three_kind;
+    }
+
+    if let Some(two_pair) = check_two_pair(&counts, &all_values) {
+        return two_pair;
+    }
+
+    if let Some(pair) = check_one_pair(&counts, &all_values) {
+        return pair;
+    }
+
+    check_high_card(&all_values)
+}
+
+fn analyze_suits_for_flush(cards: &[Card]) -> Option<u8> {
     // Group by suit
-    let mut suit_cards: [Vec<Card>; 4] = [vec![], vec![], vec![], vec![]];
+    let mut suit_cards: [Vec<Card>; NUM_SUITS] = [vec![], vec![], vec![], vec![]];
     for &c in cards {
         suit_cards[card_suit(c) as usize].push(c);
     }
     // Suit presence >=5 indicates possible flush
-    let flush_suit = (0..4).find(|&s| suit_cards[s].len() >= 5).map(|s| s as u8);
+    (0..NUM_SUITS).find(|&s| suit_cards[s].len() >= 5).map(|s| s as u8)
+}
 
-    // Straight flush
-    if let Some(fs) = flush_suit {
-        let values = ranks_as_values_unique(&suit_cards[fs as usize]);
-        if let Some(high) = straight_high(&values) {
-            return HandRank {
-                category: HandRankCategory::StraightFlush,
-                tiebreakers: vec![high],
-            };
-        }
-    }
-
-    // Counts by value (2..14)
-    let mut counts = [0u8; 15]; // index is value (2..14). 0..1 unused
+fn analyze_card_values(cards: &[Card]) -> ([u8; RANK_COUNT_ARRAY_SIZE], Vec<u8>) {
+    let mut counts = [0u8; RANK_COUNT_ARRAY_SIZE];
     let mut all_values = Vec::with_capacity(cards.len());
     for &c in cards {
         let v = rank_value_high(card_rank(c));
         counts[v as usize] += 1;
         all_values.push(v);
     }
+    (counts, all_values)
+}
 
-    // Four of a kind
-    if let Some((quad, kicker)) = find_n_of_a_kind(&counts, 4, &all_values) {
-        return HandRank {
-            category: HandRankCategory::FourKind,
-            tiebreakers: vec![quad, kicker],
-        };
-    }
-
-    // Full house
-    if let Some((trip, pair)) = find_full_house(&counts) {
-        return HandRank {
-            category: HandRankCategory::FullHouse,
-            tiebreakers: vec![trip, pair],
-        };
-    }
-
-    // Flush
+fn check_straight_flush(cards: &[Card], flush_suit: Option<u8>) -> Option<HandRank> {
     if let Some(fs) = flush_suit {
+        let mut suit_cards: [Vec<Card>; NUM_SUITS] = [vec![], vec![], vec![], vec![]];
+        for &c in cards {
+            suit_cards[card_suit(c) as usize].push(c);
+        }
+
+        let values = ranks_as_values_unique(&suit_cards[fs as usize]);
+        if let Some(high) = straight_high(&values) {
+            return Some(HandRank {
+                category: HandRankCategory::StraightFlush,
+                tiebreakers: vec![high],
+            });
+        }
+    }
+    None
+}
+
+fn check_four_of_a_kind(counts: &[u8; RANK_COUNT_ARRAY_SIZE], all_values: &[u8]) -> Option<HandRank> {
+    find_n_of_a_kind(counts, 4, all_values).map(|(quad, kicker)| HandRank {
+        category: HandRankCategory::FourKind,
+        tiebreakers: vec![quad, kicker],
+    })
+}
+
+fn check_full_house(counts: &[u8; RANK_COUNT_ARRAY_SIZE]) -> Option<HandRank> {
+    find_full_house(counts).map(|(trip, pair)| HandRank {
+        category: HandRankCategory::FullHouse,
+        tiebreakers: vec![trip, pair],
+    })
+}
+
+fn check_flush(cards: &[Card], flush_suit: Option<u8>) -> Option<HandRank> {
+    if let Some(fs) = flush_suit {
+        let mut suit_cards: [Vec<Card>; NUM_SUITS] = [vec![], vec![], vec![], vec![]];
+        for &c in cards {
+            suit_cards[card_suit(c) as usize].push(c);
+        }
+
         let mut vs = suit_cards[fs as usize]
             .iter()
             .map(|&c| rank_value_high(card_rank(c)))
             .collect::<Vec<u8>>();
         vs.sort_unstable_by(|a, b| b.cmp(a));
         vs.truncate(5);
-        return HandRank {
+        return Some(HandRank {
             category: HandRankCategory::Flush,
             tiebreakers: vs,
-        };
+        });
     }
+    None
+}
 
-    // Straight
+fn check_straight(cards: &[Card]) -> Option<HandRank> {
     let values = ranks_as_values_unique(cards);
-    if let Some(high) = straight_high(&values) {
-        return HandRank {
-            category: HandRankCategory::Straight,
-            tiebreakers: vec![high],
-        };
-    }
+    straight_high(&values).map(|high| HandRank {
+        category: HandRankCategory::Straight,
+        tiebreakers: vec![high],
+    })
+}
 
-    // Trips
-    if let Some((trip, kickers)) = find_n_kind_with_kickers(&counts, &all_values, 3, 2) {
+fn check_three_of_a_kind(counts: &[u8; RANK_COUNT_ARRAY_SIZE], all_values: &[u8]) -> Option<HandRank> {
+    find_n_kind_with_kickers(counts, all_values, 3, 2).map(|(trip, kickers)| {
         let mut t = vec![trip];
         t.extend(kickers);
-        return HandRank {
+        HandRank {
             category: HandRankCategory::ThreeKind,
             tiebreakers: t,
-        };
-    }
+        }
+    })
+}
 
-    // Two pair
-    if let Some((p_high, p_low, kicker)) = find_two_pair(&counts, &all_values) {
-        return HandRank {
-            category: HandRankCategory::TwoPair,
-            tiebreakers: vec![p_high, p_low, kicker],
-        };
-    }
+fn check_two_pair(counts: &[u8; RANK_COUNT_ARRAY_SIZE], all_values: &[u8]) -> Option<HandRank> {
+    find_two_pair(counts, all_values).map(|(p_high, p_low, kicker)| HandRank {
+        category: HandRankCategory::TwoPair,
+        tiebreakers: vec![p_high, p_low, kicker],
+    })
+}
 
-    // One pair
-    if let Some((pair, kickers)) = find_n_kind_with_kickers(&counts, &all_values, 2, 3) {
+fn check_one_pair(counts: &[u8; RANK_COUNT_ARRAY_SIZE], all_values: &[u8]) -> Option<HandRank> {
+    find_n_kind_with_kickers(counts, all_values, 2, 3).map(|(pair, kickers)| {
         let mut t = vec![pair];
         t.extend(kickers);
-        return HandRank {
+        HandRank {
             category: HandRankCategory::Pair,
             tiebreakers: t,
-        };
-    }
+        }
+    })
+}
 
-    // High card
-    let mut highs = all_values;
+fn check_high_card(all_values: &[u8]) -> HandRank {
+    let mut highs = all_values.to_vec();
     highs.sort_unstable_by(|a, b| b.cmp(a));
     highs.dedup();
     highs.truncate(5);
@@ -227,7 +303,7 @@ fn straight_high(values_unique_sorted_asc: &Vec<u8>) -> Option<u8> {
         return None;
     }
     // Build presence map for 2..14, also enable wheel (A as 1) if Ace present.
-    let mut present = [false; 15];
+    let mut present = [false; RANK_COUNT_ARRAY_SIZE];
     for &v in values_unique_sorted_asc {
         if (2..=14).contains(&v) {
             present[v as usize] = true;
@@ -273,7 +349,7 @@ fn straight_high(values_unique_sorted_asc: &Vec<u8>) -> Option<u8> {
     best
 }
 
-fn find_n_of_a_kind(counts: &[u8; 15], n: u8, all_values: &[u8]) -> Option<(u8, u8)> {
+fn find_n_of_a_kind(counts: &[u8; RANK_COUNT_ARRAY_SIZE], n: u8, all_values: &[u8]) -> Option<(u8, u8)> {
     // (rank, top kicker) with rank in 2..14
     let mut rank = None;
     for v in (2..=14).rev() {
@@ -296,7 +372,7 @@ fn find_n_of_a_kind(counts: &[u8; 15], n: u8, all_values: &[u8]) -> Option<(u8, 
     None
 }
 
-fn find_full_house(counts: &[u8; 15]) -> Option<(u8, u8)> {
+fn find_full_house(counts: &[u8; RANK_COUNT_ARRAY_SIZE]) -> Option<(u8, u8)> {
     let mut trips = vec![];
     let mut pairs = vec![];
     for v in (2..=14).rev() {
@@ -316,7 +392,7 @@ fn find_full_house(counts: &[u8; 15]) -> Option<(u8, u8)> {
 }
 
 fn find_n_kind_with_kickers(
-    counts: &[u8; 15],
+    counts: &[u8; RANK_COUNT_ARRAY_SIZE],
     all_values: &[u8],
     n: u8,
     kicker_count: usize,
@@ -342,7 +418,7 @@ fn find_n_kind_with_kickers(
     None
 }
 
-fn find_two_pair(counts: &[u8; 15], all_values: &[u8]) -> Option<(u8, u8, u8)> {
+fn find_two_pair(counts: &[u8; RANK_COUNT_ARRAY_SIZE], all_values: &[u8]) -> Option<(u8, u8, u8)> {
     let mut pairs = vec![];
     for v in (2..=14).rev() {
         if counts[v] >= 2 {

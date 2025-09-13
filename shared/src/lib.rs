@@ -84,8 +84,8 @@ impl From<usize> for PlayerId {
     }
 }
 impl From<PlayerId> for usize {
-    fn from(pid: PlayerId) -> Self {
-        pid.0
+    fn from(player_id: PlayerId) -> Self {
+        player_id.0
     }
 }
 
