@@ -5,10 +5,10 @@ pub mod field;
 pub mod screens;
 pub mod theme;
 pub mod websocket;
-use theme::*;
 #[cfg(target_arch = "wasm32")]
 use crate::router::Router;
 use screens::{AppInterface, MainMenu, ScreenWidget};
+use theme::*;
 
 /// Events that can be sent between screens
 #[derive(Debug, Clone)]

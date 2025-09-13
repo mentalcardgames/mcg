@@ -1,7 +1,7 @@
 //! Showdown resolution and pot awarding.
 
 use super::Game;
-use crate::eval::{evaluate_best_hand, pick_best_five};
+use crate::poker::evaluation::{evaluate_best_hand, pick_best_five};
 use mcg_shared::{ActionEvent, GameAction, HandResult};
 
 /// Resolve showdown by evaluating all non-folded hands, splitting the pot on ties

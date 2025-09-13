@@ -1,8 +1,8 @@
 use anyhow::Result;
 use mcg_shared::{ActionEvent, GameAction, Stage};
 
-use crate::eval::card_str;
 use crate::game::Game;
+use crate::poker::cards::card_str;
 
 impl Game {
     /// After an action is applied, update the game flow (next actor, stage changes, etc).

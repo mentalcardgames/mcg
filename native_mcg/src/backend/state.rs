@@ -30,10 +30,7 @@ pub struct AppState {
 
 impl AppState {
     /// Create a new AppState with the given config and optional config path
-    pub fn new(
-        config: crate::config::Config,
-        config_path: Option<PathBuf>,
-    ) -> Self {
+    pub fn new(config: crate::config::Config, config_path: Option<PathBuf>) -> Self {
         let (tx, _rx) = broadcast::channel(16);
         Self {
             lobby: Arc::new(RwLock::new(Lobby::default())),
@@ -260,9 +257,7 @@ async fn handle_request_state(state: &AppState) -> mcg_shared::ServerMsg {
         broadcast_and_drive(state).await;
         mcg_shared::ServerMsg::State(gs)
     } else {
-        mcg_shared::ServerMsg::Error(
-            "No active game. Please start a new game first.".into(),
-        )
+        mcg_shared::ServerMsg::Error("No active game. Please start a new game first.".into())
     }
 }
 
@@ -284,9 +279,7 @@ async fn handle_next_hand(state: &AppState) -> mcg_shared::ServerMsg {
             if let Some(gs) = current_state_public(state).await {
                 mcg_shared::ServerMsg::State(gs)
             } else {
-                mcg_shared::ServerMsg::Error(
-                    "No active game after starting next hand".into(),
-                )
+                mcg_shared::ServerMsg::Error("No active game after starting next hand".into())
             }
         }
         Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to start new hand: {}", e)),
@@ -327,15 +320,9 @@ pub async fn handle_client_msg(
         mcg_shared::ClientMsg::Action { player_id, action } => {
             handle_action(state, player_id, action).await
         }
-        mcg_shared::ClientMsg::RequestState => {
-            handle_request_state(state).await
-        }
-        mcg_shared::ClientMsg::NextHand => {
-            handle_next_hand(state).await
-        }
-        mcg_shared::ClientMsg::NewGame { players } => {
-            handle_new_game(state, players).await
-        }
+        mcg_shared::ClientMsg::RequestState => handle_request_state(state).await,
+        mcg_shared::ClientMsg::NextHand => handle_next_hand(state).await,
+        mcg_shared::ClientMsg::NewGame { players } => handle_new_game(state, players).await,
     }
 }
 
@@ -411,10 +398,10 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
         // Apply bot action under write lock, but re-check to_act to avoid races.
         let applied_and_advanced = {
             let mut lobby_w = state.lobby.write().await;
-            
+
             // Clone the bot manager first to avoid borrowing conflicts
             let bot_manager = lobby_w.bot_manager.clone();
-            
+
             if let Some(game) = &mut lobby_w.game {
                 // Reconfirm conditions haven't changed.
                 if game.stage == mcg_shared::Stage::Showdown || game.to_act != actor_idx {
@@ -432,7 +419,7 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
                         position: actor_idx,
                         total_players: game.players.len(),
                     };
-                    
+
                     let action = match bot_manager.generate_action(&context) {
                         Ok(action) => action,
                         Err(e) => {

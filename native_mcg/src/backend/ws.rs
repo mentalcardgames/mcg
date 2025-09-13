@@ -13,7 +13,7 @@ use tokio::sync::broadcast;
 use owo_colors::OwoColorize;
 use std::io::IsTerminal;
 
-use super::state::AppState;
+use crate::backend::state::AppState;
 use crate::pretty;
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
@@ -98,7 +98,7 @@ async fn send_ws(socket: &mut WebSocket, msg: &mcg_shared::ServerMsg) {
 }
 
 async fn send_state_to(socket: &mut WebSocket, state: &AppState) {
-    if let Some(gs) = super::state::current_state_public(state).await {
+    if let Some(gs) = crate::backend::current_state_public(state).await {
         // Only print newly added events since the last print, to avoid repeating "Preflop"
         let mut lobby = state.lobby.write().await;
         let already = lobby.last_printed_log_len;

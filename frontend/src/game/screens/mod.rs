@@ -9,7 +9,7 @@ pub mod game_setup_screen;
 pub mod main_menu;
 pub mod pairing_screen;
 
-pub mod poker_online;
+pub mod poker;
 pub mod qr_test;
 
 pub use articles_screen::ArticlesScreen;
@@ -20,7 +20,7 @@ pub use game::{DNDSelector, DirectoryCardType, Game, GameConfig};
 pub use game_setup_screen::GameSetupScreen;
 pub use main_menu::MainMenu;
 pub use pairing_screen::PairingScreen;
-pub use poker_online::PokerOnlineScreen;
+pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
 
 pub struct AppInterface<'a> {
@@ -100,8 +100,6 @@ impl ScreenRegistry {
         reg.register::<GameSetupScreen>();
         reg.register::<Game<DirectoryCardType>>();
         reg.register::<PairingScreen>();
-        // PlayerSetupScreen functionality moved to PokerOnlineScreen
-        // reg.register::<PlayerSetupScreen>();
         reg.register::<DNDTest>();
         reg.register::<CardsTestDND>();
         reg.register::<ArticlesScreen>();

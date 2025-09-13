@@ -91,10 +91,7 @@ impl WebSocketConnection {
                 let server_address_err = server_address.to_string();
                 let on_error_clone = on_error.clone();
                 let onerror = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
-                    on_error_clone(format!(
-                        "Failed to connect to {}.",
-                        server_address_err
-                    ));
+                    on_error_clone(format!("Failed to connect to {}.", server_address_err));
                 });
                 ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
 

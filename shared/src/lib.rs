@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use egui::Vec2;
+use serde::{Deserialize, Serialize};
 
 pub mod communication;
 

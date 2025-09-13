@@ -2,10 +2,10 @@
 
 use native_mcg::{backend, cli, config};
 
-use config::Config;
 use anyhow::Context;
 use backend::AppState;
 use clap::Parser;
+use config::Config;
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
 

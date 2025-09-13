@@ -342,3 +342,4 @@ poker/
 **Shared:**
 - Create clear API boundaries between protocol, game, and crypto
 - Use more specific enums and structs for type safety
+

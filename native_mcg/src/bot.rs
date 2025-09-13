@@ -62,13 +62,14 @@ impl BotAI for SimpleBot {
         } else {
             // There is a bet to call. Use probabilistic decision making:
             // Higher relative bet size -> more likely to fold
-            let relative_bet = context.call_amount as f64 
-                / (context.stack + context.current_bet) as f64;
-            
+            let relative_bet =
+                context.call_amount as f64 / (context.stack + context.current_bet) as f64;
+
             // Blend base fold chance with relative bet-based chance
-            let fold_chance = (self.base_fold_chance + relative_bet * (1.0 - self.base_fold_chance))
+            let fold_chance = (self.base_fold_chance
+                + relative_bet * (1.0 - self.base_fold_chance))
                 .min(self.max_fold_chance);
-            
+
             if random::<f64>() < fold_chance {
                 PlayerAction::Fold
             } else {
@@ -109,18 +110,21 @@ impl BotManager {
             ai: Box::new(SimpleBot::default()),
         }
     }
-    
+
     /// Create a new bot manager with a custom AI implementation.
     pub fn with_ai(ai: Box<dyn BotAI + Send + Sync>) -> Self {
         Self { ai }
     }
-    
+
     /// Generate a bot action given the current game context.
     pub fn generate_action(&self, context: &BotContext) -> Result<PlayerAction> {
         let action = self.ai.decide_action(context);
         tracing::debug!(
             "Bot decision: {:?} (call_amount: {}, stack: {}, stage: {:?})",
-            action, context.call_amount, context.stack, context.stage
+            action,
+            context.call_amount,
+            context.stack,
+            context.stage
         );
         Ok(action)
     }
@@ -135,7 +139,7 @@ impl Default for BotManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn simple_bot_bets_with_no_current_bet() {
         let bot = SimpleBot::default();
@@ -148,11 +152,11 @@ mod tests {
             position: 0,
             total_players: 4,
         };
-        
+
         let action = bot.decide_action(&context);
         assert!(matches!(action, PlayerAction::Bet(10)));
     }
-    
+
     #[test]
     fn simple_bot_calls_when_all_in_required() {
         let bot = SimpleBot::default();
@@ -165,11 +169,11 @@ mod tests {
             position: 1,
             total_players: 4,
         };
-        
+
         let action = bot.decide_action(&context);
         assert!(matches!(action, PlayerAction::CheckCall));
     }
-    
+
     #[test]
     fn bot_manager_generates_actions() {
         let manager = BotManager::new();
@@ -182,12 +186,15 @@ mod tests {
             position: 2,
             total_players: 3,
         };
-        
+
         let result = manager.generate_action(&context);
         assert!(result.is_ok());
-        
+
         // Action should be either Fold or CheckCall based on probability
         let action = result.unwrap();
-        assert!(matches!(action, PlayerAction::Fold | PlayerAction::CheckCall));
+        assert!(matches!(
+            action,
+            PlayerAction::Fold | PlayerAction::CheckCall
+        ));
     }
 }
