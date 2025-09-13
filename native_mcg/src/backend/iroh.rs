@@ -23,7 +23,6 @@ use tokio::io::BufReader;
 use crate::backend::AppState;
 use crate::transport::send_server_msg_to_writer;
 use mcg_shared::{ClientMsg, ServerMsg};
-// owo_colors not used after replacing prints with tracing
 
 /// Public entrypoint spawned by server startup
 ///
