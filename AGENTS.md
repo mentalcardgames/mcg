@@ -60,3 +60,20 @@ This application is aimed to be peer to peer (p2p) in the future. Each player ge
 *   **Frontend Entry Point:** The `index.html` file in the repository root serves as the main entry point for the web application.
 *   **Asset Structure:** WASM output goes to `pkg/`, and media assets go to `media/`. This structure is expected by `index.html`.
 *   **Shared Code:** Data structures defining the game state and communication protocol are placed in the `shared` crate to ensure consistency between frontend and backend.
+
+
+<!-- AGENT_COMMIT_POLICY -->
+## Agent Git-Commit Policy (Extension)
+
+This section documents a repository-level policy for automated agents interacting with the workspace.
+
+- Agents MUST NOT create or modify git commits without explicit, verifiable human authorization.
+- Agents MAY write files to the workspace for iteration, diagnostics, or drafting, but MUST NOT run `git add`/`git commit`/`git push`.
+- If an agent believes changes should be committed, it must present a clear diff and request human confirmation. The authorized human can then run the commit themselves or explicitly supply the passphrase `agent-commit-allowed` in a directive to permit the agent to commit.
+- Agents must avoid creating any commit history themselves. Any automated recovery or rollback must be performed by the human operator.
+
+Guidance for humans:
+- To review unstaged changes: `git status --porcelain` and `git diff`.
+- To commit accepted changes: `git add -A && git commit -m "<message>"`.
+
+(End of agent commit policy extension)
