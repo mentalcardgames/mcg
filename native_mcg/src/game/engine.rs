@@ -170,6 +170,8 @@ impl Game {
             stage: self.stage,
             winner_ids: self.winner_ids.clone(),
             action_log: self.recent_actions.clone(),
+            current_bet: self.current_bet,
+            min_raise: self.min_raise,
         }
     }
 

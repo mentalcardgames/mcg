@@ -130,13 +130,13 @@ pub fn render_my_cards_and_actions(
         }
 
         if p.id == state.to_act && state.stage != mcg_shared::Stage::Showdown {
-            poker_screen.render_action_row(ui, p.id, true, false);
+            poker_screen.render_action_row(ui, state, p.id, true, false);
             ui.add_space(6.0);
             ui.separator();
         } else if p.id == preferred_player
             && (state.stage == mcg_shared::Stage::Showdown || p.cards.is_none())
         {
-            poker_screen.render_action_row(ui, p.id, false, true);
+            poker_screen.render_action_row(ui, state, p.id, false, true);
             ui.add_space(6.0);
             ui.separator();
         } else {
@@ -196,10 +196,17 @@ pub fn render_panels(
 
 // Trait to define poker screen actions that need to be implemented by the screen
 pub trait PokerScreenActions {
-    fn render_action_buttons(&self, ui: &mut Ui, player_id: mcg_shared::PlayerId, enabled: bool);
+    fn render_action_buttons(
+        &self,
+        ui: &mut Ui,
+        state: &GameStatePublic,
+        player_id: mcg_shared::PlayerId,
+        enabled: bool,
+    );
     fn render_action_row(
         &self,
         ui: &mut Ui,
+        state: &GameStatePublic,
         player_id: mcg_shared::PlayerId,
         enabled: bool,
         show_next: bool,

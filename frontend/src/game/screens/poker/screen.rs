@@ -11,11 +11,38 @@ use crate::qr_scanner::QrScannerPopup;
 use super::connection_manager::ConnectionManager;
 use super::player_manager::{render_player_setup, PlayerManager};
 
+#[derive(Clone, Debug)]
+struct BettingControls {
+    /// Amount to raise BY (not total)
+    raise_amount: u32,
+    /// Amount to bet (when no current bet)
+    bet_amount: u32,
+    /// Minimum raise amount (calculated from game state)
+    min_raise: u32,
+    /// Maximum raise (player's stack)
+    max_raise: u32,
+    /// Whether to show the betting controls
+    show_betting_controls: bool,
+}
+
+impl Default for BettingControls {
+    fn default() -> Self {
+        Self {
+            raise_amount: 0,
+            bet_amount: 0,
+            min_raise: 0,
+            max_raise: 0,
+            show_betting_controls: false,
+        }
+    }
+}
+
 pub struct PokerOnlineScreen {
     conn: WebSocketConnection,
     scanner: QrScannerPopup,
     connection_manager: ConnectionManager,
     player_manager: PlayerManager,
+    betting_controls: BettingControls,
 }
 
 impl PokerOnlineScreen {
@@ -28,7 +55,153 @@ impl PokerOnlineScreen {
             scanner: QrScannerPopup::new(),
             connection_manager: ConnectionManager::new(settings.server_address.clone()),
             player_manager: PlayerManager::new(),
+            betting_controls: BettingControls::default(),
         }
+    }
+
+    /// Update betting controls based on current game state and player
+    fn update_betting_controls(
+        &mut self,
+        state: &mcg_shared::GameStatePublic,
+        player_id: mcg_shared::PlayerId,
+    ) {
+        if let Some(player) = state.players.iter().find(|p| p.id == player_id) {
+            self.betting_controls.max_raise = player.stack;
+            self.betting_controls.min_raise = if state.current_bet == 0 {
+                state.bb
+            } else {
+                state.min_raise
+            };
+            self.betting_controls.show_betting_controls = true;
+
+            // Initialize betting amounts if not set
+            if self.betting_controls.bet_amount == 0 {
+                self.betting_controls.bet_amount = state.bb;
+            }
+            if self.betting_controls.raise_amount == 0 {
+                self.betting_controls.raise_amount = self.betting_controls.min_raise;
+            }
+        } else {
+            self.betting_controls.show_betting_controls = false;
+        }
+    }
+
+    /// Calculate the call amount for a player
+    fn calculate_call_amount(
+        &self,
+        state: &mcg_shared::GameStatePublic,
+        player_id: mcg_shared::PlayerId,
+    ) -> u32 {
+        if let Some(player) = state.players.iter().find(|p| p.id == player_id) {
+            state.current_bet.saturating_sub(player.bet_this_round)
+        } else {
+            0
+        }
+    }
+
+    /// Render betting/raising controls for variable bet sizing
+    fn render_betting_controls(
+        &self,
+        ui: &mut egui::Ui,
+        state: &mcg_shared::GameStatePublic,
+        player_id: mcg_shared::PlayerId,
+        player: &mcg_shared::PlayerPublic,
+    ) {
+        ui.group(|ui| {
+            ui.label("Betting:");
+
+            let min_bet = if state.current_bet == 0 {
+                state.bb
+            } else {
+                state.min_raise
+            };
+            let max_bet = player.stack;
+
+            if state.current_bet == 0 {
+                // No current bet - can open bet
+                ui.horizontal(|ui| {
+                    // Quick bet buttons
+                    if ui.button("Min Bet").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(state.bb),
+                        });
+                    }
+
+                    let pot_third = (state.pot / 3).max(state.bb);
+                    if ui.button("1/3 Pot").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(pot_third.min(max_bet)),
+                        });
+                    }
+
+                    let pot_half = (state.pot / 2).max(state.bb);
+                    if ui.button("1/2 Pot").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(pot_half.min(max_bet)),
+                        });
+                    }
+
+                    if ui.button("Pot Size").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(state.pot.max(state.bb).min(max_bet)),
+                        });
+                    }
+
+                    if max_bet > 0 && ui.button("All-in").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(max_bet),
+                        });
+                    }
+                });
+            } else {
+                // Current bet exists - can raise
+                ui.horizontal(|ui| {
+                    // Quick raise buttons
+                    if min_bet <= max_bet && ui.button("Min Raise").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(min_bet),
+                        });
+                    }
+
+                    let pot_third = (state.pot / 3).max(min_bet);
+                    if pot_third <= max_bet && ui.button("Raise 1/3 Pot").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(pot_third),
+                        });
+                    }
+
+                    let pot_half = (state.pot / 2).max(min_bet);
+                    if pot_half <= max_bet && ui.button("Raise 1/2 Pot").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(pot_half),
+                        });
+                    }
+
+                    let pot_size = state.pot.max(min_bet);
+                    if pot_size <= max_bet && ui.button("Raise Pot").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(pot_size),
+                        });
+                    }
+
+                    if max_bet > 0 && ui.button("All-in").clicked() {
+                        self.send(&mcg_shared::ClientMsg::Action {
+                            player_id,
+                            action: PlayerAction::Bet(max_bet),
+                        });
+                    }
+                });
+            }
+        });
     }
 
     fn draw_error_popup(&mut self, app_state: &mut AppState, ctx: &Context) {
@@ -280,70 +453,77 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
     fn render_action_buttons(
         &self,
         ui: &mut egui::Ui,
+        state: &mcg_shared::GameStatePublic,
         player_id: mcg_shared::PlayerId,
         enabled: bool,
     ) {
-        ui.horizontal(|ui| {
-            let check_label = RichText::new("✔ Check / Call").size(18.0);
-            if enabled {
-                if ui
-                    .add(egui::Button::new(check_label).min_size(egui::vec2(120.0, 40.0)))
-                    .clicked()
-                {
-                    self.send(&mcg_shared::ClientMsg::Action {
-                        player_id,
-                        action: PlayerAction::CheckCall,
-                    });
-                }
-            } else {
-                ui.add_enabled(
-                    false,
-                    egui::Button::new(check_label).min_size(egui::vec2(120.0, 40.0)),
-                );
-            }
+        // Update betting controls based on current state
+        // Note: we can't modify self here due to &self, so we'll calculate values locally
+        let call_amount = self.calculate_call_amount(state, player_id);
+        let player = state.players.iter().find(|p| p.id == player_id);
 
-            let bet_label = RichText::new("💰 Bet 10").size(18.0);
-            if enabled {
-                if ui
-                    .add(egui::Button::new(bet_label).min_size(egui::vec2(120.0, 40.0)))
-                    .on_hover_text("Place a small bet")
-                    .clicked()
-                {
-                    self.send(&mcg_shared::ClientMsg::Action {
-                        player_id,
-                        action: PlayerAction::Bet(10),
-                    });
-                }
-            } else {
-                ui.add_enabled(
-                    false,
-                    egui::Button::new(bet_label).min_size(egui::vec2(120.0, 40.0)),
-                );
-            }
+        if let Some(player) = player {
+            ui.vertical(|ui| {
+                // First row: Check/Call and Fold buttons
+                ui.horizontal(|ui| {
+                    let check_call_label = if call_amount == 0 {
+                        RichText::new("✔ Check").size(18.0)
+                    } else {
+                        RichText::new(format!("✔ Call {}", call_amount)).size(18.0)
+                    };
 
-            let fold_label = RichText::new("✂ Fold").size(18.0);
-            if enabled {
-                if ui
-                    .add(egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)))
-                    .clicked()
-                {
-                    self.send(&mcg_shared::ClientMsg::Action {
-                        player_id,
-                        action: PlayerAction::Fold,
-                    });
+                    if enabled {
+                        if ui
+                            .add(
+                                egui::Button::new(check_call_label)
+                                    .min_size(egui::vec2(120.0, 40.0)),
+                            )
+                            .clicked()
+                        {
+                            self.send(&mcg_shared::ClientMsg::Action {
+                                player_id,
+                                action: PlayerAction::CheckCall,
+                            });
+                        }
+                    } else {
+                        ui.add_enabled(
+                            false,
+                            egui::Button::new(check_call_label).min_size(egui::vec2(120.0, 40.0)),
+                        );
+                    }
+
+                    let fold_label = RichText::new("✂ Fold").size(18.0);
+                    if enabled {
+                        if ui
+                            .add(egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)))
+                            .clicked()
+                        {
+                            self.send(&mcg_shared::ClientMsg::Action {
+                                player_id,
+                                action: PlayerAction::Fold,
+                            });
+                        }
+                    } else {
+                        ui.add_enabled(
+                            false,
+                            egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)),
+                        );
+                    }
+                });
+
+                if enabled {
+                    ui.add_space(8.0);
+                    // Second row: Betting/Raising controls
+                    self.render_betting_controls(ui, state, player_id, player);
                 }
-            } else {
-                ui.add_enabled(
-                    false,
-                    egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)),
-                );
-            }
-        });
+            });
+        }
     }
 
     fn render_action_row(
         &self,
         ui: &mut egui::Ui,
+        state: &mcg_shared::GameStatePublic,
         player_id: mcg_shared::PlayerId,
         enabled: bool,
         show_next: bool,
@@ -362,7 +542,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                 ui.add_space(6.0);
             }
             // Render the centralized action buttons (enabled or disabled)
-            self.render_action_buttons(ui, player_id, enabled);
+            self.render_action_buttons(ui, state, player_id, enabled);
         });
     }
 

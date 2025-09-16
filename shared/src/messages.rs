@@ -3,9 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::cards::Card;
-use crate::game::{ActionEvent, Stage};
-use crate::player::{PlayerId, PlayerConfig, PlayerPublic};
 use crate::game::PlayerAction;
+use crate::game::{ActionEvent, Stage};
+use crate::player::{PlayerConfig, PlayerId, PlayerPublic};
 
 /// Complete public view of the game state
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -23,6 +23,10 @@ pub struct GameStatePublic {
     pub winner_ids: Vec<PlayerId>,
     #[serde(default)]
     pub action_log: Vec<ActionEvent>,
+    #[serde(default)]
+    pub current_bet: u32,
+    #[serde(default)]
+    pub min_raise: u32,
 }
 
 /// Messages that clients can send to the server

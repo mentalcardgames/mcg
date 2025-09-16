@@ -54,8 +54,25 @@ impl Default for SimpleBot {
 impl BotAI for SimpleBot {
     fn decide_action(&self, context: &BotContext) -> PlayerAction {
         if context.call_amount == 0 {
-            // No outstanding bet: make an opening bet of the big blind
-            PlayerAction::Bet(context.big_blind)
+            // No outstanding bet: decide whether to check or make an opening bet
+            if random::<f64>() < 0.3 {
+                // 30% chance to check
+                PlayerAction::CheckCall
+            } else {
+                // 70% chance to make an opening bet of varying sizes
+                let bet_options = [
+                    context.big_blind,                       // Min bet
+                    context.big_blind * 2,                   // 2x big blind
+                    context.big_blind * 3,                   // 3x big blind
+                    (context.big_blind as f64 * 2.5) as u32, // 2.5x big blind
+                ];
+
+                let random_index = (random::<f32>() * bet_options.len() as f32) as usize;
+                let bet_amount =
+                    bet_options[random_index.min(bet_options.len() - 1)].min(context.stack);
+
+                PlayerAction::Bet(bet_amount)
+            }
         } else if context.call_amount >= context.stack {
             // Calling would require all-in: just call
             PlayerAction::CheckCall
@@ -73,7 +90,32 @@ impl BotAI for SimpleBot {
             if random::<f64>() < fold_chance {
                 PlayerAction::Fold
             } else {
-                PlayerAction::CheckCall
+                // Decide whether to call or raise
+                let raise_chance = 0.2; // 20% chance to raise instead of call
+
+                if random::<f64>() < raise_chance && context.stack > context.call_amount {
+                    // Choose a raise amount randomly
+                    let remaining_after_call = context.stack - context.call_amount;
+                    let min_raise = (context.current_bet as f64 * 0.5) as u32; // Half pot minimum
+                    let max_raise = (context.current_bet as f64 * 1.5) as u32; // 1.5x pot maximum
+
+                    let raise_options = [
+                        min_raise,
+                        context.current_bet, // Pot-sized raise
+                        max_raise,
+                        remaining_after_call / 2, // Half remaining stack
+                        remaining_after_call,     // All-in
+                    ];
+
+                    let random_index = (random::<f32>() * raise_options.len() as f32) as usize;
+                    let raise_amount = raise_options[random_index.min(raise_options.len() - 1)]
+                        .max(min_raise)
+                        .min(remaining_after_call);
+
+                    PlayerAction::Bet(raise_amount)
+                } else {
+                    PlayerAction::CheckCall
+                }
             }
         }
     }
@@ -141,7 +183,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn simple_bot_bets_with_no_current_bet() {
+    fn simple_bot_acts_with_no_current_bet() {
         let bot = SimpleBot::default();
         let context = BotContext {
             stack: 1000,
@@ -153,8 +195,26 @@ mod tests {
             total_players: 4,
         };
 
-        let action = bot.decide_action(&context);
-        assert!(matches!(action, PlayerAction::Bet(10)));
+        // Run multiple times to test both check and bet behaviors
+        let mut checks = 0;
+        let mut bets = 0;
+        for _ in 0..100 {
+            let action = bot.decide_action(&context);
+            match action {
+                PlayerAction::CheckCall => checks += 1,
+                PlayerAction::Bet(amount) => {
+                    bets += 1;
+                    // Should bet at least the big blind and not more than stack
+                    assert!(amount >= 10);
+                    assert!(amount <= 1000);
+                }
+                PlayerAction::Fold => panic!("Bot should not fold with no bet to call"),
+            }
+        }
+
+        // Should have both checks and bets in the distribution
+        assert!(checks > 0, "Bot should check sometimes when no bet exists");
+        assert!(bets > 0, "Bot should bet sometimes when no bet exists");
     }
 
     #[test]
