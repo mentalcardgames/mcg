@@ -1,81 +1,13 @@
-use crate::poker::cards::{CardRank, CardSuit};
 use mcg_shared::{
     ActionEvent, ActionKind as SharedActionKind, BlindKind, Card, GameAction, GameStatePublic,
     PlayerId, PlayerPublic, Stage,
 };
 use owo_colors::OwoColorize;
 
-fn card_faces(rank: CardRank) -> &'static str {
-    match rank {
-        CardRank::Ace => "A",
-        CardRank::Two => "2",
-        CardRank::Three => "3",
-        CardRank::Four => "4",
-        CardRank::Five => "5",
-        CardRank::Six => "6",
-        CardRank::Seven => "7",
-        CardRank::Eight => "8",
-        CardRank::Nine => "9",
-        CardRank::Ten => "T",
-        CardRank::Jack => "J",
-        CardRank::Queen => "Q",
-        CardRank::King => "K",
-    }
-}
-
-fn suit_icon(suit: CardSuit) -> char {
-    match suit {
-        CardSuit::Clubs => '♣',
-        CardSuit::Diamonds => '♦',
-        CardSuit::Hearts => '♥',
-        CardSuit::Spades => '♠',
-    }
-}
-
-fn suit_name(suit: CardSuit) -> &'static str {
-    match suit {
-        CardSuit::Clubs => "Clubs",
-        CardSuit::Diamonds => "Diamonds",
-        CardSuit::Hearts => "Hearts",
-        CardSuit::Spades => "Spades",
-    }
-}
-
-fn rank_name(rank: CardRank) -> &'static str {
-    match rank {
-        CardRank::Ace => "Ace",
-        CardRank::Two => "Two",
-        CardRank::Three => "Three",
-        CardRank::Four => "Four",
-        CardRank::Five => "Five",
-        CardRank::Six => "Six",
-        CardRank::Seven => "Seven",
-        CardRank::Eight => "Eight",
-        CardRank::Nine => "Nine",
-        CardRank::Ten => "Ten",
-        CardRank::Jack => "Jack",
-        CardRank::Queen => "Queen",
-        CardRank::King => "King",
-    }
-}
-
 fn format_card(c: Card, color: bool) -> String {
-    let rank = c.rank();
-    let suit = c.suit();
-    let face = card_faces(rank);
-    let icon = suit_icon(suit);
-    let mut text = format!(
-        "{}{} ({} of {})",
-        face,
-        icon,
-        rank_name(rank),
-        suit_name(suit)
-    );
-    if color {
-        text = match suit {
-            CardSuit::Diamonds | CardSuit::Hearts => text.red().to_string(),
-            _ => text.to_string(),
-        };
+    let mut text = c.to_detailed_string();
+    if color && c.is_red() {
+        text = text.red().to_string();
     }
     text
 }
@@ -90,11 +22,7 @@ fn format_cards(cards: &[Card], color: bool) -> String {
 }
 
 fn player_name(players: &[PlayerPublic], id: PlayerId) -> String {
-    players
-        .iter()
-        .find(|p| p.id == id)
-        .map(|p| p.name.clone())
-        .unwrap_or_else(|| format!("P{}", id))
+    PlayerPublic::name_of(players, id)
 }
 
 fn format_log_entry(entry: &ActionEvent, players: &[PlayerPublic], color: bool) -> String {

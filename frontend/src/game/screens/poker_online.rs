@@ -8,7 +8,7 @@ use mcg_shared::{
 };
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use super::poker::ui_components::{action_kind_text, card_chip, card_text_and_color, category_text, name_of, card_text, stage_badge, stage_to_str};
+use super::poker::ui_components::{action_kind_text, card_chip, card_text_and_color, category_text, format_game_for_clipboard, log_entry_row, name_of, card_text, stage_badge, stage_to_str};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
@@ -787,36 +787,6 @@ impl ScreenWidget for PokerOnlineScreen {
             ui.label("No state yet. Click Connect to start a session.");
         }
     }
-}
-
-fn format_game_for_clipboard(state: &GameStatePublic, you: PlayerId) -> String {
-    let mut out = String::new();
-
-    format_game_summary(&mut out, state, you);
-    format_players_section(&mut out, state, you);
-    format_board_section(&mut out, state);
-    format_action_log(&mut out, state);
-
-    out
-}
-
-fn format_game_summary(out: &mut String, state: &GameStatePublic, you: PlayerId) {
-    out.push_str("Game summary\n");
-    out.push_str(&format!("Stage: {}\n", stage_to_str(state.stage)));
-    out.push_str(&format!("Pot: {}\n", state.pot));
-
-    if let Some(p) = state.players.iter().find(|p| p.id == you) {
-        if let Some(cards) = p.cards {
-            out.push_str(&format!(
-                "Your hole cards: {}, {}\n",
-                card_text(cards[0]),
-                card_text(cards[1])
-            ));
-        } else {
-            out.push_str("Your hole cards: (hidden)\n");
-        }
-    }
-    out.push('\n');
 }
 
 fn format_players_section(out: &mut String, state: &GameStatePublic, you: PlayerId) {

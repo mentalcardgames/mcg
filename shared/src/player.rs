@@ -44,3 +44,15 @@ pub struct PlayerConfig {
     pub name: String,
     pub is_bot: bool, // true if driven by bot mechanisms, false if waits for messages
 }
+
+impl PlayerPublic {
+    /// Get the name of a player by ID from a slice of players.
+    /// Returns the player's name if found, or a default "Player {id}" format if not found.
+    pub fn name_of(players: &[PlayerPublic], id: PlayerId) -> String {
+        players
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| format!("Player {}", id))
+    }
+}

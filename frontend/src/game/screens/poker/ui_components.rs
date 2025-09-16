@@ -59,11 +59,7 @@ pub fn category_text(cat: &HandRankCategory) -> &'static str {
 }
 
 pub fn name_of(players: &[PlayerPublic], id: PlayerId) -> String {
-    players
-        .iter()
-        .find(|p| p.id == id)
-        .map(|p| p.name.clone())
-        .unwrap_or_else(|| format!("Player {}", id))
+    PlayerPublic::name_of(players, id)
 }
 
 pub fn card_text(c: Card) -> String {

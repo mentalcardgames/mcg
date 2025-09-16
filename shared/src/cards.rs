@@ -141,4 +141,44 @@ impl Card {
     pub fn is_black(self) -> bool {
         matches!(self.suit(), CardSuit::Clubs | CardSuit::Spades)
     }
+
+    /// Get the full name of the rank (Ace, Two, Three, ..., King)
+    pub fn rank_name(self) -> &'static str {
+        match self.rank() {
+            CardRank::Ace => "Ace",
+            CardRank::Two => "Two",
+            CardRank::Three => "Three",
+            CardRank::Four => "Four",
+            CardRank::Five => "Five",
+            CardRank::Six => "Six",
+            CardRank::Seven => "Seven",
+            CardRank::Eight => "Eight",
+            CardRank::Nine => "Nine",
+            CardRank::Ten => "Ten",
+            CardRank::Jack => "Jack",
+            CardRank::Queen => "Queen",
+            CardRank::King => "King",
+        }
+    }
+
+    /// Get the full name of the suit (Clubs, Diamonds, Hearts, Spades)
+    pub fn suit_name(self) -> &'static str {
+        match self.suit() {
+            CardSuit::Clubs => "Clubs",
+            CardSuit::Diamonds => "Diamonds",
+            CardSuit::Hearts => "Hearts",
+            CardSuit::Spades => "Spades",
+        }
+    }
+
+    /// Format the card with full details like "A♣ (Ace of Clubs)"
+    pub fn to_detailed_string(self) -> String {
+        format!(
+            "{}{} ({} of {})",
+            self.rank_str(),
+            self.suit_char(),
+            self.rank_name(),
+            self.suit_name()
+        )
+    }
 }
