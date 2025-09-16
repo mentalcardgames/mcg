@@ -1,7 +1,7 @@
 //! Tests for hand evaluation logic, especially tiebreaker scenarios
 
-use native_mcg::poker::evaluation::*;
 use mcg_shared::{Card, HandRankCategory};
+use native_mcg::poker::evaluation::*;
 
 /// Test that pair tiebreakers work correctly
 #[test]
@@ -15,11 +15,11 @@ fn test_pair_tiebreakers() {
     let hole3 = [Card(0 * 13 + 10), Card(2 * 13 + 10)]; // J♠, J♥
 
     let community = [
-        Card(1 * 13 + 2),  // 3♦
-        Card(1 * 13 + 3),  // 4♣
-        Card(0 * 13 + 7),  // 9♠
-        Card(2 * 13 + 6),  // 8♥
-        Card(3 * 13 + 5),  // 7♦
+        Card(1 * 13 + 2), // 3♦
+        Card(1 * 13 + 3), // 4♣
+        Card(0 * 13 + 7), // 9♠
+        Card(2 * 13 + 6), // 8♥
+        Card(3 * 13 + 5), // 7♦
     ];
 
     let rank1 = evaluate_best_hand(hole1, &community);
@@ -74,11 +74,49 @@ fn test_two_pair_tiebreakers() {
 }
 
 /// Test high card tiebreakers
-// TODO: Fix high card test - straight detection logic needs investigation
 #[test]
 fn test_high_card_tiebreakers() {
-    // This test is temporarily disabled due to straight detection issues
-    assert!(true);
+    // Player 1: A♠, K♥ with community 9♦, 7♣, 5♠, 3♥, 2♦ (Ace high)
+    // Player 2: A♦, Q♥ with community 9♦, 7♣, 5♠, 3♥, 2♦ (Ace high, Queen kicker)
+    // Player 3: K♠, Q♦ with community 9♦, 7♣, 5♠, 3♥, 2♦ (King high)
+
+    let community = [
+        Card(1 * 13 + 8), // 9♦
+        Card(1 * 13 + 6), // 7♣
+        Card(0 * 13 + 4), // 5♠
+        Card(2 * 13 + 2), // 3♥
+        Card(3 * 13 + 1), // 2♦
+    ];
+
+    let hole1 = [Card(0 * 13 + 0), Card(2 * 13 + 12)]; // A♠, K♥
+    let hole2 = [Card(1 * 13 + 0), Card(2 * 13 + 11)]; // A♦, Q♥
+    let hole3 = [Card(0 * 13 + 12), Card(1 * 13 + 11)]; // K♠, Q♦
+
+    let rank1 = evaluate_best_hand(hole1, &community);
+    let rank2 = evaluate_best_hand(hole2, &community);
+    let rank3 = evaluate_best_hand(hole3, &community);
+
+    println!("Rank1 (A-K high): {:?}", rank1);
+    println!("Rank2 (A-Q high): {:?}", rank2);
+    println!("Rank3 (K-Q high): {:?}", rank3);
+
+    // All should be high card
+    assert_eq!(rank1.category, HandRankCategory::HighCard);
+    assert_eq!(rank2.category, HandRankCategory::HighCard);
+    assert_eq!(rank3.category, HandRankCategory::HighCard);
+
+    // A-K > A-Q > K-Q
+    assert!(rank1 > rank2); // A-K beats A-Q (same ace, but King vs Queen kicker)
+    assert!(rank2 > rank3); // A-Q beats K-Q (Ace vs King)
+    assert!(rank1 > rank3); // A-K beats K-Q
+
+    // Check tiebreaker values - should be ordered by high cards
+    assert_eq!(rank1.tiebreakers[0], 14); // Ace
+    assert_eq!(rank1.tiebreakers[1], 13); // King
+    assert_eq!(rank2.tiebreakers[0], 14); // Ace
+    assert_eq!(rank2.tiebreakers[1], 12); // Queen
+    assert_eq!(rank3.tiebreakers[0], 13); // King
+    assert_eq!(rank3.tiebreakers[1], 12); // Queen
 }
 
 /// Test three of a kind tiebreakers
@@ -134,8 +172,8 @@ fn test_same_category_different_kickers() {
 
     // Same hands as in the bug report
     let hole_you = [Card(2 * 13 + 12), Card(1 * 13 + 12)]; // K♥, K♦
-    let hole_bot1 = [Card(1 * 13 + 0), Card(0 * 13 + 6)];   // A♦, 7♣
-    let hole_bot2 = [Card(0 * 13 + 2), Card(1 * 13 + 0)];  // 3♠, A♣
+    let hole_bot1 = [Card(1 * 13 + 0), Card(0 * 13 + 6)]; // A♦, 7♣
+    let hole_bot2 = [Card(0 * 13 + 2), Card(1 * 13 + 0)]; // 3♠, A♣
     let hole_bot3 = [Card(0 * 13 + 9), Card(2 * 13 + 11)]; // T♠, Q♥
 
     let rank_you = evaluate_best_hand(hole_you, &community);
@@ -150,9 +188,9 @@ fn test_same_category_different_kickers() {
     assert_eq!(rank_bot3.category, HandRankCategory::Pair);
 
     // Rankings: Aces > Kings > Queens
-    assert!(rank_bot1 > rank_you);  // Aces beat Kings
-    assert!(rank_bot2 > rank_you);  // Aces beat Kings
-    assert!(rank_you > rank_bot3);  // Kings beat Queens
+    assert!(rank_bot1 > rank_you); // Aces beat Kings
+    assert!(rank_bot2 > rank_you); // Aces beat Kings
+    assert!(rank_you > rank_bot3); // Kings beat Queens
 
     // In this specific case, both ace hands should be equal since they use the same kickers
     assert_eq!(rank_bot1, rank_bot2); // Same kickers make them equal
@@ -160,19 +198,70 @@ fn test_same_category_different_kickers() {
     // Verify the tiebreaker values
     assert_eq!(rank_bot1.tiebreakers[0], 14); // Aces
     assert_eq!(rank_bot2.tiebreakers[0], 14); // Aces
-    assert_eq!(rank_you.tiebreakers[0], 13);  // Kings
-    assert_eq!(rank_bot3.tiebreakers[0], 12);  // Queens
+    assert_eq!(rank_you.tiebreakers[0], 13); // Kings
+    assert_eq!(rank_bot3.tiebreakers[0], 12); // Queens
 
     // Aces should have the same kickers in this specific case
     assert_eq!(rank_bot1.tiebreakers[1], rank_bot2.tiebreakers[1]);
 }
 
 /// Test straight tiebreakers (high card determines winner)
-// TODO: Fix straight test - straight detection logic needs investigation
 #[test]
 fn test_straight_tiebreakers() {
-    // This test is temporarily disabled due to straight detection issues
-    assert!(true);
+    // Test different types of straights to ensure proper detection and ranking
+
+    // Player 1: Ace-high straight (10-J-Q-K-A)
+    let hole1 = [Card(0 * 13 + 0), Card(2 * 13 + 9)]; // A♠, T♥
+    let community1 = [
+        Card(1 * 13 + 10), // J♦
+        Card(0 * 13 + 11), // Q♠
+        Card(2 * 13 + 12), // K♥
+        Card(3 * 13 + 5),  // 6♦ (unused)
+        Card(1 * 13 + 2),  // 3♦ (unused)
+    ];
+
+    // Player 2: King-high straight (9-10-J-Q-K)
+    let hole2 = [Card(1 * 13 + 8), Card(2 * 13 + 9)]; // 9♦, T♥
+    let community2 = [
+        Card(0 * 13 + 10), // J♠
+        Card(2 * 13 + 11), // Q♥
+        Card(1 * 13 + 12), // K♦
+        Card(3 * 13 + 5),  // 6♦ (unused)
+        Card(0 * 13 + 2),  // 3♠ (unused)
+    ];
+
+    // Player 3: Ace-low straight (A-2-3-4-5) - "wheel"
+    let hole3 = [Card(2 * 13 + 0), Card(0 * 13 + 1)]; // A♥, 2♠
+    let community3 = [
+        Card(1 * 13 + 2),  // 3♦
+        Card(0 * 13 + 3),  // 4♠
+        Card(2 * 13 + 4),  // 5♥
+        Card(3 * 13 + 12), // K♦ (unused)
+        Card(1 * 13 + 9),  // T♦ (unused)
+    ];
+
+    let rank1 = evaluate_best_hand(hole1, &community1);
+    let rank2 = evaluate_best_hand(hole2, &community2);
+    let rank3 = evaluate_best_hand(hole3, &community3);
+
+    println!("Rank1 (Ace-high straight): {:?}", rank1);
+    println!("Rank2 (King-high straight): {:?}", rank2);
+    println!("Rank3 (Ace-low straight): {:?}", rank3);
+
+    // All should be straights
+    assert_eq!(rank1.category, HandRankCategory::Straight);
+    assert_eq!(rank2.category, HandRankCategory::Straight);
+    assert_eq!(rank3.category, HandRankCategory::Straight);
+
+    // Ace-high > King-high > Ace-low (wheel)
+    assert!(rank1 > rank2); // Ace-high straight beats King-high straight
+    assert!(rank2 > rank3); // King-high straight beats wheel
+    assert!(rank1 > rank3); // Ace-high straight beats wheel
+
+    // Check tiebreaker values
+    assert_eq!(rank1.tiebreakers[0], 14); // Ace-high straight
+    assert_eq!(rank2.tiebreakers[0], 13); // King-high straight
+    assert_eq!(rank3.tiebreakers[0], 5); // Ace-low straight (5 is high card)
 }
 
 /// Test exact scenario from bug report to ensure it's fixed
@@ -194,8 +283,8 @@ fn test_bug_report_scenario() {
     ];
 
     let hole_you = [Card(2 * 13 + 12), Card(1 * 13 + 12)]; // K♥, K♦
-    let hole_bot1 = [Card(1 * 13 + 0), Card(0 * 13 + 6)];   // A♦, 7♣
-    let hole_bot2 = [Card(0 * 13 + 2), Card(1 * 13 + 0)];  // 3♠, A♣
+    let hole_bot1 = [Card(1 * 13 + 0), Card(0 * 13 + 6)]; // A♦, 7♣
+    let hole_bot2 = [Card(0 * 13 + 2), Card(1 * 13 + 0)]; // 3♠, A♣
     let hole_bot3 = [Card(0 * 13 + 9), Card(2 * 13 + 11)]; // T♠, Q♥
 
     let rank_you = evaluate_best_hand(hole_you, &community);

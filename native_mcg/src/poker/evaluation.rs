@@ -1,4 +1,7 @@
-use super::{cards::{card_rank, CardRank}, constants::NUM_RANKS};
+use super::{
+    cards::{card_rank, CardRank},
+    constants::NUM_RANKS,
+};
 use mcg_shared::{Card, HandRank};
 
 /// Evaluate the best 5-card hand from 2 hole + up to 5 community cards.
@@ -161,32 +164,38 @@ fn best_rank_from_seven(cards: &[Card]) -> HandRank {
 }
 
 /// Calculate tiebreakers for hand comparison
-fn calculate_tiebreakers(category: &mcg_shared::HandRankCategory, rank_counts: &[u8; NUM_RANKS], cards: &[Card]) -> Vec<u8> {
+fn calculate_tiebreakers(
+    category: &mcg_shared::HandRankCategory,
+    rank_counts: &[u8; NUM_RANKS],
+    cards: &[Card],
+) -> Vec<u8> {
     let mut tiebreakers = vec![0u8; 5];
 
     match category {
         mcg_shared::HandRankCategory::HighCard => {
             // Use all 5 highest cards in descending order
-            let mut ranks: Vec<u8> = cards.iter()
+            let mut ranks: Vec<u8> = cards
+                .iter()
                 .map(|&card| rank_value_high(card_rank(card)))
                 .collect();
             ranks.sort_unstable_by(|a, b| b.cmp(a));
-            for i in 0..5.min(ranks.len()) {
-                tiebreakers[i] = ranks[i];
-            }
+            let copy_len = 5.min(ranks.len());
+            tiebreakers[..copy_len].copy_from_slice(&ranks[..copy_len]);
         }
         mcg_shared::HandRankCategory::Pair => {
             // Find the pair rank and calculate kickers from actual cards
             let pair_rank = find_pair_rank(rank_counts);
 
             // Get all card ranks and remove the paired cards to find kickers
-            let mut all_ranks: Vec<u8> = cards.iter()
+            let all_ranks: Vec<u8> = cards
+                .iter()
                 .map(|&card| rank_value_high(card_rank(card)))
                 .collect();
 
             // Remove instances of the pair rank (remove 2 instances for the pair)
             let mut pair_count = 0;
-            let mut kicker_ranks: Vec<u8> = all_ranks.into_iter()
+            let mut kicker_ranks: Vec<u8> = all_ranks
+                .into_iter()
                 .filter(|&rank| {
                     if rank == pair_rank && pair_count < 2 {
                         pair_count += 1;
@@ -201,23 +210,24 @@ fn calculate_tiebreakers(category: &mcg_shared::HandRankCategory, rank_counts: &
             kicker_ranks.sort_unstable_by(|a, b| b.cmp(a));
 
             tiebreakers[0] = pair_rank;
-            for i in 0..3.min(kicker_ranks.len()) {
-                tiebreakers[i + 1] = kicker_ranks[i];
-            }
+            let copy_len = 3.min(kicker_ranks.len());
+            tiebreakers[1..(copy_len + 1)].copy_from_slice(&kicker_ranks[..copy_len]);
         }
         mcg_shared::HandRankCategory::TwoPair => {
             // Find both pair ranks, then kicker from actual cards
             let pair_ranks = find_two_pair_ranks(rank_counts);
 
             // Get all card ranks and remove the paired cards to find kicker
-            let mut all_ranks: Vec<u8> = cards.iter()
+            let all_ranks: Vec<u8> = cards
+                .iter()
                 .map(|&card| rank_value_high(card_rank(card)))
                 .collect();
 
             // Remove instances of the pair ranks (remove 2 instances for each pair)
             let mut pair1_count = 0;
             let mut pair2_count = 0;
-            let kicker_ranks: Vec<u8> = all_ranks.into_iter()
+            let kicker_ranks: Vec<u8> = all_ranks
+                .into_iter()
                 .filter(|&rank| {
                     if rank == pair_ranks[0] && pair1_count < 2 {
                         pair1_count += 1;
@@ -242,13 +252,15 @@ fn calculate_tiebreakers(category: &mcg_shared::HandRankCategory, rank_counts: &
             let trips_rank = find_trips_rank(rank_counts);
 
             // Get all card ranks and remove the trip cards to find kickers
-            let mut all_ranks: Vec<u8> = cards.iter()
+            let all_ranks: Vec<u8> = cards
+                .iter()
                 .map(|&card| rank_value_high(card_rank(card)))
                 .collect();
 
             // Remove instances of the trips rank (remove 3 instances)
             let mut trips_count = 0;
-            let mut kicker_ranks: Vec<u8> = all_ranks.into_iter()
+            let mut kicker_ranks: Vec<u8> = all_ranks
+                .into_iter()
                 .filter(|&rank| {
                     if rank == trips_rank && trips_count < 3 {
                         trips_count += 1;
@@ -263,9 +275,8 @@ fn calculate_tiebreakers(category: &mcg_shared::HandRankCategory, rank_counts: &
             kicker_ranks.sort_unstable_by(|a, b| b.cmp(a));
 
             tiebreakers[0] = trips_rank;
-            for i in 0..2.min(kicker_ranks.len()) {
-                tiebreakers[i + 1] = kicker_ranks[i];
-            }
+            let copy_len = 2.min(kicker_ranks.len());
+            tiebreakers[1..(copy_len + 1)].copy_from_slice(&kicker_ranks[..copy_len]);
         }
         mcg_shared::HandRankCategory::Straight => {
             // For straights, the high card determines the winner
@@ -274,13 +285,13 @@ fn calculate_tiebreakers(category: &mcg_shared::HandRankCategory, rank_counts: &
         }
         mcg_shared::HandRankCategory::Flush => {
             // For flushes, use high cards like high card
-            let mut ranks: Vec<u8> = cards.iter()
+            let mut ranks: Vec<u8> = cards
+                .iter()
                 .map(|&card| rank_value_high(card_rank(card)))
                 .collect();
             ranks.sort_unstable_by(|a, b| b.cmp(a));
-            for i in 0..5.min(ranks.len()) {
-                tiebreakers[i] = ranks[i];
-            }
+            let copy_len = 5.min(ranks.len());
+            tiebreakers[..copy_len].copy_from_slice(&ranks[..copy_len]);
         }
         mcg_shared::HandRankCategory::FullHouse => {
             // Three of a kind rank, then pair rank
@@ -295,13 +306,15 @@ fn calculate_tiebreakers(category: &mcg_shared::HandRankCategory, rank_counts: &
             let quads_rank = find_quads_rank(rank_counts);
 
             // Get all card ranks and remove the quad cards to find kicker
-            let mut all_ranks: Vec<u8> = cards.iter()
+            let all_ranks: Vec<u8> = cards
+                .iter()
                 .map(|&card| rank_value_high(card_rank(card)))
                 .collect();
 
             // Remove instances of the quads rank (remove 4 instances)
             let mut quads_count = 0;
-            let kicker_ranks: Vec<u8> = all_ranks.into_iter()
+            let kicker_ranks: Vec<u8> = all_ranks
+                .into_iter()
                 .filter(|&rank| {
                     if rank == quads_rank && quads_count < 4 {
                         quads_count += 1;
@@ -368,10 +381,20 @@ fn find_quads_rank(rank_counts: &[u8; NUM_RANKS]) -> u8 {
     0
 }
 
-
 /// Find the high card of a straight
 fn find_straight_high(rank_counts: &[u8; NUM_RANKS]) -> u8 {
-    // Check for regular straight
+    // Check for ace-high straight (10-J-Q-K-A)
+    if rank_counts[9] > 0   // Ten
+        && rank_counts[10] > 0  // Jack
+        && rank_counts[11] > 0  // Queen
+        && rank_counts[12] > 0  // King
+        && rank_counts[0] > 0
+    // Ace
+    {
+        return 14; // Ace-high straight, Ace is high card
+    }
+
+    // Check for regular straights (not including ace-high)
     for i in 0..(NUM_RANKS - 4) {
         if rank_counts[i] > 0
             && rank_counts[i + 1] > 0
@@ -388,7 +411,8 @@ fn find_straight_high(rank_counts: &[u8; NUM_RANKS]) -> u8 {
         && rank_counts[1] > 0 // 2
         && rank_counts[2] > 0 // 3
         && rank_counts[3] > 0 // 4
-        && rank_counts[4] > 0 // 5
+        && rank_counts[4] > 0
+    // 5
     {
         return 5; // Ace-low straight, high card is 5
     }
@@ -398,7 +422,18 @@ fn find_straight_high(rank_counts: &[u8; NUM_RANKS]) -> u8 {
 
 /// Check if there's a straight in the rank counts
 fn check_straight(rank_counts: &[u8; NUM_RANKS]) -> bool {
-    // Check for regular straight
+    // Check for ace-high straight (10-J-Q-K-A)
+    if rank_counts[9] > 0   // Ten
+        && rank_counts[10] > 0  // Jack
+        && rank_counts[11] > 0  // Queen
+        && rank_counts[12] > 0  // King
+        && rank_counts[0] > 0
+    // Ace
+    {
+        return true;
+    }
+
+    // Check for regular straights (not including ace-high)
     for i in 0..(NUM_RANKS - 4) {
         if rank_counts[i] > 0
             && rank_counts[i + 1] > 0
