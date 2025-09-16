@@ -22,3 +22,9 @@ impl SessionManager {
         // Session cleanup logic would go here
     }
 }
+
+impl Default for SessionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
