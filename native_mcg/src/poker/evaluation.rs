@@ -31,7 +31,7 @@ pub fn pick_best_five(hole: [Card; 2], community: &[Card]) -> [Card; 5] {
 
     // If fewer than 5 cards are available (pre-flop/early streets), just take the highest ones
     if all.len() < 5 {
-        all.sort_unstable_by(|a, b| rank_value_high(a.rank()).cmp(&rank_value_high(b.rank())));
+        all.sort_unstable_by_key(|a| rank_value_high(a.rank()));
         let mut out = [Card::new(CardRank::Ace, CardSuit::Clubs); 5];
         let n = all.len().min(5);
         out[..n].copy_from_slice(&all[..n]);
