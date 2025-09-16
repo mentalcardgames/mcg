@@ -51,7 +51,7 @@ pub async fn create_new_game(
 pub async fn current_state_public(state: &AppState) -> Option<GameStatePublic> {
     let lobby_r = state.lobby.read().await;
     if let Some(game) = &lobby_r.game {
-        let gs = game.public();
+        let gs = game.public_all();
         Some(gs)
     } else {
         None
@@ -174,7 +174,7 @@ pub async fn start_new_hand_and_print(state: &AppState) -> Result<()> {
         let bb = game.bb;
         // start_new_hand_and_print runs in server-side context
         // for printing the table header and tracking printed log length.
-        let gs = game.public();
+        let gs = game.public_all();
         lobby.last_printed_log_len = gs.action_log.len();
         let header = pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
         tracing::info!("{}", header);

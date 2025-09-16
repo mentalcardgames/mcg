@@ -17,6 +17,17 @@ impl Game {
         // The player who just acted is no longer pending for this street.
         self.remove_from_pending(actor);
 
+        // Validate stack integrity after each action
+        if let Some(initial_total) = self.recent_actions.first().and_then(|_| {
+            // Use a reasonable default for total chips (players.len() * 1000)
+            Some(self.players.len() as u32 * 1000)
+        }) {
+            if let Err(e) = self.validate_stack_consistency(initial_total) {
+                eprintln!("[ERROR] Stack consistency check failed: {}", e);
+                // Don't bail to avoid crashing the game, but log the error
+            }
+        }
+
         // Check for end-of-hand conditions (e.g. only one player left).
         if self.active_players().len() <= 1 {
             self.stage = mcg_shared::Stage::Showdown;

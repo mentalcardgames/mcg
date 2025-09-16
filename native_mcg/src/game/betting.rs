@@ -66,8 +66,12 @@ impl Game {
         }
 
         println!(
-            "[ACTION] {}: {:?} (stage: {:?})",
-            self.players[actor].name, action, self.stage
+            "[ACTION] {}: {:?} (stage: {:?}, stack: {}, all_in: {})",
+            self.players[actor].name,
+            action,
+            self.stage,
+            self.players[actor].stack,
+            self.players[actor].all_in
         );
 
         let prev_current_bet = self.current_bet;
@@ -93,7 +97,15 @@ impl Game {
                     self.pot += pay;
                     if pay < need {
                         self.players[actor].all_in = true;
+                        println!(
+                            "[ALL-IN] {} called {} but needed {}, now all-in",
+                            self.players[actor].name, pay, need
+                        );
                     }
+                    println!(
+                        "[CALL] {} called {}, stack now {}, pot now {}",
+                        self.players[actor].name, pay, self.players[actor].stack, self.pot
+                    );
                     self.log(ActionEvent::player(
                         mcg_shared::PlayerId(actor),
                         ActionKind::Call(pay),
@@ -101,7 +113,32 @@ impl Game {
                 }
             }
             PlayerAction::Bet(x) => {
-                if self.current_bet == 0 {
+                // Validate bet amount - if betting 0, treat as check/call instead
+                if x == 0 {
+                    println!(
+                        "[WARNING] Converting Bet(0) to CheckCall for player {}",
+                        actor
+                    );
+                    let need = self.current_bet.saturating_sub(self.round_bets[actor]);
+                    if need == 0 {
+                        self.log(ActionEvent::player(
+                            mcg_shared::PlayerId(actor),
+                            ActionKind::Check,
+                        ));
+                    } else {
+                        let pay = need.min(self.players[actor].stack);
+                        self.players[actor].stack -= pay;
+                        self.round_bets[actor] += pay;
+                        self.pot += pay;
+                        if pay < need {
+                            self.players[actor].all_in = true;
+                        }
+                        self.log(ActionEvent::player(
+                            mcg_shared::PlayerId(actor),
+                            ActionKind::Call(pay),
+                        ));
+                    }
+                } else if self.current_bet == 0 {
                     let (add, _bet_to) = compute_open_bet_add(self, actor, x);
                     self.players[actor].stack -= add;
                     self.round_bets[actor] += add;
@@ -110,7 +147,15 @@ impl Game {
                     self.min_raise = add;
                     if self.players[actor].stack == 0 {
                         self.players[actor].all_in = true;
+                        println!(
+                            "[ALL-IN] {} is now all-in with stack 0",
+                            self.players[actor].name
+                        );
                     }
+                    println!(
+                        "[BET] {} bet {}, stack now {}, pot now {}",
+                        self.players[actor].name, add, self.players[actor].stack, self.pot
+                    );
                     self.log(ActionEvent::player(
                         mcg_shared::PlayerId(actor),
                         ActionKind::Bet(add),

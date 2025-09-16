@@ -120,7 +120,7 @@ pub async fn create_new_game(
 pub async fn current_state_public(state: &AppState) -> Option<GameStatePublic> {
     let lobby_r = state.lobby.read().await;
     if let Some(game) = &lobby_r.game {
-        let gs = game.public();
+        let gs = game.public_all();
         Some(gs)
     } else {
         None

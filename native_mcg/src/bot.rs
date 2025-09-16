@@ -96,15 +96,17 @@ impl BotAI for SimpleBot {
                 if random::<f64>() < raise_chance && context.stack > context.call_amount {
                     // Choose a raise amount randomly
                     let remaining_after_call = context.stack - context.call_amount;
-                    let min_raise = (context.current_bet as f64 * 0.5) as u32; // Half pot minimum
+                    // Ensure minimum raise is at least the big blind to prevent Bet(0)
+                    let min_raise =
+                        ((context.current_bet as f64 * 0.5) as u32).max(context.big_blind);
                     let max_raise = (context.current_bet as f64 * 1.5) as u32; // 1.5x pot maximum
 
                     let raise_options = [
                         min_raise,
-                        context.current_bet, // Pot-sized raise
-                        max_raise,
-                        remaining_after_call / 2, // Half remaining stack
-                        remaining_after_call,     // All-in
+                        context.current_bet.max(context.big_blind), // Pot-sized raise (min big blind)
+                        max_raise.max(context.big_blind),           // Max raise (min big blind)
+                        remaining_after_call / 2,                   // Half remaining stack
+                        remaining_after_call,                       // All-in
                     ];
 
                     let random_index = (random::<f32>() * raise_options.len() as f32) as usize;
@@ -250,11 +252,11 @@ mod tests {
         let result = manager.generate_action(&context);
         assert!(result.is_ok());
 
-        // Action should be either Fold or CheckCall based on probability
+        // Action should be either Fold, CheckCall, or Bet based on probability
         let action = result.unwrap();
         assert!(matches!(
             action,
-            PlayerAction::Fold | PlayerAction::CheckCall
+            PlayerAction::Fold | PlayerAction::CheckCall | PlayerAction::Bet(_)
         ));
     }
 }

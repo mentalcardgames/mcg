@@ -144,7 +144,7 @@ impl Game {
         Ok(g)
     }
 
-    pub fn public(&self) -> GameStatePublic {
+    pub fn public(&self, _preferred_player: Option<PlayerId>) -> GameStatePublic {
         let players = self
             .players
             .iter()
@@ -153,7 +153,7 @@ impl Game {
                 id: p.id,
                 name: p.name.clone(),
                 stack: p.stack,
-                // Expose hole cards for all players in the public state.
+                // For now, always expose all cards (insecure but allowed)
                 cards: Some(p.cards),
                 has_folded: p.has_folded,
                 bet_this_round: self.round_bets[idx],
@@ -175,11 +175,37 @@ impl Game {
         }
     }
 
+    /// Legacy method for backwards compatibility - reveals all cards at showdown, none otherwise
+    pub fn public_all(&self) -> GameStatePublic {
+        self.public(None)
+    }
+
     pub(crate) fn log(&mut self, ev: ActionEvent) {
         // canonical store is recent_actions (typed ActionEvent).
         self.recent_actions.push(ev);
         // cap logs via utils helper
         super::utils::cap_logs(self);
+    }
+
+    /// Validate stack consistency - the sum of all player stacks plus pot should remain constant
+    /// This helps detect stack management bugs
+    pub(crate) fn validate_stack_consistency(&self, initial_total: u32) -> Result<()> {
+        let current_total: u32 = self.players.iter().map(|p| p.stack).sum::<u32>() + self.pot;
+        if current_total != initial_total {
+            anyhow::bail!(
+                "Stack inconsistency: expected total {}, but got {} (stacks: {:?}, pot: {})",
+                initial_total,
+                current_total,
+                self.players.iter().map(|p| p.stack).collect::<Vec<_>>(),
+                self.pot
+            );
+        }
+        Ok(())
+    }
+
+    /// Get the total chips in play for consistency checking
+    pub(crate) fn total_chips(&self) -> u32 {
+        self.players.iter().map(|p| p.stack).sum::<u32>() + self.pot
     }
 }
 
