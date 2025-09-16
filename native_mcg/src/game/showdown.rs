@@ -35,7 +35,7 @@ pub(crate) fn finish_showdown(g: &mut Game) {
     } else {
         vec![]
     };
-    g.winner_ids = winners.clone().into_iter().map(|p| p.into()).collect();
+    g.winner_ids = winners.clone();
 
     g.log(ActionEvent::game(GameAction::Showdown {
         hand_results: results.clone(),
