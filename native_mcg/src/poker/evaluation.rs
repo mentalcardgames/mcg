@@ -1,5 +1,5 @@
 use super::{
-    cards::{card_rank, CardRank},
+    cards::{card_rank, CardRank, CardSuit},
     constants::NUM_RANKS,
 };
 use mcg_shared::{Card, HandRank};
@@ -34,7 +34,7 @@ pub fn pick_best_five(hole: [Card; 2], community: &[Card]) -> [Card; 5] {
         all.sort_unstable_by(|a, b| {
             rank_value_high(card_rank(*b)).cmp(&rank_value_high(card_rank(*a)))
         });
-        let mut out = [Card(0); 5];
+        let mut out = [Card::new(CardRank::Ace, CardSuit::Clubs); 5];
         let n = all.len().min(5);
         out[..n].copy_from_slice(&all[..n]);
         return out;
@@ -43,7 +43,7 @@ pub fn pick_best_five(hole: [Card; 2], community: &[Card]) -> [Card; 5] {
     // Enumerate all 5-card combinations and select the one with the highest rank
     let n = all.len();
     let mut best_rank: Option<HandRank> = None;
-    let mut best_combo: [Card; 5] = [Card(0); 5];
+    let mut best_combo: [Card; 5] = [Card::new(CardRank::Ace, CardSuit::Clubs); 5];
 
     for i in 0..(n - 4) {
         for j in (i + 1)..(n - 3) {

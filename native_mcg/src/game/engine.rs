@@ -1,7 +1,9 @@
 //! Core Game and Player definitions + constructors and small helpers.
 
 use anyhow::{Context, Result};
-use mcg_shared::{ActionEvent, Card, GameStatePublic, PlayerId, PlayerPublic, Stage};
+use mcg_shared::{
+    ActionEvent, Card, CardRank, CardSuit, GameStatePublic, PlayerId, PlayerPublic, Stage,
+};
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
 
@@ -92,7 +94,10 @@ impl Game {
             id: PlayerId(0),
             name: human_name,
             stack: 1000,
-            cards: [Card(0), Card(0)],
+            cards: [
+                Card::new(CardRank::Ace, CardSuit::Clubs),
+                Card::new(CardRank::Ace, CardSuit::Clubs),
+            ],
             has_folded: false,
             all_in: false,
         });
@@ -101,7 +106,10 @@ impl Game {
                 id: PlayerId(i + 1),
                 name: format!("Bot {}", i + 1),
                 stack: 1000,
-                cards: [Card(0), Card(0)],
+                cards: [
+                    Card::new(CardRank::Ace, CardSuit::Clubs),
+                    Card::new(CardRank::Ace, CardSuit::Clubs),
+                ],
                 has_folded: false,
                 all_in: false,
             });
@@ -235,7 +243,10 @@ mod tests {
                 id: PlayerId(0),
                 name: "Short".to_owned(),
                 stack: 3, // less than small blind (5)
-                cards: [Card(0), Card(0)],
+                cards: [
+                    Card::new(CardRank::Ace, CardSuit::Clubs),
+                    Card::new(CardRank::Ace, CardSuit::Clubs),
+                ],
                 has_folded: false,
                 all_in: false,
             },
@@ -243,7 +254,10 @@ mod tests {
                 id: PlayerId(1),
                 name: "Normal".to_owned(),
                 stack: 1000,
-                cards: [Card(0), Card(0)],
+                cards: [
+                    Card::new(CardRank::Ace, CardSuit::Clubs),
+                    Card::new(CardRank::Ace, CardSuit::Clubs),
+                ],
                 has_folded: false,
                 all_in: false,
             },

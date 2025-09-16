@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 use crate::bot::BotManager;
 use crate::game::{Game, Player};
 use anyhow::{Context, Result};
-use mcg_shared::{Card, GameStatePublic, PlayerId};
+use mcg_shared::{Card, CardRank, CardSuit, GameStatePublic, PlayerId};
 
 pub const CHANNEL_BUFFER_SIZE: usize = 256;
 
@@ -94,8 +94,11 @@ pub async fn create_new_game(
         let player = Player {
             id: config.id,
             name: config.name.clone(),
-            stack: 1000,               // Default stack size
-            cards: [Card(0), Card(0)], // Empty cards initially
+            stack: 1000, // Default stack size
+            cards: [
+                Card::new(CardRank::Ace, CardSuit::Clubs),
+                Card::new(CardRank::Ace, CardSuit::Clubs),
+            ], // Empty cards initially
             has_folded: false,
             all_in: false,
         };

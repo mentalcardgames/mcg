@@ -1,6 +1,6 @@
 //! Tests for hand evaluation logic, especially tiebreaker scenarios
 
-use mcg_shared::{Card, HandRankCategory};
+use mcg_shared::{Card, CardRank, CardSuit, HandRankCategory};
 use native_mcg::poker::evaluation::*;
 
 /// Test that pair tiebreakers work correctly
@@ -10,16 +10,25 @@ fn test_pair_tiebreakers() {
     // Player 2: Q♠, Q♥ with community 3♦, 4♣, 9♠, 8♥, 7♦ (Queens)
     // Player 3: J♠, J♥ with community 3♦, 4♣, 9♠, 8♥, 7♦ (Jacks)
 
-    let hole1 = [Card(0 * 13 + 12), Card(2 * 13 + 12)]; // K♠, K♥
-    let hole2 = [Card(0 * 13 + 11), Card(2 * 13 + 11)]; // Q♠, Q♥
-    let hole3 = [Card(0 * 13 + 10), Card(2 * 13 + 10)]; // J♠, J♥
+    let hole1 = [
+        Card::new(CardRank::King, CardSuit::Clubs),
+        Card::new(CardRank::King, CardSuit::Hearts),
+    ]; // K♠, K♥
+    let hole2 = [
+        Card::new(CardRank::Queen, CardSuit::Clubs),
+        Card::new(CardRank::Queen, CardSuit::Hearts),
+    ]; // Q♠, Q♥
+    let hole3 = [
+        Card::new(CardRank::Jack, CardSuit::Clubs),
+        Card::new(CardRank::Jack, CardSuit::Hearts),
+    ]; // J♠, J♥
 
     let community = [
-        Card(1 * 13 + 2), // 3♦
-        Card(1 * 13 + 3), // 4♣
-        Card(0 * 13 + 7), // 9♠
-        Card(2 * 13 + 6), // 8♥
-        Card(3 * 13 + 5), // 7♦
+        Card::new(CardRank::Three, CardSuit::Diamonds), // 3♦
+        Card::new(CardRank::Four, CardSuit::Diamonds),  // 4♦
+        Card::new(CardRank::Nine, CardSuit::Clubs),     // 9♠
+        Card::new(CardRank::Eight, CardSuit::Hearts),   // 8♥
+        Card::new(CardRank::Seven, CardSuit::Spades),   // 7♠
     ];
 
     let rank1 = evaluate_best_hand(hole1, &community);
@@ -53,15 +62,21 @@ fn test_two_pair_tiebreakers() {
     // Player 2: A♠, Q♥ with community A♥, K♦, Q♣, J♠, 2♦ (Aces and Queens)
 
     let community = [
-        Card(2 * 13 + 0),  // A♥
-        Card(1 * 13 + 12), // K♦
-        Card(1 * 13 + 11), // Q♣
-        Card(0 * 13 + 10), // J♠
-        Card(1 * 13 + 1),  // 2♦
+        Card::new(CardRank::Ace, CardSuit::Hearts),     // A♥
+        Card::new(CardRank::King, CardSuit::Diamonds),  // K♦
+        Card::new(CardRank::Queen, CardSuit::Diamonds), // Q♦
+        Card::new(CardRank::Jack, CardSuit::Clubs),     // J♠
+        Card::new(CardRank::Two, CardSuit::Diamonds),   // 2♦
     ];
 
-    let hole1 = [Card(0 * 13 + 0), Card(2 * 13 + 12)]; // A♠, K♥
-    let hole2 = [Card(0 * 13 + 0), Card(2 * 13 + 11)]; // A♠, Q♥
+    let hole1 = [
+        Card::new(CardRank::Ace, CardSuit::Clubs),
+        Card::new(CardRank::King, CardSuit::Hearts),
+    ]; // A♠, K♥
+    let hole2 = [
+        Card::new(CardRank::Ace, CardSuit::Clubs),
+        Card::new(CardRank::Queen, CardSuit::Hearts),
+    ]; // A♠, Q♥
 
     let rank1 = evaluate_best_hand(hole1, &community);
     let rank2 = evaluate_best_hand(hole2, &community);
@@ -81,16 +96,25 @@ fn test_high_card_tiebreakers() {
     // Player 3: K♠, Q♦ with community 9♦, 7♣, 5♠, 3♥, 2♦ (King high)
 
     let community = [
-        Card(1 * 13 + 8), // 9♦
-        Card(1 * 13 + 6), // 7♣
-        Card(0 * 13 + 4), // 5♠
-        Card(2 * 13 + 2), // 3♥
-        Card(3 * 13 + 1), // 2♦
+        Card::new(CardRank::Nine, CardSuit::Diamonds),  // 9♦
+        Card::new(CardRank::Seven, CardSuit::Diamonds), // 7♦
+        Card::new(CardRank::Five, CardSuit::Clubs),     // 5♠
+        Card::new(CardRank::Three, CardSuit::Hearts),   // 3♥
+        Card::new(CardRank::Two, CardSuit::Spades),     // 2♠
     ];
 
-    let hole1 = [Card(0 * 13 + 0), Card(2 * 13 + 12)]; // A♠, K♥
-    let hole2 = [Card(1 * 13 + 0), Card(2 * 13 + 11)]; // A♦, Q♥
-    let hole3 = [Card(0 * 13 + 12), Card(1 * 13 + 11)]; // K♠, Q♦
+    let hole1 = [
+        Card::new(CardRank::Ace, CardSuit::Clubs),
+        Card::new(CardRank::King, CardSuit::Hearts),
+    ]; // A♠, K♥
+    let hole2 = [
+        Card::new(CardRank::Ace, CardSuit::Diamonds),
+        Card::new(CardRank::Queen, CardSuit::Hearts),
+    ]; // A♦, Q♥
+    let hole3 = [
+        Card::new(CardRank::King, CardSuit::Clubs),
+        Card::new(CardRank::Queen, CardSuit::Diamonds),
+    ]; // K♠, Q♦
 
     let rank1 = evaluate_best_hand(hole1, &community);
     let rank2 = evaluate_best_hand(hole2, &community);
@@ -126,23 +150,29 @@ fn test_three_kind_tiebreakers() {
     // Player 2: K♠, K♥ with community K♦, A♣, Q♠, 2♥, 7♦
 
     let community1 = [
-        Card(1 * 13 + 0),  // A♦
-        Card(1 * 13 + 12), // K♣
-        Card(0 * 13 + 11), // Q♠
-        Card(2 * 13 + 1),  // 2♥
-        Card(3 * 13 + 6),  // 7♦
+        Card::new(CardRank::Ace, CardSuit::Diamonds),  // A♦
+        Card::new(CardRank::King, CardSuit::Diamonds), // K♦
+        Card::new(CardRank::Queen, CardSuit::Clubs),   // Q♠
+        Card::new(CardRank::Two, CardSuit::Hearts),    // 2♥
+        Card::new(CardRank::Seven, CardSuit::Spades),  // 7♠
     ];
 
     let community2 = [
-        Card(1 * 13 + 12), // K♦
-        Card(1 * 13 + 0),  // A♣
-        Card(0 * 13 + 11), // Q♠
-        Card(2 * 13 + 1),  // 2♥
-        Card(3 * 13 + 6),  // 7♦
+        Card::new(CardRank::King, CardSuit::Diamonds), // K♦
+        Card::new(CardRank::Ace, CardSuit::Diamonds),  // A♦
+        Card::new(CardRank::Queen, CardSuit::Clubs),   // Q♠
+        Card::new(CardRank::Two, CardSuit::Hearts),    // 2♥
+        Card::new(CardRank::Seven, CardSuit::Spades),  // 7♠
     ];
 
-    let hole1 = [Card(0 * 13 + 0), Card(2 * 13 + 0)]; // A♠, A♥
-    let hole2 = [Card(0 * 13 + 12), Card(2 * 13 + 12)]; // K♠, K♥
+    let hole1 = [
+        Card::new(CardRank::Ace, CardSuit::Clubs),
+        Card::new(CardRank::Ace, CardSuit::Hearts),
+    ]; // A♠, A♥
+    let hole2 = [
+        Card::new(CardRank::King, CardSuit::Clubs),
+        Card::new(CardRank::King, CardSuit::Hearts),
+    ]; // K♠, K♥
 
     let rank1 = evaluate_best_hand(hole1, &community1);
     let rank2 = evaluate_best_hand(hole2, &community2);
@@ -163,18 +193,30 @@ fn test_same_category_different_kickers() {
     // different pairs should not be considered equal
 
     let community = [
-        Card(3 * 13 + 11), // Q♠
-        Card(2 * 13 + 0),  // A♥
-        Card(1 * 13 + 1),  // 2♦
-        Card(2 * 13 + 10), // J♥
-        Card(2 * 13 + 7),  // 8♥
+        Card::new(CardRank::Queen, CardSuit::Spades), // Q♠
+        Card::new(CardRank::Ace, CardSuit::Hearts),   // A♥
+        Card::new(CardRank::Two, CardSuit::Diamonds), // 2♦
+        Card::new(CardRank::Jack, CardSuit::Hearts),  // J♥
+        Card::new(CardRank::Eight, CardSuit::Hearts), // 8♥
     ];
 
     // Same hands as in the bug report
-    let hole_you = [Card(2 * 13 + 12), Card(1 * 13 + 12)]; // K♥, K♦
-    let hole_bot1 = [Card(1 * 13 + 0), Card(0 * 13 + 6)]; // A♦, 7♣
-    let hole_bot2 = [Card(0 * 13 + 2), Card(1 * 13 + 0)]; // 3♠, A♣
-    let hole_bot3 = [Card(0 * 13 + 9), Card(2 * 13 + 11)]; // T♠, Q♥
+    let hole_you = [
+        Card::new(CardRank::King, CardSuit::Hearts),
+        Card::new(CardRank::King, CardSuit::Diamonds),
+    ]; // K♥, K♦
+    let hole_bot1 = [
+        Card::new(CardRank::Ace, CardSuit::Diamonds),
+        Card::new(CardRank::Seven, CardSuit::Clubs),
+    ]; // A♦, 7♣
+    let hole_bot2 = [
+        Card::new(CardRank::Three, CardSuit::Clubs),
+        Card::new(CardRank::Ace, CardSuit::Diamonds),
+    ]; // 3♠, A♣
+    let hole_bot3 = [
+        Card::new(CardRank::Ten, CardSuit::Clubs),
+        Card::new(CardRank::Queen, CardSuit::Hearts),
+    ]; // T♠, Q♥
 
     let rank_you = evaluate_best_hand(hole_you, &community);
     let rank_bot1 = evaluate_best_hand(hole_bot1, &community);
@@ -211,33 +253,42 @@ fn test_straight_tiebreakers() {
     // Test different types of straights to ensure proper detection and ranking
 
     // Player 1: Ace-high straight (10-J-Q-K-A)
-    let hole1 = [Card(0 * 13 + 0), Card(2 * 13 + 9)]; // A♠, T♥
+    let hole1 = [
+        Card::new(CardRank::Ace, CardSuit::Clubs),
+        Card::new(CardRank::Ten, CardSuit::Hearts),
+    ]; // A♠, T♥
     let community1 = [
-        Card(1 * 13 + 10), // J♦
-        Card(0 * 13 + 11), // Q♠
-        Card(2 * 13 + 12), // K♥
-        Card(3 * 13 + 5),  // 6♦ (unused)
-        Card(1 * 13 + 2),  // 3♦ (unused)
+        Card::new(CardRank::Jack, CardSuit::Diamonds),  // J♦
+        Card::new(CardRank::Queen, CardSuit::Clubs),    // Q♠
+        Card::new(CardRank::King, CardSuit::Hearts),    // K♥
+        Card::new(CardRank::Six, CardSuit::Spades),     // 6♠ (unused)
+        Card::new(CardRank::Three, CardSuit::Diamonds), // 3♦ (unused)
     ];
 
     // Player 2: King-high straight (9-10-J-Q-K)
-    let hole2 = [Card(1 * 13 + 8), Card(2 * 13 + 9)]; // 9♦, T♥
+    let hole2 = [
+        Card::new(CardRank::Nine, CardSuit::Diamonds),
+        Card::new(CardRank::Ten, CardSuit::Hearts),
+    ]; // 9♦, T♥
     let community2 = [
-        Card(0 * 13 + 10), // J♠
-        Card(2 * 13 + 11), // Q♥
-        Card(1 * 13 + 12), // K♦
-        Card(3 * 13 + 5),  // 6♦ (unused)
-        Card(0 * 13 + 2),  // 3♠ (unused)
+        Card::new(CardRank::Jack, CardSuit::Clubs),    // J♠
+        Card::new(CardRank::Queen, CardSuit::Hearts),  // Q♥
+        Card::new(CardRank::King, CardSuit::Diamonds), // K♦
+        Card::new(CardRank::Six, CardSuit::Spades),    // 6♠ (unused)
+        Card::new(CardRank::Three, CardSuit::Clubs),   // 3♠ (unused)
     ];
 
     // Player 3: Ace-low straight (A-2-3-4-5) - "wheel"
-    let hole3 = [Card(2 * 13 + 0), Card(0 * 13 + 1)]; // A♥, 2♠
+    let hole3 = [
+        Card::new(CardRank::Ace, CardSuit::Hearts),
+        Card::new(CardRank::Two, CardSuit::Clubs),
+    ]; // A♥, 2♠
     let community3 = [
-        Card(1 * 13 + 2),  // 3♦
-        Card(0 * 13 + 3),  // 4♠
-        Card(2 * 13 + 4),  // 5♥
-        Card(3 * 13 + 12), // K♦ (unused)
-        Card(1 * 13 + 9),  // T♦ (unused)
+        Card::new(CardRank::Three, CardSuit::Diamonds), // 3♦
+        Card::new(CardRank::Four, CardSuit::Clubs),     // 4♠
+        Card::new(CardRank::Five, CardSuit::Hearts),    // 5♥
+        Card::new(CardRank::King, CardSuit::Spades),    // K♠ (unused)
+        Card::new(CardRank::Ten, CardSuit::Diamonds),   // T♦ (unused)
     ];
 
     let rank1 = evaluate_best_hand(hole1, &community1);
@@ -275,17 +326,29 @@ fn test_bug_report_scenario() {
     // Bot 3: T♠, Q♥ (Pair of Queens)
 
     let community = [
-        Card(3 * 13 + 11), // Q♠ (Spades=3, Queen=11)
-        Card(2 * 13 + 0),  // A♥ (Hearts=2, Ace=0)
-        Card(1 * 13 + 1),  // 2♦ (Diamonds=1, 2=1)
-        Card(2 * 13 + 10), // J♥ (Hearts=2, Jack=10)
-        Card(2 * 13 + 7),  // 8♥ (Hearts=2, 8=7)
+        Card::new(CardRank::Queen, CardSuit::Spades), // Q♠ (Spades=3, Queen=11)
+        Card::new(CardRank::Ace, CardSuit::Hearts),   // A♥ (Hearts=2, Ace=0)
+        Card::new(CardRank::Two, CardSuit::Diamonds), // 2♦ (Diamonds=1, 2=1)
+        Card::new(CardRank::Jack, CardSuit::Hearts),  // J♥ (Hearts=2, Jack=10)
+        Card::new(CardRank::Eight, CardSuit::Hearts), // 8♥ (Hearts=2, 8=7)
     ];
 
-    let hole_you = [Card(2 * 13 + 12), Card(1 * 13 + 12)]; // K♥, K♦
-    let hole_bot1 = [Card(1 * 13 + 0), Card(0 * 13 + 6)]; // A♦, 7♣
-    let hole_bot2 = [Card(0 * 13 + 2), Card(1 * 13 + 0)]; // 3♠, A♣
-    let hole_bot3 = [Card(0 * 13 + 9), Card(2 * 13 + 11)]; // T♠, Q♥
+    let hole_you = [
+        Card::new(CardRank::King, CardSuit::Hearts),
+        Card::new(CardRank::King, CardSuit::Diamonds),
+    ]; // K♥, K♦
+    let hole_bot1 = [
+        Card::new(CardRank::Ace, CardSuit::Diamonds),
+        Card::new(CardRank::Seven, CardSuit::Clubs),
+    ]; // A♦, 7♣
+    let hole_bot2 = [
+        Card::new(CardRank::Three, CardSuit::Clubs),
+        Card::new(CardRank::Ace, CardSuit::Diamonds),
+    ]; // 3♠, A♣
+    let hole_bot3 = [
+        Card::new(CardRank::Ten, CardSuit::Clubs),
+        Card::new(CardRank::Queen, CardSuit::Hearts),
+    ]; // T♠, Q♥
 
     let rank_you = evaluate_best_hand(hole_you, &community);
     let rank_bot1 = evaluate_best_hand(hole_bot1, &community);

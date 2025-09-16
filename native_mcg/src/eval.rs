@@ -1,5 +1,8 @@
+use crate::poker::{
+    cards::{card_rank, card_suit, CardRank, CardSuit},
+    constants::*,
+};
 use mcg_shared::{Card, HandRank, HandRankCategory};
-use crate::poker::{cards::{card_rank, card_suit, CardRank, CardSuit}, constants::*};
 
 /// Evaluate the best 5-card hand from 2 hole + up to 5 community cards.
 /// Returns a HandRank with category and tiebreakers for comparison.
@@ -31,7 +34,7 @@ pub fn pick_best_five(hole: [Card; 2], community: &[Card]) -> [Card; 5] {
         all.sort_unstable_by(|a, b| {
             rank_value_high(card_rank(*b)).cmp(&rank_value_high(card_rank(*a)))
         });
-        let mut out = [Card(0); 5];
+        let mut out = [Card::new(CardRank::Ace, CardSuit::Clubs); 5];
         let n = all.len().min(5);
         out[..n].copy_from_slice(&all[..n]);
         return out;
@@ -40,7 +43,7 @@ pub fn pick_best_five(hole: [Card; 2], community: &[Card]) -> [Card; 5] {
     // Enumerate all 5-card combinations and select the one with the highest rank
     let n = all.len();
     let mut best_rank: Option<HandRank> = None;
-    let mut best_combo: [Card; 5] = [Card(0); 5];
+    let mut best_combo: [Card; 5] = [Card::new(CardRank::Ace, CardSuit::Clubs); 5];
 
     for i in 0..(n - 4) {
         for j in (i + 1)..(n - 3) {
@@ -122,7 +125,9 @@ fn analyze_suits_for_flush(cards: &[Card]) -> Option<u8> {
         suit_cards[card_suit(c).as_usize()].push(c);
     }
     // Suit presence >=5 indicates possible flush
-    (0..NUM_SUITS).find(|&s| suit_cards[s].len() >= 5).map(|s| s as u8)
+    (0..NUM_SUITS)
+        .find(|&s| suit_cards[s].len() >= 5)
+        .map(|s| s as u8)
 }
 
 fn analyze_card_values(cards: &[Card]) -> ([u8; RANK_COUNT_ARRAY_SIZE], Vec<u8>) {
@@ -154,7 +159,10 @@ fn check_straight_flush(cards: &[Card], flush_suit: Option<u8>) -> Option<HandRa
     None
 }
 
-fn check_four_of_a_kind(counts: &[u8; RANK_COUNT_ARRAY_SIZE], all_values: &[u8]) -> Option<HandRank> {
+fn check_four_of_a_kind(
+    counts: &[u8; RANK_COUNT_ARRAY_SIZE],
+    all_values: &[u8],
+) -> Option<HandRank> {
     find_n_of_a_kind(counts, 4, all_values).map(|(quad, kicker)| HandRank {
         category: HandRankCategory::FourKind,
         tiebreakers: vec![quad, kicker],
@@ -197,7 +205,10 @@ fn check_straight(cards: &[Card]) -> Option<HandRank> {
     })
 }
 
-fn check_three_of_a_kind(counts: &[u8; RANK_COUNT_ARRAY_SIZE], all_values: &[u8]) -> Option<HandRank> {
+fn check_three_of_a_kind(
+    counts: &[u8; RANK_COUNT_ARRAY_SIZE],
+    all_values: &[u8],
+) -> Option<HandRank> {
     find_n_kind_with_kickers(counts, all_values, 3, 2).map(|(trip, kickers)| {
         let mut t = vec![trip];
         t.extend(kickers);
@@ -318,7 +329,11 @@ fn straight_high(values_unique_sorted_asc: &Vec<u8>) -> Option<u8> {
     best
 }
 
-fn find_n_of_a_kind(counts: &[u8; RANK_COUNT_ARRAY_SIZE], n: u8, all_values: &[u8]) -> Option<(u8, u8)> {
+fn find_n_of_a_kind(
+    counts: &[u8; RANK_COUNT_ARRAY_SIZE],
+    n: u8,
+    all_values: &[u8],
+) -> Option<(u8, u8)> {
     // (rank, top kicker) with rank in 2..14
     let mut rank = None;
     for v in (2..=14).rev() {

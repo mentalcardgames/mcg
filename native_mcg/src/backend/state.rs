@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use mcg_shared::{Card, PlayerId};
+use mcg_shared::{Card, CardRank, CardSuit, PlayerId};
 // rand import removed; use rand::random::<f64>() for probabilistic decisions
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
@@ -101,8 +101,11 @@ pub async fn create_new_game(
         let player = Player {
             id: config.id,
             name: config.name.clone(),
-            stack: 1000,               // Default stack size
-            cards: [Card(0), Card(0)], // Empty cards initially
+            stack: 1000, // Default stack size
+            cards: [
+                Card::new(CardRank::Ace, CardSuit::Clubs),
+                Card::new(CardRank::Ace, CardSuit::Clubs),
+            ], // Empty cards initially
             has_folded: false,
             all_in: false,
         };
