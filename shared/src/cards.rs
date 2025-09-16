@@ -2,6 +2,7 @@
 
 use egui::Vec2;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Natural size for card display in the UI
 pub const CARD_NATURAL_SIZE: Vec2 = Vec2::new(140.0, 190.0);
@@ -127,10 +128,11 @@ impl Card {
         }
     }
 
-    /// Get the card as a string like "A♣", "T♦", etc.
-    pub fn to_string(self) -> String {
-        format!("{}{}", self.rank_str(), self.suit_char())
-    }
+    /// Format the card as a short string like "A♣".
+    ///
+    /// Use `format!("{}", card)` (the `Display` impl) instead of calling
+    /// an inherent `to_string` method to satisfy clippy's `inherent_to_string` lint.
+
 
     /// Check if this is a red suit (hearts or diamonds)
     pub fn is_red(self) -> bool {
@@ -180,5 +182,11 @@ impl Card {
             self.rank_name(),
             self.suit_name()
         )
+    }
+}
+
+impl fmt::Display for Card {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.rank_str(), self.suit_char())
     }
 }
