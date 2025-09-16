@@ -18,9 +18,9 @@ impl Game {
         self.remove_from_pending(actor);
 
         // Validate stack integrity after each action
-        if let Some(initial_total) = self.recent_actions.first().and_then(|_| {
+        if let Some(initial_total) = self.recent_actions.first().map(|_| {
             // Use a reasonable default for total chips (players.len() * 1000)
-            Some(self.players.len() as u32 * 1000)
+            self.players.len() as u32 * 1000
         }) {
             if let Err(e) = self.validate_stack_consistency(initial_total) {
                 eprintln!("[ERROR] Stack consistency check failed: {}", e);
