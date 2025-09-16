@@ -1,3 +1,4 @@
+pub mod betting_controls;
 pub mod connection_manager;
 pub mod game_rendering;
 pub mod name_generator;

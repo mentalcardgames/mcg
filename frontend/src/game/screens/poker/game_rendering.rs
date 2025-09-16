@@ -111,7 +111,7 @@ pub fn render_my_cards_and_actions(
     state: &GameStatePublic,
     p: &PlayerPublic,
     preferred_player: PlayerId,
-    poker_screen: &dyn PokerScreenActions,
+    poker_screen: &mut dyn PokerScreenActions,
 ) {
     ui.vertical(|ui| {
         if let Some(cards) = p.cards {
@@ -150,7 +150,7 @@ pub fn render_player(
     state: &GameStatePublic,
     p: &PlayerPublic,
     preferred_player: PlayerId,
-    poker_screen: &dyn PokerScreenActions,
+    poker_screen: &mut dyn PokerScreenActions,
 ) {
     ui.horizontal(|ui| {
         render_player_status_and_bet(ui, state, p, preferred_player);
@@ -166,7 +166,7 @@ pub fn render_players_panel(
     ui: &mut Ui,
     state: &GameStatePublic,
     preferred_player: PlayerId,
-    poker_screen: &dyn PokerScreenActions,
+    poker_screen: &mut dyn PokerScreenActions,
 ) {
     ui.group(|ui| {
         for p in state.players.iter() {
@@ -179,7 +179,7 @@ pub fn render_panels(
     ui: &mut Ui,
     state: &GameStatePublic,
     preferred_player: PlayerId,
-    poker_screen: &dyn PokerScreenActions,
+    poker_screen: &mut dyn PokerScreenActions,
 ) {
     let narrow = ui.available_width() < 900.0;
     if narrow {
@@ -197,14 +197,14 @@ pub fn render_panels(
 // Trait to define poker screen actions that need to be implemented by the screen
 pub trait PokerScreenActions {
     fn render_action_buttons(
-        &self,
+        &mut self,
         ui: &mut Ui,
         state: &GameStatePublic,
         player_id: mcg_shared::PlayerId,
         enabled: bool,
     );
     fn render_action_row(
-        &self,
+        &mut self,
         ui: &mut Ui,
         state: &GameStatePublic,
         player_id: mcg_shared::PlayerId,
