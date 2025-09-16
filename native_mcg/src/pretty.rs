@@ -2,68 +2,78 @@ use mcg_shared::{
     ActionEvent, ActionKind as SharedActionKind, BlindKind, Card, GameAction, GameStatePublic,
     PlayerId, PlayerPublic, Stage,
 };
+use crate::poker::cards::{card_rank, card_suit, CardRank, CardSuit};
 use owo_colors::OwoColorize;
 
-fn card_rank(c: u8) -> u8 {
-    c % 13
-}
-fn card_suit(c: u8) -> u8 {
-    c / 13
-}
-fn card_faces() -> [&'static str; 13] {
-    [
-        "A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K",
-    ]
-}
-fn suit_icon(s: u8) -> char {
-    match s {
-        0 => '♣',
-        1 => '♦',
-        2 => '♥',
-        _ => '♠',
+fn card_faces(rank: CardRank) -> &'static str {
+    match rank {
+        CardRank::Ace => "A",
+        CardRank::Two => "2",
+        CardRank::Three => "3",
+        CardRank::Four => "4",
+        CardRank::Five => "5",
+        CardRank::Six => "6",
+        CardRank::Seven => "7",
+        CardRank::Eight => "8",
+        CardRank::Nine => "9",
+        CardRank::Ten => "T",
+        CardRank::Jack => "J",
+        CardRank::Queen => "Q",
+        CardRank::King => "K",
     }
 }
-fn suit_name(s: u8) -> &'static str {
-    match s {
-        0 => "Clubs",
-        1 => "Diamonds",
-        2 => "Hearts",
-        _ => "Spades",
+
+fn suit_icon(suit: CardSuit) -> char {
+    match suit {
+        CardSuit::Clubs => '♣',
+        CardSuit::Diamonds => '♦',
+        CardSuit::Hearts => '♥',
+        CardSuit::Spades => '♠',
     }
 }
-fn rank_name(r: u8) -> &'static str {
-    match r {
-        0 => "Ace",
-        1 => "Two",
-        2 => "Three",
-        3 => "Four",
-        4 => "Five",
-        5 => "Six",
-        6 => "Seven",
-        7 => "Eight",
-        8 => "Nine",
-        9 => "Ten",
-        10 => "Jack",
-        11 => "Queen",
-        _ => "King",
+
+fn suit_name(suit: CardSuit) -> &'static str {
+    match suit {
+        CardSuit::Clubs => "Clubs",
+        CardSuit::Diamonds => "Diamonds",
+        CardSuit::Hearts => "Hearts",
+        CardSuit::Spades => "Spades",
+    }
+}
+
+fn rank_name(rank: CardRank) -> &'static str {
+    match rank {
+        CardRank::Ace => "Ace",
+        CardRank::Two => "Two",
+        CardRank::Three => "Three",
+        CardRank::Four => "Four",
+        CardRank::Five => "Five",
+        CardRank::Six => "Six",
+        CardRank::Seven => "Seven",
+        CardRank::Eight => "Eight",
+        CardRank::Nine => "Nine",
+        CardRank::Ten => "Ten",
+        CardRank::Jack => "Jack",
+        CardRank::Queen => "Queen",
+        CardRank::King => "King",
     }
 }
 
 fn format_card(c: Card, color: bool) -> String {
-    let r = card_rank(c.0) as usize;
-    let s = card_suit(c.0);
-    let face = card_faces()[r];
-    let icon = suit_icon(s);
+    let rank = card_rank(c);
+    let suit = card_suit(c);
+    let face = card_faces(rank);
+    let icon = suit_icon(suit);
     let mut text = format!(
         "{}{} ({} of {})",
         face,
         icon,
-        rank_name(r as u8),
-        suit_name(s)
+        rank_name(rank),
+        suit_name(suit)
     );
     if color {
-        text = match s {
-            1 | 2 => text.red().to_string(),
+        text = match suit {
+            CardSuit::Diamonds | CardSuit::Hearts => text.red().to_string(),
             _ => text.to_string(),
         };
     }

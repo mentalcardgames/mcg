@@ -1,4 +1,4 @@
-use super::{cards::card_rank, constants::NUM_RANKS};
+use super::{cards::{card_rank, CardRank}, constants::NUM_RANKS};
 use mcg_shared::{Card, HandRank};
 
 /// Evaluate the best 5-card hand from 2 hole + up to 5 community cards.
@@ -72,11 +72,21 @@ pub fn pick_best_five(hole: [Card; 2], community: &[Card]) -> [Card; 5] {
 }
 
 /// Helper function to get the high value of a rank (Ace=14, King=13, etc.)
-fn rank_value_high(rank: u8) -> u8 {
-    if rank == 0 {
-        14
-    } else {
-        rank + 1
+fn rank_value_high(rank: CardRank) -> u8 {
+    match rank {
+        CardRank::Ace => 14,
+        CardRank::Two => 2,
+        CardRank::Three => 3,
+        CardRank::Four => 4,
+        CardRank::Five => 5,
+        CardRank::Six => 6,
+        CardRank::Seven => 7,
+        CardRank::Eight => 8,
+        CardRank::Nine => 9,
+        CardRank::Ten => 10,
+        CardRank::Jack => 11,
+        CardRank::Queen => 12,
+        CardRank::King => 13,
     }
 }
 
@@ -91,7 +101,7 @@ fn best_rank_from_seven(cards: &[Card]) -> HandRank {
     let mut suit_counts = [0u8; 4];
 
     for &card in cards {
-        let rank = card_rank(card) as usize;
+        let rank = card_rank(card).as_usize();
         let suit = (card.0 / NUM_RANKS as u8) as usize;
         if rank < NUM_RANKS {
             rank_counts[rank] += 1;

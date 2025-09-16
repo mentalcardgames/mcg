@@ -1,46 +1,5 @@
 use mcg_shared::{Card, HandRank, HandRankCategory};
-
-/// Constants for card deck configuration
-pub const NUM_SUITS: usize = 4;
-pub const NUM_RANKS: usize = 13;
-pub const RANK_COUNT_ARRAY_SIZE: usize = 15; // 2..14 + unused 0..1
-
-/// Card rank values (0=Ace, 1=2, ..., 12=King)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CardRank {
-    Ace = 0, Two = 1, Three = 2, Four = 3, Five = 4,
-    Six = 5, Seven = 6, Eight = 7, Nine = 8, Ten = 9,
-    Jack = 10, Queen = 11, King = 12
-}
-
-/// Card suit values (0=Clubs, 1=Diamonds, 2=Hearts, 3=Spades)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CardSuit {
-    Clubs = 0, Diamonds = 1, Hearts = 2, Spades = 3
-}
-
-/// Returns the rank index (0..=12) where 0 is Ace, 1 is 2, ..., 12 is King.
-#[inline]
-pub fn card_rank(c: Card) -> u8 {
-    c.0 % NUM_RANKS as u8
-}
-
-/// Returns the suit index (0..=3) where 0=Clubs, 1=Diamonds, 2=Hearts, 3=Spades.
-#[inline]
-pub fn card_suit(c: Card) -> u8 {
-    c.0 / NUM_RANKS as u8
-}
-
-/// Returns a string like "A♣", "T♦", etc.
-pub fn card_str(c: Card) -> String {
-    let rank_idx = card_rank(c) as usize;
-    let suit_idx = card_suit(c) as usize;
-    let ranks = [
-        "A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K",
-    ];
-    let suits = ['♣', '♦', '♥', '♠'];
-    format!("{}{}", ranks[rank_idx], suits[suit_idx])
-}
+use crate::poker::{cards::{card_rank, card_suit, CardRank, CardSuit}, constants::*};
 
 /// Evaluate the best 5-card hand from 2 hole + up to 5 community cards.
 /// Returns a HandRank with category and tiebreakers for comparison.
@@ -160,7 +119,7 @@ fn analyze_suits_for_flush(cards: &[Card]) -> Option<u8> {
     // Group by suit
     let mut suit_cards: [Vec<Card>; NUM_SUITS] = [vec![], vec![], vec![], vec![]];
     for &c in cards {
-        suit_cards[card_suit(c) as usize].push(c);
+        suit_cards[card_suit(c).as_usize()].push(c);
     }
     // Suit presence >=5 indicates possible flush
     (0..NUM_SUITS).find(|&s| suit_cards[s].len() >= 5).map(|s| s as u8)
@@ -181,7 +140,7 @@ fn check_straight_flush(cards: &[Card], flush_suit: Option<u8>) -> Option<HandRa
     if let Some(fs) = flush_suit {
         let mut suit_cards: [Vec<Card>; NUM_SUITS] = [vec![], vec![], vec![], vec![]];
         for &c in cards {
-            suit_cards[card_suit(c) as usize].push(c);
+            suit_cards[card_suit(c).as_usize()].push(c);
         }
 
         let values = ranks_as_values_unique(&suit_cards[fs as usize]);
@@ -213,7 +172,7 @@ fn check_flush(cards: &[Card], flush_suit: Option<u8>) -> Option<HandRank> {
     if let Some(fs) = flush_suit {
         let mut suit_cards: [Vec<Card>; NUM_SUITS] = [vec![], vec![], vec![], vec![]];
         for &c in cards {
-            suit_cards[card_suit(c) as usize].push(c);
+            suit_cards[card_suit(c).as_usize()].push(c);
         }
 
         let mut vs = suit_cards[fs as usize]
@@ -279,12 +238,22 @@ fn check_high_card(all_values: &[u8]) -> HandRank {
 }
 
 #[inline]
-fn rank_value_high(r: u8) -> u8 {
-    // Map 0(A) -> 14; 1..12 -> 2..13
-    if r == 0 {
-        14
-    } else {
-        r + 1
+fn rank_value_high(rank: CardRank) -> u8 {
+    // Map CardRank to high value (Ace=14, King=13, etc.)
+    match rank {
+        CardRank::Ace => 14,
+        CardRank::Two => 2,
+        CardRank::Three => 3,
+        CardRank::Four => 4,
+        CardRank::Five => 5,
+        CardRank::Six => 6,
+        CardRank::Seven => 7,
+        CardRank::Eight => 8,
+        CardRank::Nine => 9,
+        CardRank::Ten => 10,
+        CardRank::Jack => 11,
+        CardRank::Queen => 12,
+        CardRank::King => 13,
     }
 }
 
