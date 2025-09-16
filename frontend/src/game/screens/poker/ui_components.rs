@@ -33,7 +33,7 @@ pub fn action_kind_text(kind: &ActionKind) -> (String, Color32) {
         ),
         ActionKind::PostBlind { kind, amount } => match kind {
             BlindKind::SmallBlind => (
-                format!("🟤 posts small blind {}", amount),
+                format!("● posts small blind {}", amount),
                 Color32::from_rgb(170, 120, 60),
             ),
             BlindKind::BigBlind => (
@@ -332,7 +332,7 @@ pub fn log_entry_row(ui: &mut Ui, entry: &ActionEvent, players: &[PlayerPublic],
             let who = name_of(players, *player_id);
             ui.colored_label(
                 Color32::from_rgb(150, 150, 150),
-                format!("🂠 Dealt hole cards to {}", who),
+                format!("♠ Dealt hole cards to {}", who),
             );
         }
         ActionEvent::GameAction(GameAction::DealtCommunity { cards }) => match cards.len() {

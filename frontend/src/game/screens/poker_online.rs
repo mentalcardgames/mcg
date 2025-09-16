@@ -8,6 +8,7 @@ use mcg_shared::{
 };
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
+use super::poker::ui_components::{action_kind_text, card_text_and_color, category_text, name_of, card_text};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
@@ -796,71 +797,6 @@ fn card_chip(ui: &mut egui::Ui, c: Card) {
     ui.add(b);
 }
 
-fn card_text_and_color(c: Card) -> (String, Color32) {
-    let rank_idx = (c.0 % 13) as usize;
-    let suit_idx = (c.0 / 13) as usize;
-    let ranks = [
-        "A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K",
-    ];
-    let suits = ['♣', '♦', '♥', '♠'];
-    let text = format!("{}{}", ranks[rank_idx], suits[suit_idx]);
-    let color = match suits[suit_idx] {
-        '♦' | '♥' => Color32::from_rgb(220, 50, 50),
-        _ => Color32::WHITE,
-    };
-    (text, color)
-}
-
-fn action_kind_text(kind: &ActionKind) -> (String, Color32) {
-    match kind {
-        ActionKind::Fold => ("🟥 folds".into(), Color32::from_rgb(220, 80, 80)),
-        ActionKind::Check => ("⏭ checks".into(), Color32::from_rgb(120, 160, 220)),
-        ActionKind::Call(n) => (format!("📞 calls {}", n), Color32::from_rgb(120, 160, 220)),
-        ActionKind::Bet(n) => (format!("💰 bets {}", n), Color32::from_rgb(240, 200, 80)),
-        ActionKind::Raise { to, by } => (
-            format!("▲ raises to {} (+{})", to, by),
-            Color32::from_rgb(250, 160, 60),
-        ),
-        ActionKind::PostBlind { kind, amount } => match kind {
-            BlindKind::SmallBlind => (
-                format!("🟤 posts small blind {}", amount),
-                Color32::from_rgb(170, 120, 60),
-            ),
-            BlindKind::BigBlind => (
-                format!("⚫ posts big blind {}", amount),
-                Color32::from_rgb(120, 120, 120),
-            ),
-        },
-    }
-}
-
-fn category_text(cat: &mcg_shared::HandRankCategory) -> &'static str {
-    match cat {
-        mcg_shared::HandRankCategory::HighCard => "High Card",
-        mcg_shared::HandRankCategory::Pair => "Pair",
-        mcg_shared::HandRankCategory::TwoPair => "Two Pair",
-        mcg_shared::HandRankCategory::ThreeKind => "Three of a Kind",
-        mcg_shared::HandRankCategory::Straight => "Straight",
-        mcg_shared::HandRankCategory::Flush => "Flush",
-        mcg_shared::HandRankCategory::FullHouse => "Full House",
-        mcg_shared::HandRankCategory::FourKind => "Four of a Kind",
-        mcg_shared::HandRankCategory::StraightFlush => "Straight Flush",
-    }
-}
-
-fn name_of(players: &[PlayerPublic], id: mcg_shared::PlayerId) -> String {
-    players
-        .iter()
-        .find(|p| p.id == id)
-        .map(|p| p.name.clone())
-        .unwrap_or_else(|| format!("Player {}", id))
-}
-
-//TODO: this does not need to be its own function
-fn card_text(c: Card) -> String {
-    card_text_and_color(c).0
-}
-
 fn stage_badge(stage: Stage) -> egui::WidgetText {
     let (txt, color) = match stage {
         Stage::Preflop => ("Preflop", Color32::from_rgb(100, 150, 255)),
@@ -1109,7 +1045,7 @@ fn log_entry_row(
             let who = name_of(players, *player_id);
             ui.colored_label(
                 Color32::from_rgb(150, 150, 150),
-                format!("🂠 Dealt hole cards to {}", who),
+                format!("♠ Dealt hole cards to {}", who),
             );
         }
         ActionEvent::GameAction(GameAction::DealtCommunity { cards }) => match cards.len() {
