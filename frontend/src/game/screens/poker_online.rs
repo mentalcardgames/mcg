@@ -8,7 +8,7 @@ use mcg_shared::{
 };
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use super::poker::ui_components::{action_kind_text, card_text_and_color, category_text, name_of, card_text};
+use super::poker::ui_components::{action_kind_text, card_chip, card_text_and_color, category_text, name_of, card_text, stage_badge, stage_to_str};
 use crate::qr_scanner::QrScannerPopup;
 
 pub struct PokerOnlineScreen {
@@ -786,35 +786,6 @@ impl ScreenWidget for PokerOnlineScreen {
         } else {
             ui.label("No state yet. Click Connect to start a session.");
         }
-    }
-}
-
-//TODO: document this
-fn card_chip(ui: &mut egui::Ui, c: Card) {
-    let (text, color) = card_text_and_color(c);
-    let b = egui::widgets::Button::new(RichText::new(text).color(color).size(28.0))
-        .min_size(egui::vec2(48.0, 40.0));
-    ui.add(b);
-}
-
-fn stage_badge(stage: Stage) -> egui::WidgetText {
-    let (txt, color) = match stage {
-        Stage::Preflop => ("Preflop", Color32::from_rgb(100, 150, 255)),
-        Stage::Flop => ("Flop", Color32::from_rgb(100, 200, 120)),
-        Stage::Turn => ("Turn", Color32::from_rgb(230, 180, 80)),
-        Stage::River => ("River", Color32::from_rgb(220, 120, 120)),
-        Stage::Showdown => ("Showdown", Color32::from_rgb(180, 100, 220)),
-    };
-    RichText::new(txt).color(color).strong().into()
-}
-
-fn stage_to_str(stage: Stage) -> &'static str {
-    match stage {
-        Stage::Preflop => "Preflop",
-        Stage::Flop => "Flop",
-        Stage::Turn => "Turn",
-        Stage::River => "River",
-        Stage::Showdown => "Showdown",
     }
 }
 
