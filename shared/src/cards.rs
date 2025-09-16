@@ -132,7 +132,6 @@ impl Card {
     ///
     /// Use `format!("{}", card)` (the `Display` impl) instead of calling
     /// an inherent `to_string` method to satisfy clippy's `inherent_to_string` lint.
-
     /// Check if this is a red suit (hearts or diamonds)
     pub fn is_red(self) -> bool {
         matches!(self.suit(), CardSuit::Hearts | CardSuit::Diamonds)
