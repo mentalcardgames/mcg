@@ -23,6 +23,7 @@ pub enum AppEvent {
 #[derive(Clone)]
 pub struct Settings {
     pub dpi: f32,
+    pub applied_dpi: f32,
     pub dark_mode: bool,
 }
 
@@ -94,6 +95,7 @@ impl App {
             settings_open: false,
             pending_settings: Settings {
                 dpi: crate::calculate_dpi_scale(),
+                applied_dpi: crate::calculate_dpi_scale(),
                 dark_mode: true,
             },
             app_state,
@@ -218,7 +220,8 @@ impl App {
                     ui.add_space(MARGIN_SM);
                     ui.horizontal(|ui| {
                         if ui.button("Apply").clicked() {
-                            ctx.set_pixels_per_point(self.pending_settings.dpi);
+                            self.pending_settings.applied_dpi = self.pending_settings.dpi;
+                            ctx.set_pixels_per_point(self.pending_settings.applied_dpi);
                             if self.pending_settings.dark_mode {
                                 ctx.set_visuals(egui::Visuals::dark());
                             } else {
@@ -226,7 +229,8 @@ impl App {
                             }
                         }
                         if ui.button("OK").clicked() {
-                            ctx.set_pixels_per_point(self.pending_settings.dpi);
+                            self.pending_settings.applied_dpi = self.pending_settings.dpi;
+                            ctx.set_pixels_per_point(self.pending_settings.applied_dpi);
                             if self.pending_settings.dark_mode {
                                 ctx.set_visuals(egui::Visuals::dark());
                             } else {
@@ -235,11 +239,13 @@ impl App {
                             self.settings_open = false;
                         }
                         if ui.button("Cancel").clicked() {
+                            self.pending_settings.dpi = self.pending_settings.applied_dpi;
                             self.settings_open = false;
                         }
                     });
                 });
             if !open {
+                self.pending_settings.dpi = self.pending_settings.applied_dpi;
                 self.settings_open = false;
             }
         }
@@ -248,7 +254,7 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
-        ctx.set_pixels_per_point(self.pending_settings.dpi);
+        ctx.set_pixels_per_point(self.pending_settings.applied_dpi);
         if self.pending_settings.dark_mode {
             ctx.set_visuals(egui::Visuals::dark());
         } else {
