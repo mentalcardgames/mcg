@@ -176,34 +176,95 @@ fn calculate_tiebreakers(category: &mcg_shared::HandRankCategory, rank_counts: &
             }
         }
         mcg_shared::HandRankCategory::Pair => {
-            // Find the pair rank, then kickers
+            // Find the pair rank and calculate kickers from actual cards
             let pair_rank = find_pair_rank(rank_counts);
-            let mut kickers = get_kickers(rank_counts, pair_rank, 3);
-            kickers.sort_unstable_by(|a, b| b.cmp(a));
+
+            // Get all card ranks and remove the paired cards to find kickers
+            let mut all_ranks: Vec<u8> = cards.iter()
+                .map(|&card| rank_value_high(card_rank(card)))
+                .collect();
+
+            // Remove instances of the pair rank (remove 2 instances for the pair)
+            let mut pair_count = 0;
+            let mut kicker_ranks: Vec<u8> = all_ranks.into_iter()
+                .filter(|&rank| {
+                    if rank == pair_rank && pair_count < 2 {
+                        pair_count += 1;
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .collect();
+
+            // Sort kickers in descending order
+            kicker_ranks.sort_unstable_by(|a, b| b.cmp(a));
 
             tiebreakers[0] = pair_rank;
-            for i in 0..3.min(kickers.len()) {
-                tiebreakers[i + 1] = kickers[i];
+            for i in 0..3.min(kicker_ranks.len()) {
+                tiebreakers[i + 1] = kicker_ranks[i];
             }
         }
         mcg_shared::HandRankCategory::TwoPair => {
-            // Find both pair ranks, then kicker
+            // Find both pair ranks, then kicker from actual cards
             let pair_ranks = find_two_pair_ranks(rank_counts);
-            let kicker = get_kickers(rank_counts, 0, 1)[0];
+
+            // Get all card ranks and remove the paired cards to find kicker
+            let mut all_ranks: Vec<u8> = cards.iter()
+                .map(|&card| rank_value_high(card_rank(card)))
+                .collect();
+
+            // Remove instances of the pair ranks (remove 2 instances for each pair)
+            let mut pair1_count = 0;
+            let mut pair2_count = 0;
+            let kicker_ranks: Vec<u8> = all_ranks.into_iter()
+                .filter(|&rank| {
+                    if rank == pair_ranks[0] && pair1_count < 2 {
+                        pair1_count += 1;
+                        false
+                    } else if rank == pair_ranks[1] && pair2_count < 2 {
+                        pair2_count += 1;
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .collect();
 
             tiebreakers[0] = pair_ranks[0].max(pair_ranks[1]); // Higher pair
             tiebreakers[1] = pair_ranks[0].min(pair_ranks[1]); // Lower pair
-            tiebreakers[2] = kicker;
+            if let Some(&kicker) = kicker_ranks.first() {
+                tiebreakers[2] = kicker;
+            }
         }
         mcg_shared::HandRankCategory::ThreeKind => {
-            // Find the three of a kind rank, then kickers
+            // Find the three of a kind rank, then kickers from actual cards
             let trips_rank = find_trips_rank(rank_counts);
-            let mut kickers = get_kickers(rank_counts, trips_rank, 2);
-            kickers.sort_unstable_by(|a, b| b.cmp(a));
+
+            // Get all card ranks and remove the trip cards to find kickers
+            let mut all_ranks: Vec<u8> = cards.iter()
+                .map(|&card| rank_value_high(card_rank(card)))
+                .collect();
+
+            // Remove instances of the trips rank (remove 3 instances)
+            let mut trips_count = 0;
+            let mut kicker_ranks: Vec<u8> = all_ranks.into_iter()
+                .filter(|&rank| {
+                    if rank == trips_rank && trips_count < 3 {
+                        trips_count += 1;
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .collect();
+
+            // Sort kickers in descending order
+            kicker_ranks.sort_unstable_by(|a, b| b.cmp(a));
 
             tiebreakers[0] = trips_rank;
-            for i in 0..2.min(kickers.len()) {
-                tiebreakers[i + 1] = kickers[i];
+            for i in 0..2.min(kicker_ranks.len()) {
+                tiebreakers[i + 1] = kicker_ranks[i];
             }
         }
         mcg_shared::HandRankCategory::Straight => {
@@ -230,12 +291,31 @@ fn calculate_tiebreakers(category: &mcg_shared::HandRankCategory, rank_counts: &
             tiebreakers[1] = pair_rank;
         }
         mcg_shared::HandRankCategory::FourKind => {
-            // Four of a kind rank, then kicker
+            // Four of a kind rank, then kicker from actual cards
             let quads_rank = find_quads_rank(rank_counts);
-            let kicker = get_kickers(rank_counts, quads_rank, 1)[0];
+
+            // Get all card ranks and remove the quad cards to find kicker
+            let mut all_ranks: Vec<u8> = cards.iter()
+                .map(|&card| rank_value_high(card_rank(card)))
+                .collect();
+
+            // Remove instances of the quads rank (remove 4 instances)
+            let mut quads_count = 0;
+            let kicker_ranks: Vec<u8> = all_ranks.into_iter()
+                .filter(|&rank| {
+                    if rank == quads_rank && quads_count < 4 {
+                        quads_count += 1;
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .collect();
 
             tiebreakers[0] = quads_rank;
-            tiebreakers[1] = kicker;
+            if let Some(&kicker) = kicker_ranks.first() {
+                tiebreakers[1] = kicker;
+            }
         }
         mcg_shared::HandRankCategory::StraightFlush => {
             // For straight flushes, the high card determines the winner
@@ -288,21 +368,6 @@ fn find_quads_rank(rank_counts: &[u8; NUM_RANKS]) -> u8 {
     0
 }
 
-/// Get kicker cards (excluding the specified rank)
-fn get_kickers(rank_counts: &[u8; NUM_RANKS], exclude_rank: u8, count: usize) -> Vec<u8> {
-    let mut kickers = Vec::new();
-    for (i, &count) in rank_counts.iter().enumerate() {
-        if count > 0 {
-            let rank_val = rank_value_high(CardRank::from_u8(i as u8));
-            if rank_val != exclude_rank {
-                for _ in 0..count {
-                    kickers.push(rank_val);
-                }
-            }
-        }
-    }
-    kickers
-}
 
 /// Find the high card of a straight
 fn find_straight_high(rank_counts: &[u8; NUM_RANKS]) -> u8 {
