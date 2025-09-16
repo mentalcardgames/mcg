@@ -144,7 +144,7 @@ impl Game {
         Ok(g)
     }
 
-    pub fn public(&self, _preferred_player: Option<PlayerId>) -> GameStatePublic {
+    pub fn public(&self) -> GameStatePublic {
         let players = self
             .players
             .iter()
@@ -173,11 +173,6 @@ impl Game {
             current_bet: self.current_bet,
             min_raise: self.min_raise,
         }
-    }
-
-    /// Legacy method for backwards compatibility - reveals all cards at showdown, none otherwise
-    pub fn public_all(&self) -> GameStatePublic {
-        self.public(None)
     }
 
     pub(crate) fn log(&mut self, ev: ActionEvent) {
