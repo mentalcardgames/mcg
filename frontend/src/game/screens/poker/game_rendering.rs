@@ -158,6 +158,14 @@ pub fn render_player(
 
     if p.id == preferred_player {
         render_my_cards_and_actions(ui, state, p, preferred_player, poker_screen);
+    } else if state.stage == mcg_shared::Stage::Showdown {
+        if let Some(cards) = p.cards {
+            ui.horizontal(|ui| {
+                ui.add_space(12.0);
+                super::ui_components::card_chip(ui, cards[0]);
+                super::ui_components::card_chip(ui, cards[1]);
+            });
+        }
     }
     ui.add_space(8.0);
 }
