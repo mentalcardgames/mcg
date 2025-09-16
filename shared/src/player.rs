@@ -35,6 +35,7 @@ pub struct PlayerPublic {
     pub cards: Option<[Card; 2]>, // only set for the viewer
     pub has_folded: bool,
     pub bet_this_round: u32,
+    pub bet_this_hand: u32,
 }
 
 /// Configuration for setting up a player in a new game

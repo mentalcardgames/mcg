@@ -89,8 +89,8 @@ pub fn render_player_status_and_bet(
     }
     ui.label(egui::RichText::new(&p.name).strong());
 
-    if p.bet_this_round > 0 {
-        ui.label(format!("Bet: {}", p.bet_this_round));
+    if p.bet_this_hand > 0 {
+        ui.label(format!("Bet: {}", p.bet_this_hand));
     }
 
     if p.has_folded {

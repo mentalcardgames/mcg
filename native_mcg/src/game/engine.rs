@@ -35,6 +35,7 @@ pub struct Game {
     pub current_bet: u32,
     pub min_raise: u32,
     pub round_bets: Vec<u32>, // contributions this street, indexed by player idx
+    pub hand_bets: Vec<u32>,  // contributions this hand, indexed by player idx
 
     // Blinds
     pub sb: u32,
@@ -66,6 +67,7 @@ impl Game {
             current_bet: 0,
             min_raise: 0,
             round_bets: vec![0; player_count],
+            hand_bets: vec![0; player_count],
 
             sb: 5,
             bb: 10,
@@ -134,6 +136,7 @@ impl Game {
             current_bet: 0,
             min_raise: 0,
             round_bets: vec![],
+            hand_bets: vec![],
 
             sb: 5,
             bb: 10,
@@ -160,6 +163,7 @@ impl Game {
                 cards: Some(p.cards),
                 has_folded: p.has_folded,
                 bet_this_round: self.round_bets[idx],
+                bet_this_hand: self.hand_bets[idx],
             })
             .collect();
 
@@ -297,6 +301,7 @@ mod tests {
             current_bet: 0,
             min_raise: 0,
             round_bets: vec![],
+            hand_bets: vec![],
 
             sb: 5,
             bb: 10,
