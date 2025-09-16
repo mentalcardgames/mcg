@@ -367,7 +367,7 @@ fn test_bug_report_scenario() {
     assert_eq!(rank_bot3.category, HandRankCategory::Pair);
 
     // The bug was that all hands appeared equal, so let's verify they're properly ranked
-    let mut ranks = vec![rank_you, rank_bot1, rank_bot2, rank_bot3];
+    let mut ranks = [rank_you, rank_bot1, rank_bot2, rank_bot3];
     ranks.sort();
 
     // Should be ordered: Queens < Kings < Aces (with kickers)
