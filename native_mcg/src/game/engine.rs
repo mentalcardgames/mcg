@@ -1,9 +1,10 @@
 //! Core Game and Player definitions + constructors and small helpers.
 
 use anyhow::{Context, Result};
-use mcg_shared::{
-    ActionEvent, Card, CardRank, CardSuit, GameStatePublic, PlayerId, PlayerPublic, Stage,
-};
+use mcg_shared::{ActionEvent, Card, GameStatePublic, PlayerId, PlayerPublic, Stage};
+
+#[cfg(test)]
+use mcg_shared::{CardRank, CardSuit};
 use rand::seq::SliceRandom;
 use std::collections::VecDeque;
 
@@ -88,6 +89,7 @@ impl Game {
     }
 
     /// Create test players for deterministic testing
+    #[cfg(test)]
     fn create_test_players(human_name: String, bot_count: usize) -> Vec<Player> {
         let mut v = Vec::with_capacity(1 + bot_count);
         v.push(Player {
@@ -118,6 +120,7 @@ impl Game {
     }
 
     /// Create a game from existing players and deck
+    #[cfg(test)]
     fn from_players_and_deck(players: Vec<Player>, deck: Vec<Card>) -> Result<Self> {
         let mut g = Self {
             players,
@@ -199,6 +202,7 @@ impl Game {
     }
 
     /// Get the total chips in play for consistency checking
+    #[cfg(test)]
     pub(crate) fn total_chips(&self) -> u32 {
         self.players.iter().map(|p| p.stack).sum::<u32>() + self.pot
     }
