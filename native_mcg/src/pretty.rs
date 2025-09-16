@@ -1,4 +1,4 @@
-use crate::poker::cards::{card_rank, card_suit, CardRank, CardSuit};
+use crate::poker::cards::{CardRank, CardSuit};
 use mcg_shared::{
     ActionEvent, ActionKind as SharedActionKind, BlindKind, Card, GameAction, GameStatePublic,
     PlayerId, PlayerPublic, Stage,
@@ -60,8 +60,8 @@ fn rank_name(rank: CardRank) -> &'static str {
 }
 
 fn format_card(c: Card, color: bool) -> String {
-    let rank = card_rank(c);
-    let suit = card_suit(c);
+    let rank = c.rank();
+    let suit = c.suit();
     let face = card_faces(rank);
     let icon = suit_icon(suit);
     let mut text = format!(

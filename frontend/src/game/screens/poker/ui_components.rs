@@ -12,16 +12,11 @@ pub fn card_chip(ui: &mut Ui, c: Card) {
 }
 
 pub fn card_text_and_color(c: Card) -> (String, Color32) {
-    let rank_idx = (c.0 % 13) as usize;
-    let suit_idx = (c.0 / 13) as usize;
-    let ranks = [
-        "A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K",
-    ];
-    let suits = ['♣', '♦', '♥', '♠'];
-    let text = format!("{}{}", ranks[rank_idx], suits[suit_idx]);
-    let color = match suits[suit_idx] {
-        '♦' | '♥' => Color32::from_rgb(220, 50, 50),
-        _ => Color32::WHITE,
+    let text = c.to_string();
+    let color = if c.is_red() {
+        Color32::from_rgb(220, 50, 50)
+    } else {
+        Color32::WHITE
     };
     (text, color)
 }
@@ -72,7 +67,7 @@ pub fn name_of(players: &[PlayerPublic], id: PlayerId) -> String {
 }
 
 pub fn card_text(c: Card) -> String {
-    card_text_and_color(c).0
+    c.to_string()
 }
 
 pub fn stage_badge(stage: Stage) -> WidgetText {

@@ -165,6 +165,50 @@ impl Card {
     pub fn suit(self) -> CardSuit {
         CardSuit::from_u8(self.0 / 13)
     }
+
+    /// Get the rank as a string (A, 2, 3, ..., K)
+    pub fn rank_str(self) -> &'static str {
+        match self.rank() {
+            CardRank::Ace => "A",
+            CardRank::Two => "2",
+            CardRank::Three => "3",
+            CardRank::Four => "4",
+            CardRank::Five => "5",
+            CardRank::Six => "6",
+            CardRank::Seven => "7",
+            CardRank::Eight => "8",
+            CardRank::Nine => "9",
+            CardRank::Ten => "T",
+            CardRank::Jack => "J",
+            CardRank::Queen => "Q",
+            CardRank::King => "K",
+        }
+    }
+
+    /// Get the suit as a character (♣, ♦, ♥, ♠)
+    pub fn suit_char(self) -> char {
+        match self.suit() {
+            CardSuit::Clubs => '♣',
+            CardSuit::Diamonds => '♦',
+            CardSuit::Hearts => '♥',
+            CardSuit::Spades => '♠',
+        }
+    }
+
+    /// Get the card as a string like "A♣", "T♦", etc.
+    pub fn to_string(self) -> String {
+        format!("{}{}", self.rank_str(), self.suit_char())
+    }
+
+    /// Check if this is a red suit (hearts or diamonds)
+    pub fn is_red(self) -> bool {
+        matches!(self.suit(), CardSuit::Hearts | CardSuit::Diamonds)
+    }
+
+    /// Check if this is a black suit (clubs or spades)
+    pub fn is_black(self) -> bool {
+        matches!(self.suit(), CardSuit::Clubs | CardSuit::Spades)
+    }
 }
 
 impl From<usize> for PlayerId {

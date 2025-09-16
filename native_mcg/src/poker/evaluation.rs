@@ -1,5 +1,5 @@
 use super::{
-    cards::{card_rank, card_suit, CardRank, CardSuit},
+    cards::{CardRank, CardSuit},
     constants::*,
 };
 use mcg_shared::{Card, HandRank, HandRankCategory};
@@ -32,7 +32,7 @@ pub fn pick_best_five(hole: [Card; 2], community: &[Card]) -> [Card; 5] {
     // If fewer than 5 cards are available (pre-flop/early streets), just take the highest ones
     if all.len() < 5 {
         all.sort_unstable_by(|a, b| {
-            rank_value_high(card_rank(*b)).cmp(&rank_value_high(card_rank(*a)))
+            rank_value_high(a.rank()).cmp(&rank_value_high(b.rank()))
         });
         let mut out = [Card::new(CardRank::Ace, CardSuit::Clubs); 5];
         let n = all.len().min(5);
@@ -122,7 +122,7 @@ fn analyze_suits_for_flush(cards: &[Card]) -> Option<u8> {
     // Group by suit
     let mut suit_cards: [Vec<Card>; NUM_SUITS] = [vec![], vec![], vec![], vec![]];
     for &c in cards {
-        suit_cards[card_suit(c).as_usize()].push(c);
+        suit_cards[c.suit().as_usize()].push(c);
     }
     // Suit presence >=5 indicates possible flush
     (0..NUM_SUITS)
@@ -134,7 +134,7 @@ fn analyze_card_values(cards: &[Card]) -> ([u8; RANK_COUNT_ARRAY_SIZE], Vec<u8>)
     let mut counts = [0u8; RANK_COUNT_ARRAY_SIZE];
     let mut all_values = Vec::with_capacity(cards.len());
     for &c in cards {
-        let v = rank_value_high(card_rank(c));
+        let v = rank_value_high(c.rank());
         counts[v as usize] += 1;
         all_values.push(v);
     }
@@ -145,7 +145,7 @@ fn check_straight_flush(cards: &[Card], flush_suit: Option<u8>) -> Option<HandRa
     if let Some(fs) = flush_suit {
         let mut suit_cards: [Vec<Card>; NUM_SUITS] = [vec![], vec![], vec![], vec![]];
         for &c in cards {
-            suit_cards[card_suit(c).as_usize()].push(c);
+            suit_cards[c.suit().as_usize()].push(c);
         }
 
         let values = ranks_as_values_unique(&suit_cards[fs as usize]);
@@ -180,12 +180,12 @@ fn check_flush(cards: &[Card], flush_suit: Option<u8>) -> Option<HandRank> {
     if let Some(fs) = flush_suit {
         let mut suit_cards: [Vec<Card>; NUM_SUITS] = [vec![], vec![], vec![], vec![]];
         for &c in cards {
-            suit_cards[card_suit(c).as_usize()].push(c);
+            suit_cards[c.suit().as_usize()].push(c);
         }
 
         let mut vs = suit_cards[fs as usize]
             .iter()
-            .map(|&c| rank_value_high(card_rank(c)))
+            .map(|&c| rank_value_high(c.rank()))
             .collect::<Vec<u8>>();
         vs.sort_unstable_by(|a, b| b.cmp(a));
         vs.truncate(5);
@@ -271,7 +271,7 @@ fn rank_value_high(rank: CardRank) -> u8 {
 fn ranks_as_values_unique(cards: &[Card]) -> Vec<u8> {
     let mut v = cards
         .iter()
-        .map(|&c| rank_value_high(card_rank(c)))
+        .map(|&c| rank_value_high(c.rank()))
         .collect::<Vec<u8>>();
     v.sort_unstable();
     v.dedup();
