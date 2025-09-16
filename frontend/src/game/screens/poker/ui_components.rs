@@ -1,7 +1,7 @@
 use egui::{Color32, RichText, Ui, WidgetText};
 use mcg_shared::{
-    ActionEvent, ActionKind, BlindKind, Card, GameAction, GameStatePublic, HandRankCategory,
-    HandResult, PlayerId, PlayerPublic, Stage,
+    ActionEvent, ActionKind, BlindKind, Card, GameAction, GameStatePublic, HandResult, PlayerId,
+    PlayerPublic, Stage,
 };
 
 pub fn card_chip(ui: &mut Ui, c: Card) {
@@ -44,19 +44,6 @@ pub fn action_kind_text(kind: &ActionKind) -> (String, Color32) {
     }
 }
 
-pub fn category_text(cat: &HandRankCategory) -> &'static str {
-    match cat {
-        HandRankCategory::HighCard => "High Card",
-        HandRankCategory::Pair => "Pair",
-        HandRankCategory::TwoPair => "Two Pair",
-        HandRankCategory::ThreeKind => "Three of a Kind",
-        HandRankCategory::Straight => "Straight",
-        HandRankCategory::Flush => "Flush",
-        HandRankCategory::FullHouse => "Full House",
-        HandRankCategory::FourKind => "Four of a Kind",
-        HandRankCategory::StraightFlush => "Straight Flush",
-    }
-}
 
 pub fn name_of(players: &[PlayerPublic], id: PlayerId) -> String {
     PlayerPublic::name_of(players, id)
@@ -272,7 +259,7 @@ fn format_showdown_entry(out: &mut String, hand_results: &[HandResult], state: &
     } else {
         for hr in hand_results {
             let who = name_of(&state.players, hr.player_id);
-            let cat = category_text(&hr.rank.category);
+            let cat = hr.rank.category.to_str();
             let best = hr
                 .best_five
                 .iter()
@@ -373,7 +360,7 @@ pub fn log_entry_row(ui: &mut Ui, entry: &ActionEvent, players: &[PlayerPublic],
             let mut parts = Vec::new();
             for hr in hand_results {
                 let who = name_of(players, hr.player_id);
-                let cat = category_text(&hr.rank.category);
+                let cat = hr.rank.category.to_str();
                 parts.push(format!("{}: {}", who, cat));
             }
             let text = if parts.is_empty() {
