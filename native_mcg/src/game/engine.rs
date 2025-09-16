@@ -201,11 +201,6 @@ impl Game {
         Ok(())
     }
 
-    /// Get the total chips in play for consistency checking
-    #[cfg(test)]
-    pub(crate) fn total_chips(&self) -> u32 {
-        self.players.iter().map(|p| p.stack).sum::<u32>() + self.pot
-    }
 }
 
 #[cfg(test)]
