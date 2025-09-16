@@ -42,7 +42,7 @@ impl BettingControls {
                 state.min_raise
             };
             self.show_betting_controls = true;
-            
+
             // Initialize betting amounts if not set
             if self.bet_amount == 0 {
                 self.bet_amount = state.bb;
@@ -104,19 +104,22 @@ impl BettingControls {
         conn: &WebSocketConnection,
     ) {
         ui.label("Open betting:");
-        
+
         // Slider for custom bet amount
         ui.horizontal(|ui| {
             ui.label("Bet:");
             let mut bet_amount = self.bet_amount as f32;
-            if ui.add(
-                egui::Slider::new(&mut bet_amount, min_bet as f32..=max_bet as f32)
-                    .suffix(" chips")
-                    .smart_aim(false)
-            ).changed() {
+            if ui
+                .add(
+                    egui::Slider::new(&mut bet_amount, min_bet as f32..=max_bet as f32)
+                        .suffix(" chips")
+                        .smart_aim(false),
+                )
+                .changed()
+            {
                 self.bet_amount = bet_amount as u32;
             }
-            
+
             if ui.button("Bet").clicked() {
                 conn.send_msg(&ClientMsg::Action {
                     player_id,
@@ -127,7 +130,7 @@ impl BettingControls {
 
         ui.add_space(4.0);
         ui.label("Quick bets:");
-        
+
         // Quick bet buttons
         ui.horizontal(|ui| {
             if ui.button("Min Bet").clicked() {
@@ -136,7 +139,7 @@ impl BettingControls {
                     action: PlayerAction::Bet(state.bb),
                 });
             }
-            
+
             let pot_third = (state.pot / 3).max(state.bb);
             if ui.button("1/3 Pot").clicked() {
                 conn.send_msg(&ClientMsg::Action {
@@ -144,7 +147,7 @@ impl BettingControls {
                     action: PlayerAction::Bet(pot_third.min(max_bet)),
                 });
             }
-            
+
             let pot_half = (state.pot / 2).max(state.bb);
             if ui.button("1/2 Pot").clicked() {
                 conn.send_msg(&ClientMsg::Action {
@@ -153,7 +156,7 @@ impl BettingControls {
                 });
             }
         });
-        
+
         ui.horizontal(|ui| {
             if ui.button("Pot Size").clicked() {
                 conn.send_msg(&ClientMsg::Action {
@@ -161,7 +164,7 @@ impl BettingControls {
                     action: PlayerAction::Bet(state.pot.max(state.bb).min(max_bet)),
                 });
             }
-            
+
             if max_bet > 0 && ui.button("All-in").clicked() {
                 conn.send_msg(&ClientMsg::Action {
                     player_id,
@@ -181,19 +184,22 @@ impl BettingControls {
         conn: &WebSocketConnection,
     ) {
         ui.label("Raise betting:");
-        
+
         // Slider for custom raise amount
         ui.horizontal(|ui| {
             ui.label("Raise:");
             let mut raise_amount = self.raise_amount as f32;
-            if ui.add(
-                egui::Slider::new(&mut raise_amount, min_bet as f32..=max_bet as f32)
-                    .suffix(" chips")
-                    .smart_aim(false)
-            ).changed() {
+            if ui
+                .add(
+                    egui::Slider::new(&mut raise_amount, min_bet as f32..=max_bet as f32)
+                        .suffix(" chips")
+                        .smart_aim(false),
+                )
+                .changed()
+            {
                 self.raise_amount = raise_amount as u32;
             }
-            
+
             if ui.button("Raise").clicked() {
                 conn.send_msg(&ClientMsg::Action {
                     player_id,
@@ -204,7 +210,7 @@ impl BettingControls {
 
         ui.add_space(4.0);
         ui.label("Quick raises:");
-        
+
         // Quick raise buttons
         ui.horizontal(|ui| {
             if min_bet <= max_bet && ui.button("Min Raise").clicked() {
@@ -213,7 +219,7 @@ impl BettingControls {
                     action: PlayerAction::Bet(min_bet),
                 });
             }
-            
+
             let pot_third = (state.pot / 3).max(min_bet);
             if pot_third <= max_bet && ui.button("Raise 1/3 Pot").clicked() {
                 conn.send_msg(&ClientMsg::Action {
@@ -221,7 +227,7 @@ impl BettingControls {
                     action: PlayerAction::Bet(pot_third),
                 });
             }
-            
+
             let pot_half = (state.pot / 2).max(min_bet);
             if pot_half <= max_bet && ui.button("Raise 1/2 Pot").clicked() {
                 conn.send_msg(&ClientMsg::Action {
@@ -230,7 +236,7 @@ impl BettingControls {
                 });
             }
         });
-        
+
         ui.horizontal(|ui| {
             let pot_size = state.pot.max(min_bet);
             if pot_size <= max_bet && ui.button("Raise Pot").clicked() {
@@ -239,7 +245,7 @@ impl BettingControls {
                     action: PlayerAction::Bet(pot_size),
                 });
             }
-            
+
             if max_bet > 0 && ui.button("All-in").clicked() {
                 conn.send_msg(&ClientMsg::Action {
                     player_id,

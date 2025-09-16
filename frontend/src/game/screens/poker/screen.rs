@@ -342,15 +342,11 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                 if enabled {
                     ui.add_space(8.0);
                     // Second row: Betting/Raising controls with slider
-                    self.betting_controls.update_from_game_state(state, player_id);
-                    
-                    self.betting_controls.render_betting_controls(
-                        ui,
-                        state,
-                        player_id,
-                        player,
-                        &self.conn,
-                    );
+                    self.betting_controls
+                        .update_from_game_state(state, player_id);
+
+                    self.betting_controls
+                        .render_betting_controls(ui, state, player_id, player, &self.conn);
                 }
             });
         }
