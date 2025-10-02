@@ -1,5 +1,4 @@
 use crate::bot::BotContext;
-
 use super::state::AppState;
 
 /// Drive bots with non-blocking, event-driven architecture.

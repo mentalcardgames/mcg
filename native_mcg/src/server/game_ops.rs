@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use mcg_shared::{Card, CardRank, CardSuit, GameStatePublic, PlayerId};
 use std::io::IsTerminal;
 
-use super::state::AppState;
+use crate::backend::AppState;
 
 /// Create a new game with the specified players.
 pub async fn create_new_game(

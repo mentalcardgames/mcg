@@ -1,79 +1,17 @@
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::broadcast;
-use tokio::sync::RwLock;
 
-use crate::bot::BotManager;
 use crate::game::{Game, Player};
 use anyhow::{Context, Result};
 use mcg_shared::{Card, CardRank, CardSuit, GameStatePublic, PlayerId};
 
 pub const CHANNEL_BUFFER_SIZE: usize = 256;
 
-/// Shared application state exposed to handlers.
-#[derive(Clone)]
-pub struct AppState {
-    pub(crate) lobby: Arc<RwLock<Lobby>>,
-    pub broadcaster: broadcast::Sender<mcg_shared::ServerMsg>,
-    /// In-memory shared Config instance. Holds the authoritative configuration
-    /// for the running server. Use tokio::sync::RwLock for concurrent access.
-    pub config: std::sync::Arc<RwLock<crate::config::Config>>,
-    /// Optional path to the TOML config file used by the running server.
-    /// If present, transports (e.g. iroh) may persist changes to this path.
-    pub config_path: Option<PathBuf>,
-}
+// Re-export the canonical types from backend
+pub use crate::backend::AppState;
+pub use crate::backend::state::Lobby;
 
-impl AppState {
-    /// Create a new AppState with the given config and optional config path
-    pub fn new(config: crate::config::Config, config_path: Option<PathBuf>) -> Self {
-        let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
-        Self {
-            lobby: Arc::new(RwLock::new(Lobby::default())),
-            broadcaster: tx,
-            config: std::sync::Arc::new(RwLock::new(config)),
-            config_path,
-        }
-    }
-}
 
-#[derive(Clone)]
-pub struct Lobby {
-    pub(crate) game: Option<Game>,
-    pub(crate) last_printed_log_len: usize,
-    /// List of player IDs that should be driven by bots. Kept in the backend so
-    /// the game engine remains unaware of bot status.
-    pub(crate) bots: Vec<mcg_shared::PlayerId>,
-    /// Indicates whether a server-side turn-driving loop is currently running.
-    /// Prevents concurrent drive loops from multiple transports.
-    pub(crate) driving: bool,
-    /// Bot manager for AI decision making
-    pub(crate) bot_manager: BotManager,
-}
 
-#[allow(clippy::derivable_impls)]
-impl Default for Lobby {
-    fn default() -> Self {
-        Self {
-            game: None,
-            last_printed_log_len: 0,
-            bots: Vec::new(),
-            driving: false,
-            bot_manager: BotManager::default(),
-        }
-    }
-}
 
-impl Default for AppState {
-    fn default() -> Self {
-        let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
-        AppState {
-            lobby: Arc::new(RwLock::new(Lobby::default())),
-            broadcaster: tx,
-            config: std::sync::Arc::new(RwLock::new(crate::config::Config::default())),
-            config_path: None,
-        }
-    }
-}
 
 /// Create a new game with the specified players.
 pub async fn create_new_game(
