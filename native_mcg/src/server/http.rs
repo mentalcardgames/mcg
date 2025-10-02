@@ -11,7 +11,7 @@ use axum::{
     response::IntoResponse,
 };
 
-use crate::backend::AppState;
+use crate::server::AppState;
 use mcg_shared::{ClientMsg, ServerMsg};
 
 /// Accept a NewGame ClientMsg and create a new game.
@@ -23,7 +23,7 @@ pub async fn newgame_handler(
     Json(cm): Json<ClientMsg>,
 ) -> impl IntoResponse {
     // Delegate to unified handler
-    let resp = crate::backend::handle_client_msg(&state, cm).await;
+    let resp = crate::server::handle_client_msg(&state, cm).await;
     match resp {
         ServerMsg::State(gs) => (StatusCode::OK, Json(ServerMsg::State(gs))).into_response(),
         ServerMsg::Error(e) => {
@@ -42,7 +42,7 @@ pub async fn action_handler(
     State(state): State<AppState>,
     Json(cm): Json<ClientMsg>,
 ) -> impl IntoResponse {
-    let resp = crate::backend::handle_client_msg(&state, cm).await;
+    let resp = crate::server::handle_client_msg(&state, cm).await;
     match resp {
         ServerMsg::State(gs) => {
             // Broadcast/drive side-effects are handled by the unified handler.
@@ -55,7 +55,7 @@ pub async fn action_handler(
 
 pub async fn state_handler(State(state): State<AppState>) -> impl IntoResponse {
     // Reuse unified handler by requesting state
-    let resp = crate::backend::handle_client_msg(&state, ClientMsg::RequestState).await;
+    let resp = crate::server::handle_client_msg(&state, ClientMsg::RequestState).await;
     match resp {
         ServerMsg::State(gs) => (StatusCode::OK, Json(ServerMsg::State(gs))).into_response(),
         ServerMsg::Error(e) => {

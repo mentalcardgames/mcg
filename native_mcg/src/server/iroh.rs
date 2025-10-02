@@ -20,7 +20,7 @@ use anyhow::{Context, Result};
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 
-use crate::backend::AppState;
+use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
 use mcg_shared::{ClientMsg, ServerMsg};
 
