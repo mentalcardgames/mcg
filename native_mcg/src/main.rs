@@ -1,9 +1,9 @@
 //! Main entry point for the MCG poker server.
 
-use native_mcg::{backend, cli, config};
+use native_mcg::{cli, config, server};
 
 use anyhow::Context;
-use backend::AppState;
+use server::AppState;
 use clap::Parser;
 use config::Config;
 use std::net::{SocketAddr, TcpListener};
@@ -58,7 +58,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Run the server
-    backend::run_server(addr, state).await?;
+    server::run_server(addr, state).await?;
     Ok(())
 }
 

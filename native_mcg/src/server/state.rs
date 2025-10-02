@@ -15,7 +15,7 @@ use crate::game::{Game, Player};
 use crate::pretty;
 use mcg_shared::GameStatePublic;
 
-use crate::server::state::CHANNEL_BUFFER_SIZE;
+pub const CHANNEL_BUFFER_SIZE: usize = 256;
 
 /// Shared application state exposed to handlers.
 #[derive(Clone)]
@@ -158,6 +158,7 @@ pub async fn broadcast_state(state: &AppState) {
         drop(lobby);
 
         // Broadcast the new state to all subscribers.
+        tracing::debug!("Broadcasting state to {} subscribers", state.broadcaster.receiver_count());
         let _ = state.broadcaster.send(mcg_shared::ServerMsg::State(gs));
     }
 }
@@ -234,7 +235,7 @@ pub async fn broadcast_and_drive(state: &AppState) {
     // Drive bots using the server module implementation
     let config = state.config.read().await;
     let (min_ms, max_ms) = config.bot_delay_range();
-    crate::server::bot_driver::drive_bots_with_delays(state, min_ms, max_ms).await;
+    super::bot_driver::drive_bots_with_delays(state, min_ms, max_ms).await;
 }
 
 /// Handle an Action message from a client

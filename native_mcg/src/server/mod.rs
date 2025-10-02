@@ -1,5 +1,4 @@
 pub mod bot_driver;
-pub mod game_ops;
 pub mod http;
 pub mod iroh;
 pub mod lobby;

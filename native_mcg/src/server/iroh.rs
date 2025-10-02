@@ -273,7 +273,7 @@ where
     }
 
     // Send initial state directly to this client (same behaviour as websocket)
-    if let Some(gs) = crate::backend::current_state_public(state).await {
+    if let Some(gs) = crate::server::current_state_public(state).await {
         if let Err(e) = send_server_msg_to_writer(send, &ServerMsg::State(gs)).await {
             tracing::error!(error = %e, "iroh send error");
         }
@@ -288,7 +288,7 @@ where
 {
     // Delegate handling to the centralized backend handler to ensure consistent behavior.
     tracing::debug!(client_msg = ?cm, "iroh received client message");
-    let resp = crate::backend::handle_client_msg(state, cm).await;
+    let resp = crate::server::handle_client_msg(state, cm).await;
 
     if let Err(e) = send_server_msg_to_writer(send, &resp).await {
         tracing::error!(error = %e, "iroh send error while forwarding response");

@@ -44,7 +44,8 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
         let bot_action_result = process_single_bot_action(state).await;
 
         // IMMEDIATELY broadcast the state after each bot action
-        super::game_ops::broadcast_state(state).await;
+        tracing::debug!("Broadcasting state after bot action, result: {}", bot_action_result);
+        crate::server::broadcast_state(state).await;
 
         if !bot_action_result {
             break; // Stop if bot action failed
