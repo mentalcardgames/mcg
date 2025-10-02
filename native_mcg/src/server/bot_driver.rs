@@ -16,27 +16,38 @@ pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) 
     // Process bots in a loop, but broadcast after each action
     loop {
         // Check if we should process a bot action
-        let should_process_bot = {
+        let (should_process_bot, current_player_info) = {
             let lobby_r = state.lobby.read().await;
             if lobby_r.game.is_none() {
+                tracing::debug!("Bot driver: No game present, stopping");
                 break;
             }
 
             if let Some(game) = &lobby_r.game {
                 if game.stage == mcg_shared::Stage::Showdown {
-                    false
+                    tracing::debug!("Bot driver: Game in showdown, stopping");
+                    (false, None)
                 } else {
                     let idx = game.to_act;
-                    game.players.get(idx)
-                        .map(|p| lobby_r.bots.contains(&p.id))
-                        .unwrap_or(false)
+                    if let Some(player) = game.players.get(idx) {
+                        let is_bot = lobby_r.bots.contains(&player.id);
+                        let info = format!("Player {} ({})", player.name, if is_bot { "BOT" } else { "HUMAN" });
+                        tracing::debug!("Bot driver: Current player to act: {}, is_bot: {}", info, is_bot);
+                        (is_bot, Some(info))
+                    } else {
+                        tracing::warn!("Bot driver: Invalid player index {}", idx);
+                        (false, None)
+                    }
                 }
             } else {
-                false
+                (false, None)
             }
         };
 
         if !should_process_bot {
+            if let Some(info) = current_player_info {
+                tracing::debug!("Bot driver: Stopping - current player is human: {}", info);
+            }
             break;
         }
 
@@ -117,16 +128,18 @@ async fn process_single_bot_action(state: &AppState) -> bool {
 
         // Clone action for logging
         let action_for_log = action.clone();
-        let player_id = game.players[actor_idx].id;
+        let player_name = game.players[actor_idx].name.clone();
+        let player_stack = game.players[actor_idx].stack;
 
         // Apply the bot action
         match game.apply_player_action(actor_idx, action) {
             Ok(_) => {
-                tracing::debug!("Bot {} took action: {:?}", player_id, action_for_log);
+                tracing::info!("🤖 Bot {} took action: {:?} (stack: {})",
+                    player_name, action_for_log, player_stack);
                 true
             }
             Err(e) => {
-                tracing::error!("Bot {} failed to apply action: {}", player_id, e);
+                tracing::error!("❌ Bot {} failed to apply action: {}", player_name, e);
                 false
             }
         }

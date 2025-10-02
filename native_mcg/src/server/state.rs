@@ -158,7 +158,10 @@ pub async fn broadcast_state(state: &AppState) {
         drop(lobby);
 
         // Broadcast the new state to all subscribers.
-        tracing::debug!("Broadcasting state to {} subscribers", state.broadcaster.receiver_count());
+        let subscriber_count = state.broadcaster.receiver_count();
+        let current_player_name = mcg_shared::PlayerPublic::name_of(&gs.players, gs.to_act);
+        tracing::info!("📡 Broadcasting game state to {} subscribers (stage: {:?}, to_act: {})",
+            subscriber_count, gs.stage, current_player_name);
         let _ = state.broadcaster.send(mcg_shared::ServerMsg::State(gs));
     }
 }
@@ -235,6 +238,7 @@ pub async fn broadcast_and_drive(state: &AppState) {
     // Drive bots using the server module implementation
     let config = state.config.read().await;
     let (min_ms, max_ms) = config.bot_delay_range();
+    tracing::debug!("🎯 Triggering bot driver (delay: {}ms-{}ms)", min_ms, max_ms);
     super::bot_driver::drive_bots_with_delays(state, min_ms, max_ms).await;
 }
 
