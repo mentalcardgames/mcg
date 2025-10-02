@@ -39,9 +39,9 @@ web-sys = { version = "0.3.77", features = [
     "PopStateEvent",
     "EventListener",
 ] }
-egui = "0.31.1"
-eframe = "0.31.1"
-egui_extras = { version = "0.31.1", features = [
+egui = "0.32.3"
+eframe = "0.32.3"
+egui_extras = { version = "0.32.3", features = [
     "all_loaders",
     "image",
     "svg",

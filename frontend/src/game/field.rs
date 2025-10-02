@@ -190,7 +190,7 @@ impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
         }
         if self.draggable && !self.cards.is_empty() {
             let card = self.cards.last().unwrap();
-            ui.allocate_new_ui(
+            ui.scope_builder(
                 egui::UiBuilder::new().max_rect(Rect::from_min_size(
                     origin.add(self.card_pos(self.cards.len())),
                     self.get_card_size(),
@@ -258,7 +258,7 @@ impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
                 ui,
                 Rect::from_min_size(origin.add(self.card_pos(idx)), self.get_card_size()),
             );
-            ui.allocate_new_ui(
+            ui.scope_builder(
                 egui::UiBuilder::new()
                     .max_rect(Rect::from_min_size(
                         origin.add(self.card_pos(idx)),

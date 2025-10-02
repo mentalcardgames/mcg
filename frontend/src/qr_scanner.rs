@@ -172,10 +172,10 @@ impl Camera {
             if pixels.len() != (canvas_width * canvas_height) as usize {
                 return Ok(());
             }
-            let color_image = egui::ColorImage {
-                size: [canvas_width as usize, canvas_height as usize],
-                pixels: pixels.clone(),
-            };
+            let color_image = egui::ColorImage::new(
+                [canvas_width as usize, canvas_height as usize],
+                pixels.clone(),
+            );
             self.frame_count += 1;
             if self.frame_count % 5 == 0 {
                 self.process_qr_detection(&pixels, canvas_width as usize, canvas_height as usize);

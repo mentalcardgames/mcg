@@ -151,7 +151,7 @@ impl App {
                     .inner_margin(egui::Margin::symmetric(0, 8)),
             )
             .show(ctx, |ui| {
-                egui::menu::bar(ui, |ui| {
+                egui::MenuBar::new().ui(ui, |ui| {
                     let avail = ui.available_width();
                     let left_w = NAVBAR_WIDTH_LEFT;
                     let right_w = NAVBAR_WIDTH_RIGHT;
@@ -321,5 +321,9 @@ impl eframe::App for App {
                 }
             }
         }
+
+        // Request continuous repaints for real-time updates (WebSocket messages, animations, etc.)
+        // This is the standard approach for egui applications that need real-time updates
+        ctx.request_repaint();
     }
 }
