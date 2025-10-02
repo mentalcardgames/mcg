@@ -1,13 +1,17 @@
+use egui::Context;
 use mcg_shared::{ClientMsg, PlayerConfig, ServerMsg};
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::rc::Rc;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
-/// A simplified WebSocket connection service with immediate message processing.
+/// A simplified WebSocket connection service that queues incoming messages.
 ///
-/// This service processes incoming messages immediately without queuing and triggers
-/// immediate UI repaints via callback functions.
+/// This service queues incoming `ServerMsg` instances into a shared `VecDeque`
+/// and requests a repaint from the `egui::Context` to ensure the UI thread
+/// processes the message promptly.
 pub struct WebSocketConnection {
     ws: Option<WebSocket>,
     // Store closure handles to prevent memory leaks
@@ -32,78 +36,82 @@ impl WebSocketConnection {
         }
     }
 
-    /// Connect to a WebSocket server with immediate message processing.
+    /// Connect to a WebSocket server and set up event handlers.
     ///
-    /// Establishes a connection and sets up event handlers that immediately
-    /// process incoming messages and trigger UI updates via callbacks.
+    /// Messages are queued into `pending_messages` and repaints are requested
+    /// via the `egui::Context`.
     pub fn connect(
         &mut self,
         server_address: &str,
         players: Vec<PlayerConfig>,
-        on_message: impl Fn(ServerMsg) + 'static,
-        on_error: impl Fn(String) + 'static,
-        on_close: impl Fn(String) + 'static,
+        pending_messages: Rc<RefCell<VecDeque<ServerMsg>>>,
+        ctx: Context,
     ) {
         // Close any existing connection before starting a new one
         self.close();
 
-        // Wrap callbacks in Rc to share with closures
-        let on_message = Rc::new(on_message);
-        let on_error = Rc::new(on_error);
-        let on_close = Rc::new(on_close);
-
         let ws_url = format!("ws://{}/ws", server_address);
         match WebSocket::new(&ws_url) {
             Ok(ws) => {
-                // Prepare the initial NewGame message payload
                 let newgame_msg = ClientMsg::NewGame {
                     players: players.clone(),
                 };
                 let newgame_json = match serde_json::to_string(&newgame_msg) {
                     Ok(s) => s,
                     Err(e) => {
-                        on_error(format!("Failed to serialize NewGame message: {:?}", e));
+                        let err_msg =
+                            ServerMsg::Error(format!("Failed to serialize NewGame message: {:?}", e));
+                        pending_messages.borrow_mut().push_back(err_msg);
+                        ctx.request_repaint();
                         return;
                     }
                 };
 
-                // onmessage: Parse ServerMsg and process immediately
+                // onmessage: Parse ServerMsg, queue it, and request a repaint.
                 let ws_clone_for_msg = ws.clone();
-                let on_message_clone = on_message.clone();
-                let on_error_clone = on_error.clone();
+                let pending_messages_clone = pending_messages.clone();
+                let ctx_clone = ctx.clone();
                 let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
                     if let Some(txt) = e.data().as_string() {
                         if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {
-                            // If the server sends Welcome, respond with the NewGame message
                             if let ServerMsg::Welcome = &msg {
                                 if let Err(e) = ws_clone_for_msg.send_with_str(&newgame_json) {
-                                    on_error_clone(format!("Error sending NewGame: {:?}", e));
+                                    let err_msg =
+                                        ServerMsg::Error(format!("Error sending NewGame: {:?}", e));
+                                    pending_messages_clone.borrow_mut().push_back(err_msg);
                                 }
                             }
-                            // Process the message immediately via callback
-                            on_message_clone(msg);
+                            pending_messages_clone.borrow_mut().push_back(msg);
+                            ctx_clone.request_repaint();
                         }
                     }
                 });
                 ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
 
-                // onerror: Process error immediately
+                // onerror: Queue an error message.
                 let server_address_err = server_address.to_string();
-                let on_error_clone = on_error.clone();
+                let pending_messages_clone = pending_messages.clone();
+                let ctx_clone = ctx.clone();
                 let onerror = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
-                    on_error_clone(format!("Failed to connect to {}.", server_address_err));
+                    let err_msg =
+                        ServerMsg::Error(format!("Failed to connect to {}.", server_address_err));
+                    pending_messages_clone.borrow_mut().push_back(err_msg);
+                    ctx_clone.request_repaint();
                 });
                 ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
 
-                // onclose: Process close immediately
-                let on_close_clone = on_close.clone();
+                // onclose: Queue a close message as an error.
+                let pending_messages_clone = pending_messages.clone();
                 let onclose = Closure::<dyn FnMut(CloseEvent)>::new(move |e: CloseEvent| {
                     let reason = if e.reason().is_empty() {
                         format!("Connection closed (code {}).", e.code())
                     } else {
                         format!("Connection closed (code {}): {}", e.code(), e.reason())
                     };
-                    on_close_clone(reason);
+                    pending_messages_clone
+                        .borrow_mut()
+                        .push_back(ServerMsg::Error(reason));
+                    ctx.request_repaint();
                 });
                 ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
 
@@ -114,8 +122,9 @@ impl WebSocketConnection {
                 self.ws = Some(ws);
             }
             Err(err) => {
-                // Handle initial WebSocket creation error
-                on_error(format!("WebSocket connect error: {:?}", err));
+                let err_msg = ServerMsg::Error(format!("WebSocket connect error: {:?}", err));
+                pending_messages.borrow_mut().push_back(err_msg);
+                ctx.request_repaint();
             }
         }
     }

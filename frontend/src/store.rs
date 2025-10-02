@@ -1,6 +1,8 @@
 use crate::articles::Post;
 use mcg_shared::{GameStatePublic, ServerMsg};
+use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::rc::Rc;
 
 #[derive(Clone, Default, Debug)]
 pub struct Settings {
@@ -49,7 +51,7 @@ pub struct AppState {
     pub connection_status: ConnectionStatus,
     pub settings: Settings,
     /// Queue of incoming server messages to be processed on the main thread
-    pub pending_messages: VecDeque<ServerMsg>,
+    pub pending_messages: Rc<RefCell<VecDeque<ServerMsg>>>,
     // articles-related state
     pub articles: ArticlesLoading,
     // pairing UI state
@@ -102,18 +104,19 @@ impl AppState {
             last_info: None,
             connection_status: ConnectionStatus::Disconnected,
             articles: ArticlesLoading::NotStarted,
-            pending_messages: VecDeque::new(),
+            pending_messages: Rc::new(RefCell::new(VecDeque::new())),
         }
     }
 
     /// Queue a server message to be processed on the main thread
     pub fn queue_server_msg(&mut self, msg: ServerMsg) {
-        self.pending_messages.push_back(msg);
+        self.pending_messages.borrow_mut().push_back(msg);
     }
 
     /// Process all pending server messages
     pub fn process_pending_messages(&mut self) {
-        while let Some(msg) = self.pending_messages.pop_front() {
+        let mut pending = self.pending_messages.borrow_mut();
+        while let Some(msg) = pending.pop_front() {
             self.apply_server_msg(msg);
         }
     }
