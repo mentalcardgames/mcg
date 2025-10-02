@@ -2,11 +2,14 @@ use crate::game::websocket::WebSocketConnection;
 use crate::qr_scanner::QrScannerPopup;
 use crate::store::{AppState, ConnectionStatus};
 use egui::{Color32, Context, RichText, Ui};
-use mcg_shared::PlayerConfig;
+use mcg_shared::{PlayerConfig, ServerMsg};
+use std::collections::VecDeque;
 
 pub struct ConnectionManager {
     edit_server_address: String,
     scanner: QrScannerPopup,
+    message_queue: Option<std::rc::Rc<std::cell::RefCell<VecDeque<ServerMsg>>>>,
+    error_queue: Option<std::rc::Rc<std::cell::RefCell<VecDeque<String>>>>,
 }
 
 impl ConnectionManager {
@@ -14,6 +17,8 @@ impl ConnectionManager {
         Self {
             edit_server_address: server_address,
             scanner: QrScannerPopup::new(),
+            message_queue: None,
+            error_queue: None,
         }
     }
 
@@ -29,50 +34,69 @@ impl ConnectionManager {
         app_state.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
         app_state.settings.server_address = self.edit_server_address.clone();
 
-        let ctx_for_callback = ctx.clone();
-        let app_state_ptr = std::rc::Rc::new(std::cell::RefCell::new(app_state as *mut AppState));
+        // Create a shared message queue using Rc<RefCell<VecDeque<ServerMsg>>>
+        let message_queue = std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<mcg_shared::ServerMsg>::new()));
+        let error_queue = std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<String>::new()));
 
-        // Clone for each closure to avoid move issues
-        let ctx_for_msg = ctx_for_callback.clone();
-        let app_state_ptr_for_msg = app_state_ptr.clone();
-        let ctx_for_error = ctx_for_callback.clone();
-        let app_state_ptr_for_error = app_state_ptr.clone();
-        let ctx_for_close = ctx_for_callback.clone();
-        let app_state_ptr_for_close = app_state_ptr.clone();
+        // Clone queues and context for each closure
+        let msg_queue_for_msg = message_queue.clone();
+        let error_queue_for_error = error_queue.clone();
+        let error_queue_for_close = error_queue.clone();
+        let ctx_for_msg = ctx.clone();
+        let ctx_for_error = ctx.clone();
+        let ctx_for_close = ctx.clone();
 
         conn.connect(
             &self.edit_server_address,
             players,
             move |msg: mcg_shared::ServerMsg| {
-                // handle_msg - immediate processing
-                unsafe {
-                    if let Some(app_state) = app_state_ptr_for_msg.borrow_mut().as_mut() {
-                        app_state.apply_server_msg(msg);
-                        ctx_for_msg.request_repaint(); // immediate UI update
-                    }
+                // Queue the message safely
+                if let Ok(mut queue) = msg_queue_for_msg.try_borrow_mut() {
+                    queue.push_back(msg);
+                    ctx_for_msg.request_repaint();
                 }
             },
             move |error: String| {
-                // handle error
-                unsafe {
-                    if let Some(app_state) = app_state_ptr_for_error.borrow_mut().as_mut() {
-                        app_state.last_error = Some(error);
-                        app_state.connection_status = ConnectionStatus::Disconnected;
-                        ctx_for_error.request_repaint();
-                    }
+                // Queue the error safely
+                if let Ok(mut queue) = error_queue_for_error.try_borrow_mut() {
+                    queue.push_back(error);
+                    ctx_for_error.request_repaint();
                 }
             },
             move |reason: String| {
-                // handle close
-                unsafe {
-                    if let Some(app_state) = app_state_ptr_for_close.borrow_mut().as_mut() {
-                        app_state.connection_status = ConnectionStatus::Disconnected;
-                        app_state.last_error = Some(reason);
-                        ctx_for_close.request_repaint();
-                    }
+                // Queue the close reason safely
+                if let Ok(mut queue) = error_queue_for_close.try_borrow_mut() {
+                    queue.push_back(reason);
+                    ctx_for_close.request_repaint();
                 }
             },
         );
+
+        // Store the queues for processing in the update loop
+        self.message_queue = Some(message_queue);
+        self.error_queue = Some(error_queue);
+    }
+
+    /// Process any queued messages from WebSocket callbacks
+    pub fn process_queued_messages(&mut self, app_state: &mut AppState) {
+        // Process server messages
+        if let Some(queue) = &self.message_queue {
+            if let Ok(mut q) = queue.try_borrow_mut() {
+                while let Some(msg) = q.pop_front() {
+                    app_state.apply_server_msg(msg);
+                }
+            }
+        }
+
+        // Process error messages
+        if let Some(queue) = &self.error_queue {
+            if let Ok(mut q) = queue.try_borrow_mut() {
+                while let Some(error) = q.pop_front() {
+                    app_state.last_error = Some(error);
+                    app_state.connection_status = ConnectionStatus::Disconnected;
+                }
+            }
+        }
     }
 
     pub fn render_header(&mut self, app_state: &mut AppState, ui: &mut Ui, ctx: &Context) {

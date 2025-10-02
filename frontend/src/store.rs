@@ -1,5 +1,6 @@
 use crate::articles::Post;
 use mcg_shared::{GameStatePublic, ServerMsg};
+use std::collections::VecDeque;
 
 #[derive(Clone, Default, Debug)]
 pub struct Settings {
@@ -47,6 +48,8 @@ pub struct AppState {
     pub last_info: Option<String>,
     pub connection_status: ConnectionStatus,
     pub settings: Settings,
+    /// Queue of incoming server messages to be processed on the main thread
+    pub pending_messages: VecDeque<ServerMsg>,
     // articles-related state
     pub articles: ArticlesLoading,
     // pairing UI state
@@ -99,6 +102,19 @@ impl AppState {
             last_info: None,
             connection_status: ConnectionStatus::Disconnected,
             articles: ArticlesLoading::NotStarted,
+            pending_messages: VecDeque::new(),
+        }
+    }
+
+    /// Queue a server message to be processed on the main thread
+    pub fn queue_server_msg(&mut self, msg: ServerMsg) {
+        self.pending_messages.push_back(msg);
+    }
+
+    /// Process all pending server messages
+    pub fn process_pending_messages(&mut self) {
+        while let Some(msg) = self.pending_messages.pop_front() {
+            self.apply_server_msg(msg);
         }
     }
 
