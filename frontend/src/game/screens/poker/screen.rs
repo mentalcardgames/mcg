@@ -160,8 +160,8 @@ impl PokerOnlineScreen {
             // Auto-focus the text field when rename starts
             response.request_focus();
             
-            // Allow Enter to confirm or Escape to cancel
-            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            // Check for Enter key to confirm rename
+            if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 *apply_rename = true;
             } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 *cancel_rename = true;
@@ -193,10 +193,10 @@ impl PokerOnlineScreen {
     ) {
         // If this player is being renamed, show Save/Cancel buttons
         if self.player_manager.is_renaming(player.id) {
-            if ui.button("✓").on_hover_text("Save").clicked() {
+            if ui.button("Save").clicked() {
                 *apply_rename = true;
             }
-            if ui.button("✗").on_hover_text("Cancel").clicked() {
+            if ui.button("Cancel").clicked() {
                 *cancel_rename = true;
             }
         } else {
