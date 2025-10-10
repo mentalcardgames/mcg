@@ -27,6 +27,8 @@ pub struct PlayerManager {
     next_player_id: usize,
     new_player_name: String,
     preferred_player: PlayerId,
+    renaming_player_id: Option<PlayerId>,
+    rename_buffer: String,
 }
 
 impl PlayerManager {
@@ -57,6 +59,8 @@ impl PlayerManager {
             next_player_id: 4,
             new_player_name: String::new(),
             preferred_player: PlayerId(0),
+            renaming_player_id: None,
+            rename_buffer: String::new(),
         }
     }
 
@@ -78,6 +82,37 @@ impl PlayerManager {
 
     pub fn get_new_player_name_mut(&mut self) -> &mut String {
         &mut self.new_player_name
+    }
+
+    pub fn start_renaming(&mut self, player_id: PlayerId) {
+        if let Some(player) = self.players.iter().find(|p| p.id == player_id) {
+            self.renaming_player_id = Some(player_id);
+            self.rename_buffer = player.name.clone();
+        }
+    }
+
+    pub fn is_renaming(&self, player_id: PlayerId) -> bool {
+        self.renaming_player_id == Some(player_id)
+    }
+
+    pub fn get_rename_buffer_mut(&mut self) -> &mut String {
+        &mut self.rename_buffer
+    }
+
+    pub fn apply_rename(&mut self) {
+        if let Some(player_id) = self.renaming_player_id {
+            if !self.rename_buffer.trim().is_empty() {
+                if let Some(player) = self.players.iter_mut().find(|p| p.id == player_id) {
+                    player.name = self.rename_buffer.trim().to_string();
+                }
+            }
+            self.cancel_rename();
+        }
+    }
+
+    pub fn cancel_rename(&mut self) {
+        self.renaming_player_id = None;
+        self.rename_buffer.clear();
     }
 
     pub fn add_new_player(&mut self) {

@@ -119,6 +119,8 @@ impl PokerOnlineScreen {
         let mut to_remove = None;
         let mut to_rename = None;
         let mut bot_updates = Vec::new();
+        let mut apply_rename = false;
+        let mut cancel_rename = false;
 
         let players_snapshot = self.player_manager.get_players().clone();
         for (idx, player) in players_snapshot.iter().enumerate() {
@@ -129,10 +131,12 @@ impl PokerOnlineScreen {
                 &mut bot_updates,
                 &mut to_remove,
                 &mut to_rename,
+                &mut apply_rename,
+                &mut cancel_rename,
             );
         }
 
-        self.apply_player_updates(bot_updates, to_remove, to_rename);
+        self.apply_player_updates(bot_updates, to_remove, to_rename, apply_rename, cancel_rename);
     }
 
     fn render_player_row(
@@ -143,9 +147,28 @@ impl PokerOnlineScreen {
         bot_updates: &mut Vec<(usize, bool)>,
         to_remove: &mut Option<usize>,
         to_rename: &mut Option<usize>,
+        apply_rename: &mut bool,
+        cancel_rename: &mut bool,
     ) {
         ui.label(format!("{}", player.id));
-        ui.label(&player.name);
+        
+        // Check if this player is being renamed
+        if self.player_manager.is_renaming(player.id) {
+            // Show text edit field for renaming
+            let response = ui.text_edit_singleline(self.player_manager.get_rename_buffer_mut());
+            
+            // Auto-focus the text field when rename starts
+            response.request_focus();
+            
+            // Allow Enter to confirm or Escape to cancel
+            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                *apply_rename = true;
+            } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                *cancel_rename = true;
+            }
+        } else {
+            ui.label(&player.name);
+        }
 
         let mut is_bot = player.is_bot;
         if ui.checkbox(&mut is_bot, "").changed() {
@@ -153,7 +176,7 @@ impl PokerOnlineScreen {
         }
 
         ui.horizontal(|ui| {
-            self.render_player_actions(ui, player, idx, to_remove, to_rename);
+            self.render_player_actions(ui, player, idx, to_remove, to_rename, apply_rename, cancel_rename);
         });
         ui.end_row();
     }
@@ -165,27 +188,39 @@ impl PokerOnlineScreen {
         idx: usize,
         to_remove: &mut Option<usize>,
         to_rename: &mut Option<usize>,
+        apply_rename: &mut bool,
+        cancel_rename: &mut bool,
     ) {
-        // Radio toggle to select which player the frontend would like to control.
-        // Bot players cannot be selected.
-        if player.is_bot {
-            ui.label("Bot");
+        // If this player is being renamed, show Save/Cancel buttons
+        if self.player_manager.is_renaming(player.id) {
+            if ui.button("✓").on_hover_text("Save").clicked() {
+                *apply_rename = true;
+            }
+            if ui.button("✗").on_hover_text("Cancel").clicked() {
+                *cancel_rename = true;
+            }
         } else {
-            ui.radio_value(
-                self.player_manager.get_preferred_player_mut(),
-                player.id,
-                "Play as",
-            )
-            .on_hover_text("Select this player for this client");
-        }
+            // Radio toggle to select which player the frontend would like to control.
+            // Bot players cannot be selected.
+            if player.is_bot {
+                ui.label("Bot");
+            } else {
+                ui.radio_value(
+                    self.player_manager.get_preferred_player_mut(),
+                    player.id,
+                    "Play as",
+                )
+                .on_hover_text("Select this player for this client");
+            }
 
-        if ui.button("✏").on_hover_text("Rename").clicked() {
-            *to_rename = Some(idx);
-        }
-        if self.player_manager.get_players().len() > 1
-            && ui.button("🗑").on_hover_text("Remove").clicked()
-        {
-            *to_remove = Some(idx);
+            if ui.button("✏").on_hover_text("Rename").clicked() {
+                *to_rename = Some(idx);
+            }
+            if self.player_manager.get_players().len() > 1
+                && ui.button("🗑").on_hover_text("Remove").clicked()
+            {
+                *to_remove = Some(idx);
+            }
         }
     }
 
@@ -194,6 +229,8 @@ impl PokerOnlineScreen {
         bot_updates: Vec<(usize, bool)>,
         to_remove: Option<usize>,
         to_rename: Option<usize>,
+        apply_rename: bool,
+        cancel_rename: bool,
     ) {
         // Apply bot status updates after iteration
         for (idx, is_bot) in bot_updates {
@@ -209,13 +246,18 @@ impl PokerOnlineScreen {
             }
         }
 
-        // Handle rename after iteration
+        // Handle rename mode toggle
         if let Some(idx) = to_rename {
             if let Some(player) = self.player_manager.get_players().get(idx) {
-                // For now, just set the edit buffer to the current name
-                // In a more complete implementation, you might want a popup
-                *self.player_manager.get_new_player_name_mut() = player.name.clone();
+                self.player_manager.start_renaming(player.id);
             }
+        }
+
+        // Apply or cancel rename
+        if apply_rename {
+            self.player_manager.apply_rename();
+        } else if cancel_rename {
+            self.player_manager.cancel_rename();
         }
     }
 
