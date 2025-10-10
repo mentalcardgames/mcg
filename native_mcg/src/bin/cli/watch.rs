@@ -6,6 +6,14 @@ use mcg_shared::{ClientMsg, ServerMsg};
 
 use super::utils::handle_server_msg;
 
+fn announce_connection(json: bool, message: &str) {
+    if json {
+        eprintln!("{}", message);
+    } else {
+        println!("{}", message);
+    }
+}
+
 /// Watch over a websocket connection and print events as they arrive.
 /// Accepts an address string (e.g. "ws://host:port/ws" or "http://host:port") and builds the ws URL internally.
 pub async fn watch_ws(ws_addr: &str, json: bool) -> anyhow::Result<()> {
@@ -15,6 +23,8 @@ pub async fn watch_ws(ws_addr: &str, json: bool) -> anyhow::Result<()> {
 
     let subscribe_txt = serde_json::to_string(&ClientMsg::Subscribe)?;
     write.send(Message::Text(subscribe_txt)).await?;
+
+    announce_connection(json, &format!("Connected to WebSocket {}", ws_url));
 
     // Read messages forever (until socket closed or error) and handle them via
     // the shared handler. Track how many log entries we've printed so we only
@@ -42,6 +52,7 @@ pub async fn watch_ws(ws_addr: &str, json: bool) -> anyhow::Result<()> {
 /// Implement a basic long-polling watcher over the HTTP API.
 pub async fn watch_http(base: &str, json: bool) -> anyhow::Result<()> {
     let client = reqwest::Client::new();
+    announce_connection(json, &format!("Polling HTTP endpoint {}", base));
     let mut last_printed: usize = 0;
     loop {
         // Long-poll GET state with a 30s timeout
@@ -108,6 +119,8 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
         send.write_all(b"\n").await?;
         send.flush().await?;
     }
+
+    announce_connection(json, &format!("Connected to Iroh peer {}", peer_uri));
 
     let mut reader = BufReader::new(recv);
 
