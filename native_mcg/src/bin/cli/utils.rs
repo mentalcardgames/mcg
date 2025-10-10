@@ -68,15 +68,5 @@ pub fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
             }
         }
         ServerMsg::Error(e) => eprintln!("Server error: {}", e),
-        ServerMsg::Welcome => {
-            if json {
-                // If user wants JSON, print the welcome message as JSON.
-                if let Ok(txt) = serde_json::to_string_pretty(sm) {
-                    println!("{}", txt);
-                }
-            } else {
-                println!("Backend says Welcome!")
-            }
-        }
     }
 }

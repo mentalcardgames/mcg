@@ -4,11 +4,11 @@
 // newline-delimited JSON protocol where each JSON object is a
 // ClientMsg or ServerMsg (the same types used over the WebSocket).
 //
-// The implementation mirrors the WebSocket handler behaviour: on connection
-// the transport sends a `ServerMsg::Welcome` and an initial `ServerMsg::State`.
-// Clients may then send any supported `ClientMsg` (for example `NewGame`,
-// `Action`, or `RequestState`). The handler delegates message processing to
-// centralized backend helpers so behavior is consistent across transports.
+// The implementation mirrors the WebSocket handler behaviour: clients send a
+// `ClientMsg::Subscribe` if they wish to receive broadcast state updates. After
+// subscribing they are sent the current `ServerMsg::State` (if one exists) and
+// will receive future broadcasts. All other client messages delegate to shared
+// backend handlers to preserve transport-agnostic behavior.
 //
 // Note: this file is feature-gated behind the iroh Cargo feature. It attempts
 // to follow the iroh API shown in the iroh docs. The exact iroh types and
@@ -229,7 +229,9 @@ async fn handle_iroh_connection(
             match reader.read_line(&mut line).await {
                 Ok(0) => break,
                 Ok(_) => {
-                    if !handle_client_line(&state, &mut send, &mut subscription, line.trim()).await? {
+                    if !handle_client_line(&state, &mut send, &mut subscription, line.trim())
+                        .await?
+                    {
                         break;
                     }
                 }
@@ -264,7 +266,9 @@ where
     match serde_json::from_str::<ClientMsg>(trimmed) {
         Ok(ClientMsg::Subscribe) => {
             if subscription.is_some() {
-                let _ = send_server_msg_to_writer(send, &ServerMsg::Error("already subscribed".into())).await;
+                let _ =
+                    send_server_msg_to_writer(send, &ServerMsg::Error("already subscribed".into()))
+                        .await;
                 return Ok(true);
             }
             let sub = crate::server::subscribe_connection(state).await;

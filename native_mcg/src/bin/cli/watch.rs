@@ -2,7 +2,7 @@ use anyhow::Context;
 use futures_util::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 
-use mcg_shared::ServerMsg;
+use mcg_shared::{ClientMsg, ServerMsg};
 
 use super::utils::handle_server_msg;
 
@@ -11,7 +11,10 @@ use super::utils::handle_server_msg;
 pub async fn watch_ws(ws_addr: &str, json: bool) -> anyhow::Result<()> {
     let ws_url = super::transport::build_ws_url(ws_addr)?;
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
-    let (_, mut read) = ws_stream.split();
+    let (mut write, mut read) = ws_stream.split();
+
+    let subscribe_txt = serde_json::to_string(&ClientMsg::Subscribe)?;
+    write.send(Message::Text(subscribe_txt)).await?;
 
     // Read messages forever (until socket closed or error) and handle them via
     // the shared handler. Track how many log entries we've printed so we only
@@ -96,6 +99,15 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
         .open_bi()
         .await
         .context("opening bidirectional stream")?;
+
+    // Subscribe to broadcast updates
+    {
+        use tokio::io::AsyncWriteExt;
+        let txt = serde_json::to_string(&ClientMsg::Subscribe)?;
+        send.write_all(txt.as_bytes()).await?;
+        send.write_all(b"\n").await?;
+        send.flush().await?;
+    }
 
     let mut reader = BufReader::new(recv);
 

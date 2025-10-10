@@ -10,6 +10,7 @@ use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 /// immediate UI repaints via callback functions.
 pub struct WebSocketConnection {
     ws: Option<WebSocket>,
+    _onopen: Option<Closure<dyn FnMut(Event)>>,
     // Store closure handles to prevent memory leaks
     _onmessage: Option<Closure<dyn FnMut(MessageEvent)>>,
     _onerror: Option<Closure<dyn FnMut(Event)>>,
@@ -26,6 +27,7 @@ impl WebSocketConnection {
     pub fn new() -> Self {
         Self {
             ws: None,
+            _onopen: None,
             _onmessage: None,
             _onerror: None,
             _onclose: None,
@@ -55,7 +57,14 @@ impl WebSocketConnection {
         let ws_url = format!("ws://{}/ws", server_address);
         match WebSocket::new(&ws_url) {
             Ok(ws) => {
-                // Prepare the initial NewGame message payload
+                // Prepare the Subscribe and initial NewGame messages
+                let subscribe_json = match serde_json::to_string(&ClientMsg::Subscribe) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        on_error(format!("Failed to serialize Subscribe message: {:?}", e));
+                        return;
+                    }
+                };
                 let newgame_msg = ClientMsg::NewGame {
                     players: players.clone(),
                 };
@@ -67,19 +76,27 @@ impl WebSocketConnection {
                     }
                 };
 
+                let ws_clone_for_open = ws.clone();
+                let subscribe_payload = subscribe_json;
+                let newgame_payload = newgame_json;
+                let on_error_clone = on_error.clone();
+                let onopen = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
+                    if let Err(e) = ws_clone_for_open.send_with_str(&subscribe_payload) {
+                        on_error_clone(format!("Error sending Subscribe: {:?}", e));
+                        return;
+                    }
+                    if let Err(e) = ws_clone_for_open.send_with_str(&newgame_payload) {
+                        on_error_clone(format!("Error sending NewGame: {:?}", e));
+                    }
+                });
+                ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
+
                 // onmessage: Parse ServerMsg and process immediately
-                let ws_clone_for_msg = ws.clone();
                 let on_message_clone = on_message.clone();
                 let on_error_clone = on_error.clone();
                 let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
                     if let Some(txt) = e.data().as_string() {
                         if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {
-                            // If the server sends Welcome, respond with the NewGame message
-                            if let ServerMsg::Welcome = &msg {
-                                if let Err(e) = ws_clone_for_msg.send_with_str(&newgame_json) {
-                                    on_error_clone(format!("Error sending NewGame: {:?}", e));
-                                }
-                            }
                             // Process the message immediately via callback
                             on_message_clone(msg);
                         }
@@ -111,6 +128,7 @@ impl WebSocketConnection {
                 self._onmessage = Some(onmessage);
                 self._onerror = Some(onerror);
                 self._onclose = Some(onclose);
+                self._onopen = Some(onopen);
                 self.ws = Some(ws);
             }
             Err(err) => {
@@ -138,12 +156,14 @@ impl WebSocketConnection {
             ws.set_onmessage(None);
             ws.set_onerror(None);
             ws.set_onclose(None);
+            ws.set_onopen(None);
 
             // The onclose event will handle state updates
             let _ = ws.close();
         }
 
         // Drop the closure handles to free memory
+        self._onopen = None;
         self._onmessage = None;
         self._onerror = None;
         self._onclose = None;

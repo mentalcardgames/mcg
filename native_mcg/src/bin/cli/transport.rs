@@ -52,7 +52,6 @@ pub async fn run_once_ws(
                     match sm {
                         ServerMsg::State(gs) => latest_state = Some(gs),
                         ServerMsg::Error(e) => eprintln!("Server error: {}", e),
-                        ServerMsg::Welcome => {}
                     }
                 }
             }

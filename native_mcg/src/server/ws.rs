@@ -10,8 +10,8 @@ use axum::{
 use futures::StreamExt;
 use tokio::sync::broadcast;
 
-use owo_colors::OwoColorize;
 use crate::server::state::AppState;
+use owo_colors::OwoColorize;
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
@@ -92,7 +92,11 @@ async fn handle_client_text(
     match serde_json::from_str::<mcg_shared::ClientMsg>(&txt) {
         Ok(mcg_shared::ClientMsg::Subscribe) => {
             if subscription.is_some() {
-                send_ws(socket, &mcg_shared::ServerMsg::Error("already subscribed".into())).await;
+                send_ws(
+                    socket,
+                    &mcg_shared::ServerMsg::Error("already subscribed".into()),
+                )
+                .await;
                 return;
             }
             let sub = crate::server::subscribe_connection(state).await;
@@ -107,8 +111,11 @@ async fn handle_client_text(
         }
         Err(err) => {
             tracing::warn!(error = %err, "failed to parse incoming ClientMsg JSON");
-            send_ws(socket, &mcg_shared::ServerMsg::Error("Malformed ClientMsg JSON".into())).await;
+            send_ws(
+                socket,
+                &mcg_shared::ServerMsg::Error("Malformed ClientMsg JSON".into()),
+            )
+            .await;
         }
     }
 }
-

@@ -32,10 +32,20 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
     let (ws2_stream, _) = tokio_tungstenite::connect_async(&ws_url).await?;
 
     let (mut write1, mut read1) = ws1_stream.split();
-    let (mut _write2, mut read2) = ws2_stream.split();
+    let (mut write2, mut read2) = ws2_stream.split();
 
-    // Drain initial welcome/state messages from both clients
-    async fn drain_welcome_and_state<R>(read: &mut R) -> Option<ServerMsg>
+    let subscribe_txt = serde_json::to_string(&ClientMsg::Subscribe)?;
+    write1
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            subscribe_txt.clone(),
+        ))
+        .await?;
+    write2
+        .send(tokio_tungstenite::tungstenite::Message::Text(subscribe_txt))
+        .await?;
+
+    // Drain any immediate responses triggered by subscription
+    async fn drain_initial_messages<R>(read: &mut R)
     where
         R: StreamExt<
                 Item = Result<
@@ -44,32 +54,22 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
                 >,
             > + Unpin,
     {
-        let mut last_state: Option<ServerMsg> = None;
         let start = tokio::time::Instant::now();
-        while start.elapsed() < Duration::from_secs(2) {
+        while start.elapsed() < Duration::from_millis(500) {
             if let Ok(Some(Ok(msg))) =
-                tokio::time::timeout(Duration::from_millis(200), read.next()).await
+                tokio::time::timeout(Duration::from_millis(100), read.next()).await
             {
-                if let tokio_tungstenite::tungstenite::Message::Text(txt) = msg {
-                    if let Ok(ServerMsg::State(_)) = serde_json::from_str::<ServerMsg>(&txt) {
-                        last_state = Some(serde_json::from_str::<ServerMsg>(&txt).unwrap());
-                        break;
-                    }
-                    // record other msgs (e.g., Welcome)
-                    if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
-                        last_state = Some(sm);
-                    }
+                if !matches!(msg, tokio_tungstenite::tungstenite::Message::Text(_)) {
+                    continue;
                 }
             } else {
-                // timeout or stream ended
                 break;
             }
         }
-        last_state
     }
 
-    let _ = drain_welcome_and_state(&mut read1).await;
-    let _ = drain_welcome_and_state(&mut read2).await;
+    drain_initial_messages(&mut read1).await;
+    drain_initial_messages(&mut read2).await;
 
     // Client 1 sends NewGame which should trigger a broadcasted State to client 2
     let players = vec![

@@ -122,13 +122,10 @@ impl AppState {
     /// Effects may call this helper while holding the appropriate repaint context.
     pub fn apply_server_msg(&mut self, msg: ServerMsg) {
         match msg {
-            ServerMsg::Welcome => {
-                self.connection_status = ConnectionStatus::Connected;
-                self.last_info = Some("Connected".into());
-                self.last_error = None;
-            }
             ServerMsg::State(gs) => {
+                self.connection_status = ConnectionStatus::Connected;
                 self.game_state = Some(gs.clone());
+                self.last_error = None;
                 self.last_info = None;
             }
             ServerMsg::Error(e) => {

@@ -339,9 +339,7 @@ pub async fn handle_client_msg(
         mcg_shared::ClientMsg::Action { player_id, action } => {
             handle_action(state, player_id, action).await
         }
-        mcg_shared::ClientMsg::Subscribe => {
-            mcg_shared::ServerMsg::Error("not supported".into())
-        }
+        mcg_shared::ClientMsg::Subscribe => mcg_shared::ServerMsg::Error("not supported".into()),
         mcg_shared::ClientMsg::RequestState => handle_request_state(state).await,
         mcg_shared::ClientMsg::NextHand => handle_next_hand(state).await,
         mcg_shared::ClientMsg::NewGame { players } => handle_new_game(state, players).await,
