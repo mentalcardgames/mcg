@@ -38,6 +38,7 @@ pub enum ClientMsg {
         player_id: PlayerId,
         action: PlayerAction,
     },
+    Subscribe,
     RequestState,
     NextHand,
     NewGame {
@@ -49,11 +50,6 @@ pub enum ClientMsg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum ServerMsg {
-    /// A simple welcome/acknowledgement sent by the server when a client
-    /// first connects. The server no longer assigns or embeds a per-connection
-    /// `PlayerId` in this message; transports or session managers may choose
-    /// to emit their own client-specific information separately if needed.
-    Welcome,
     State(GameStatePublic),
     Error(String),
 }

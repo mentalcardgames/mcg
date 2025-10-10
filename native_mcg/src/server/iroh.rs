@@ -19,6 +19,7 @@ use anyhow::{Context, Result};
 
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
+use tokio::sync::broadcast;
 
 use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
@@ -184,114 +185,108 @@ async fn handle_iroh_connection(
     let (mut send, recv) = connection.accept_bi().await?;
     let mut reader = BufReader::new(recv);
 
-    // Log connect
-    tracing::info!("[IROH CONNECT] New Game Client");
+    tracing::info!("[IROH CONNECT] Client");
 
-    // Send welcome + initial state immediately (do not require a Join/NewGame
-    // as the first client message). Transport-agnostic behaviour: each transport
-    // offers the same entrypoint: client can send any supported `ClientMsg`
-    // after receiving `Welcome` and an initial `State`.
-    send_welcome_and_state(&state, &mut send).await;
+    let mut subscription: Option<broadcast::Receiver<ServerMsg>> = None;
 
-    // Subscribe to global broadcasts so this iroh connection receives state updates
-    // caused by other transports (e.g. websocket clients).
-    let mut rx = state.broadcaster.subscribe();
-
-    // Now enter a loop that waits for either incoming client lines or broadcast messages.
     let mut line = String::new();
     loop {
         line.clear();
-        tokio::select! {
-            // Broadcast events from server (State/Error/Welcome) forwarded to this client
-            biased;
-            recv = rx.recv() => {
-                match recv {
-                    Ok(sm) => {
-                        if let Err(e) = send_server_msg_to_writer(&mut send, &sm).await {
-                            tracing::error!(error = %e, "iroh send error while forwarding broadcast");
-                            // On write failure, break the connection loop
+        if let Some(rx) = subscription.as_mut() {
+            tokio::select! {
+                recv = rx.recv() => {
+                    match recv {
+                        Ok(sm) => {
+                            if let Err(e) = send_server_msg_to_writer(&mut send, &sm).await {
+                                tracing::error!(error = %e, "iroh send error while forwarding broadcast");
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
                             break;
                         }
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                        // missed messages, continue
-                        continue;
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                        break;
+                }
+                res = reader.read_line(&mut line) => {
+                    match res {
+                        Ok(0) => break,
+                        Ok(_) => {
+                            if !handle_client_line(&state, &mut send, &mut subscription, line.trim()).await? {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "iroh read error");
+                            break;
+                        }
                     }
                 }
             }
-
-            // Incoming client messages (newline-delimited JSON)
-            res = reader.read_line(&mut line) => {
-                match res {
-                    Ok(0) => break, // connection closed
-                    Ok(_) => {
-                        let trimmed = line.trim();
-                        if trimmed.is_empty() {
-                            continue;
-                        }
-                        match serde_json::from_str::<ClientMsg>(trimmed) {
-                            Ok(cm) => {
-                                // Delegate processing of client messages to a helper.
-                                if let Err(e) = process_client_msg(&state, &mut send, cm).await {
-                                    tracing::error!(error = %e, "error processing client message");
-                                    // On unexpected processing error, break the loop to close connection.
-                                    break;
-                                }
-                            }
-                            Err(e) => {
-                                let _ = send_server_msg_to_writer(&mut send, &ServerMsg::Error(format!("Invalid JSON message: {}", e))).await;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(error = %e, "iroh read error");
+        } else {
+            match reader.read_line(&mut line).await {
+                Ok(0) => break,
+                Ok(_) => {
+                    if !handle_client_line(&state, &mut send, &mut subscription, line.trim()).await? {
                         break;
                     }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "iroh read error");
+                    break;
                 }
             }
         }
     }
 
-    tracing::info!("[IROH DISCONNECT] New Game Client");
+    tracing::info!("[IROH DISCONNECT] Client");
     // Close the send side politely if available
     let _ = send.finish();
     connection.closed().await;
     Ok(())
 }
 
-/// Send a Welcome and the initial State to the connected client.
-/// Errors while writing are logged but do not abort the connection.
-async fn send_welcome_and_state<W>(state: &AppState, send: &mut W)
+async fn handle_client_line<W>(
+    state: &AppState,
+    send: &mut W,
+    subscription: &mut Option<broadcast::Receiver<ServerMsg>>,
+    trimmed: &str,
+) -> Result<bool>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
-    if let Err(e) = send_server_msg_to_writer(send, &ServerMsg::Welcome).await {
-        tracing::error!(error = %e, "iroh send error");
+    if trimmed.is_empty() {
+        return Ok(true);
     }
 
-    // Send initial state directly to this client (same behaviour as websocket)
-    if let Some(gs) = crate::server::current_state_public(state).await {
-        if let Err(e) = send_server_msg_to_writer(send, &ServerMsg::State(gs)).await {
-            tracing::error!(error = %e, "iroh send error");
+    match serde_json::from_str::<ClientMsg>(trimmed) {
+        Ok(ClientMsg::Subscribe) => {
+            if subscription.is_some() {
+                let _ = send_server_msg_to_writer(send, &ServerMsg::Error("already subscribed".into())).await;
+                return Ok(true);
+            }
+            let sub = crate::server::subscribe_connection(state).await;
+            if let Some(gs) = sub.initial_state {
+                send_server_msg_to_writer(send, &ServerMsg::State(gs)).await?;
+            }
+            *subscription = Some(sub.receiver);
+            Ok(true)
+        }
+        Ok(other) => {
+            tracing::debug!(client_msg = ?other, "iroh received client message");
+            let resp = crate::server::handle_client_msg(state, other).await;
+            if let Err(e) = send_server_msg_to_writer(send, &resp).await {
+                tracing::error!(error = %e, "iroh send error while forwarding response");
+                return Err(e.into());
+            }
+            Ok(true)
+        }
+        Err(e) => {
+            let msg = ServerMsg::Error(format!("Invalid JSON message: {}", e));
+            let _ = send_server_msg_to_writer(send, &msg).await;
+            Ok(true)
         }
     }
-}
-
-/// Process a single ClientMsg received after the initial handshake.
-/// This encapsulates the Action/RequestState/NextHand/NewGame handling.
-async fn process_client_msg<W>(state: &AppState, send: &mut W, cm: ClientMsg) -> Result<()>
-where
-    W: tokio::io::AsyncWrite + Unpin + Send,
-{
-    // Delegate handling to the centralized backend handler to ensure consistent behavior.
-    tracing::debug!(client_msg = ?cm, "iroh received client message");
-    let resp = crate::server::handle_client_msg(state, cm).await;
-
-    if let Err(e) = send_server_msg_to_writer(send, &resp).await {
-        tracing::error!(error = %e, "iroh send error while forwarding response");
-    }
-    Ok(())
 }

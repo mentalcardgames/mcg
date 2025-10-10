@@ -47,6 +47,7 @@ impl Config {
             }
 
             let cfg = Config::default();
+            //TODO: use ordinary context (probably)
             let toml_text = toml::to_string_pretty(&cfg)
                 .with_context(|| "serializing default config to TOML")?;
             fs::write(path, toml_text)

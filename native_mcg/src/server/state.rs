@@ -34,7 +34,7 @@ impl AppState {
     /// Create a new AppState with the given config and optional config path
     // TODO: config path should not be optional
     pub fn new(config: crate::config::Config, config_path: Option<PathBuf>) -> Self {
-        let (tx, _rx) = broadcast::channel(16);
+        let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
         Self {
             lobby: Arc::new(RwLock::new(Lobby::default())),
             broadcaster: tx,
@@ -76,6 +76,22 @@ impl Default for AppState {
             config: std::sync::Arc::new(RwLock::new(crate::config::Config::default())),
             config_path: None,
         }
+    }
+}
+
+/// Represents a subscription to broadcast state updates.
+pub struct Subscription {
+    pub receiver: broadcast::Receiver<mcg_shared::ServerMsg>,
+    pub initial_state: Option<GameStatePublic>,
+}
+
+/// Register a connection as a broadcast subscriber and capture the current state.
+pub async fn subscribe_connection(state: &AppState) -> Subscription {
+    let receiver = state.broadcaster.subscribe();
+    let initial_state = current_state_public(state).await;
+    Subscription {
+        receiver,
+        initial_state,
     }
 }
 
@@ -322,6 +338,9 @@ pub async fn handle_client_msg(
     match cm {
         mcg_shared::ClientMsg::Action { player_id, action } => {
             handle_action(state, player_id, action).await
+        }
+        mcg_shared::ClientMsg::Subscribe => {
+            mcg_shared::ServerMsg::Error("not supported".into())
         }
         mcg_shared::ClientMsg::RequestState => handle_request_state(state).await,
         mcg_shared::ClientMsg::NextHand => handle_next_hand(state).await,
