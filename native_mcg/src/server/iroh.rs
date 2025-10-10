@@ -293,7 +293,7 @@ where
             let resp = crate::server::handle_client_msg(state, other).await;
             if let Err(e) = send_server_msg_to_writer(send, &resp).await {
                 tracing::error!(error = %e, "iroh send error while forwarding response");
-                return Err(e.into());
+                return Err(e);
             }
             Ok(true)
         }
