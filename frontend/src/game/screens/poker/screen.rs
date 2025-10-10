@@ -136,7 +136,13 @@ impl PokerOnlineScreen {
             );
         }
 
-        self.apply_player_updates(bot_updates, to_remove, to_rename, apply_rename, cancel_rename);
+        self.apply_player_updates(
+            bot_updates,
+            to_remove,
+            to_rename,
+            apply_rename,
+            cancel_rename,
+        );
     }
 
     fn render_player_row(
@@ -151,15 +157,15 @@ impl PokerOnlineScreen {
         cancel_rename: &mut bool,
     ) {
         ui.label(format!("{}", player.id));
-        
+
         // Check if this player is being renamed
         if self.player_manager.is_renaming(player.id) {
             // Show text edit field for renaming
             let response = ui.text_edit_singleline(self.player_manager.get_rename_buffer_mut());
-            
+
             // Auto-focus the text field when rename starts
             response.request_focus();
-            
+
             // Check for Enter key to confirm rename
             if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 *apply_rename = true;
@@ -176,7 +182,15 @@ impl PokerOnlineScreen {
         }
 
         ui.horizontal(|ui| {
-            self.render_player_actions(ui, player, idx, to_remove, to_rename, apply_rename, cancel_rename);
+            self.render_player_actions(
+                ui,
+                player,
+                idx,
+                to_remove,
+                to_rename,
+                apply_rename,
+                cancel_rename,
+            );
         });
         ui.end_row();
     }
