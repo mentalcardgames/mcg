@@ -53,7 +53,9 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     let public_path = path_for_config(state.config_path.as_deref());
     match PublicInfo::write_iroh_node_id(&public_path, pk.to_string()) {
         Ok(_) => tracing::info!(path = %public_path.display(), "stored iroh node id"),
-        Err(e) => tracing::warn!(error = %e, path = %public_path.display(), "failed to persist iroh node id"),
+        Err(e) => {
+            tracing::warn!(error = %e, path = %public_path.display(), "failed to persist iroh node id")
+        }
     }
 
     // Start the accept loop which will spawn a handler per connection
