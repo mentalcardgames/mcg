@@ -16,6 +16,7 @@ use std::path::PathBuf;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Use clap-based CLI for parsing
+    // TODO extract config init into utility function
     let cli = cli::ServerCli::parse();
 
     let config_path: PathBuf = cli.config.clone();

@@ -15,3 +15,4 @@ dist
 .crush
 server.log
 mcg-server.toml
+tags

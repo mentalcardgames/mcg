@@ -32,6 +32,7 @@ pub struct AppState {
 
 impl AppState {
     /// Create a new AppState with the given config and optional config path
+    // TODO: config path should not be optional
     pub fn new(config: crate::config::Config, config_path: Option<PathBuf>) -> Self {
         let (tx, _rx) = broadcast::channel(16);
         Self {
@@ -105,7 +106,7 @@ pub async fn create_new_game(
             cards: [
                 Card::new(CardRank::Ace, CardSuit::Clubs),
                 Card::new(CardRank::Ace, CardSuit::Clubs),
-            ], // Empty cards initially
+            ], // Default cards initially
             has_folded: false,
             all_in: false,
         };
@@ -116,6 +117,7 @@ pub async fn create_new_game(
 
     // Create the game with the players
     let game = Game::with_players(game_players)
+        // TODO: evaluate with_context or context should be used
         .with_context(|| "creating new game with specified players")?;
 
     lobby.game = Some(game);
@@ -170,6 +172,7 @@ pub async fn broadcast_state(state: &AppState) {
 /// underlying Game::apply_player_action returned an error, otherwise None.
 pub async fn apply_action_to_game(
     state: &AppState,
+    // TODO: should this be a playerid?
     actor: usize,
     action: mcg_shared::PlayerAction,
 ) -> Option<String> {
@@ -201,6 +204,7 @@ pub async fn validate_and_apply_action(
     // Resolve provided player_id to the internal player index used by Game
     let actor_idx = {
         let lobby_r = state.lobby.read().await;
+        // TODO: extract this into utility function
         if let Some(game) = &lobby_r.game {
             match game.players.iter().position(|p| p.id == player_id) {
                 Some(idx) => idx,
@@ -232,6 +236,9 @@ pub async fn validate_and_apply_action(
 }
 
 /// Broadcast the current state (and trigger bots if enabled).
+// TODO: reexamine if this is the right way to trigger bots. It seems scattered, also bots should
+// never block operations. Requests should be handled between and during bot turns. Just like with a real player, i can request state while someone is still making decisions
+// player
 pub async fn broadcast_and_drive(state: &AppState) {
     // Broadcast updated state to subscribers.
     broadcast_state(state).await;
@@ -264,6 +271,8 @@ async fn handle_action(
 /// Handle a RequestState message from a client
 async fn handle_request_state(state: &AppState) -> mcg_shared::ServerMsg {
     if let Some(gs) = current_state_public(state).await {
+        // TODO: simplify when bots are driven. Also, requesting the state should answer
+        // immesiately, not wait until the bots are done
         broadcast_and_drive(state).await;
         mcg_shared::ServerMsg::State(gs)
     } else {
