@@ -51,9 +51,6 @@ pub struct Lobby {
     /// List of player IDs that should be driven by bots. Kept in the backend so
     /// the game engine remains unaware of bot status.
     pub(crate) bots: Vec<PlayerId>,
-    /// Indicates whether a server-side turn-driving loop is currently running.
-    /// Prevents concurrent drive loops from multiple transports.
-    pub(crate) driving: bool,
     /// Bot manager for AI decision making
     pub(crate) bot_manager: BotManager,
 }
@@ -65,7 +62,6 @@ impl Default for Lobby {
             game: None,
             last_printed_log_len: 0,
             bots: Vec::new(),
-            driving: false,
             bot_manager: BotManager::default(),
         }
     }
@@ -162,8 +158,12 @@ pub async fn broadcast_state(state: &AppState) {
         // Broadcast the new state to all subscribers.
         let subscriber_count = state.broadcaster.receiver_count();
         let current_player_name = mcg_shared::PlayerPublic::name_of(&gs.players, gs.to_act);
-        tracing::info!("📡 Broadcasting game state to {} subscribers (stage: {:?}, to_act: {})",
-            subscriber_count, gs.stage, current_player_name);
+        tracing::info!(
+            "📡 Broadcasting game state to {} subscribers (stage: {:?}, to_act: {})",
+            subscriber_count,
+            gs.stage,
+            current_player_name
+        );
         let _ = state.broadcaster.send(mcg_shared::ServerMsg::State(gs));
     }
 }
@@ -235,20 +235,6 @@ pub async fn validate_and_apply_action(
     Ok(())
 }
 
-/// Broadcast the current state (and trigger bots if enabled).
-// TODO: reexamine if this is the right way to trigger bots. It seems scattered, also bots should
-// never block operations. Requests should be handled between and during bot turns. Just like with a real player, i can request state while someone is still making decisions
-// player
-pub async fn broadcast_and_drive(state: &AppState) {
-    // Broadcast updated state to subscribers.
-    broadcast_state(state).await;
-    // Drive bots using the server module implementation
-    let config = state.config.read().await;
-    let (min_ms, max_ms) = config.bot_delay_range();
-    tracing::debug!("🎯 Triggering bot driver (delay: {}ms-{}ms)", min_ms, max_ms);
-    super::bot_driver::drive_bots_with_delays(state, min_ms, max_ms).await;
-}
-
 /// Handle an Action message from a client
 async fn handle_action(
     state: &AppState,
@@ -257,7 +243,7 @@ async fn handle_action(
 ) -> mcg_shared::ServerMsg {
     match validate_and_apply_action(state, player_id, action.clone()).await {
         Ok(()) => {
-            broadcast_and_drive(state).await;
+            broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
                 mcg_shared::ServerMsg::State(gs)
             } else {
@@ -271,9 +257,7 @@ async fn handle_action(
 /// Handle a RequestState message from a client
 async fn handle_request_state(state: &AppState) -> mcg_shared::ServerMsg {
     if let Some(gs) = current_state_public(state).await {
-        // TODO: simplify when bots are driven. Also, requesting the state should answer
-        // immesiately, not wait until the bots are done
-        broadcast_and_drive(state).await;
+        broadcast_state(state).await;
         mcg_shared::ServerMsg::State(gs)
     } else {
         mcg_shared::ServerMsg::Error("No active game. Please start a new game first.".into())
@@ -294,7 +278,7 @@ async fn handle_next_hand(state: &AppState) -> mcg_shared::ServerMsg {
 
     match start_new_hand_and_print(state).await {
         Ok(()) => {
-            broadcast_and_drive(state).await;
+            broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
                 mcg_shared::ServerMsg::State(gs)
             } else {
@@ -312,7 +296,7 @@ async fn handle_new_game(
 ) -> mcg_shared::ServerMsg {
     match create_new_game(state, players).await {
         Ok(()) => {
-            broadcast_and_drive(state).await;
+            broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
                 mcg_shared::ServerMsg::State(gs)
             } else {
@@ -365,5 +349,3 @@ pub async fn start_new_hand_and_print(state: &AppState) -> Result<()> {
     }
     Ok(())
 }
-
-

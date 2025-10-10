@@ -35,8 +35,13 @@ impl ConnectionManager {
         app_state.settings.server_address = self.edit_server_address.clone();
 
         // Create a shared message queue using Rc<RefCell<VecDeque<ServerMsg>>>
-        let message_queue = std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<mcg_shared::ServerMsg>::new()));
-        let error_queue = std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<String>::new()));
+        let message_queue =
+            std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<
+                mcg_shared::ServerMsg,
+            >::new()));
+        let error_queue = std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<
+            String,
+        >::new()));
 
         // Clone queues and context for each closure
         let msg_queue_for_msg = message_queue.clone();

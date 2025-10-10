@@ -44,7 +44,6 @@ pub fn action_kind_text(kind: &ActionKind) -> (String, Color32) {
     }
 }
 
-
 pub fn name_of(players: &[PlayerPublic], id: PlayerId) -> String {
     PlayerPublic::name_of(players, id)
 }

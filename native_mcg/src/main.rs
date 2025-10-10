@@ -3,9 +3,9 @@
 use native_mcg::{cli, config, server};
 
 use anyhow::Context;
-use server::AppState;
 use clap::Parser;
 use config::Config;
+use server::AppState;
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
 
@@ -55,8 +55,9 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize tracing subscriber for logging; default to INFO if RUST_LOG not set
     // Reduce iroh verbosity to avoid spam
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,iroh=warn,iroh::magicsock=error"));
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        tracing_subscriber::EnvFilter::new("info,iroh=warn,iroh::magicsock=error")
+    });
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Run the server

@@ -1,84 +1,84 @@
-use crate::bot::BotContext;
 use super::state::AppState;
+use crate::bot::BotContext;
+use mcg_shared::{PlayerId, Stage};
+use rand::random;
+use tokio::time::{sleep, Duration};
 
-/// Drive bots with non-blocking, event-driven architecture.
-/// This function processes bot actions one at a time with immediate broadcasts.
-pub async fn drive_bots_with_delays(state: &AppState, min_ms: u64, max_ms: u64) {
-    // Ensure only one drive loop runs at a time.
-    {
-        let mut lobby = state.lobby.write().await;
-        if lobby.driving {
-            return;
-        }
-        lobby.driving = true;
-    }
+const IDLE_SLEEP_MS: u64 = 50;
 
-    // Process bots in a loop, but broadcast after each action
+/// Continuously drive bots whenever it is their turn.
+///
+/// This loop runs for the lifetime of the server. When no bots are scheduled to
+/// act it idles with a short sleep, otherwise it produces a single bot action,
+/// broadcasts the state, and waits for a randomized delay before re-checking.
+pub async fn run_bot_driver(state: AppState) {
+    let mut last_logged_bot: Option<PlayerId> = None;
+    let mut logged_idle = false;
+
     loop {
-        // Check if we should process a bot action
-        let (should_process_bot, current_player_info) = {
-            let lobby_r = state.lobby.read().await;
-            if lobby_r.game.is_none() {
-                tracing::debug!("Bot driver: No game present, stopping");
-                break;
-            }
-
-            if let Some(game) = &lobby_r.game {
-                if game.stage == mcg_shared::Stage::Showdown {
-                    tracing::debug!("Bot driver: Game in showdown, stopping");
-                    (false, None)
-                } else {
-                    let idx = game.to_act;
-                    if let Some(player) = game.players.get(idx) {
-                        let is_bot = lobby_r.bots.contains(&player.id);
-                        let info = format!("Player {} ({})", player.name, if is_bot { "BOT" } else { "HUMAN" });
-                        tracing::debug!("Bot driver: Current player to act: {}, is_bot: {}", info, is_bot);
-                        (is_bot, Some(info))
-                    } else {
-                        tracing::warn!("Bot driver: Invalid player index {}", idx);
-                        (false, None)
-                    }
+        let bot_to_act = {
+            let lobby = state.lobby.read().await;
+            let game = match &lobby.game {
+                Some(game) if game.stage != Stage::Showdown => Some(game),
+                _ => {
+                    last_logged_bot = None;
+                    None
                 }
-            } else {
-                (false, None)
-            }
+            };
+
+            game.and_then(|game| {
+                let idx = game.to_act;
+                game.players.get(idx).and_then(|player| {
+                    if lobby.bots.contains(&player.id) {
+                        Some((player.id, player.name.clone()))
+                    } else {
+                        None
+                    }
+                })
+            })
         };
 
-        if !should_process_bot {
-            if let Some(info) = current_player_info {
-                tracing::debug!("Bot driver: Stopping - current player is human: {}", info);
+        if let Some((bot_id, bot_name)) = bot_to_act {
+            if last_logged_bot != Some(bot_id) {
+                tracing::debug!(player = %bot_name, player_id = ?bot_id, "Bot driver: bot turn detected");
+                last_logged_bot = Some(bot_id);
             }
-            break;
+            logged_idle = false;
+
+            let (min_delay, max_delay) = {
+                let cfg = state.config.read().await;
+                cfg.bot_delay_range()
+            };
+
+            if !process_single_bot_action(&state).await {
+                tracing::warn!(player = %bot_name, player_id = ?bot_id, "Bot driver: bot action failed or skipped");
+                sleep(Duration::from_millis(IDLE_SLEEP_MS)).await;
+                continue;
+            }
+
+            crate::server::broadcast_state(&state).await;
+
+            let delay_ms = pick_delay(min_delay, max_delay);
+            tracing::trace!(delay_ms, "Bot driver: sleeping before next bot action");
+            sleep(Duration::from_millis(delay_ms)).await;
+        } else {
+            if !logged_idle {
+                tracing::trace!("Bot driver: idle, waiting for bot turn");
+                logged_idle = true;
+            }
+            last_logged_bot = None;
+            sleep(Duration::from_millis(IDLE_SLEEP_MS)).await;
         }
-
-        // Process exactly ONE bot action
-        let bot_action_result = process_single_bot_action(state).await;
-
-        // IMMEDIATELY broadcast the state after each bot action
-        tracing::debug!("Broadcasting state after bot action, result: {}", bot_action_result);
-        crate::server::broadcast_state(state).await;
-
-        if !bot_action_result {
-            break; // Stop if bot action failed
-        }
-
-        // Calculate delay for next bot action
-        let now_ns = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-            Ok(d) => d.subsec_nanos() as u64,
-            Err(_) => 0u64,
-        };
-        let span = max_ms.saturating_sub(min_ms);
-        let delay = min_ms + (now_ns % span.max(1));
-
-        // Sleep between bot actions (but clients already received the update)
-        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
     }
+}
 
-    // Clear driving flag
-    {
-        let mut lobby = state.lobby.write().await;
-        lobby.driving = false;
+fn pick_delay(min_ms: u64, max_ms: u64) -> u64 {
+    if max_ms <= min_ms {
+        return min_ms;
     }
+    let span = max_ms - min_ms;
+    let jitter = random::<u64>() % (span + 1);
+    min_ms + jitter
 }
 
 /// Process a single bot action and return whether it was successful
@@ -134,8 +134,12 @@ async fn process_single_bot_action(state: &AppState) -> bool {
         // Apply the bot action
         match game.apply_player_action(actor_idx, action) {
             Ok(_) => {
-                tracing::info!("🤖 Bot {} took action: {:?} (stack: {})",
-                    player_name, action_for_log, player_stack);
+                tracing::info!(
+                    "🤖 Bot {} took action: {:?} (stack: {})",
+                    player_name,
+                    action_for_log,
+                    player_stack
+                );
                 true
             }
             Err(e) => {

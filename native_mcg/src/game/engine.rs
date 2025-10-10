@@ -200,7 +200,6 @@ impl Game {
         }
         Ok(())
     }
-
 }
 
 #[cfg(test)]

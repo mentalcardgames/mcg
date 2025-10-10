@@ -13,8 +13,8 @@ use tokio::sync::broadcast;
 use owo_colors::OwoColorize;
 use std::io::IsTerminal;
 
-use crate::server::state::AppState;
 use crate::pretty;
+use crate::server::state::AppState;
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))

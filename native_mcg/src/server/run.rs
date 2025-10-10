@@ -56,6 +56,14 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
         });
     }
 
+    // Continuously drive bots in the background.
+    {
+        let state_clone = state.clone();
+        tokio::spawn(async move {
+            crate::server::bot_driver::run_bot_driver(state_clone).await;
+        });
+    }
+
     let display_addr = if addr.ip().to_string() == "127.0.0.1" {
         format!("localhost:{}", addr.port())
     } else {
