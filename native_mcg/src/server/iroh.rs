@@ -21,6 +21,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::sync::broadcast;
 
+use crate::public::{path_for_config, PublicInfo};
 use crate::server::state::subscribe_connection;
 use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
@@ -48,6 +49,12 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // Print node id for CLI users
     let pk = endpoint.node_id();
     tracing::info!(iroh_node_id = %pk);
+
+    let public_path = path_for_config(state.config_path.as_deref());
+    match PublicInfo::write_iroh_node_id(&public_path, pk.to_string()) {
+        Ok(_) => tracing::info!(path = %public_path.display(), "stored iroh node id"),
+        Err(e) => tracing::warn!(error = %e, path = %public_path.display(), "failed to persist iroh node id"),
+    }
 
     // Start the accept loop which will spawn a handler per connection
     start_iroh_accept_loop(endpoint, state.clone());

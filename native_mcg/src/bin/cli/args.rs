@@ -66,7 +66,7 @@ pub enum ActionKind {
 pub enum TransportKind {
     WebSocket(String),
     Http(String),
-    Iroh(String),
+    Iroh { peer: Option<String> },
 }
 
 impl std::str::FromStr for TransportKind {
@@ -79,13 +79,17 @@ impl std::str::FromStr for TransportKind {
         let lower = s.to_ascii_lowercase();
 
         // Explicit iroh: prefix
+        if lower == "iroh" {
+            return Ok(TransportKind::Iroh { peer: None });
+        }
         if lower.starts_with("iroh:") {
-            let peer = s["iroh:".len()..].to_string();
+            let peer = s["iroh:".len()..].trim();
             if peer.is_empty() {
                 return Err("iroh transport requires a peer id: --transport 'iroh:PEER'".into());
-            } else {
-                return Ok(TransportKind::Iroh(peer));
             }
+            return Ok(TransportKind::Iroh {
+                peer: Some(peer.to_string()),
+            });
         }
 
         // Full URL forms: http(s) -> Http, ws(s) -> WebSocket
@@ -109,7 +113,8 @@ impl std::fmt::Display for TransportKind {
         match self {
             TransportKind::WebSocket(addr) => write!(f, "{}", addr),
             TransportKind::Http(addr) => write!(f, "{}", addr),
-            TransportKind::Iroh(peer) => write!(f, "iroh:{}", peer),
+            TransportKind::Iroh { peer: Some(peer) } => write!(f, "iroh:{}", peer),
+            TransportKind::Iroh { peer: None } => write!(f, "iroh"),
         }
     }
 }
@@ -138,7 +143,13 @@ mod tests {
     #[test]
     fn parse_iroh() {
         let i = TransportKind::from_str("iroh:zb2examplepeer").expect("should parse iroh");
-        assert!(matches!(i, TransportKind::Iroh(ref p) if p == "zb2examplepeer"));
+        assert!(matches!(i, TransportKind::Iroh { peer: Some(ref p) } if p == "zb2examplepeer"));
+    }
+
+    #[test]
+    fn parse_iroh_without_peer() {
+        let i = TransportKind::from_str("iroh").expect("should parse bare iroh");
+        assert!(matches!(i, TransportKind::Iroh { peer: None }));
     }
 
     #[test]
@@ -157,5 +168,7 @@ mod tests {
         assert_eq!(w.to_string(), "ws://localhost:3000/ws");
         let i = TransportKind::from_str("iroh:zb2peer").unwrap();
         assert_eq!(i.to_string(), "iroh:zb2peer");
+        let no_peer = TransportKind::from_str("iroh").unwrap();
+        assert_eq!(no_peer.to_string(), "iroh");
     }
 }

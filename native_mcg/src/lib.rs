@@ -4,6 +4,7 @@ pub mod config;
 pub mod game;
 pub mod poker;
 pub mod pretty;
+pub mod public;
 pub mod server;
 pub mod transport;
 
