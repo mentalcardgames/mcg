@@ -93,7 +93,6 @@ impl WebSocketConnection {
 
                 // onmessage: Parse ServerMsg and process immediately
                 let on_message_clone = on_message.clone();
-                let on_error_clone = on_error.clone();
                 let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
                     if let Some(txt) = e.data().as_string() {
                         if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {

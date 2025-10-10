@@ -30,7 +30,6 @@ pub async fn newgame_handler(
             // Creating a new game failing is server-side error historically.
             (StatusCode::INTERNAL_SERVER_ERROR, Json(ServerMsg::Error(e))).into_response()
         }
-        other => (StatusCode::OK, Json(other)).into_response(),
     }
 }
 
@@ -49,7 +48,6 @@ pub async fn action_handler(
             (StatusCode::OK, Json(ServerMsg::State(gs))).into_response()
         }
         ServerMsg::Error(e) => (StatusCode::BAD_REQUEST, Json(ServerMsg::Error(e))).into_response(),
-        other => (StatusCode::OK, Json(other)).into_response(),
     }
 }
 
@@ -62,7 +60,6 @@ pub async fn state_handler(State(state): State<AppState>) -> impl IntoResponse {
             // No active game historically returned NOT_FOUND; map error to NOT_FOUND when appropriate.
             (StatusCode::NOT_FOUND, Json(ServerMsg::Error(e))).into_response()
         }
-        other => (StatusCode::OK, Json(other)).into_response(),
     }
 }
 
@@ -74,6 +71,5 @@ pub async fn next_hand_handler(State(state): State<AppState>) -> impl IntoRespon
         ServerMsg::Error(e) => {
             (StatusCode::INTERNAL_SERVER_ERROR, Json(ServerMsg::Error(e))).into_response()
         }
-        other => (StatusCode::OK, Json(other)).into_response(),
     }
 }

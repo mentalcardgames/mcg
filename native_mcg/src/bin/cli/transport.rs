@@ -218,7 +218,6 @@ pub async fn run_once_http(
                     eprintln!("Server error: {}", e);
                     Ok(None)
                 }
-                _ => Ok(None),
             }
         }
         Ok(Err(e)) => Err(e.into()),

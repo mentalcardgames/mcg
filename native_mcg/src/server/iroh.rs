@@ -21,6 +21,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::sync::broadcast;
 
+use crate::server::state::subscribe_connection;
 use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
 use mcg_shared::{ClientMsg, ServerMsg};
@@ -271,7 +272,7 @@ where
                         .await;
                 return Ok(true);
             }
-            let sub = crate::server::subscribe_connection(state).await;
+            let sub = subscribe_connection(state).await;
             if let Some(gs) = sub.initial_state {
                 send_server_msg_to_writer(send, &ServerMsg::State(gs)).await?;
             }

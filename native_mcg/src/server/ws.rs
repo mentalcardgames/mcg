@@ -10,7 +10,7 @@ use axum::{
 use futures::StreamExt;
 use tokio::sync::broadcast;
 
-use crate::server::state::AppState;
+use crate::server::state::{subscribe_connection, AppState};
 use owo_colors::OwoColorize;
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
@@ -18,7 +18,8 @@ pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
-    tracing::info!(%format!("{} {}", "[CONNECT]".bold().green(), "Client".bold()));
+    let hello = format!("{} {}", "[CONNECT]".bold().green(), "Client".bold());
+    tracing::info!("{}", hello);
 
     let mut subscription: Option<broadcast::Receiver<mcg_shared::ServerMsg>> = None;
 
@@ -99,7 +100,7 @@ async fn handle_client_text(
                 .await;
                 return;
             }
-            let sub = crate::server::subscribe_connection(state).await;
+            let sub = subscribe_connection(state).await;
             if let Some(gs) = sub.initial_state {
                 send_ws(socket, &mcg_shared::ServerMsg::State(gs)).await;
             }
