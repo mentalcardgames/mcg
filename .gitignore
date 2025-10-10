@@ -16,3 +16,4 @@ dist
 server.log
 mcg-server.toml
 tags
+mcg_server_public.toml
