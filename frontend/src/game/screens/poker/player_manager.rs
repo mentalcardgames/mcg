@@ -4,22 +4,6 @@ use mcg_shared::{PlayerConfig, PlayerId};
 pub fn render_player_setup(ui: &mut Ui, _ctx: &Context) {
     ui.heading("Player Setup");
     ui.add_space(8.0);
-
-    // This will be implemented by the screen using PlayerManager
-    ui.add_space(16.0);
-
-    render_start_game_button(ui);
-    add_game_instructions(ui);
-}
-
-fn render_start_game_button(ui: &mut Ui) {
-    if ui.button("Start Game").clicked() {
-        // This will be handled by the screen
-    }
-}
-
-fn add_game_instructions(_ui: &mut Ui) {
-    // Instructions will be handled by the screen
 }
 
 pub struct PlayerManager {
