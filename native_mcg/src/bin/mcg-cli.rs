@@ -2,7 +2,7 @@ mod cli;
 
 use anyhow::anyhow;
 use clap::Parser;
-use cli::{generate_demo_players, Cli, Commands, TransportKind};
+use cli::{generate_demo_players, Cli, Commands, DisplayMode, MessagePrinter, TransportKind};
 use mcg_shared::{ClientMsg, PlayerAction};
 use native_mcg::public::PublicInfo;
 
@@ -19,23 +19,24 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::State => {
-            let latest = match &transport {
+            let mut printer = MessagePrinter::new(cli.json, DisplayMode::FullState);
+            match &transport {
                 TransportKind::Iroh { .. } => {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, ClientMsg::RequestState, cli.wait_ms).await?
+                    cli::run_once_iroh(peer, ClientMsg::RequestState, cli.wait_ms, &mut printer)
+                        .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(addr, ClientMsg::RequestState, cli.wait_ms).await?
+                    cli::run_once_http(addr, ClientMsg::RequestState, cli.wait_ms, &mut printer)
+                        .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(addr, ClientMsg::RequestState, cli.wait_ms).await?
+                    cli::run_once_ws(addr, ClientMsg::RequestState, cli.wait_ms, &mut printer)
+                        .await?
                 }
             };
-            if let Some(state) = latest {
-                cli::output_state(&state, cli.json);
-            }
         }
         Commands::Action { kind, amount } => {
             let pa = match kind {
@@ -43,7 +44,8 @@ async fn main() -> anyhow::Result<()> {
                 cli::ActionKind::CheckCall => PlayerAction::CheckCall,
                 cli::ActionKind::Bet => PlayerAction::Bet(amount),
             };
-            let latest = match &transport {
+            let mut printer = MessagePrinter::new(cli.json, DisplayMode::FullState);
+            match &transport {
                 TransportKind::Iroh { .. } => {
                     let peer = resolved_iroh_peer
                         .as_ref()
@@ -55,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
                             action: pa,
                         },
                         cli.wait_ms,
+                        &mut printer,
                     )
                     .await?
                 }
@@ -66,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
                             action: pa,
                         },
                         cli.wait_ms,
+                        &mut printer,
                     )
                     .await?
                 }
@@ -77,49 +81,50 @@ async fn main() -> anyhow::Result<()> {
                             action: pa,
                         },
                         cli.wait_ms,
+                        &mut printer,
                     )
                     .await?
                 }
             };
-            if let Some(state) = latest {
-                cli::output_state(&state, cli.json);
-            }
         }
         Commands::NextHand => {
-            let latest = match &transport {
+            let mut printer = MessagePrinter::new(cli.json, DisplayMode::FullState);
+            match &transport {
                 TransportKind::Iroh { .. } => {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, ClientMsg::NextHand, cli.wait_ms).await?
+                    cli::run_once_iroh(peer, ClientMsg::NextHand, cli.wait_ms, &mut printer)
+                        .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(addr, ClientMsg::NextHand, cli.wait_ms).await?
+                    cli::run_once_http(addr, ClientMsg::NextHand, cli.wait_ms, &mut printer)
+                        .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(addr, ClientMsg::NextHand, cli.wait_ms).await?
+                    cli::run_once_ws(addr, ClientMsg::NextHand, cli.wait_ms, &mut printer)
+                        .await?
                 }
             };
-            if let Some(state) = latest {
-                cli::output_state(&state, cli.json);
-            }
         }
         Commands::NewGame => {
             let players = generate_demo_players(3);
             let msg = ClientMsg::NewGame { players };
-            let latest = match &transport {
+            let mut printer = MessagePrinter::new(cli.json, DisplayMode::FullState);
+            match &transport {
                 TransportKind::Iroh { .. } => {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, msg, cli.wait_ms).await?
+                    cli::run_once_iroh(peer, msg, cli.wait_ms, &mut printer).await?
                 }
-                TransportKind::Http(addr) => cli::run_once_http(addr, msg, cli.wait_ms).await?,
-                TransportKind::WebSocket(addr) => cli::run_once_ws(addr, msg, cli.wait_ms).await?,
+                TransportKind::Http(addr) => {
+                    cli::run_once_http(addr, msg, cli.wait_ms, &mut printer).await?
+                }
+                TransportKind::WebSocket(addr) => {
+                    cli::run_once_ws(addr, msg, cli.wait_ms, &mut printer).await?
+                }
             };
-            if let Some(state) = latest {
-                cli::output_state(&state, cli.json);
-            }
         }
         Commands::Watch => {
             match &transport {
@@ -133,20 +138,23 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::WebSocket(addr) => cli::watch_ws(addr, cli.json).await?,
             };
         }
-        Commands::Ping => match &transport {
-            TransportKind::Iroh { .. } => {
-                let peer = resolved_iroh_peer
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                let _ = cli::run_once_iroh(peer, ClientMsg::Ping, cli.wait_ms).await?;
+        Commands::Ping => {
+            let mut printer = MessagePrinter::new(cli.json, DisplayMode::FullState);
+            match &transport {
+                TransportKind::Iroh { .. } => {
+                    let peer = resolved_iroh_peer
+                        .as_ref()
+                        .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
+                    cli::run_once_iroh(peer, ClientMsg::Ping, cli.wait_ms, &mut printer).await?;
+                }
+                TransportKind::Http(addr) => {
+                    cli::run_once_http(addr, ClientMsg::Ping, cli.wait_ms, &mut printer).await?;
+                }
+                TransportKind::WebSocket(addr) => {
+                    cli::run_once_ws(addr, ClientMsg::Ping, cli.wait_ms, &mut printer).await?;
+                }
             }
-            TransportKind::Http(addr) => {
-                let _ = cli::run_once_http(addr, ClientMsg::Ping, cli.wait_ms).await?;
-            }
-            TransportKind::WebSocket(addr) => {
-                let _ = cli::run_once_ws(addr, ClientMsg::Ping, cli.wait_ms).await?;
-            }
-        },
+        }
     }
 
     Ok(())

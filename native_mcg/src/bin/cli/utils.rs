@@ -4,16 +4,84 @@ use mcg_shared::{GameStatePublic, PlayerConfig, ServerMsg};
 
 use native_mcg::pretty::{format_event_human, format_state_human, format_table_header};
 
-/// Print a state either as JSON or human-friendly text.
-pub fn output_state(state: &GameStatePublic, json: bool) {
-    if json {
-        match serde_json::to_string_pretty(state) {
-            Ok(json_str) => println!("{}", json_str),
-            Err(e) => eprintln!("Failed to serialize state to JSON: {}", e),
+#[derive(Clone, Copy)]
+pub enum DisplayMode {
+    FullState,
+    Incremental,
+}
+
+pub struct MessagePrinter {
+    json: bool,
+    mode: DisplayMode,
+    last_printed: usize,
+    latest_state: Option<GameStatePublic>,
+}
+
+impl MessagePrinter {
+    pub fn new(json: bool, mode: DisplayMode) -> Self {
+        Self {
+            json,
+            mode,
+            last_printed: 0,
+            latest_state: None,
         }
-    } else {
-        let use_color = std::io::stdout().is_terminal();
-        println!("{}", format_state_human(state, use_color));
+    }
+
+    pub fn handle(&mut self, msg: &ServerMsg) {
+        match msg {
+            ServerMsg::State(gs) => {
+                self.latest_state = Some(gs.clone());
+                match self.mode {
+                    DisplayMode::FullState => self.print_full_state(gs),
+                    DisplayMode::Incremental => self.print_incremental(gs),
+                }
+            }
+            ServerMsg::Error(e) => eprintln!("Server error: {}", e),
+            ServerMsg::Pong => println!("Received pong"),
+        }
+    }
+
+    pub fn latest_state(&self) -> Option<&GameStatePublic> {
+        self.latest_state.as_ref()
+    }
+
+    fn print_full_state(&self, gs: &GameStatePublic) {
+        if self.json {
+            match serde_json::to_string_pretty(gs) {
+                Ok(json_str) => println!("{}", json_str),
+                Err(e) => eprintln!("Failed to serialize state to JSON: {}", e),
+            }
+        } else {
+            let use_color = std::io::stdout().is_terminal();
+            println!("{}", format_state_human(gs, use_color));
+        }
+    }
+
+    fn print_incremental(&mut self, gs: &GameStatePublic) {
+        if self.json {
+            match serde_json::to_string_pretty(gs) {
+                Ok(json_str) => println!("{}", json_str),
+                Err(e) => eprintln!("Failed to serialize state to JSON: {}", e),
+            }
+            return;
+        }
+
+        let already = self.last_printed;
+        let total = gs.action_log.len();
+        if total < already {
+            let use_color = std::io::stdout().is_terminal();
+            let header = format_table_header(gs, gs.sb, gs.bb, use_color);
+            println!("{}", header);
+            self.last_printed = total;
+        } else if total > already {
+            for e in gs.action_log.iter().skip(already) {
+                println!(
+                    "{}",
+                    format_event_human(e, &gs.players, std::io::stdout().is_terminal())
+                );
+            }
+            self.last_printed = total;
+        }
     }
 }
 
@@ -32,42 +100,4 @@ pub fn generate_demo_players(num_players: usize) -> Vec<PlayerConfig> {
         });
     }
     players
-}
-
-/// Shared handler for server messages so the CLI doesn't duplicate logic.
-///
-/// Supports incremental printing by accepting a mutable `last_printed` index
-/// which tracks how many log entries have already been displayed. For JSON
-/// mode this still prints the full message.
-pub fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
-    match sm {
-        ServerMsg::State(gs) => {
-            if json {
-                // In JSON mode, print the full state as before.
-                output_state(gs, true);
-            } else {
-                // Print only newly appended log entries (to avoid repeating full state).
-                // Handle the case where the server resets/truncates the action_log (e.g. on new hand).
-                let already = *last_printed;
-                let total = gs.action_log.len();
-                if total < already {
-                    // action_log was reset on the server (new hand); print table header like the server
-                    let use_color = std::io::stdout().is_terminal();
-                    let header = format_table_header(gs, gs.sb, gs.bb, use_color);
-                    println!("{}", header);
-                    *last_printed = total;
-                } else if total > already {
-                    for e in gs.action_log.iter().skip(already) {
-                        println!(
-                            "{}",
-                            format_event_human(e, &gs.players, std::io::stdout().is_terminal())
-                        );
-                    }
-                    *last_printed = total;
-                }
-            }
-        }
-        ServerMsg::Error(e) => eprintln!("Server error: {}", e),
-        ServerMsg::Pong => println!("Received pong"),
-    }
 }

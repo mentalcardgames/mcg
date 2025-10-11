@@ -25,14 +25,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         // WebSocket endpoint (WASM GUI remains websocket-only)
         .route("/ws", get(crate::server::ws::ws_handler))
-        // HTTP API endpoints (transport-agnostic server logic is reused)
-        .route("/api/newgame", post(crate::server::http::newgame_handler))
-        .route("/api/action", post(crate::server::http::action_handler))
-        .route("/api/state", get(crate::server::http::state_handler))
-        .route(
-            "/api/next_hand",
-            post(crate::server::http::next_hand_handler),
-        )
+        // HTTP API endpoint using unified ClientMsg/ServerMsg payloads
+        .route("/api/message", post(crate::server::http::message_handler))
         .nest_service("/pkg", serve_dir)
         .nest_service("/media", serve_media)
         // Serve index.html for the root route

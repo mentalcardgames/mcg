@@ -4,7 +4,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 use mcg_shared::{ClientMsg, ServerMsg};
 
-use super::utils::handle_server_msg;
+use super::utils::{DisplayMode, MessagePrinter};
 
 fn announce_connection(json: bool, message: &str) {
     if json {
@@ -26,15 +26,12 @@ pub async fn watch_ws(ws_addr: &str, json: bool) -> anyhow::Result<()> {
 
     announce_connection(json, &format!("Connected to WebSocket {}", ws_url));
 
-    // Read messages forever (until socket closed or error) and handle them via
-    // the shared handler. Track how many log entries we've printed so we only
-    // print incremental events.
-    let mut last_printed: usize = 0;
+    let mut printer = MessagePrinter::new(json, DisplayMode::Incremental);
     loop {
         match read.next().await {
             Some(Ok(Message::Text(txt))) => {
                 if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
-                    handle_server_msg(&sm, json, &mut last_printed);
+                    printer.handle(&sm);
                 }
             }
             Some(Ok(_other)) => { /* ignore non-text frames */ }
@@ -53,18 +50,21 @@ pub async fn watch_ws(ws_addr: &str, json: bool) -> anyhow::Result<()> {
 pub async fn watch_http(base: &str, json: bool) -> anyhow::Result<()> {
     let client = reqwest::Client::new();
     announce_connection(json, &format!("Polling HTTP endpoint {}", base));
-    let mut last_printed: usize = 0;
+    let mut printer = MessagePrinter::new(json, DisplayMode::Incremental);
     loop {
         // Long-poll GET state with a 30s timeout
         match tokio::time::timeout(
             std::time::Duration::from_secs(30),
-            client.get(format!("{}/api/state", base)).send(),
+            client
+                .post(format!("{}/api/message", base))
+                .json(&ClientMsg::RequestState)
+                .send(),
         )
         .await
         {
             Ok(Ok(resp)) => {
                 if let Ok(sm) = resp.json::<ServerMsg>().await {
-                    handle_server_msg(&sm, json, &mut last_printed);
+                    printer.handle(&sm);
                 }
             }
             Ok(Err(e)) => {
@@ -126,8 +126,7 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
 
     // Read newline-delimited JSON messages and handle them via shared handler.
     let mut line = String::new();
-    // Track how many log entries we've already printed for this connection.
-    let mut last_printed: usize = 0;
+    let mut printer = MessagePrinter::new(json, DisplayMode::Incremental);
     loop {
         line.clear();
         match reader.read_line(&mut line).await {
@@ -138,7 +137,7 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
                     continue;
                 }
                 if let Ok(sm) = serde_json::from_str::<ServerMsg>(trimmed) {
-                    handle_server_msg(&sm, json, &mut last_printed);
+                    printer.handle(&sm);
                 } else {
                     eprintln!("Invalid JSON from iroh peer: {}", trimmed);
                 }

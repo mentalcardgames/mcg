@@ -5,7 +5,9 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
-use mcg_shared::{ClientMsg, GameStatePublic, ServerMsg};
+use mcg_shared::{ClientMsg, ServerMsg};
+
+use super::utils::MessagePrinter;
 
 /// Try to build a websocket URL from a base string (like "localhost:3000" or "http://host:3000")
 pub fn build_ws_url(base: &str) -> anyhow::Result<Url> {
@@ -26,13 +28,13 @@ pub fn build_ws_url(base: &str) -> anyhow::Result<Url> {
     Ok(url)
 }
 
-/// Connect over websocket, send the provided ClientMsg and collect ServerMsg responses within `wait_ms`.
-/// Accepts an address string (e.g. "ws://host:port/ws" or "http://host:port") and builds the ws URL internally.
-pub async fn collect_ws_responses(
+/// Connect over websocket, send the provided ClientMsg and pass all responses to the printer until timeout.
+pub async fn run_once_ws(
     ws_addr: &str,
     client_msg: ClientMsg,
     wait_ms: u64,
-) -> anyhow::Result<Vec<ServerMsg>> {
+    printer: &mut MessagePrinter,
+) -> anyhow::Result<()> {
     let ws_url = build_ws_url(ws_addr)?;
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
     let (mut write, mut read) = ws_stream.split();
@@ -44,12 +46,11 @@ pub async fn collect_ws_responses(
     }
 
     // Read until timeout, capture all server messages
-    let mut responses: Vec<ServerMsg> = Vec::new();
     loop {
         match tokio::time::timeout(Duration::from_millis(wait_ms), read.next()).await {
             Ok(Some(Ok(Message::Text(txt)))) => {
                 if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
-                    responses.push(sm);
+                    printer.handle(&sm);
                 }
             }
             Ok(Some(Ok(_other))) => { /* ignore */ }
@@ -62,37 +63,18 @@ pub async fn collect_ws_responses(
         }
     }
 
-    Ok(responses)
-}
-
-/// Connect over websocket, send the provided ClientMsg and return the last State seen within `wait_ms`.
-pub async fn run_once_ws(
-    ws_addr: &str,
-    client_msg: ClientMsg,
-    wait_ms: u64,
-) -> anyhow::Result<Option<GameStatePublic>> {
-    let responses = collect_ws_responses(ws_addr, client_msg, wait_ms).await?;
-    let mut latest_state: Option<GameStatePublic> = None;
-
-    for sm in responses {
-        match sm {
-            ServerMsg::State(gs) => latest_state = Some(gs),
-            ServerMsg::Error(e) => eprintln!("Server error: {}", e),
-            ServerMsg::Pong => println!("Received pong"),
-        }
-    }
-
-    Ok(latest_state)
+    Ok(())
 }
 
 /// Minimal iroh run-once client. Mirrors the behavior of `run_once_ws` but over iroh.
 /// The iroh imports are inside the function so compilation only fails if iroh is
 /// actually required by the build.
-pub async fn run_once_iroh_message(
+pub async fn run_once_iroh(
     peer_uri: &str,
     client_msg: ClientMsg,
     wait_ms: u64,
-) -> anyhow::Result<Option<ServerMsg>> {
+    printer: &mut MessagePrinter,
+) -> anyhow::Result<()> {
     // Note: keep iroh imports local to avoid compile-time requirement when feature is disabled.
     use iroh::endpoint::Endpoint;
     use iroh::PublicKey;
@@ -126,35 +108,12 @@ pub async fn run_once_iroh_message(
     send_client_msg_over_stream(&mut send, &client_msg).await?;
 
     // Read responses until timeout using a dedicated helper
-    let server_msg_opt = read_iroh_responses_until_timeout(&mut reader, wait_ms).await?;
+    read_iroh_responses_until_timeout(&mut reader, wait_ms, printer).await?;
 
     // Try to finish/close the send side politely if available
     let _ = send.finish();
 
-    Ok(server_msg_opt)
-}
-
-pub async fn run_once_iroh(
-    peer_uri: &str,
-    client_msg: ClientMsg,
-    wait_ms: u64,
-) -> anyhow::Result<Option<GameStatePublic>> {
-    let last_msg = run_once_iroh_message(peer_uri, client_msg, wait_ms).await?;
-
-    let latest = match last_msg {
-        Some(ServerMsg::State(gs)) => Some(gs),
-        Some(ServerMsg::Error(e)) => {
-            eprintln!("Server error: {}", e);
-            None
-        }
-        Some(ServerMsg::Pong) => {
-            println!("Received pong");
-            None
-        }
-        None => None,
-    };
-
-    Ok(latest)
+    Ok(())
 }
 
 /// Write the provided ClientMsg as newline-delimited JSON to the given writer.
@@ -175,13 +134,13 @@ where
 async fn read_iroh_responses_until_timeout<R>(
     reader: &mut R,
     wait_ms: u64,
-) -> anyhow::Result<Option<ServerMsg>>
+    printer: &mut MessagePrinter,
+) -> anyhow::Result<()>
 where
     R: tokio::io::AsyncBufRead + Unpin,
 {
     use tokio::io::AsyncBufReadExt;
 
-    let mut last_sm: Option<ServerMsg> = None;
     let mut line = String::new();
 
     loop {
@@ -200,8 +159,7 @@ where
                 }
                 match serde_json::from_str::<ServerMsg>(trimmed) {
                     Ok(sm) => {
-                        // Store the last ServerMsg and leave handling to caller
-                        last_sm = Some(sm);
+                        printer.handle(&sm);
                     }
                     Err(_) => {
                         eprintln!("Invalid JSON from iroh peer: {}", trimmed);
@@ -216,72 +174,26 @@ where
         }
     }
 
-    Ok(last_sm)
+    Ok(())
 }
 
-/// Run a single HTTP-based action sequence and attempt to GET state.
+/// Run a single HTTP call against the unified message endpoint and forward the response to the printer.
 pub async fn run_once_http(
     base: &str,
     client_msg: ClientMsg,
     wait_ms: u64,
-) -> anyhow::Result<Option<GameStatePublic>> {
-    // Use reqwest to POST newgame and optional action, then GET state once with a timeout.
+    printer: &mut MessagePrinter,
+) -> anyhow::Result<()> {
     let client = reqwest::Client::new();
-    let mut latest_state: Option<GameStatePublic> = None;
-    let mut request_state = true;
+    let url = format!("{}/api/message", base);
 
-    // Client message to send and capture the immediate response
-    let action_response = client
-        .post(format!("{}/api/action", base))
-        .json(&client_msg)
-        .send()
-        .await?;
+    let response = tokio::time::timeout(Duration::from_millis(wait_ms), async {
+        client.post(&url).json(&client_msg).send().await
+    })
+    .await??;
 
-    let status = action_response.status();
-    let server_msg: ServerMsg = action_response.json().await?;
+    let server_msg: ServerMsg = response.json().await?;
+    printer.handle(&server_msg);
 
-    match server_msg {
-        ServerMsg::State(gs) => {
-            latest_state = Some(gs);
-        }
-        ServerMsg::Error(e) => {
-            eprintln!("Server error: {}", e);
-            request_state = false;
-            if !status.is_success() {
-                return Ok(None);
-            }
-        }
-        ServerMsg::Pong => {
-            println!("Received pong");
-            request_state = false;
-        }
-    }
-
-    // Attempt a single GET state request with timeout equal to wait_ms
-    if request_state {
-        match tokio::time::timeout(std::time::Duration::from_millis(wait_ms), async {
-            client.get(format!("{}/api/state", base)).send().await
-        })
-        .await
-        {
-            Ok(Ok(r)) => {
-                let sm: ServerMsg = r.json().await?;
-                match sm {
-                    ServerMsg::State(gs) => Ok(Some(gs)),
-                    ServerMsg::Error(e) => {
-                        eprintln!("Server error: {}", e);
-                        Ok(None)
-                    }
-                    ServerMsg::Pong => {
-                        println!("Received pong");
-                        Ok(latest_state)
-                    }
-                }
-            }
-            Ok(Err(e)) => Err(e.into()),
-            Err(_) => Ok(latest_state), // timeout
-        }
-    } else {
-        Ok(latest_state)
-    }
+    Ok(())
 }
