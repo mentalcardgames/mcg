@@ -41,10 +41,6 @@ impl MessagePrinter {
         }
     }
 
-    pub fn latest_state(&self) -> Option<&GameStatePublic> {
-        self.latest_state.as_ref()
-    }
-
     fn print_full_state(&self, gs: &GameStatePublic) {
         if self.json {
             match serde_json::to_string_pretty(gs) {

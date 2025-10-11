@@ -94,16 +94,13 @@ async fn main() -> anyhow::Result<()> {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, ClientMsg::NextHand, cli.wait_ms, &mut printer)
-                        .await?
+                    cli::run_once_iroh(peer, ClientMsg::NextHand, cli.wait_ms, &mut printer).await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(addr, ClientMsg::NextHand, cli.wait_ms, &mut printer)
-                        .await?
+                    cli::run_once_http(addr, ClientMsg::NextHand, cli.wait_ms, &mut printer).await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(addr, ClientMsg::NextHand, cli.wait_ms, &mut printer)
-                        .await?
+                    cli::run_once_ws(addr, ClientMsg::NextHand, cli.wait_ms, &mut printer).await?
                 }
             };
         }
