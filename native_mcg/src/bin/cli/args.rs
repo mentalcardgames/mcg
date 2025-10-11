@@ -49,6 +49,8 @@ pub enum Commands {
     NewGame,
     /// Watch game events continuously and print them as they happen
     Watch,
+    /// Send a ping message to the server
+    Ping,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]

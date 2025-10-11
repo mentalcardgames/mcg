@@ -40,6 +40,7 @@ pub enum ClientMsg {
     },
     Subscribe,
     RequestState,
+    Ping,
     NextHand,
     NewGame {
         players: Vec<PlayerConfig>,
@@ -52,4 +53,5 @@ pub enum ClientMsg {
 pub enum ServerMsg {
     State(GameStatePublic),
     Error(String),
+    Pong,
 }

@@ -341,6 +341,10 @@ pub async fn handle_client_msg(
         }
         mcg_shared::ClientMsg::Subscribe => mcg_shared::ServerMsg::Error("not supported".into()),
         mcg_shared::ClientMsg::RequestState => handle_request_state(state).await,
+        mcg_shared::ClientMsg::Ping => {
+            tracing::info!("received ping from client");
+            mcg_shared::ServerMsg::Pong
+        }
         mcg_shared::ClientMsg::NextHand => handle_next_hand(state).await,
         mcg_shared::ClientMsg::NewGame { players } => handle_new_game(state, players).await,
     }

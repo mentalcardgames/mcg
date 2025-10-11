@@ -133,6 +133,20 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::WebSocket(addr) => cli::watch_ws(addr, cli.json).await?,
             };
         }
+        Commands::Ping => match &transport {
+            TransportKind::Iroh { .. } => {
+                let peer = resolved_iroh_peer
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
+                let _ = cli::run_once_iroh(peer, ClientMsg::Ping, cli.wait_ms).await?;
+            }
+            TransportKind::Http(addr) => {
+                let _ = cli::run_once_http(addr, ClientMsg::Ping, cli.wait_ms).await?;
+            }
+            TransportKind::WebSocket(addr) => {
+                let _ = cli::run_once_ws(addr, ClientMsg::Ping, cli.wait_ms).await?;
+            }
+        },
     }
 
     Ok(())
