@@ -1,4 +1,4 @@
 [workspace]
-members = ["frontend", "native_mcg", "shared"]
+members = ["frontend", "native_mcg", "shared", "crates/qr_comm"]
 default-members = ["native_mcg", "shared"]
 resolver = "2"
