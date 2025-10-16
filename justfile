@@ -62,3 +62,8 @@ kill-backend:
 #   just cli -- reset --bots 3
 cli +ARGS:
     cargo run -p native_mcg --bin mcg-cli -- {{ARGS}}
+
+# Make the project somewhat AI development friendly
+agents:
+    cp AGENTS.md CLAUDE.md
+    cp AGENTS.md CRUSH.md
