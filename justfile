@@ -67,3 +67,5 @@ cli +ARGS:
 agents:
     cp AGENTS.md CLAUDE.md
     cp AGENTS.md CRUSH.md
+    cp AGENTS.md WARP.md
+
