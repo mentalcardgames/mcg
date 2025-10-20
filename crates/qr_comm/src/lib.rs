@@ -30,6 +30,10 @@ pub const BYTES_PER_PARTICIPANT: usize = FRAGMENT_SIZE_BYTES * FRAGMENTS_PER_PAR
 pub const QR_CODE_VERSION: Version = Version::Normal(26);
 pub const QR_CODE_ECC: EcLevel = EcLevel::L;
 
+pub const AP_LENGTH_INDEX_SIZE_BITS: usize = (FRAGMENT_SIZE_BYTES * CODING_FACTORS_PER_FRAME).next_power_of_two().ilog2() as usize;
+pub const AP_LENGTH_INDEX_SIZE_BYTES: usize = AP_LENGTH_INDEX_SIZE_BITS.div_ceil(8);
+pub const AP_MAX_SIZE_BYTES: usize = FRAGMENT_SIZE_BYTES * CODING_FACTORS_PER_FRAME - AP_LENGTH_INDEX_SIZE_BYTES;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,5 +61,8 @@ mod tests {
         assert_eq!(BYTES_PER_PARTICIPANT, 67140608);
         assert_eq!(QR_CODE_VERSION, Version::Normal(26));
         assert_eq!(QR_CODE_ECC, EcLevel::L);
+        assert_eq!(AP_LENGTH_INDEX_SIZE_BITS, 19);
+        assert_eq!(AP_LENGTH_INDEX_SIZE_BYTES, 3);
+        assert_eq!(AP_MAX_SIZE_BYTES, 524285);
     }
 }
