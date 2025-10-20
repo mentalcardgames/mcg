@@ -24,6 +24,7 @@ impl Default for FrameFactor {
         }
     }
 }
+
 impl FrameFactor {
     pub fn new(factors: [GaloisField2p4; CODING_FACTORS_PER_FRAME], width: [u8; MAX_PARTICIPANTS], offsets: [u16; MAX_PARTICIPANTS]) -> Self {
         if width.iter().fold(0u16, |acc, w| { acc + 2*(*w as u16)}) != 512 {
@@ -116,5 +117,18 @@ impl From<FrameFactor> for WideFactor {
             start += 2 * (*width as usize);
         }
         wide
+    }
+}
+
+#[allow(dead_code)]
+#[derive(PartialEq, Clone, Debug)]
+pub struct CompactFactor {
+    pub inner: Vec<(usize, GaloisField2p4)>,
+}
+
+impl Default for CompactFactor {
+    fn default() -> Self {
+        let inner = Vec::new();
+        CompactFactor { inner }
     }
 }

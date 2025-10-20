@@ -13,7 +13,4 @@ pub use crate::data_structures::factors::{FrameFactor, WideFactor};
 mod application_package;
 pub use crate::data_structures::application_package::Package;
 
-mod equation;
-pub use crate::data_structures::equation::Equation;
-
 mod conversion;
