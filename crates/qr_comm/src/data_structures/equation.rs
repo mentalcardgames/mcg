@@ -1,90 +1,99 @@
-use crate::data_structures::{CodingFactor, Fragment};
-use crate::{FRAGMENTS_PER_PARTICIPANT, MAX_PARTICIPANTS};
-use galois_2p8::Field;
+use crate::data_structures::factors::WideFactor;
+use crate::data_structures::Fragment;
+use crate::network_coding::GaloisField2p4;
+use crate::FRAGMENTS_PER_EPOCH;
 
 #[derive(Copy, Clone, Default)]
 pub struct Equation {
-    pub coding_factor: CodingFactor,
+    pub factors: WideFactor,
     pub fragment: Fragment,
 }
 
 impl Equation {
-    pub fn new(coding_factor: CodingFactor, fragment: Fragment) -> Self {
-        Equation {
-            coding_factor,
-            fragment,
-        }
+    pub fn new(factors: WideFactor, fragment: Fragment) -> Self {
+        Equation { factors, fragment }
     }
 
-    pub fn utilized_fragments(&self) -> [usize; MAX_PARTICIPANTS] {
-        let mut utilization = [0; MAX_PARTICIPANTS];
-        for (idx, participant) in utilization.iter_mut().enumerate() {
-            let offset = idx * FRAGMENTS_PER_PARTICIPANT;
-            for fragment in 0..FRAGMENTS_PER_PARTICIPANT {
-                if self.coding_factor[offset + fragment] == 0 {
-                    *participant = fragment;
-                    break;
-                }
-            }
-        }
+    pub fn utilized_fragments(&self) -> [bool; FRAGMENTS_PER_EPOCH] {
+        let mut utilization = [false; FRAGMENTS_PER_EPOCH];
+        let util: Vec<bool> = self
+            .factors
+            .iter()
+            .map(|f| *f != GaloisField2p4::ZERO)
+            .collect();
+        utilization.copy_from_slice(util.as_slice());
         utilization
     }
 
     pub fn is_plain(&self) -> bool {
-        self.coding_factor.iter().filter(|&f| *f != 0).count() == 1
+        self.factors
+            .iter()
+            .filter(|&f| *f != GaloisField2p4::ZERO)
+            .count()
+            == 1
     }
 }
 
 /// Mathematical operations
 impl Equation {
-    pub fn div_assign(&mut self, denominator: u8, field: &impl Field) {
-        field.div_multiword(self.coding_factor.as_mut(), denominator);
-        field.div_multiword(self.fragment.as_mut(), denominator);
+    pub fn div_assign(&mut self, denominator: u8) {
+        self.factors.inner = self.factors.inner.map(|f| f / denominator);
+        self.fragment.inner = self.fragment.inner.map(|f| {
+            let upper = (f & 0xF0) >> 4;
+            let lower = f & 0xF;
+            let upper = GaloisField2p4::new(upper) / denominator;
+            let lower = GaloisField2p4::new(lower) / denominator;
+            let upper = upper.inner << 4;
+            let lower = lower.inner;
+            upper | lower
+        });
     }
-    pub fn mul_assign(&mut self, factor: u8, field: &impl Field) {
-        field.mult_multiword(self.coding_factor.as_mut(), factor);
-        field.mult_multiword(self.fragment.as_mut(), factor);
+    pub fn mul_assign(&mut self, factor: u8) {
+        self.factors.inner = self.factors.inner.map(|f| f * factor);
+        self.fragment.inner = self.fragment.inner.map(|f| {
+            let upper = (f & 0xF0) >> 4;
+            let lower = f & 0xF;
+            let upper = GaloisField2p4::new(upper) * factor;
+            let lower = GaloisField2p4::new(lower) * factor;
+            let upper = upper.inner << 4;
+            let lower = lower.inner;
+            upper | lower
+        });
     }
-    pub fn sub_scaled_assign(&mut self, scale: u8, rhs: &Self, field: &impl Field) {
-        field.sub_scaled_multiword(&mut self.coding_factor, &rhs.coding_factor, scale);
-        field.sub_scaled_multiword(&mut self.fragment, &rhs.fragment, scale);
+    pub fn sub_scaled_assign(&mut self, scale: u8, rhs: &Self) {
+        let mut rhs = *rhs;
+        rhs.mul_assign(scale);
+        self.factors
+            .inner
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, f)| {
+                *f -= rhs.factors[i];
+            });
+        self.fragment
+            .inner
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, f)| {
+                *f ^= rhs.fragment[i];
+            });
     }
-    pub fn add_scaled_assign(&mut self, scale: u8, rhs: &Self, field: &impl Field) {
-        field.add_scaled_multiword(&mut self.coding_factor, &rhs.coding_factor, scale);
-        field.add_scaled_multiword(&mut self.fragment, &rhs.fragment, scale);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::CODING_FACTORS_SIZE;
-    #[test]
-    fn test_0_utilized_fragments() {
-        let fragment = Fragment::default();
-        let mut coding_factor = CodingFactor::new([0; CODING_FACTORS_SIZE]);
-        for i in 0..4 {
-            coding_factor[i] = 1;
-        }
-        let equation = Equation::new(coding_factor, fragment);
-        let mut expected = [0; MAX_PARTICIPANTS];
-        expected[0] = 4;
-        assert_eq!(equation.utilized_fragments(), expected);
-    }
-    #[test]
-    fn test_1_utilized_fragments() {
-        let fragment = Fragment::default();
-        let mut coding_factor = CodingFactor::new([0; CODING_FACTORS_SIZE]);
-        for i in 0..4 {
-            coding_factor[i] = 1;
-        }
-        for i in 0..5 {
-            coding_factor[i + 2 * FRAGMENTS_PER_PARTICIPANT] = 1;
-        }
-        let equation = Equation::new(coding_factor, fragment);
-        let mut expected = [0; MAX_PARTICIPANTS];
-        expected[0] = 4;
-        expected[2] = 5;
-        assert_eq!(equation.utilized_fragments(), expected);
+    pub fn add_scaled_assign(&mut self, scale: u8, rhs: &Self) {
+        let mut rhs = *rhs;
+        rhs.mul_assign(scale);
+        self.factors
+            .inner
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, f)| {
+                *f += rhs.factors[i];
+            });
+        self.fragment
+            .inner
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, f)| {
+                *f ^= rhs.fragment[i];
+            });
     }
 }

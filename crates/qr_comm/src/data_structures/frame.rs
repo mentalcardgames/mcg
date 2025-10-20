@@ -1,11 +1,11 @@
-use crate::data_structures::{CodingFactor, Fragment, FrameHeader};
+use crate::data_structures::{FrameFactor, Fragment, FrameHeader};
 use crate::{FRAME_SIZE_BYTES, QR_CODE_ECC, QR_CODE_VERSION};
 use qrcode::types::QrError;
 use qrcode::{QrCode, QrResult};
 
 #[derive(Copy, Clone)]
 pub struct Frame {
-    pub coding_factor: CodingFactor,
+    pub coding_factors: FrameFactor,
     pub fragment: Fragment,
     pub header: FrameHeader,
 }
@@ -22,7 +22,7 @@ impl TryFrom<Frame> for QrCode {
 }
 
 impl Frame {
-    pub fn new(coding_factor: CodingFactor, fragment: Fragment, header: FrameHeader) -> Self {
-        Self { coding_factor, fragment, header }
+    pub fn new(coding_factors: FrameFactor, fragment: Fragment, header: FrameHeader) -> Self {
+        Self { coding_factors, fragment, header }
     }
 }

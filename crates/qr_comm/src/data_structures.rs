@@ -8,7 +8,7 @@ mod header;
 pub use crate::data_structures::header::FrameHeader;
 
 mod factors;
-pub use crate::data_structures::factors::CodingFactor;
+pub use crate::data_structures::factors::{FrameFactor, WideFactor};
 
 mod application_package;
 pub use crate::data_structures::application_package::Package;
