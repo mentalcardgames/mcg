@@ -60,9 +60,10 @@ const EXP_TABLE: [u8; 16] = [1, 2, 4, 8, 3, 6, 12, 11, 5, 10, 7, 14, 15, 13, 9, 
 const LOG_TABLE: [u8; 16] = [15, 0, 1, 4, 2, 8, 5, 10, 3, 14, 9, 7, 6, 13, 11, 12];
 
 /// Implementation of GF(16) with P(x) = x4 + x + 1
+/// The `inner` attribute only hold a single 4-bit number, even though it could hold two.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GaloisField2p4 {
-    inner: u8,
+    pub inner: u8,
 }
 
 impl Add for GaloisField2p4 {
@@ -103,26 +104,14 @@ impl Mul for GaloisField2p4 {
     type Output = GaloisField2p4;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        let lhs_upper = (self.inner & 0b1111_0000) >> 4;
-        let rhs_upper = (rhs.inner & 0b1111_0000) >> 4;
-        let lhs_lower = self.inner & 0b0000_1111;
-        let rhs_lower = rhs.inner & 0b0000_1111;
-        let upper = MUL_TABLE_2D[lhs_upper as usize][rhs_upper as usize] << 4;
-        let lower = MUL_TABLE_2D[lhs_lower as usize][rhs_lower as usize];
-        let inner = upper ^ lower;
+        let inner = MUL_TABLE_2D[self.inner as usize][rhs.inner as usize];
         GaloisField2p4 { inner }
     }
 }
 
 impl MulAssign for GaloisField2p4 {
     fn mul_assign(&mut self, rhs: Self) {
-        let lhs_upper = (self.inner & 0b1111_0000) >> 4;
-        let rhs_upper = (rhs.inner & 0b1111_0000) >> 4;
-        let lhs_lower = self.inner & 0b0000_1111;
-        let rhs_lower = rhs.inner & 0b0000_1111;
-        let upper = MUL_TABLE_2D[lhs_upper as usize][rhs_upper as usize] << 4;
-        let lower = MUL_TABLE_2D[lhs_lower as usize][rhs_lower as usize];
-        self.inner = upper ^ lower;
+        self.inner = MUL_TABLE_2D[self.inner as usize][rhs.inner as usize];
     }
 }
 
@@ -130,49 +119,103 @@ impl Div for GaloisField2p4 {
     type Output = GaloisField2p4;
 
     fn div(self, rhs: Self) -> Self::Output {
-        let lhs_upper = (self.inner & 0b1111_0000) >> 4;
-        let rhs_upper = (rhs.inner & 0b1111_0000) >> 4;
-        let lhs_lower = self.inner & 0b0000_1111;
-        let rhs_lower = rhs.inner & 0b0000_1111;
-        let upper = DIV_TABLE_2D[lhs_upper as usize][rhs_upper as usize] << 4;
-        let lower = DIV_TABLE_2D[lhs_lower as usize][rhs_lower as usize];
-        let inner = upper ^ lower;
+        let inner = DIV_TABLE_2D[self.inner as usize][rhs.inner as usize];
         GaloisField2p4 { inner }
     }
 }
 
 impl DivAssign for GaloisField2p4 {
     fn div_assign(&mut self, rhs: Self) {
-        let lhs_upper = (self.inner & 0b1111_0000) >> 4;
-        let rhs_upper = (rhs.inner & 0b1111_0000) >> 4;
-        let lhs_lower = self.inner & 0b0000_1111;
-        let rhs_lower = rhs.inner & 0b0000_1111;
-        let upper = DIV_TABLE_2D[lhs_upper as usize][rhs_upper as usize] << 4;
-        let lower = DIV_TABLE_2D[lhs_lower as usize][rhs_lower as usize];
-        self.inner = upper ^ lower;
+        self.inner = DIV_TABLE_2D[self.inner as usize][rhs.inner as usize];
+    }
+}
+
+impl Add<u8> for GaloisField2p4 {
+    type Output = GaloisField2p4;
+
+    #[allow(clippy::suspicious_arithmetic_impl)]
+    fn add(self, rhs: u8) -> Self::Output {
+        debug_assert!(rhs <= 0b1111);
+        let inner = self.inner ^ rhs;
+        GaloisField2p4 { inner }
+    }
+}
+
+impl AddAssign<u8> for GaloisField2p4 {
+    #[allow(clippy::suspicious_op_assign_impl)]
+    fn add_assign(&mut self, rhs: u8) {
+        debug_assert!(rhs <= 0b1111);
+        self.inner ^= rhs;
+    }
+}
+
+impl Sub<u8> for GaloisField2p4 {
+    type Output = GaloisField2p4;
+
+    #[allow(clippy::suspicious_arithmetic_impl)]
+    fn sub(self, rhs: u8) -> Self::Output {
+        debug_assert!(rhs <= 0b1111);
+        let inner = self.inner ^ rhs;
+        GaloisField2p4 { inner }
+    }
+}
+
+impl SubAssign<u8> for GaloisField2p4 {
+    #[allow(clippy::suspicious_op_assign_impl)]
+    fn sub_assign(&mut self, rhs: u8) {
+        debug_assert!(rhs <= 0b1111);
+        self.inner ^= rhs;
+    }
+}
+
+impl Mul<u8> for GaloisField2p4 {
+    type Output = GaloisField2p4;
+
+    fn mul(self, rhs: u8) -> Self::Output {
+        debug_assert!(rhs <= 0b1111);
+        let inner = MUL_TABLE_2D[self.inner as usize][rhs as usize];
+        GaloisField2p4 { inner }
+    }
+}
+
+impl MulAssign<u8> for GaloisField2p4 {
+    fn mul_assign(&mut self, rhs: u8) {
+        debug_assert!(rhs <= 0b1111);
+        self.inner = MUL_TABLE_2D[self.inner as usize][rhs as usize];
+    }
+}
+
+impl Div<u8> for GaloisField2p4 {
+    type Output = GaloisField2p4;
+
+    fn div(self, rhs: u8) -> Self::Output {
+        debug_assert!(rhs <= 0b1111);
+        let inner = DIV_TABLE_2D[self.inner as usize][rhs as usize];
+        GaloisField2p4 { inner }
+    }
+}
+
+impl DivAssign<u8> for GaloisField2p4 {
+    fn div_assign(&mut self, rhs: u8) {
+        debug_assert!(rhs <= 0b1111);
+        self.inner = DIV_TABLE_2D[self.inner as usize][rhs as usize];
     }
 }
 
 impl GaloisField2p4 {
+    pub fn new(inner: u8) -> Self {
+        debug_assert!(inner <= 0b1111);
+        GaloisField2p4 { inner }
+    }
     pub fn pow(self, exp: GaloisField2p4) -> GaloisField2p4 {
-        let lhs_upper = (self.inner & 0b1111_0000) >> 4;
-        let rhs_upper = (exp.inner & 0b1111_0000) >> 4;
-        let lhs_lower = self.inner & 0b0000_1111;
-        let rhs_lower = exp.inner & 0b0000_1111;
-        let upper = POW_TABLE_2D[lhs_upper as usize][rhs_upper as usize] << 4;
-        let lower = POW_TABLE_2D[lhs_lower as usize][rhs_lower as usize];
-        let inner = upper ^ lower;
+        let inner = POW_TABLE_2D[self.inner as usize][exp.inner as usize];
         GaloisField2p4 { inner }
     }
     pub fn pow_assign(&mut self, exp: GaloisField2p4) {
-        let lhs_upper = (self.inner & 0b1111_0000) >> 4;
-        let rhs_upper = (exp.inner & 0b1111_0000) >> 4;
-        let lhs_lower = self.inner & 0b0000_1111;
-        let rhs_lower = exp.inner & 0b0000_1111;
-        let upper = POW_TABLE_2D[lhs_upper as usize][rhs_upper as usize] << 4;
-        let lower = POW_TABLE_2D[lhs_lower as usize][rhs_lower as usize];
-        self.inner = upper ^ lower;
+        self.inner = POW_TABLE_2D[self.inner as usize][exp.inner as usize];
     }
+    pub const ZERO: GaloisField2p4 = GaloisField2p4 { inner: 0 };
+    pub const ONE: GaloisField2p4 = GaloisField2p4 { inner: 1 };
 }
 
 #[cfg(test)]

@@ -1,51 +1,67 @@
-use crate::data_structures::{CodingFactor, Fragment, Frame, FrameHeader};
-use crate::{FRAGMENT_SIZE_BYTES, FRAME_SIZE_BYTES, HEADER_SIZE_BYTES, CODING_FACTORS_SIZE};
+use crate::data_structures::{FrameFactor, Fragment, Frame, FrameHeader};
+use crate::{CODING_FACTOR_OFFSET_SIZE_BYTES, CODING_FACTORS_SIZE_BYTES, FRAGMENT_SIZE_BYTES, FRAME_SIZE_BYTES, HEADER_SIZE_BYTES, MAX_PARTICIPANTS, NETWORK_CODING_SIZE_BYTES, CODING_FACTORS_PER_FRAME};
+use std::array::from_fn;
+use crate::network_coding::GaloisField2p4;
 
 impl From<[u8; FRAME_SIZE_BYTES]> for Frame {
     fn from(value: [u8; FRAME_SIZE_BYTES]) -> Self {
-        debug_assert_eq!(CODING_FACTORS_SIZE, 688);
-        debug_assert_eq!(FRAGMENT_SIZE_BYTES, 676);
-        debug_assert_eq!(HEADER_SIZE_BYTES, 3);
-        debug_assert_eq!(
-            CODING_FACTORS_SIZE + FRAGMENT_SIZE_BYTES + HEADER_SIZE_BYTES,
-            FRAME_SIZE_BYTES
-        );
-        let mut coding_factor = [0u8; CODING_FACTORS_SIZE];
-        let a = 0;
-        let b = CODING_FACTORS_SIZE;
-        coding_factor.copy_from_slice(&value[a..b]);
-        let coding_factor = coding_factor.into();
-        let mut fragment = [0u8; FRAGMENT_SIZE_BYTES];
-        let a = CODING_FACTORS_SIZE;
-        let b = CODING_FACTORS_SIZE + FRAGMENT_SIZE_BYTES;
-        fragment.copy_from_slice(&value[a..b]);
-        let fragment = fragment.into();
+        debug_assert_eq!(FRAME_SIZE_BYTES, 1367);
+        debug_assert_eq!(HEADER_SIZE_BYTES, 55);
+        debug_assert_eq!(CODING_FACTOR_OFFSET_SIZE_BYTES, 32);
+        debug_assert_eq!(CODING_FACTORS_SIZE_BYTES, 256);
+        debug_assert_eq!(FRAGMENT_SIZE_BYTES, 1024);
+
+        let mut a = 0;
+        let mut b = 0;
         let mut header = [0u8; HEADER_SIZE_BYTES];
-        let a = CODING_FACTORS_SIZE + FRAGMENT_SIZE_BYTES;
-        let b = FRAME_SIZE_BYTES;
-        header.copy_from_slice(&value[a..b]);
+        let mut coding_factors = [0u8; NETWORK_CODING_SIZE_BYTES];
+        let mut fragment = [0u8; FRAGMENT_SIZE_BYTES];
+        for slice in [header.as_mut(), coding_factors.as_mut(), fragment.as_mut()] {
+            b += slice.len();
+            slice.copy_from_slice(&value[a..b]);
+            a += slice.len();
+        }
         let header = header.into();
-        Frame { coding_factor, fragment, header }
+        let coding_factors = coding_factors.into();
+        let fragment = fragment.into();
+        Frame {
+            header,
+            coding_factors,
+            fragment,
+        }
     }
 }
 
 impl From<[u8; HEADER_SIZE_BYTES]> for FrameHeader {
     fn from(value: [u8; HEADER_SIZE_BYTES]) -> Self {
-        debug_assert_eq!(HEADER_SIZE_BYTES, 3);
-        let sender_id = value[0];
+        debug_assert_eq!(HEADER_SIZE_BYTES, 55);
+        let participant = value[0];
         let is_overflowing = value[1] != 0;
         let epoch = value[2];
         FrameHeader {
-            participant: sender_id,
+            participant,
             is_overflowing,
             epoch,
         }
     }
 }
 
-impl From<[u8; CODING_FACTORS_SIZE]> for CodingFactor {
-    fn from(value: [u8; CODING_FACTORS_SIZE]) -> Self {
-        CodingFactor::new(value)
+impl From<[u8; NETWORK_CODING_SIZE_BYTES]> for FrameFactor {
+    fn from(value: [u8; NETWORK_CODING_SIZE_BYTES]) -> Self {
+        let width: [u8; MAX_PARTICIPANTS] = from_fn(|idx| value[idx]);
+        let offsets: [u16; MAX_PARTICIPANTS] =
+            from_fn(|idx| u16::from_le_bytes([value[MAX_PARTICIPANTS + 2 * idx], value[MAX_PARTICIPANTS + 2 * idx + 1]]));
+        let mut coding_factors = [GaloisField2p4::ZERO; CODING_FACTORS_PER_FRAME];
+        let factors: Vec<GaloisField2p4> = value[CODING_FACTOR_OFFSET_SIZE_BYTES..]
+            .iter()
+            .flat_map(|b| {
+                let upper = *b | 0xF0 >> 4;
+                let lower = *b & 0xF;
+                [GaloisField2p4::new(lower), GaloisField2p4::new(upper)]
+            })
+            .collect();
+        coding_factors[..factors.len()].copy_from_slice(factors.as_slice());
+        FrameFactor::new(coding_factors, width, offsets)
     }
 }
 impl From<[u8; FRAGMENT_SIZE_BYTES]> for Fragment {
