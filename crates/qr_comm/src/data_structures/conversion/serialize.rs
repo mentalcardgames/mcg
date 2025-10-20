@@ -1,6 +1,10 @@
+use crate::data_structures::{Fragment, Frame, FrameFactor, FrameHeader};
+use crate::{
+    CODING_FACTOR_OFFSET_SIZE_BYTES, CODING_FACTOR_WIDTH_SIZE_BYTES, CODING_FACTORS_SIZE_BYTES,
+    FRAGMENT_SIZE_BYTES, FRAME_SIZE_BYTES, HEADER_SIZE_BYTES, MAX_PARTICIPANTS,
+    NETWORK_CODING_SIZE_BYTES,
+};
 use std::array::from_fn;
-use crate::data_structures::{FrameFactor, Fragment, Frame, FrameHeader};
-use crate::{CODING_FACTORS_SIZE_BYTES, CODING_FACTOR_OFFSET_SIZE_BYTES, CODING_FACTOR_WIDTH_SIZE_BYTES, FRAGMENT_SIZE_BYTES, FRAME_SIZE_BYTES, HEADER_SIZE_BYTES, MAX_PARTICIPANTS, NETWORK_CODING_SIZE_BYTES};
 
 impl From<Frame> for [u8; FRAME_SIZE_BYTES] {
     fn from(val: Frame) -> Self {
@@ -11,7 +15,7 @@ impl From<Frame> for [u8; FRAME_SIZE_BYTES] {
 
         let mut result: [u8; FRAME_SIZE_BYTES] = [0u8; FRAME_SIZE_BYTES];
         let Frame {
-            coding_factors,
+            factors: coding_factors,
             fragment,
             header,
         } = val;
@@ -20,7 +24,11 @@ impl From<Frame> for [u8; FRAME_SIZE_BYTES] {
         let fragment: [u8; FRAGMENT_SIZE_BYTES] = fragment.into();
         let mut a = 0;
         let mut b = 0;
-        for slice in [header.as_slice(), coding_factors.as_slice(), fragment.as_slice()] {
+        for slice in [
+            header.as_slice(),
+            coding_factors.as_slice(),
+            fragment.as_slice(),
+        ] {
             b += slice.len();
             result[a..b].copy_from_slice(slice);
             a += slice.len();
@@ -47,26 +55,31 @@ impl From<FrameHeader> for [u8; HEADER_SIZE_BYTES] {
 
 impl From<FrameFactor> for [u8; NETWORK_CODING_SIZE_BYTES] {
     fn from(val: FrameFactor) -> Self {
-        let FrameFactor { width, offsets, factors } = val;
+        let FrameFactor {
+            width,
+            offsets,
+            factors,
+        } = val;
         let mut result = [0; NETWORK_CODING_SIZE_BYTES];
         for idx in 0..MAX_PARTICIPANTS {
             result[idx] = width[idx];
             let [upper, lower] = offsets[idx].to_le_bytes();
-            result[MAX_PARTICIPANTS + 2*idx] = lower;
-            result[MAX_PARTICIPANTS + 2*idx + 1] = upper;
+            result[MAX_PARTICIPANTS + 2 * idx] = lower;
+            result[MAX_PARTICIPANTS + 2 * idx + 1] = upper;
         }
         let factors: [u8; CODING_FACTORS_SIZE_BYTES] = from_fn(|idx| {
-            let lower = factors[2*idx].inner;
-            let upper = factors[2*idx + 1].inner << 4;
+            let lower = factors[2 * idx].inner;
+            let upper = factors[2 * idx + 1].inner << 4;
             lower | upper
         });
-        result[CODING_FACTOR_OFFSET_SIZE_BYTES + CODING_FACTOR_WIDTH_SIZE_BYTES..].copy_from_slice(&factors);
+        result[CODING_FACTOR_OFFSET_SIZE_BYTES + CODING_FACTOR_WIDTH_SIZE_BYTES..]
+            .copy_from_slice(&factors);
         result
     }
 }
 
 impl From<Fragment> for [u8; FRAGMENT_SIZE_BYTES] {
     fn from(val: Fragment) -> Self {
-        val.inner
+        *val.inner
     }
 }
