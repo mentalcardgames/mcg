@@ -1,9 +1,9 @@
 use crate::data_structures::{Fragment, Frame, FrameFactor, FrameHeader, Package, WideFactor};
 use crate::network_coding::{Equation, GaloisField2p4};
 use crate::{
-    BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, CODING_FACTORS_SIZE_BYTES,
-    FRAGMENT_SIZE_BYTES, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
-    MAX_PARTICIPANTS,
+    AP_LENGTH_INDEX_SIZE_BYTES, BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME,
+    CODING_FACTORS_SIZE_BYTES, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
+    FRAGMENT_SIZE_BYTES, MAX_PARTICIPANTS,
 };
 use rand::random;
 use std::array::from_fn;
@@ -12,7 +12,7 @@ use std::num::NonZeroU8;
 pub struct Epoch {
     pub equations: Vec<Equation>,
     pub decoded_fragments: Vec<Vec<Fragment>>,
-    pub current_utilization: [usize; FRAGMENTS_PER_EPOCH],
+    pub current_utilization: Box<[usize; FRAGMENTS_PER_EPOCH]>, // Vec<usize>, // assert_eq!(current_utilization.len(), FRAGMENTS_PER_EPOCH)
     pub elimination_flag: bool,
     pub header: FrameHeader,
 }
@@ -21,10 +21,10 @@ impl Default for Epoch {
     fn default() -> Self {
         let equations = Vec::new();
         let decoded_fragments = from_fn::<_, MAX_PARTICIPANTS, _>(|_| {
-            Vec::with_capacity(CODING_FACTORS_PER_PARTICIPANT_PER_FRAME)
+            Vec::with_capacity(FRAGMENTS_PER_PARTICIPANT_PER_EPOCH)
         })
         .to_vec();
-        let current_utilization = [0; FRAGMENTS_PER_EPOCH];
+        let current_utilization: Box<[usize; FRAGMENTS_PER_EPOCH]> = vec![0; FRAGMENTS_PER_EPOCH].try_into().expect("Error initializing current_utilization!");
         let elimination_flag = false;
         let header = FrameHeader::default();
         Epoch {
@@ -55,14 +55,13 @@ impl Epoch {
         let utilization = equation.utilized_fragments();
 
         // Check for new fragments this frame
-        self.current_utilization = from_fn(|idx| {
-            let n = self.current_utilization[idx];
-            let u = if utilization[idx] { 1 } else { 0 };
-            if n == 0 && u == 1 {
+        for (current, u) in self.current_utilization.iter_mut().zip(utilization.iter()) {
+            let u = if *u { 1 } else { 0 };
+            if *current == 0 && u == 1 {
                 self.elimination_flag = true;
             }
-            n + u
-        });
+            *current += u;
+        }
 
         if self.elimination_flag {
             self.equations.push(equation);
@@ -195,9 +194,12 @@ impl Epoch {
         let mut number_used_fragments = 0;
         while package_index < index as isize {
             let mut size = [0; 4];
-            size.copy_from_slice(&self.decoded_fragments[participant].get(fragment_index)?[0..4]);
+            let fragment = self.decoded_fragments[participant].get(fragment_index)?;
+            size[..AP_LENGTH_INDEX_SIZE_BYTES]
+                .copy_from_slice(&fragment[..AP_LENGTH_INDEX_SIZE_BYTES]);
             let size = u32::from_le_bytes(size);
-            number_used_fragments = (size as usize + 4).div_ceil(FRAGMENT_SIZE_BYTES);
+            number_used_fragments =
+                (size as usize + AP_LENGTH_INDEX_SIZE_BYTES).div_ceil(FRAGMENT_SIZE_BYTES);
             fragment_index += number_used_fragments;
             package_index += 1;
         }
@@ -285,5 +287,36 @@ fn matrix_elimination(matrix: &mut [Equation]) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::io::Read;
+    use crate::data_structures::Package;
+    use crate::network_coding::Epoch;
+
+    #[test]
+    fn get_package_test_0() {
+        let mut e = Epoch::default();
+        let mut file_0 = File::open("tests/data_0.txt").unwrap();
+        let mut data_0 = Vec::new();
+        file_0.read_to_end(&mut data_0).unwrap();
+        let mut file_1 = File::open("tests/data_1.txt").unwrap();
+        let mut data_1 = Vec::new();
+        file_1.read_to_end(&mut data_1).unwrap();
+        let package_0 = Package::new(&data_0);
+        let package_1 = Package::new(&data_1);
+        e.write(data_0);
+        e.write(data_1);
+        assert_eq!(e.get_package(0, 0).unwrap(), package_0);
+        assert_eq!(e.get_package(0, 1).unwrap(), package_1);
+        assert!(e.get_package(0, 2).is_none());
+        assert!(e.get_package(1, 0).is_none());
+    }
+    #[test]
+    fn get_package_test_1() {
+        todo!("Test get_package(...) after receiving frames from a different epoch.");
     }
 }

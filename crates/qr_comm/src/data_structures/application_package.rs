@@ -3,7 +3,7 @@ use crate::{AP_LENGTH_INDEX_SIZE_BYTES, AP_MAX_SIZE_BYTES, FRAGMENT_SIZE_BYTES};
 use std::cmp::min;
 use std::io::Read;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Package {
     pub size: u32,
     pub data: Vec<u8>,

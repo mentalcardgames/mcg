@@ -13,9 +13,8 @@ impl Equation {
     pub fn new(factors: WideFactor, fragment: Fragment) -> Self {
         Equation { factors, fragment }
     }
-
-    pub fn utilized_fragments(&self) -> [bool; FRAGMENTS_PER_EPOCH] {
-        let mut utilization = [false; FRAGMENTS_PER_EPOCH];
+    pub fn utilized_fragments(&self) -> Box<[bool; FRAGMENTS_PER_EPOCH]> {
+        let mut utilization: Box<[bool; FRAGMENTS_PER_EPOCH]> = vec![false; FRAGMENTS_PER_EPOCH].try_into().expect("Error allocating memory!");
         let util: Vec<bool> = self
             .factors
             .iter()
@@ -24,7 +23,6 @@ impl Equation {
         utilization.copy_from_slice(util.as_slice());
         utilization
     }
-
     pub fn is_plain(&self) -> bool {
         self.factors
             .iter()
