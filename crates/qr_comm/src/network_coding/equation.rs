@@ -1,4 +1,4 @@
-use crate::data_structures::factors::WideFactor;
+use crate::data_structures::WideFactor;
 use crate::data_structures::Fragment;
 use crate::network_coding::GaloisField2p4;
 use crate::FRAGMENTS_PER_EPOCH;

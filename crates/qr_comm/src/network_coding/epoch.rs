@@ -1,10 +1,8 @@
-use crate::data_structures::{
-    Equation, Fragment, Frame, FrameFactor, FrameHeader, Package, WideFactor,
-};
-use crate::network_coding::GaloisField2p4;
+use crate::data_structures::{Fragment, Frame, FrameFactor, FrameHeader, Package, WideFactor};
+use crate::network_coding::{Equation, GaloisField2p4};
 use crate::{
     BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, CODING_FACTORS_SIZE_BYTES,
-    FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, FRAGMENT_SIZE_BYTES,
+    FRAGMENT_SIZE_BYTES, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
     MAX_PARTICIPANTS,
 };
 use rand::random;
