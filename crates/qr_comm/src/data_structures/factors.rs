@@ -1,7 +1,7 @@
 use crate::network_coding::GaloisField2p4;
 use crate::{
-    CODING_FACTORS_PER_FRAME, CODING_FACTORS_SIZE_BYTES, FRAGMENTS_PER_EPOCH,
-    FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, MAX_PARTICIPANTS,
+    CODING_FACTORS_PER_FRAME, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, CODING_FACTORS_SIZE_BYTES,
+    FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, MAX_PARTICIPANTS,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -26,8 +26,12 @@ impl Default for FrameFactor {
 }
 
 impl FrameFactor {
-    pub fn new(factors: [GaloisField2p4; CODING_FACTORS_PER_FRAME], width: [u8; MAX_PARTICIPANTS], offsets: [u16; MAX_PARTICIPANTS]) -> Self {
-        if width.iter().fold(0u16, |acc, w| { acc + 2*(*w as u16)}) != 512 {
+    pub fn new(
+        factors: [GaloisField2p4; CODING_FACTORS_PER_FRAME],
+        width: [u8; MAX_PARTICIPANTS],
+        offsets: [u16; MAX_PARTICIPANTS],
+    ) -> Self {
+        if width.iter().fold(0u16, |acc, w| acc + 2 * (*w as u16)) != 512 {
             panic!("Width data is illegal. You need to use all 512 factors!");
         }
         let _data: Vec<GaloisField2p4> = [0; CODING_FACTORS_SIZE_BYTES]
@@ -38,7 +42,11 @@ impl FrameFactor {
                 [GaloisField2p4::new(lower), GaloisField2p4::new(upper)]
             })
             .collect();
-        FrameFactor { width, offsets, factors }
+        FrameFactor {
+            width,
+            offsets,
+            factors,
+        }
     }
     pub fn get_factor_at(&self, idx: usize) -> GaloisField2p4 {
         let participant_idx = idx / FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
@@ -53,9 +61,9 @@ impl FrameFactor {
     }
 }
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct WideFactor {
-    pub inner: [GaloisField2p4; FRAGMENTS_PER_EPOCH],
+    pub inner: Box<[GaloisField2p4; FRAGMENTS_PER_EPOCH]>,
 }
 
 impl WideFactor {
@@ -65,15 +73,21 @@ impl WideFactor {
         for participant in 0..MAX_PARTICIPANTS {
             // Find offset
             for factor in 0..FRAGMENTS_PER_PARTICIPANT_PER_EPOCH {
-                if self.inner[participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + factor] == GaloisField2p4::ZERO {
+                if self.inner[participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + factor]
+                    == GaloisField2p4::ZERO
+                {
                     continue;
                 }
                 offsets[participant] = factor as u16;
                 break;
             }
             // Find width
-            for factor in ((offsets[participant] as usize)..FRAGMENTS_PER_PARTICIPANT_PER_EPOCH).rev() {
-                if self.inner[participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + factor] == GaloisField2p4::ZERO {
+            for factor in
+                ((offsets[participant] as usize)..FRAGMENTS_PER_PARTICIPANT_PER_EPOCH).rev()
+            {
+                if self.inner[participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + factor]
+                    == GaloisField2p4::ZERO
+                {
                     continue;
                 }
                 width[participant] = (factor as u16 - offsets[participant]).div_ceil(2) as u8;
@@ -86,7 +100,9 @@ impl WideFactor {
 
 impl Default for WideFactor {
     fn default() -> Self {
-        let inner = [GaloisField2p4::ZERO; FRAGMENTS_PER_EPOCH];
+        let inner = vec![GaloisField2p4::ZERO; FRAGMENTS_PER_EPOCH]
+            .try_into()
+            .expect("Error allocating memory!");
         WideFactor { inner }
     }
 }

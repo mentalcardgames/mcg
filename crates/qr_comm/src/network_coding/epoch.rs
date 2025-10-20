@@ -2,8 +2,8 @@ use crate::data_structures::{Fragment, Frame, FrameFactor, FrameHeader, Package,
 use crate::network_coding::{Equation, GaloisField2p4};
 use crate::{
     AP_LENGTH_INDEX_SIZE_BYTES, BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME,
-    CODING_FACTORS_SIZE_BYTES, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
-    FRAGMENT_SIZE_BYTES, MAX_PARTICIPANTS,
+    FRAGMENT_SIZE_BYTES, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
+    MAX_PARTICIPANTS,
 };
 use rand::random;
 use std::array::from_fn;
@@ -12,7 +12,7 @@ use std::num::NonZeroU8;
 pub struct Epoch {
     pub equations: Vec<Equation>,
     pub decoded_fragments: Vec<Vec<Fragment>>,
-    pub current_utilization: Box<[usize; FRAGMENTS_PER_EPOCH]>, // Vec<usize>, // assert_eq!(current_utilization.len(), FRAGMENTS_PER_EPOCH)
+    pub current_utilization: Box<[usize; FRAGMENTS_PER_EPOCH]>,
     pub elimination_flag: bool,
     pub header: FrameHeader,
 }
@@ -24,7 +24,9 @@ impl Default for Epoch {
             Vec::with_capacity(FRAGMENTS_PER_PARTICIPANT_PER_EPOCH)
         })
         .to_vec();
-        let current_utilization: Box<[usize; FRAGMENTS_PER_EPOCH]> = vec![0; FRAGMENTS_PER_EPOCH].try_into().expect("Error initializing current_utilization!");
+        let current_utilization: Box<[usize; FRAGMENTS_PER_EPOCH]> = vec![0; FRAGMENTS_PER_EPOCH]
+            .try_into()
+            .expect("Error allocating memory!");
         let elimination_flag = false;
         let header = FrameHeader::default();
         Epoch {
@@ -46,11 +48,11 @@ impl Epoch {
     }
     pub fn push_frame(&mut self, frame: Frame) {
         let Frame {
-            coding_factors,
+            factors,
             fragment,
             header: _header,
         } = frame;
-        let factors: WideFactor = coding_factors.into();
+        let factors: WideFactor = factors.into();
         let equation = Equation::new(factors, fragment);
         let utilization = equation.utilized_fragments();
 
@@ -93,7 +95,7 @@ impl Epoch {
                         let idx =
                             idx_participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + idx_fragment;
                         factors[idx] = GaloisField2p4::ONE;
-                        let equation = Equation::new(factors, *fragment);
+                        let equation = Equation::new(factors, fragment.clone());
                         matrix.push(equation);
                     }
                 }
@@ -145,7 +147,7 @@ impl Epoch {
                 factors
                     [participant_idx * CODING_FACTORS_PER_PARTICIPANT_PER_FRAME + fragment_idx] =
                     GaloisField2p4::ONE;
-                let eq = Equation::new(factors, *fragment);
+                let eq = Equation::new(factors, fragment.clone());
                 let factor: NonZeroU8 = random();
                 equation.add_scaled_assign(factor.into(), &eq);
             }
@@ -222,7 +224,7 @@ fn matrix_elimination(matrix: &mut [Equation]) {
     let n_rows = matrix.len();
     // Eliminate lower left triangle from matrix
     let mut pivot_counter = 0;
-    for column_idx in 0..CODING_FACTORS_SIZE_BYTES {
+    for column_idx in 0..FRAGMENTS_PER_EPOCH {
         if pivot_counter == n_rows {
             break;
         }
@@ -260,7 +262,7 @@ fn matrix_elimination(matrix: &mut [Equation]) {
 
     // Elimination of upper right triangle
     let mut pivot_counter = matrix.len() - 1;
-    for column_idx in (0..CODING_FACTORS_SIZE_BYTES).rev() {
+    for column_idx in (0..FRAGMENTS_PER_EPOCH).rev() {
         if pivot_counter == 0 {
             break;
         }
@@ -292,10 +294,13 @@ fn matrix_elimination(matrix: &mut [Equation]) {
 
 #[cfg(test)]
 mod tests {
+    use crate::FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
+    use crate::data_structures::{Package, WideFactor};
+    use crate::network_coding::epoch::matrix_elimination;
+    use crate::network_coding::{Epoch, Equation, GaloisField2p4};
+    use rand::random;
     use std::fs::File;
     use std::io::Read;
-    use crate::data_structures::Package;
-    use crate::network_coding::Epoch;
 
     #[test]
     fn get_package_test_0() {
@@ -319,4 +324,33 @@ mod tests {
     fn get_package_test_1() {
         todo!("Test get_package(...) after receiving frames from a different epoch.");
     }
+    #[test]
+    fn matrix_elimination_test_0() {
+        let file_0 = File::open("tests/data_0.txt").unwrap();
+        let fragments = Package::from_read(file_0).into_fragments();
+        let equations: Vec<Equation> = fragments
+            .iter()
+            .enumerate()
+            .map(|(idx, frag)| {
+                let mut factor = WideFactor::default();
+                factor[idx + FRAGMENTS_PER_PARTICIPANT_PER_EPOCH] = GaloisField2p4::ONE;
+                Equation::new(factor, frag.clone())
+            })
+            .collect();
+        let mut matrix: Vec<Equation> = Vec::new();
+        for _ in 0..equations.len() {
+            let eq = equations.iter().fold(Equation::default(), |mut acc, e| {
+                acc.add_scaled_assign(random::<u8>() & 0xF, e);
+                acc
+            });
+            matrix.push(eq);
+        }
+        matrix_elimination(&mut matrix);
+        for (idx, eq) in matrix.iter().enumerate() {
+            assert!(eq.is_plain());
+            assert_eq!(eq.fragment, fragments[idx]);
+        }
+    }
+    #[test]
+    fn matrix_elimination_test_1() {}
 }
