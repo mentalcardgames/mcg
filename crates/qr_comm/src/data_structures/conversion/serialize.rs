@@ -56,13 +56,13 @@ impl From<FrameHeader> for [u8; HEADER_SIZE_BYTES] {
 impl From<FrameFactor> for [u8; NETWORK_CODING_SIZE_BYTES] {
     fn from(val: FrameFactor) -> Self {
         let FrameFactor {
-            width,
+            widths,
             offsets,
             factors,
         } = val;
         let mut result = [0; NETWORK_CODING_SIZE_BYTES];
         for idx in 0..MAX_PARTICIPANTS {
-            result[idx] = width[idx];
+            result[idx] = widths[idx];
             let [upper, lower] = offsets[idx].to_le_bytes();
             result[MAX_PARTICIPANTS + 2 * idx] = lower;
             result[MAX_PARTICIPANTS + 2 * idx + 1] = upper;

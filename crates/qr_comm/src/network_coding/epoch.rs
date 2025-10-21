@@ -1,10 +1,6 @@
 use crate::data_structures::{Fragment, Frame, FrameFactor, FrameHeader, Package, WideFactor};
 use crate::network_coding::{Equation, GaloisField2p4};
-use crate::{
-    AP_LENGTH_INDEX_SIZE_BYTES, BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME,
-    FRAGMENT_SIZE_BYTES, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
-    MAX_PARTICIPANTS,
-};
+use crate::{AP_LENGTH_INDEX_SIZE_BYTES, BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, FRAGMENT_SIZE_BYTES, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, MAX_PARTICIPANTS, CODING_FACTORS_PER_FRAME};
 use rand::random;
 use std::array::from_fn;
 use std::num::NonZeroU8;
@@ -54,15 +50,16 @@ impl Epoch {
         let Frame {
             factors,
             fragment,
+            // TODO Think about how the header should be used e.g. implement starting a new epoch
             header: _header,
         } = frame;
         let factors: WideFactor = factors.into();
         let equation = Equation::new(factors, fragment);
-        let utilization = equation.factors.utilized_fragments();
+        let utilization: Box<[bool; FRAGMENTS_PER_EPOCH]> = equation.factors.utilized_fragments();
 
         // Check for new fragments this frame
-        for (current, u) in self.current_utilization.iter_mut().zip(utilization.iter()) {
-            let u = if *u { 1 } else { 0 };
+        for (current, utilized) in self.current_utilization.iter_mut().zip(utilization.iter()) {
+            let u = if *utilized { 1 } else { 0 };
             if *current == 0 && u == 1 {
                 self.elimination_flag = true;
             }
@@ -144,11 +141,10 @@ impl Epoch {
         // Add all fragments that are decoded
         for (participant_idx, fragments) in self.decoded_fragments.iter().enumerate() {
             for (fragment_idx, fragment) in fragments.iter().enumerate() {
-                let mut factors = WideFactor::default();
-                factors
-                    [participant_idx * CODING_FACTORS_PER_PARTICIPANT_PER_FRAME + fragment_idx] =
-                    GaloisField2p4::ONE;
-                let eq = Equation::new(factors, fragment.clone());
+                let eq = Equation::plain_at_index(
+                    participant_idx * CODING_FACTORS_PER_PARTICIPANT_PER_FRAME + fragment_idx,
+                    fragment.clone(),
+                );
                 let factor: NonZeroU8 = random();
                 equation += eq * u8::from(factor);
             }
@@ -171,8 +167,37 @@ impl Epoch {
                 .to_owned()
         });
 
-        let coding_factors = FrameFactor::new(frame_factors, width, offsets);
+        let coding_factors = FrameFactor::new(frame_factors, width, offsets).expect("Looks like I did something wrong!");
         Frame::new(coding_factors, fragment, header)
+    }
+    pub fn pop_recent_frame(&self) -> Option<Frame> {
+        let mut widths = [0u8; MAX_PARTICIPANTS];
+        let mut sum_width = 0;
+        let mut offsets = [0u16; MAX_PARTICIPANTS];
+        let mut factors = [GaloisField2p4::ZERO; CODING_FACTORS_PER_FRAME];
+        let mut coding_factor_idx = 0;
+        let mut fragment = Fragment::default();
+        for participant in 0..MAX_PARTICIPANTS {
+            if let Some(Range { start, end }) = self.find_range_of_most_recent_package(participant) {
+                let width = end - start;
+                sum_width += width;
+                if sum_width > CODING_FACTORS_PER_FRAME {
+                    return None;
+                }
+                widths[participant] = width.div_ceil(2) as u8;
+                offsets[participant] = start as u16;
+                for frag in &self.decoded_fragments[participant][start..end] {
+                    let factor = random::<GaloisField2p4>();
+                    factors[coding_factor_idx] = factor;
+                    coding_factor_idx += 1;
+                    fragment += frag.clone() * factor;
+                }
+            }
+        }
+        let factors = FrameFactor::new(factors, widths, offsets).unwrap();
+        let header = self.header;
+        let frame = Frame::new(factors, fragment, header);
+        Some(frame)
     }
     pub fn write(&mut self, ap: Package) {
         if (ap.size as usize
@@ -222,6 +247,28 @@ impl Epoch {
             // TODO add range to self.meta_ap_fragments[participant]
         }
         package
+    }
+    pub fn find_range_of_most_recent_package(&self, participant: usize) -> Option<Range<usize>> {
+        if self.decoded_fragments[participant].is_empty() {
+            return None;
+        }
+        let mut range = None;
+        let mut fragment_index = 0;
+        loop {
+            if let Some(fragment) = self.decoded_fragments[participant].get(fragment_index) {
+                let mut size = [0; 4];
+                size[..AP_LENGTH_INDEX_SIZE_BYTES]
+                    .copy_from_slice(&fragment[..AP_LENGTH_INDEX_SIZE_BYTES]);
+                let size = u32::from_le_bytes(size);
+                let length = (size as usize + AP_LENGTH_INDEX_SIZE_BYTES).div_ceil(FRAGMENT_SIZE_BYTES);
+                let end = fragment_index + length;
+                range = Some(Range { start: fragment_index, end });
+                fragment_index = end;
+            } else {
+                break;
+            }
+        }
+        range
     }
 }
 

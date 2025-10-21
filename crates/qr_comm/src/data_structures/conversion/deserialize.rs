@@ -67,7 +67,7 @@ impl From<[u8; NETWORK_CODING_SIZE_BYTES]> for FrameFactor {
             })
             .collect();
         coding_factors[..factors.len()].copy_from_slice(factors.as_slice());
-        FrameFactor::new(coding_factors, width, offsets)
+        FrameFactor::new(coding_factors, width, offsets).expect("Seems like the provided values are illegal!")
     }
 }
 impl From<[u8; FRAGMENT_SIZE_BYTES]> for Fragment {
