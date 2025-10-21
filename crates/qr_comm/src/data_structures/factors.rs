@@ -1,7 +1,7 @@
 use crate::network_coding::GaloisField2p4;
 use crate::{
-    CODING_FACTORS_PER_FRAME, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, CODING_FACTORS_SIZE_BYTES,
-    FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, MAX_PARTICIPANTS,
+    CODING_FACTORS_PER_FRAME, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, FRAGMENTS_PER_EPOCH,
+    FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, MAX_PARTICIPANTS,
 };
 use std::ops::{Deref, DerefMut};
 
@@ -34,14 +34,6 @@ impl FrameFactor {
         if width.iter().fold(0u16, |acc, w| acc + 2 * (*w as u16)) != 512 {
             panic!("Width data is illegal. You need to use all 512 factors!");
         }
-        let _data: Vec<GaloisField2p4> = [0; CODING_FACTORS_SIZE_BYTES]
-            .iter()
-            .flat_map(|b| {
-                let upper = *b | 0xF0 >> 4;
-                let lower = *b & 0xF;
-                [GaloisField2p4::new(lower), GaloisField2p4::new(upper)]
-            })
-            .collect();
         FrameFactor {
             width,
             offsets,
@@ -95,6 +87,25 @@ impl WideFactor {
             }
         }
         (width, offsets)
+    }
+    pub fn utilized_fragments(&self) -> Box<[bool; FRAGMENTS_PER_EPOCH]> {
+        let mut utilization: Box<[bool; FRAGMENTS_PER_EPOCH]> = vec![false; FRAGMENTS_PER_EPOCH]
+            .try_into()
+            .expect("Error allocating memory!");
+        let util: Vec<bool> = self
+            .inner
+            .iter()
+            .map(|f| *f != GaloisField2p4::ZERO)
+            .collect();
+        utilization.copy_from_slice(util.as_slice());
+        utilization
+    }
+    pub fn is_plain(&self) -> bool {
+        self.inner
+            .iter()
+            .filter(|&f| *f != GaloisField2p4::ZERO)
+            .count()
+            == 1
     }
 }
 
