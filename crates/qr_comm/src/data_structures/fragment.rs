@@ -1,5 +1,6 @@
 use crate::FRAGMENT_SIZE_BYTES;
-use std::ops::{Deref, DerefMut};
+use crate::network_coding::GaloisField2p4;
+use std::ops::{AddAssign, Deref, DerefMut, Mul, MulAssign};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Fragment {
@@ -24,6 +25,36 @@ impl Deref for Fragment {
 impl DerefMut for Fragment {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner.deref_mut()
+    }
+}
+impl MulAssign<GaloisField2p4> for Fragment {
+    fn mul_assign(&mut self, rhs: GaloisField2p4) {
+        self.inner.iter_mut().for_each(|f| {
+            let upper = GaloisField2p4 {
+                inner: (*f & 0xF0) >> 4,
+            } * rhs;
+            let lower = GaloisField2p4 { inner: *f & 0xF } * rhs;
+            *f = (upper.inner << 4) | lower.inner
+        });
+    }
+}
+impl Mul<GaloisField2p4> for Fragment {
+    type Output = Fragment;
+
+    fn mul(self, rhs: GaloisField2p4) -> Self::Output {
+        let mut lhs = self;
+        lhs *= rhs;
+        lhs
+    }
+}
+impl AddAssign<Fragment> for Fragment {
+    fn add_assign(&mut self, rhs: Fragment) {
+        self.inner
+            .iter_mut()
+            .zip(rhs.inner.iter())
+            .for_each(|(lhs, rhs)| {
+                *lhs ^= rhs;
+            });
     }
 }
 

@@ -13,6 +13,11 @@ impl Equation {
     pub fn new(factors: WideFactor, fragment: Fragment) -> Self {
         Equation { factors, fragment }
     }
+    pub fn plain_at_index(index: usize, fragment: Fragment) -> Self {
+        let mut factors = WideFactor::default();
+        factors[index] = GaloisField2p4::ONE;
+        Equation { factors, fragment }
+    }
 }
 
 impl SubAssign<Equation> for Equation {
@@ -51,13 +56,7 @@ impl AddAssign<Equation> for Equation {
             .for_each(|(lhs, rhs)| {
                 *lhs += *rhs;
             });
-        self.fragment
-            .inner
-            .iter_mut()
-            .zip(rhs.fragment.inner.iter())
-            .for_each(|(lhs, rhs)| {
-                *lhs ^= rhs;
-            });
+        self.fragment += rhs.fragment;
     }
 }
 impl Add<Equation> for Equation {
@@ -72,11 +71,7 @@ impl Add<Equation> for Equation {
 impl MulAssign<GaloisField2p4> for Equation {
     fn mul_assign(&mut self, rhs: GaloisField2p4) {
         self.factors.inner.iter_mut().for_each(|f| *f *= rhs);
-        self.fragment.inner.iter_mut().for_each(|f| {
-            let upper = GaloisField2p4 { inner: (*f & 0xF0) >> 4 } * rhs;
-            let lower = GaloisField2p4 { inner: *f & 0xF } * rhs;
-            *f = (upper.inner << 4) | lower.inner
-        });
+        self.fragment *= rhs;
     }
 }
 impl MulAssign<u8> for Equation {

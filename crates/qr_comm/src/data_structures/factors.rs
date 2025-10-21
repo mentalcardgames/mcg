@@ -1,24 +1,24 @@
 use crate::network_coding::GaloisField2p4;
 use crate::{
-    CODING_FACTORS_PER_FRAME, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, FRAGMENTS_PER_EPOCH,
-    FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, MAX_PARTICIPANTS,
+    CODING_FACTORS_PER_FRAME, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
+    MAX_PARTICIPANTS,
 };
 use std::ops::{Deref, DerefMut};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FrameFactor {
-    pub width: [u8; MAX_PARTICIPANTS],
+    pub widths: [u8; MAX_PARTICIPANTS],
     pub offsets: [u16; MAX_PARTICIPANTS],
     pub factors: [GaloisField2p4; CODING_FACTORS_PER_FRAME],
 }
 
 impl Default for FrameFactor {
     fn default() -> Self {
-        let width = [16; MAX_PARTICIPANTS];
+        let widths = [16; MAX_PARTICIPANTS];
         let offsets = [0; MAX_PARTICIPANTS];
         let factors = [GaloisField2p4::ZERO; CODING_FACTORS_PER_FRAME];
         Self {
-            width,
+            widths,
             offsets,
             factors,
         }
@@ -28,28 +28,36 @@ impl Default for FrameFactor {
 impl FrameFactor {
     pub fn new(
         factors: [GaloisField2p4; CODING_FACTORS_PER_FRAME],
-        width: [u8; MAX_PARTICIPANTS],
+        widths: [u8; MAX_PARTICIPANTS],
         offsets: [u16; MAX_PARTICIPANTS],
-    ) -> Self {
-        if width.iter().fold(0u16, |acc, w| acc + 2 * (*w as u16)) != 512 {
-            panic!("Width data is illegal. You need to use all 512 factors!");
-        }
-        FrameFactor {
-            width,
-            offsets,
-            factors,
+    ) -> Result<Self, &'static str> {
+        if widths.iter().fold(0u16, |acc, w| acc + 2 * (*w as u16)) > 512 {
+            Err("Illegal widths data. You can't have more than 512 factors!")
+        } else {
+            Ok(
+                FrameFactor {
+                    widths,
+                    offsets,
+                    factors,
+                }
+            )
         }
     }
-    pub fn get_factor_at(&self, idx: usize) -> GaloisField2p4 {
+    pub fn get_factor_at(&self, idx: usize) -> Option<GaloisField2p4> {
         let participant_idx = idx / FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
         let factor_idx = idx % FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
-        if let Some(idx) = factor_idx.checked_sub(self.offsets[participant_idx] as usize)
-            && let Some(idx) = idx.checked_sub(CODING_FACTORS_PER_PARTICIPANT_PER_FRAME)
-        {
-            self.factors[CODING_FACTORS_PER_PARTICIPANT_PER_FRAME * participant_idx + idx]
-        } else {
-            GaloisField2p4::ZERO
+        let factor_idx_shifted = factor_idx.checked_sub(self.offsets[participant_idx] as usize)?;
+        (self.widths[participant_idx] as usize * 2).checked_sub(factor_idx_shifted)?;
+        if self.widths[participant_idx] == 0 {
+            return None;
         }
+        Some(
+            self.factors[self.widths[..participant_idx]
+                .iter()
+                .map(|x| *x as usize * 2)
+                .sum::<usize>()
+                + factor_idx_shifted],
+        )
     }
 }
 
@@ -135,7 +143,7 @@ impl From<FrameFactor> for WideFactor {
         let mut start: usize = 0;
         let mut stop: usize = 0;
         for (participant, (width, offset)) in
-            value.width.iter().zip(value.offsets.iter()).enumerate()
+            value.widths.iter().zip(value.offsets.iter()).enumerate()
         {
             stop += 2 * (*width as usize);
             let a = participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + (*offset as usize);
@@ -157,5 +165,72 @@ impl Default for CompactFactor {
     fn default() -> Self {
         let inner = Vec::new();
         CompactFactor { inner }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::data_structures::FrameFactor;
+    use crate::network_coding::GaloisField2p4;
+    use crate::{
+        CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
+        MAX_PARTICIPANTS,
+    };
+
+    #[test]
+    fn get_factor_at_test_0() {
+        let mut factors = FrameFactor::default();
+        for participant in 0..MAX_PARTICIPANTS {
+            for factor in 0..10 {
+                factors.factors[participant * CODING_FACTORS_PER_PARTICIPANT_PER_FRAME + factor] =
+                    GaloisField2p4::from((factor + participant) as u8 & 0xF);
+            }
+        }
+        for participant in 0..MAX_PARTICIPANTS {
+            for factor in 0..10 {
+                let f = factors
+                    .get_factor_at(participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + factor);
+                let expected = GaloisField2p4::from((factor + participant) as u8 & 0xF);
+                assert!(
+                    f.is_some(),
+                    "Missing for participant {} at factor {}",
+                    participant,
+                    factor
+                );
+                assert_eq!(f.unwrap(), expected);
+            }
+        }
+        factors.widths[4] = 0;
+        factors.widths[MAX_PARTICIPANTS-1] *= 2;
+        for factor in 0..10 {
+            let f = factors.get_factor_at(4 * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + factor);
+            assert!(f.is_none());
+        }
+        for participant in 5..(MAX_PARTICIPANTS-1) {
+            for factor in 0..10 {
+                let f =
+                    factors.get_factor_at(participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + factor);
+                let expected = GaloisField2p4::from((factor + participant - 1) as u8  & 0xF);
+                assert!(
+                    f.is_some(),
+                    "Missing for participant {} at factor {}",
+                    participant,
+                    factor
+                );
+                assert_eq!(f.unwrap(), expected);
+            }
+        }
+        for factor in 0..10usize {
+            let f = factors.get_factor_at((MAX_PARTICIPANTS-1) * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + factor);
+            let expected = GaloisField2p4::from((factor + MAX_PARTICIPANTS-2) as u8 & 0xF);
+            assert!(f.is_some());
+            assert_eq!(f.unwrap(), expected);
+        }
+        for factor in 0..10usize {
+            let f = factors.get_factor_at((MAX_PARTICIPANTS-1) * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + factor + CODING_FACTORS_PER_PARTICIPANT_PER_FRAME);
+            let expected = GaloisField2p4::from((factor + MAX_PARTICIPANTS-1) as u8 & 0xF);
+            assert!(f.is_some());
+            assert_eq!(f.unwrap(), expected);
+        }
     }
 }
