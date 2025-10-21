@@ -75,14 +75,12 @@ impl Add for GaloisField2p4 {
         GaloisField2p4 { inner }
     }
 }
-
 impl AddAssign for GaloisField2p4 {
     #[allow(clippy::suspicious_op_assign_impl)]
     fn add_assign(&mut self, rhs: Self) {
         self.inner ^= rhs.inner;
     }
 }
-
 impl Sub for GaloisField2p4 {
     type Output = GaloisField2p4;
 
@@ -92,14 +90,12 @@ impl Sub for GaloisField2p4 {
         GaloisField2p4 { inner }
     }
 }
-
 impl SubAssign for GaloisField2p4 {
     #[allow(clippy::suspicious_op_assign_impl)]
     fn sub_assign(&mut self, rhs: Self) {
         self.inner ^= rhs.inner;
     }
 }
-
 impl Mul for GaloisField2p4 {
     type Output = GaloisField2p4;
 
@@ -108,13 +104,11 @@ impl Mul for GaloisField2p4 {
         GaloisField2p4 { inner }
     }
 }
-
 impl MulAssign for GaloisField2p4 {
     fn mul_assign(&mut self, rhs: Self) {
         self.inner = MUL_TABLE_2D[self.inner as usize][rhs.inner as usize];
     }
 }
-
 impl Div for GaloisField2p4 {
     type Output = GaloisField2p4;
 
@@ -123,90 +117,23 @@ impl Div for GaloisField2p4 {
         GaloisField2p4 { inner }
     }
 }
-
 impl DivAssign for GaloisField2p4 {
     fn div_assign(&mut self, rhs: Self) {
         self.inner = DIV_TABLE_2D[self.inner as usize][rhs.inner as usize];
     }
 }
-
-impl Add<u8> for GaloisField2p4 {
-    type Output = GaloisField2p4;
-
-    #[allow(clippy::suspicious_arithmetic_impl)]
-    fn add(self, rhs: u8) -> Self::Output {
-        debug_assert!(rhs <= 0b1111);
-        let inner = self.inner ^ rhs;
-        GaloisField2p4 { inner }
-    }
-}
-
-impl AddAssign<u8> for GaloisField2p4 {
-    #[allow(clippy::suspicious_op_assign_impl)]
-    fn add_assign(&mut self, rhs: u8) {
-        debug_assert!(rhs <= 0b1111);
-        self.inner ^= rhs;
-    }
-}
-
-impl Sub<u8> for GaloisField2p4 {
-    type Output = GaloisField2p4;
-
-    #[allow(clippy::suspicious_arithmetic_impl)]
-    fn sub(self, rhs: u8) -> Self::Output {
-        debug_assert!(rhs <= 0b1111);
-        let inner = self.inner ^ rhs;
-        GaloisField2p4 { inner }
-    }
-}
-
-impl SubAssign<u8> for GaloisField2p4 {
-    #[allow(clippy::suspicious_op_assign_impl)]
-    fn sub_assign(&mut self, rhs: u8) {
-        debug_assert!(rhs <= 0b1111);
-        self.inner ^= rhs;
-    }
-}
-
-impl Mul<u8> for GaloisField2p4 {
-    type Output = GaloisField2p4;
-
-    fn mul(self, rhs: u8) -> Self::Output {
-        debug_assert!(rhs <= 0b1111);
-        let inner = MUL_TABLE_2D[self.inner as usize][rhs as usize];
-        GaloisField2p4 { inner }
-    }
-}
-
-impl MulAssign<u8> for GaloisField2p4 {
-    fn mul_assign(&mut self, rhs: u8) {
-        debug_assert!(rhs <= 0b1111);
-        self.inner = MUL_TABLE_2D[self.inner as usize][rhs as usize];
-    }
-}
-
-impl Div<u8> for GaloisField2p4 {
-    type Output = GaloisField2p4;
-
-    fn div(self, rhs: u8) -> Self::Output {
-        debug_assert!(rhs <= 0b1111);
-        let inner = DIV_TABLE_2D[self.inner as usize][rhs as usize];
-        GaloisField2p4 { inner }
-    }
-}
-
-impl DivAssign<u8> for GaloisField2p4 {
-    fn div_assign(&mut self, rhs: u8) {
-        debug_assert!(rhs <= 0b1111);
-        self.inner = DIV_TABLE_2D[self.inner as usize][rhs as usize];
+impl From<u8> for GaloisField2p4 {
+    /// Creating GaloisField2p4 from u8 shifts the value down by 4 bits if it is too big to fit in.
+    fn from(value: u8) -> Self {
+        if value <= 0xF {
+            GaloisField2p4 { inner: value }
+        } else {
+            GaloisField2p4 { inner: (value &0xF0) >> 4 }
+        }
     }
 }
 
 impl GaloisField2p4 {
-    pub fn new(inner: u8) -> Self {
-        debug_assert!(inner <= 0b1111);
-        GaloisField2p4 { inner }
-    }
     pub fn pow(self, exp: GaloisField2p4) -> GaloisField2p4 {
         let inner = POW_TABLE_2D[self.inner as usize][exp.inner as usize];
         GaloisField2p4 { inner }
