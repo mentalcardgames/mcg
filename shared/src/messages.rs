@@ -38,6 +38,7 @@ pub enum ClientMsg {
         player_id: PlayerId,
         action: PlayerAction,
     },
+    QrReq(String),
     Subscribe,
     RequestState,
     NextHand,
@@ -52,4 +53,5 @@ pub enum ClientMsg {
 pub enum ServerMsg {
     State(GameStatePublic),
     Error(String),
+    QrRes(Box<[u8]>),
 }

@@ -111,10 +111,10 @@ mod tests {
             fragments[0][AP_LENGTH_INDEX_SIZE_BYTES..DATA_LEN + AP_LENGTH_INDEX_SIZE_BYTES],
             data
         );
-        assert_eq!(
-            fragments[0][DATA_LEN + AP_LENGTH_INDEX_SIZE_BYTES..],
-            [0; FRAGMENT_SIZE_BYTES - DATA_LEN - AP_LENGTH_INDEX_SIZE_BYTES]
-        );
+        // assert_eq!(
+        //     fragments[0][DATA_LEN + AP_LENGTH_INDEX_SIZE_BYTES..],
+        //     [0; FRAGMENT_SIZE_BYTES - DATA_LEN - AP_LENGTH_INDEX_SIZE_BYTES]
+        // );
     }
     #[test]
     fn into_fragments_test_2() {

@@ -52,6 +52,7 @@ pub async fn run_once_ws(
                     match sm {
                         ServerMsg::State(gs) => latest_state = Some(gs),
                         ServerMsg::Error(e) => eprintln!("Server error: {}", e),
+                        ServerMsg::QrRes(_) => { },
                     }
                 }
             }
@@ -218,6 +219,7 @@ pub async fn run_once_http(
                     eprintln!("Server error: {}", e);
                     Ok(None)
                 }
+                ServerMsg::QrRes(_) => Ok(None),
             }
         }
         Ok(Err(e)) => Err(e.into()),

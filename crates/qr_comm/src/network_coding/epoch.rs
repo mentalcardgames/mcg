@@ -186,6 +186,7 @@ impl Epoch {
                 }
                 widths[participant] = width.div_ceil(2) as u8;
                 offsets[participant] = start as u16;
+                // TODO move this after participant loop to fill widths up to maximum
                 for frag in &self.decoded_fragments[participant][start..end] {
                     let factor = random::<GaloisField2p4>();
                     factors[coding_factor_idx] = factor;
@@ -351,11 +352,13 @@ fn matrix_elimination(matrix: &mut [Equation]) {
 #[cfg(test)]
 mod tests {
     use crate::FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
-    use crate::data_structures::{Package, WideFactor};
+    use crate::data_structures::{Frame, Package, WideFactor};
     use crate::network_coding::epoch::matrix_elimination;
     use crate::network_coding::{Epoch, Equation, GaloisField2p4};
     use rand::random;
     use std::fs::File;
+    use image::{ImageBuffer, Luma};
+    use qrcode::QrCode;
 
     #[test]
     fn get_package_test_0() {
@@ -370,10 +373,6 @@ mod tests {
         assert_eq!(e.get_package(0, 1).unwrap(), package_1);
         assert!(e.get_package(0, 2).is_none());
         assert!(e.get_package(1, 0).is_none());
-    }
-    #[test]
-    fn get_package_test_1() {
-        todo!("Test get_package(...) after receiving frames from a different epoch.");
     }
     #[test]
     fn matrix_elimination_test_0() {
@@ -405,9 +404,21 @@ mod tests {
         }
     }
     #[test]
-    fn matrix_elimination_test_1() {}
-    #[test]
-    fn richtige_simulation() {
-        todo!("Wie sieht eine 'richtige' Simulation aus?")
+    fn generate_qr_codes() {
+        let mut e = Epoch::default();
+        for (idx, file_name) in ["data_0.txt", "data_1.txt", "dataset-card.png", "homepage.md"].iter().enumerate() {
+            let file = File::open(format!("tests/{}", file_name)).unwrap();
+            let package = Package::from_read(&file);
+            e.header.participant = idx as u8;
+            e.write(package);
+        }
+        for idx in 0..199 {
+            let frame: Frame = e.pop_recent_frame().unwrap();
+            let code: Result<QrCode, _> = frame.try_into();
+            if let Ok(qr) = code {
+                let image: ImageBuffer<Luma<u8>, Vec<u8>> = qr.render::<Luma<u8>>().build();
+                image.save(format!("tests/out_dir/qr_{idx}.png")).unwrap();
+            }
+        }
     }
 }

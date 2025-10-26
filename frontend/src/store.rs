@@ -131,6 +131,7 @@ impl AppState {
             ServerMsg::Error(e) => {
                 self.last_error = Some(e.clone());
             }
+            ServerMsg::QrRes(content) => {}
         }
     }
 }

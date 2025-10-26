@@ -68,5 +68,6 @@ pub fn handle_server_msg(sm: &ServerMsg, json: bool, last_printed: &mut usize) {
             }
         }
         ServerMsg::Error(e) => eprintln!("Server error: {}", e),
+        ServerMsg::QrRes(_) => { },
     }
 }

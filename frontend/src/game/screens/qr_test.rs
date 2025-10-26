@@ -3,6 +3,7 @@ use crate::qr_scanner::QrScannerPopup;
 
 pub struct QrScreen {
     input: String,
+    raw: Vec<u8>,
     scanner: QrScannerPopup,
 }
 
@@ -10,6 +11,7 @@ impl QrScreen {
     pub fn new() -> Self {
         Self {
             input: String::new(),
+            raw: Vec::new(),
             scanner: QrScannerPopup::new(),
         }
     }
@@ -34,10 +36,14 @@ impl ScreenWidget for QrScreen {
         ui.horizontal(|ui| {
             ui.label("Text:");
             ui.text_edit_singleline(&mut self.input);
-            self.scanner.button_and_popup(ui, &ctx, &mut self.input);
+            self.scanner.button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
         });
         ui.add_space(8.0);
         ui.label("Tip: Click 'Scan QR' to fill this field from a QR code.");
+        if !self.raw.is_empty() {
+            let lossy = String::from_utf8_lossy(&self.raw);
+            ui.label(lossy);
+        }
     }
 }
 
