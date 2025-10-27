@@ -1,6 +1,11 @@
 use crate::data_structures::{Fragment, Frame, FrameFactor, FrameHeader, Package, WideFactor};
+use crate::matrix::Matrix;
 use crate::network_coding::{Equation, GaloisField2p4};
-use crate::{AP_LENGTH_INDEX_SIZE_BYTES, BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, FRAGMENT_SIZE_BYTES, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, MAX_PARTICIPANTS, CODING_FACTORS_PER_FRAME};
+use crate::{
+    AP_LENGTH_INDEX_SIZE_BYTES, BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_FRAME,
+    CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
+    FRAGMENT_SIZE_BYTES, MAX_PARTICIPANTS,
+};
 use rand::random;
 use std::array::from_fn;
 use std::num::NonZeroU8;
@@ -81,13 +86,13 @@ impl Epoch {
                         && self
                             .decoded_fragments
                             .get(participant_idx)
-                            .map(|fragments| fragments.get(fragment_idx).is_some())
-                            .unwrap_or(false)
+                            .map(|fragments| fragments.get(fragment_idx).is_none())
+                            .unwrap_or(true)
                 })
                 .count();
 
             if self.equations.len() >= number_equations {
-                let mut matrix = Vec::new();
+                let mut matrix = Matrix::default();
 
                 // Map encoded fragments into equations
                 for (idx_participant, fragments) in self.decoded_fragments.iter().enumerate() {
@@ -97,17 +102,23 @@ impl Epoch {
                             idx_participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + idx_fragment;
                         factors[idx] = GaloisField2p4::ONE;
                         let equation = Equation::new(factors, fragment.clone());
-                        matrix.push(equation);
+                        matrix.inner.push(equation);
                     }
                 }
-                matrix.append(self.equations.clone().as_mut());
+                matrix.inner.append(self.equations.clone().as_mut());
 
-                matrix_elimination(&mut matrix);
+                matrix.matrix_elimination();
 
                 // Append decoded fragments
-                if matrix.iter().filter(|eq| eq.factors.is_plain()).count() == number_equations {
+                if matrix
+                    .inner
+                    .iter()
+                    .filter(|eq| eq.factors.is_plain())
+                    .count()
+                    == number_equations
+                {
                     self.elimination_flag = false;
-                    for eq in matrix {
+                    for eq in matrix.inner {
                         let eq_idx = eq
                             .factors
                             .iter()
@@ -115,8 +126,8 @@ impl Epoch {
                             .find(|(_idx, f)| **f != GaloisField2p4::ZERO)
                             .unwrap()
                             .0;
-                        let participant_idx = eq_idx / CODING_FACTORS_PER_PARTICIPANT_PER_FRAME;
-                        let fragment_idx = eq_idx % CODING_FACTORS_PER_PARTICIPANT_PER_FRAME;
+                        let participant_idx = eq_idx / FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
+                        let fragment_idx = eq_idx % FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
                         if fragment_idx < self.decoded_fragments[participant_idx].len() {
                             continue;
                         }
@@ -167,7 +178,8 @@ impl Epoch {
                 .to_owned()
         });
 
-        let coding_factors = FrameFactor::new(frame_factors, width, offsets).expect("Looks like I did something wrong!");
+        let coding_factors = FrameFactor::new(frame_factors, width, offsets)
+            .expect("Looks like I did something wrong!");
         Frame::new(coding_factors, fragment, header)
     }
     pub fn pop_recent_frame(&self) -> Option<Frame> {
@@ -178,7 +190,8 @@ impl Epoch {
         let mut coding_factor_idx = 0;
         let mut fragment = Fragment::default();
         for participant in 0..MAX_PARTICIPANTS {
-            if let Some(Range { start, end }) = self.find_range_of_most_recent_package(participant) {
+            if let Some(Range { start, end }) = self.find_range_of_most_recent_package(participant)
+            {
                 let width = end - start;
                 sum_width += width;
                 if sum_width > CODING_FACTORS_PER_FRAME {
@@ -261,9 +274,13 @@ impl Epoch {
                 size[..AP_LENGTH_INDEX_SIZE_BYTES]
                     .copy_from_slice(&fragment[..AP_LENGTH_INDEX_SIZE_BYTES]);
                 let size = u32::from_le_bytes(size);
-                let length = (size as usize + AP_LENGTH_INDEX_SIZE_BYTES).div_ceil(FRAGMENT_SIZE_BYTES);
+                let length =
+                    (size as usize + AP_LENGTH_INDEX_SIZE_BYTES).div_ceil(FRAGMENT_SIZE_BYTES);
                 let end = fragment_index + length;
-                range = Some(Range { start: fragment_index, end });
+                range = Some(Range {
+                    start: fragment_index,
+                    end,
+                });
                 fragment_index = end;
             } else {
                 break;
@@ -273,92 +290,18 @@ impl Epoch {
     }
 }
 
-fn find_pivot(matrix: &[Equation], column: usize, start: usize) -> Option<usize> {
-    (start..matrix.len()).find(|&i| matrix[i].factors[column] != GaloisField2p4::ZERO)
-}
-
-/// Matrix elimination from https://docs.rs/gauss_jordan_elimination/0.2.0/src/gauss_jordan_elimination/lib.rs.html#23
-fn matrix_elimination(matrix: &mut [Equation]) {
-    let n_rows = matrix.len();
-    // Eliminate lower left triangle from matrix
-    let mut pivot_counter = 0;
-    for column_idx in 0..FRAGMENTS_PER_EPOCH {
-        if pivot_counter == n_rows {
-            break;
-        }
-        match find_pivot(matrix, column_idx, pivot_counter) {
-            None => {}
-            Some(pivot_row_idx) => {
-                // Normalize the pivot to get identity
-                let denominator = matrix[pivot_row_idx].factors[column_idx];
-                if denominator != GaloisField2p4::ONE {
-                    matrix[pivot_row_idx] /= denominator;
-                } else if denominator == GaloisField2p4::ZERO {
-                    unreachable!("This shouldn't happen!");
-                }
-
-                // Subtract pivot row from all rows that are below it
-                for row in pivot_row_idx + 1..n_rows {
-                    let factor = matrix[row].factors[column_idx];
-                    if factor == GaloisField2p4::ZERO {
-                        continue;
-                    }
-                    let (pivot_slice, destination_slice) = matrix.split_at_mut(row);
-                    destination_slice[0] -= pivot_slice[pivot_row_idx].clone() * factor;
-                }
-
-                // Move pivot to row column, in order to get a "real" echelon form.
-                if pivot_counter != pivot_row_idx {
-                    matrix.swap(pivot_row_idx, pivot_counter);
-                }
-
-                pivot_counter += 1;
-            }
-        }
-    }
-
-    // Elimination of upper right triangle
-    let mut pivot_counter = matrix.len() - 1;
-    for column_idx in (0..FRAGMENTS_PER_EPOCH).rev() {
-        if pivot_counter == 0 {
-            break;
-        }
-        match find_pivot(matrix, column_idx, pivot_counter) {
-            None => {}
-            Some(pivot_row_idx) => {
-                pivot_counter -= 1;
-
-                let pivot = matrix[pivot_row_idx].factors[column_idx];
-                if pivot != GaloisField2p4::ONE {
-                    // In case the pivot is not one we make it
-                    matrix[pivot_row_idx] /= pivot;
-                } else if pivot == GaloisField2p4::ZERO {
-                    unreachable!("This shouldn't happen!");
-                }
-
-                // Subtract pivot row from all rows that are above it
-                for row_idx in 0..pivot_row_idx {
-                    let factor = matrix[row_idx].factors[column_idx];
-                    if factor != GaloisField2p4::ZERO {
-                        let (destination_slice, pivot_slice) = matrix.split_at_mut(pivot_row_idx);
-                        destination_slice[row_idx] -= pivot_slice[0].clone() * factor;
-                    }
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
     use crate::data_structures::{Frame, Package, WideFactor};
-    use crate::network_coding::epoch::matrix_elimination;
+    use crate::matrix::Matrix;
     use crate::network_coding::{Epoch, Equation, GaloisField2p4};
-    use rand::random;
-    use std::fs::File;
+    use crate::{FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, FRAME_SIZE_BYTES};
     use image::{ImageBuffer, Luma};
     use qrcode::QrCode;
+    use rand::random;
+    use std::array::from_fn;
+    use std::fs::File;
+    use std::io::Write;
 
     #[test]
     fn get_package_test_0() {
@@ -376,7 +319,7 @@ mod tests {
     }
     #[test]
     fn matrix_elimination_test_0() {
-        let file_0 = File::open("tests/data_0.txt").unwrap();
+        let file_0 = File::open("../../media/qr_test/data_0.txt").unwrap();
         let fragments = Package::from_read(file_0).into_fragments();
         let equations: Vec<Equation> = fragments
             .iter()
@@ -387,7 +330,7 @@ mod tests {
                 Equation::new(factor, frag.clone())
             })
             .collect();
-        let mut matrix: Vec<Equation> = Vec::new();
+        let mut matrix = Matrix::default();
         for _ in 0..equations.len() {
             let eq = equations
                 .iter()
@@ -395,30 +338,218 @@ mod tests {
                 .fold(Equation::default(), |acc, e| {
                     acc + (e * (random::<u8>() & 0xF))
                 });
-            matrix.push(eq);
+            matrix.inner.push(eq);
         }
-        matrix_elimination(&mut matrix);
-        for (idx, eq) in matrix.iter().enumerate() {
+        matrix.matrix_elimination();
+        for (idx, eq) in matrix.inner.iter().enumerate() {
             assert!(eq.factors.is_plain());
             assert_eq!(eq.fragment, fragments[idx]);
         }
     }
     #[test]
+    fn push_frame_test_0() {
+        let mut e = Epoch::default();
+        let package: Package =
+            Package::from_read(File::open("../../media/qr_test/data_0.txt").unwrap());
+        e.write(package);
+        assert!(e.get_package(0, 0).is_some());
+        let mut frames = Vec::new();
+        for _ in 0..4 {
+            let frame = e.pop_recent_frame();
+            assert!(frame.is_some());
+            frames.push(frame.unwrap());
+        }
+        let mut e = Epoch::default();
+        e.header.participant = 1;
+        for (idx, frame) in frames.iter().enumerate() {
+            if idx > 0 {
+                assert!(!e.equations.is_empty());
+            } else {
+                assert_eq!(e.equations.len(), idx);
+            }
+            e.push_frame(frame.clone());
+        }
+        assert!(e.equations.is_empty());
+    }
+    #[test]
+    fn push_frame_test_1() {
+        let mut e_out = Epoch::default();
+        assert_eq!(FILES.len(), 4);
+        for (idx, file_name) in FILES.iter().enumerate() {
+            let ap = Package::from_read(
+                File::open(format!("../../media/qr_test/{}", file_name)).unwrap(),
+            );
+            e_out.write(ap);
+            e_out.header.participant += 1;
+            assert!(e_out.get_package(idx, 0).is_some());
+        }
+        let mut e_in = Epoch::default();
+        e_in.header.participant = FILES.len() as u8;
+        let width = e_out
+            .pop_recent_frame()
+            .unwrap()
+            .factors
+            .widths
+            .iter()
+            .fold(0u16, |acc, w| acc + (*w as u16 * 2));
+        let times = width + 20;
+        for idx in 0..times {
+            let frame = e_out.pop_recent_frame();
+            assert!(frame.is_some());
+            assert_eq!(e_in.equations.len(), idx as usize);
+            e_in.push_frame(frame.unwrap());
+            if idx > 0 && e_in.equations.is_empty() {
+                println!("decoded after the {idx}. out of {times} frames 🥳");
+                break;
+            }
+        }
+        assert!(e_in.equations.is_empty());
+    }
+    #[test]
+    fn push_frame_test_2() {
+        let mut e_out = Epoch::default();
+        assert_eq!(FILES.len(), 4);
+        for (idx, file_name) in FILES.iter().enumerate() {
+            let ap = Package::from_read(
+                File::open(format!("../../media/qr_test/{}", file_name)).unwrap(),
+            );
+            e_out.write(ap);
+            e_out.header.participant += 1;
+            assert!(e_out.get_package(idx, 0).is_some());
+        }
+        let mut e_in = Epoch::default();
+        e_in.header.participant = FILES.len() as u8;
+        let mut idx: usize = 0;
+        loop {
+            let frame = e_out.pop_recent_frame();
+            assert!(frame.is_some());
+            if e_in.equations.len() != idx || idx > 300 {
+                println!("decoded after the {idx}. frame 🥳");
+                break;
+            }
+            if idx >= 196 && idx % 25 == 0 {
+                println!("Working on frame {idx}");
+            }
+            e_in.push_frame(frame.unwrap());
+            idx += 1;
+        }
+        for (idx, file_name) in FILES.iter().enumerate() {
+            let mut ap = e_in.get_package(idx, 0).unwrap();
+            let mut file = File::create(format!("tests/out_dir/{}", file_name)).unwrap();
+            file.write_all(ap.data.as_mut_slice()).unwrap();
+        }
+    }
+    const NUM_FRAMES: usize = 220;
+    // const FILES: [&str; 1] = ["data_0.txt"];
+    const FILES: [&str; 2] = ["data_0.txt", "data_1.txt"];
+    // const FILES: [&str; 4] = [
+    //     "data_0.txt",
+    //     "data_1.txt",
+    //     "dataset-card.png",
+    //     "homepage.md",
+    // ];
+    #[test]
+    #[ignore]
     fn generate_qr_codes() {
         let mut e = Epoch::default();
-        for (idx, file_name) in ["data_0.txt", "data_1.txt", "dataset-card.png", "homepage.md"].iter().enumerate() {
-            let file = File::open(format!("tests/{}", file_name)).unwrap();
+        for (idx, file_name) in FILES.iter().enumerate() {
+            let file = File::open(format!("../../media/qr_test/{}", file_name)).unwrap();
             let package = Package::from_read(&file);
             e.header.participant = idx as u8;
             e.write(package);
         }
-        for idx in 0..199 {
+        for idx in 0..NUM_FRAMES {
             let frame: Frame = e.pop_recent_frame().unwrap();
             let code: Result<QrCode, _> = frame.try_into();
             if let Ok(qr) = code {
                 let image: ImageBuffer<Luma<u8>, Vec<u8>> = qr.render::<Luma<u8>>().build();
                 image.save(format!("tests/out_dir/qr_{idx}.png")).unwrap();
             }
+        }
+    }
+    #[test]
+    #[ignore]
+    fn scan_qr_codes() {
+        let mut e = Epoch::default();
+        for (idx, code) in (0..NUM_FRAMES)
+            .filter_map(|file_idx| image::open(format!("tests/out_dir/qr_{}.png", file_idx)).ok())
+            .enumerate()
+        {
+            let img = code.to_luma8();
+            let mut img = rqrr::PreparedImage::prepare(img);
+            let grids = img.detect_grids();
+            let mut buf = Vec::new();
+            if let Some(grid) = grids.get(0)
+                && let Ok(_) = grid.decode_to(&mut buf)
+            {
+                let data: [u8; FRAME_SIZE_BYTES] = from_fn(|idx| *buf.get(idx).unwrap_or(&0));
+                let frame: Frame = data.into();
+                e.push_frame(frame);
+                if e.equations.is_empty() {
+                    println!("Decoded after the {idx}. QR-Code");
+                    break;
+                }
+            }
+        }
+        for (participant_idx, file) in FILES.iter().enumerate() {
+            let maybe_ap = e.get_package(participant_idx, 0);
+            assert!(maybe_ap.is_some());
+            let Package {
+                mut data,
+                size: _size,
+            } = maybe_ap.unwrap();
+            if let Ok(mut file) = File::create(format!("tests/out_dir/{}", file)) {
+                let _ = file.write_all(&mut data);
+            }
+        }
+    }
+    #[test]
+    fn coding_test_0() {
+        let mut e_out = Epoch::default();
+        for (idx, file_name) in FILES.iter().enumerate() {
+            let ap = Package::from_read(
+                File::open(format!("../../media/qr_test/{}", file_name)).unwrap(),
+            );
+            e_out.write(ap);
+            e_out.header.participant += 1;
+            assert!(e_out.get_package(idx, 0).is_some());
+        }
+        let mut e_in = Epoch::default();
+        e_in.header.participant = FILES.len() as u8;
+        let mut idx: usize = 0;
+        loop {
+            let frame = e_out.pop_recent_frame().unwrap();
+            if let Ok(code) = frame.try_into() {
+                let image: ImageBuffer<Luma<u8>, Vec<u8>> =
+                    QrCode::render::<Luma<u8>>(&code).build();
+                image.save(format!("tests/out_dir/qr_{idx}.png")).unwrap();
+                let file = image::open(format!("tests/out_dir/qr_{}.png", idx)).unwrap();
+                let img = file.to_luma8();
+                let mut img = rqrr::PreparedImage::prepare(img);
+                let grids = img.detect_grids();
+                let mut buf = Vec::new();
+                if let Some(grid) = grids.get(0)
+                    && let Ok(_) = grid.decode_to(&mut buf)
+                {
+                    println!("Working on {idx}. frame");
+                    let data: [u8; FRAME_SIZE_BYTES] = from_fn(|idx| *buf.get(idx).unwrap_or(&0));
+                    let frame: Frame = data.into();
+                    e_in.push_frame(frame);
+                    idx += 1;
+                    if (0..FILES.len())
+                        .into_iter()
+                        .all(|i| !e_in.decoded_fragments[i].is_empty())
+                    {
+                        println!("decoded after {idx} frames 🥳");
+                        break;
+                    }
+                }
+            }
+        }
+        for (idx, file_name) in FILES.iter().enumerate() {
+            let mut ap = e_in.get_package(idx, 0).unwrap();
+            let mut file = File::create(format!("tests/out_dir/{}", file_name)).unwrap();
+            file.write_all(ap.data.as_mut_slice()).unwrap();
         }
     }
 }
