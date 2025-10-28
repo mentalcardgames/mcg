@@ -369,6 +369,7 @@ impl QrScannerPopup {
                                 camera.stop();
                                 self.started = false;
                                 self.open = false;
+                                camera.last_qr_result_raw.replace(Vec::new());
                             }
                         } else {
                             ui.label("Camera busy...");

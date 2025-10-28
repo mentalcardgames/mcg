@@ -12,6 +12,7 @@ pub mod pairing_screen;
 pub mod poker;
 pub mod qr_test;
 pub mod qr_test_transmit;
+pub mod qr_test_receive;
 
 pub use articles_screen::ArticlesScreen;
 pub use cards_test_dnd::CardsTestDND;
@@ -23,6 +24,7 @@ pub use main_menu::MainMenu;
 pub use pairing_screen::PairingScreen;
 pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
+use crate::game::screens::qr_test_receive::QrTestReceive;
 use crate::game::screens::qr_test_transmit::QrTestTransmit;
 
 pub struct AppInterface<'a> {
@@ -107,6 +109,7 @@ impl ScreenRegistry {
         reg.register::<ArticlesScreen>();
         reg.register::<QrScreen>();
         reg.register::<QrTestTransmit>();
+        reg.register::<QrTestReceive>();
         reg.register::<PokerOnlineScreen>();
         reg.register::<ExampleScreen>();
 

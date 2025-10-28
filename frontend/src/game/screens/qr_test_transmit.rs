@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use egui::{vec2, ColorImage, Image, TextureHandle, TextureOptions};
+use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
 use image::{ImageBuffer, Luma};
 use qrcode::QrCode;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use js_sys::Date;
 use mcg_qr_comm::data_structures::Package;
 use mcg_qr_comm::MAX_PARTICIPANTS;
 use mcg_shared::{ClientMsg, PlayerConfig, PlayerId, ServerMsg};
@@ -21,6 +22,33 @@ pub struct QrTestTransmit {
     epoch: Rc<RefCell<Epoch>>,
     file_list: Vec<String>,
     zoom: f32,
+    last_code_shown: Option<f64>,
+}
+
+impl QrTestTransmit {
+    fn gen_new_code(&mut self) {
+        if let Ok(epoch) = self.epoch.try_borrow_mut() {
+            if let Some(frame) = epoch.pop_recent_frame() {
+                let qr_res: Result<QrCode, _> = frame.try_into();
+                if let Ok(qr) = qr_res {
+                    let image = qr.render::<Luma<u8>>().build();
+                    self.qr_queue.push_back(image);
+                }
+            }
+        }
+    }
+    fn show_next_code(&mut self, ctx: &Context) {
+        if let Some(img) = self.qr_queue.pop_front() {
+            let size = [img.width() as usize, img.height() as usize];
+            let data = img.iter().as_slice();
+            let color_img = ColorImage::from_gray(size, data);
+            let texture_handle =
+                ctx.load_texture("qr_code", color_img, TextureOptions::default());
+            self.texture_handle.replace(texture_handle);
+        } else {
+            self.texture_handle = None;
+        }
+    }
 }
 
 impl ScreenWidget for QrTestTransmit {
@@ -57,30 +85,34 @@ impl ScreenWidget for QrTestTransmit {
                     }
                 }
             }
-            if ui.button("Generate Frame").clicked() {
-                if let Ok(epoch) = self.epoch.try_borrow_mut() {
-                    if let Some(frame) = epoch.pop_recent_frame() {
-                        let qr_res: Result<QrCode, _> = frame.try_into();
-                        if let Ok(qr) = qr_res {
-                            let image = qr.render::<Luma<u8>>().build();
-                            self.qr_queue.push_back(image);
-                        }
+            if ui.button("Generate Frame").clicked() && self.last_code_shown.is_none() {
+                self.last_code_shown.replace(Date::now());
+                self.gen_new_code();
+            }
+            if let Some(last) = self.last_code_shown {
+                let now = Date::now();
+                if now - last >= 50.0 { // 20 Hz
+                    self.last_code_shown.replace(now);
+                    while self.qr_queue.len() < 3 {
+                        self.gen_new_code();
                     }
+                    self.show_next_code(&ctx);
                 }
+            }
+            if ui.button("Stop").clicked() {
+                self.last_code_shown.take();
             }
         });
         ui.add_space(12.0);
-        if ui.button("Next").clicked() {
-            if let Some(img) = self.qr_queue.pop_front() {
-                let size = [img.width() as usize, img.height() as usize];
-                let data = img.iter().as_slice();
-                let color_img = ColorImage::from_gray(size, data);
-                let texture_handle =
-                    ctx.load_texture("qr_code", color_img, TextureOptions::default());
-                self.texture_handle.replace(texture_handle);
-            }
+        if ui.button("Next").clicked() && self.last_code_shown.is_none() {
+            self.last_code_shown.replace(Date::now());
+            self.show_next_code(&ctx);
         }
         ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            ui.label("Zoom:");
+            ui.add(egui::Slider::new(&mut self.zoom, 0.0..=1.0).text("Zoom").min_decimals(3));
+        });
         if let Some(handle) = &self.texture_handle {
             let width = ui.available_width();
             let height = ui.available_height();
@@ -89,10 +121,6 @@ impl ScreenWidget for QrTestTransmit {
             let image = Image::from_texture(handle).fit_to_exact_size(vec2(size, size));
             ui.add(image);
         }
-        ui.horizontal(|ui| {
-            ui.label("Zoom:");
-            ui.add(egui::Slider::new(&mut self.zoom, 0.0..=1.0).text("Zoom").min_decimals(3));
-        });
     }
 }
 
@@ -102,8 +130,8 @@ impl ScreenDef for QrTestTransmit {
         Self: Sized,
     {
         ScreenMetadata {
-            path: "/qr/transmit",
-            display_name: "QR Transmission",
+            path: "/transmit",
+            display_name: "Generate QR-Codes",
             icon: "🔍",
             description: "Send QR-Codes to peers",
             show_in_menu: true,
@@ -153,7 +181,7 @@ impl ScreenDef for QrTestTransmit {
             is_bot: false,
         };
         players.push(p);
-        me.web_socket_connection.connect("192.168.178.41:8000", players, on_msg, on_err, on_cls);
+        me.web_socket_connection.connect("192.168.137.1:8000", players, on_msg, on_err, on_cls);
         Box::new(me)
     }
 }
