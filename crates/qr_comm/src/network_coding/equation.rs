@@ -1,41 +1,30 @@
-use crate::data_structures::Fragment;
-use crate::data_structures::WideFactor;
+use crate::data_structures::{Factor, Fragment, SparseFactor};
 use crate::network_coding::GaloisField2p4;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Equation {
-    pub factors: WideFactor,
+    pub factors: Factor,
     pub fragment: Fragment,
 }
 
 impl Equation {
-    pub fn new(factors: WideFactor, fragment: Fragment) -> Self {
+    pub fn new(factors: impl Into<Factor>, fragment: Fragment) -> Self {
+        let factors = factors.into();
         Equation { factors, fragment }
     }
     pub fn plain_at_index(index: usize, fragment: Fragment) -> Self {
-        let mut factors = WideFactor::default();
-        factors[index] = GaloisField2p4::ONE;
+        let mut sparse = SparseFactor::default();
+        sparse.inner.push((index, GaloisField2p4::ONE));
+        let factors = Factor::Sparse(sparse);
         Equation { factors, fragment }
     }
 }
 
 impl SubAssign<Equation> for Equation {
     fn sub_assign(&mut self, rhs: Self) {
-        self.factors
-            .inner
-            .iter_mut()
-            .zip(rhs.factors.inner.iter())
-            .for_each(|(lhs, rhs)| {
-                *lhs -= *rhs;
-            });
-        self.fragment
-            .inner
-            .iter_mut()
-            .zip(rhs.fragment.inner.iter())
-            .for_each(|(lhs, rhs)| {
-                *lhs ^= rhs;
-            });
+        self.factors -= rhs.factors;
+        self.fragment -= rhs.fragment;
     }
 }
 impl Sub<Equation> for Equation {
@@ -49,13 +38,7 @@ impl Sub<Equation> for Equation {
 }
 impl AddAssign<Equation> for Equation {
     fn add_assign(&mut self, rhs: Self) {
-        self.factors
-            .inner
-            .iter_mut()
-            .zip(rhs.factors.inner.iter())
-            .for_each(|(lhs, rhs)| {
-                *lhs += *rhs;
-            });
+        self.factors += rhs.factors;
         self.fragment += rhs.fragment;
     }
 }
@@ -70,7 +53,7 @@ impl Add<Equation> for Equation {
 }
 impl MulAssign<GaloisField2p4> for Equation {
     fn mul_assign(&mut self, rhs: GaloisField2p4) {
-        self.factors.inner.iter_mut().for_each(|f| *f *= rhs);
+        self.factors *= rhs;
         self.fragment *= rhs;
     }
 }
@@ -100,12 +83,8 @@ impl Mul<u8> for Equation {
 }
 impl DivAssign<GaloisField2p4> for Equation {
     fn div_assign(&mut self, rhs: GaloisField2p4) {
-        self.factors.inner.iter_mut().for_each(|f| *f /= rhs);
-        self.fragment.inner.iter_mut().for_each(|f| {
-            let upper = GaloisField2p4 { inner: (*f & 0xF0) >> 4 } / rhs;
-            let lower = GaloisField2p4 { inner: *f & 0xF } / rhs;
-            *f = (upper.inner << 4) | lower.inner
-        });
+        self.factors /= rhs;
+        self.fragment /= rhs;
     }
 }
 impl DivAssign<u8> for Equation {
