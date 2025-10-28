@@ -54,6 +54,7 @@ pub(crate) fn start_new_hand_from_deck(g: &mut Game, deck: Vec<Card>) -> Result<
     g.current_bet = 0;
     g.min_raise = g.bb;
     g.round_bets = vec![0; g.players.len()];
+    g.hand_bets = vec![0; g.players.len()];
     g.recent_actions.clear();
     g.winner_ids.clear();
 
@@ -90,6 +91,7 @@ fn post_blind(g: &mut Game, idx: usize, kind: BlindKind, amount: u32) {
     let a = amount.min(g.players[idx].stack);
     g.players[idx].stack -= a;
     g.round_bets[idx] += a;
+    g.hand_bets[idx] += a;
     g.pot += a;
     if a < amount {
         g.players[idx].all_in = true;
