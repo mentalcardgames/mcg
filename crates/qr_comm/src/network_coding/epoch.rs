@@ -1,6 +1,10 @@
 use crate::data_structures::{Fragment, Frame, FrameFactor, FrameHeader, Package, WideFactor};
 use crate::network_coding::{Equation, GaloisField2p4};
-use crate::{AP_LENGTH_INDEX_SIZE_BYTES, BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, FRAGMENT_SIZE_BYTES, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, MAX_PARTICIPANTS, CODING_FACTORS_PER_FRAME};
+use crate::{
+    AP_LENGTH_INDEX_SIZE_BYTES, BYTES_PER_PARTICIPANT, CODING_FACTORS_PER_FRAME,
+    CODING_FACTORS_PER_PARTICIPANT_PER_FRAME, FRAGMENT_SIZE_BYTES, FRAGMENTS_PER_EPOCH,
+    FRAGMENTS_PER_PARTICIPANT_PER_EPOCH, MAX_PARTICIPANTS,
+};
 use rand::random;
 use std::array::from_fn;
 use std::num::NonZeroU8;
@@ -167,7 +171,8 @@ impl Epoch {
                 .to_owned()
         });
 
-        let coding_factors = FrameFactor::new(frame_factors, width, offsets).expect("Looks like I did something wrong!");
+        let coding_factors = FrameFactor::new(frame_factors, width, offsets)
+            .expect("Looks like I did something wrong!");
         Frame::new(coding_factors, fragment, header)
     }
     pub fn pop_recent_frame(&self) -> Option<Frame> {
@@ -178,7 +183,8 @@ impl Epoch {
         let mut coding_factor_idx = 0;
         let mut fragment = Fragment::default();
         for participant in 0..MAX_PARTICIPANTS {
-            if let Some(Range { start, end }) = self.find_range_of_most_recent_package(participant) {
+            if let Some(Range { start, end }) = self.find_range_of_most_recent_package(participant)
+            {
                 let width = end - start;
                 sum_width += width;
                 if sum_width > CODING_FACTORS_PER_FRAME {
@@ -260,9 +266,13 @@ impl Epoch {
                 size[..AP_LENGTH_INDEX_SIZE_BYTES]
                     .copy_from_slice(&fragment[..AP_LENGTH_INDEX_SIZE_BYTES]);
                 let size = u32::from_le_bytes(size);
-                let length = (size as usize + AP_LENGTH_INDEX_SIZE_BYTES).div_ceil(FRAGMENT_SIZE_BYTES);
+                let length =
+                    (size as usize + AP_LENGTH_INDEX_SIZE_BYTES).div_ceil(FRAGMENT_SIZE_BYTES);
                 let end = fragment_index + length;
-                range = Some(Range { start: fragment_index, end });
+                range = Some(Range {
+                    start: fragment_index,
+                    end,
+                });
                 fragment_index = end;
             } else {
                 break;
