@@ -53,7 +53,10 @@ impl Package {
         size[..AP_LENGTH_INDEX_SIZE_BYTES]
             .copy_from_slice(&fragments[0][..AP_LENGTH_INDEX_SIZE_BYTES]);
         let size = u32::from_le_bytes(size);
-        assert!(size <= AP_MAX_SIZE_BYTES as u32, "AP size greater than maximum");
+        assert!(
+            size <= AP_MAX_SIZE_BYTES as u32,
+            "AP size greater than maximum"
+        );
         let mut data = Vec::with_capacity(size as usize);
         let end = min(
             size as usize,

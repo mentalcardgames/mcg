@@ -102,7 +102,9 @@ impl DivAssign<GaloisField2p4> for Equation {
     fn div_assign(&mut self, rhs: GaloisField2p4) {
         self.factors.inner.iter_mut().for_each(|f| *f /= rhs);
         self.fragment.inner.iter_mut().for_each(|f| {
-            let upper = GaloisField2p4 { inner: (*f & 0xF0) >> 4 } / rhs;
+            let upper = GaloisField2p4 {
+                inner: (*f & 0xF0) >> 4,
+            } / rhs;
             let lower = GaloisField2p4 { inner: *f & 0xF } / rhs;
             *f = (upper.inner << 4) | lower.inner
         });
@@ -130,6 +132,5 @@ impl Div<u8> for Equation {
         let mut lhs = self;
         lhs /= rhs;
         lhs
-
     }
 }

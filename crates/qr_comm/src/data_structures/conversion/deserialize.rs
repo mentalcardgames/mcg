@@ -63,11 +63,17 @@ impl From<[u8; NETWORK_CODING_SIZE_BYTES]> for FrameFactor {
         let factors: Vec<GaloisField2p4> = value[CODING_FACTOR_OFFSET_SIZE_BYTES..]
             .iter()
             .flat_map(|b| {
-                [GaloisField2p4 { inner: *b & 0xF }, GaloisField2p4 { inner: (*b | 0xF0) >> 4 }]
+                [
+                    GaloisField2p4 { inner: *b & 0xF },
+                    GaloisField2p4 {
+                        inner: (*b | 0xF0) >> 4,
+                    },
+                ]
             })
             .collect();
         coding_factors[..factors.len()].copy_from_slice(factors.as_slice());
-        FrameFactor::new(coding_factors, width, offsets).expect("Seems like the provided values are illegal!")
+        FrameFactor::new(coding_factors, width, offsets)
+            .expect("Seems like the provided values are illegal!")
     }
 }
 impl From<[u8; FRAGMENT_SIZE_BYTES]> for Fragment {

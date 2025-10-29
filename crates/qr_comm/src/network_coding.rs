@@ -6,4 +6,3 @@ pub use crate::network_coding::epoch::Epoch;
 
 pub mod equation;
 pub use crate::network_coding::equation::Equation;
-

@@ -1,9 +1,9 @@
+use rand::distr::{Distribution, StandardUniform};
+use rand::seq::IndexedRandom;
+use rand::{Rng, random};
 use std::array::from_fn;
 use std::num::NonZeroU8;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
-use rand::distr::{Distribution, StandardUniform};
-use rand::{random, Rng};
-use rand::seq::IndexedRandom;
 
 const MUL_TABLE_2D: [[u8; 16]; 16] = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -133,7 +133,9 @@ impl From<u8> for GaloisField2p4 {
         if value <= 0xF {
             GaloisField2p4 { inner: value }
         } else {
-            GaloisField2p4 { inner: (value &0xF0) >> 4 }
+            GaloisField2p4 {
+                inner: (value & 0xF0) >> 4,
+            }
         }
     }
 }
@@ -141,7 +143,7 @@ impl From<u8> for GaloisField2p4 {
 // Trait `Distribution<GaloisField2p4>` is not implemented for `StandardUniform`
 impl Distribution<GaloisField2p4> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> GaloisField2p4 {
-        let range: [GaloisField2p4; 15] = from_fn(|idx| { GaloisField2p4::from((idx + 1) as u8) });
+        let range: [GaloisField2p4; 15] = from_fn(|idx| GaloisField2p4::from((idx + 1) as u8));
         *range.choose(rng).unwrap()
     }
 }
