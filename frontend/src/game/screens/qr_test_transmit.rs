@@ -1,17 +1,17 @@
-use std::cell::RefCell;
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
-use image::{ImageBuffer, Luma};
-use qrcode::QrCode;
-use std::collections::VecDeque;
-use std::rc::Rc;
-use js_sys::Date;
-use mcg_qr_comm::data_structures::Package;
-use mcg_qr_comm::MAX_PARTICIPANTS;
-use mcg_shared::{ClientMsg, PlayerConfig, PlayerId, ServerMsg};
 use crate::game::websocket::WebSocketConnection;
 use crate::sprintln;
+use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
+use image::{ImageBuffer, Luma};
+use js_sys::Date;
+use mcg_qr_comm::data_structures::Package;
 use mcg_qr_comm::network_coding::Epoch;
+use mcg_qr_comm::MAX_PARTICIPANTS;
+use mcg_shared::{ClientMsg, PlayerConfig, PlayerId, ServerMsg};
+use qrcode::QrCode;
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::rc::Rc;
 
 #[derive(Default)]
 pub struct QrTestTransmit {
@@ -42,8 +42,7 @@ impl QrTestTransmit {
             let size = [img.width() as usize, img.height() as usize];
             let data = img.iter().as_slice();
             let color_img = ColorImage::from_gray(size, data);
-            let texture_handle =
-                ctx.load_texture("qr_code", color_img, TextureOptions::default());
+            let texture_handle = ctx.load_texture("qr_code", color_img, TextureOptions::default());
             self.texture_handle.replace(texture_handle);
         } else {
             self.texture_handle = None;
@@ -64,7 +63,9 @@ impl ScreenWidget for QrTestTransmit {
         ui.label(format!("QR-Codes in Queue: {}", self.qr_queue.len()));
         let id = if let Ok(epoch) = self.epoch.try_borrow_mut() {
             Some(epoch.header.participant)
-        } else { None };
+        } else {
+            None
+        };
         ui.label(format!("Current participant ID: {:?}", id));
         ui.horizontal(|ui| {
             ui.label("Text to transmit:");
@@ -91,7 +92,8 @@ impl ScreenWidget for QrTestTransmit {
             }
             if let Some(last) = self.last_code_shown {
                 let now = Date::now();
-                if now - last >= 50.0 { // 20 Hz
+                if now - last >= 50.0 {
+                    // 20 Hz
                     self.last_code_shown.replace(now);
                     while self.qr_queue.len() < 3 {
                         self.gen_new_code();
@@ -111,7 +113,11 @@ impl ScreenWidget for QrTestTransmit {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             ui.label("Zoom:");
-            ui.add(egui::Slider::new(&mut self.zoom, 0.0..=1.0).text("Zoom").min_decimals(3));
+            ui.add(
+                egui::Slider::new(&mut self.zoom, 0.0..=1.0)
+                    .text("Zoom")
+                    .min_decimals(3),
+            );
         });
         if let Some(handle) = &self.texture_handle {
             let width = ui.available_width();
@@ -148,23 +154,21 @@ impl ScreenDef for QrTestTransmit {
         me.file_list.push(String::from("homepage.md"));
         me.file_list.push(String::from("dataset-card.png"));
         let epoch_copy = me.epoch.clone();
-        let on_msg = move |x| {
-            match x {
-                ServerMsg::State(s) => {
-                    sprintln!("Got a message state:\n\t- {:?}", s);
-                }
-                ServerMsg::Error(e) => {
-                    sprintln!("Got a message error:\n\t- {:?}", e);
-                }
-                ServerMsg::QrRes(content) => {
-                    let s = String::from_utf8_lossy(&content);
-                    sprintln!("Got a response:\n\t- {:?}", s);
-                    if let Ok(mut epoch) = epoch_copy.try_borrow_mut() {
-                        let ap = Package::new(&content);
-                        epoch.write(ap);
-                        epoch.header.participant += 1;
-                        epoch.header.participant %= MAX_PARTICIPANTS as u8;
-                    }
+        let on_msg = move |x| match x {
+            ServerMsg::State(s) => {
+                sprintln!("Got a message state:\n\t- {:?}", s);
+            }
+            ServerMsg::Error(e) => {
+                sprintln!("Got a message error:\n\t- {:?}", e);
+            }
+            ServerMsg::QrRes(content) => {
+                let s = String::from_utf8_lossy(&content);
+                sprintln!("Got a response:\n\t- {:?}", s);
+                if let Ok(mut epoch) = epoch_copy.try_borrow_mut() {
+                    let ap = Package::new(&content);
+                    epoch.write(ap);
+                    epoch.header.participant += 1;
+                    epoch.header.participant %= MAX_PARTICIPANTS as u8;
                 }
             }
         };
@@ -181,7 +185,8 @@ impl ScreenDef for QrTestTransmit {
             is_bot: false,
         };
         players.push(p);
-        me.web_socket_connection.connect("192.168.137.1:8000", players, on_msg, on_err, on_cls);
+        me.web_socket_connection
+            .connect("192.168.137.1:8000", players, on_msg, on_err, on_cls);
         Box::new(me)
     }
 }

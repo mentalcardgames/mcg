@@ -109,6 +109,5 @@ impl Div<u8> for Equation {
         let mut lhs = self;
         lhs /= rhs;
         lhs
-
     }
 }

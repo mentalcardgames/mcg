@@ -9,7 +9,7 @@ use crate::{
 };
 use rand::random;
 use std::array::from_fn;
-use std::mem;
+use std::io::Write;
 use std::num::NonZeroUsize;
 use std::ops::Range;
 
@@ -28,6 +28,7 @@ pub struct Epoch {
     pub current_utilization: Box<[Utilization; FRAGMENTS_PER_EPOCH]>,
     pub elimination_flag: bool,
     pub header: FrameHeader,
+    pub needed_eqs: usize,
 }
 
 impl Default for Epoch {
@@ -53,6 +54,7 @@ impl Default for Epoch {
             current_utilization,
             elimination_flag,
             header,
+            needed_eqs: 0,
         }
     }
 }
@@ -93,31 +95,37 @@ impl Epoch {
             self.matrix.inner.push(equation);
 
             // Calculate how many equations are needed to solve new AP
-            let mut plain_equations = Vec::new();
+            let mut _plain_equations = Vec::new();
+            // let number_equations = self
+            //     .current_utilization
+            //     .iter()
+            //     .enumerate()
+            //     .filter(|(idx, u)| {
+            //         let participant_idx = idx / FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
+            //         let fragment_idx = idx % FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
+            //         if let Utilization::Some(_) = u {
+            //             if let Some(fragment) =
+            //                 self.decoded_fragments[participant_idx].get(fragment_idx)
+            //             {
+            //                 let equation = Equation::plain_at_index(*idx, fragment.clone());
+            //                 _plain_equations.push((*idx, equation));
+            //             } else {
+            //                 return true;
+            //             }
+            //         }
+            //         false
+            //     })
+            //     .count();
             let number_equations = self
                 .current_utilization
                 .iter()
-                .enumerate()
-                .filter(|(idx, u)| {
-                    let participant_idx = idx / FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
-                    let fragment_idx = idx % FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
-                    if let Utilization::Some(_) = u {
-                        if let Some(fragment) =
-                            self.decoded_fragments[participant_idx].get(fragment_idx)
-                        {
-                            let equation = Equation::plain_at_index(*idx, fragment.clone());
-                            plain_equations.push((*idx, equation));
-                        } else {
-                            return true;
-                        }
-                    }
-                    false
-                })
+                .filter(|u| !matches!(u, Utilization::None))
                 .count();
+            self.needed_eqs = number_equations;
 
             // Add already decoded fragments, that aren't in the matrix
-            if !plain_equations.is_empty() {
-                for (idx, eq) in plain_equations {
+            if !_plain_equations.is_empty() {
+                for (idx, eq) in _plain_equations {
                     let insert_idx = self
                         .matrix
                         .inner
@@ -133,40 +141,39 @@ impl Epoch {
                 //     self.matrix.inner.pop();
                 // }
             }
-            #[cfg(debug_assertions)]
-            self.print_matrx();
+            // #[cfg(debug_assertions)]
+            // println!("{}", self.print_matrix());
 
             if self.matrix.inner.len() >= number_equations {
                 self.matrix.sweep_upwards();
             }
 
             // Append decoded fragments
-            if self
+            let plain_eqs: Vec<_> = self
                 .matrix
                 .inner
                 .iter()
-                .filter(|eq| eq.factors.is_plain())
-                .count()
-                >= number_equations
-            {
-                self.elimination_flag = false;
-                self.current_utilization = vec![Utilization::None; FRAGMENTS_PER_EPOCH]
-                    .try_into()
-                    .expect("Error allocating memory!");
-                let equations = mem::take(&mut self.matrix.inner);
-                for eq in equations {
-                    if eq.factors.is_zero() {
-                        continue;
-                    }
+                .filter(|eq| {
+                    eq.factors.is_plain() && eq.factors.first_factor().1 != GaloisField2p4::ZERO
+                })
+                .collect();
+            if plain_eqs.len() >= number_equations {
+                for eq in plain_eqs {
                     let eq_idx = eq.factors.first_factor().0;
                     let participant_idx = eq_idx / FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
                     let fragment_idx = eq_idx % FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
                     if fragment_idx < self.decoded_fragments[participant_idx].len() {
                         continue;
                     }
-                    self.decoded_fragments[participant_idx].push(eq.fragment);
+                    self.decoded_fragments[participant_idx].push(eq.fragment.clone());
                 }
+                self.elimination_flag = false;
+                self.matrix.inner = Vec::new();
                 self.equations = Vec::new();
+                self.current_utilization = vec![Utilization::None; FRAGMENTS_PER_EPOCH]
+                    .try_into()
+                    .expect("Error allocating memory!");
+                self.needed_eqs = 0;
             }
         }
     }
@@ -315,23 +322,34 @@ impl Epoch {
         }
         range
     }
-    pub fn print_matrx(&self) {
-        let idx: Vec<usize> = self.current_utilization.iter().enumerate().filter_map(|(i, util)| {
-            if !matches!(util, Utilization::None) {
-                Some(i)
-            } else {
-                None
-            }
-        }).collect();
+    pub fn print_matrix(&self) -> String {
+        let mut matrix = Vec::new();
+        let idx: Vec<usize> = self
+            .current_utilization
+            .iter()
+            .enumerate()
+            .filter_map(|(i, util)| {
+                if !matches!(util, Utilization::None) {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect();
         if let Some(eq) = self.equations.last() {
-            println!("Most recent equation:");
-            eq.factors.print_matrix_row(idx.clone());
+            // println!("Most recent equation:");
+            writeln!(&mut matrix, "Most recent equation:").unwrap();
+            writeln!(&mut matrix, "{}", eq.factors.print_matrix_row(idx.clone())).unwrap();
+            // eq.factors.print_matrix_row(idx.clone());
         }
-        println!("Current Matrix:");
+        // println!("Current Matrix:");
+        writeln!(&mut matrix, "Current Matrix:").unwrap();
         for f in self.matrix.inner.iter().map(|eq| &eq.factors) {
-            f.print_matrix_row(idx.clone());
+            writeln!(&mut matrix, "{}", f.print_matrix_row(idx.clone())).unwrap();
+            // f.print_matrix_row(idx.clone());
         }
-        println!();
+        writeln!(&mut matrix).unwrap();
+        String::from_utf8(matrix.to_vec()).unwrap()
     }
 }
 
@@ -483,14 +501,14 @@ mod tests {
         }
     }
     const NUM_FRAMES: usize = 220;
-    // const FILES: [&str; 1] = ["data_0.txt"];
+    const FILES: [&str; 1] = ["data_0.txt"];
     // const FILES: [&str; 2] = ["data_0.txt", "data_1.txt"];
-    const FILES: [&str; 4] = [
-        "data_0.txt",
-        "data_1.txt",
-        "dataset-card.png",
-        "homepage.md",
-    ];
+    // const FILES: [&str; 4] = [
+    //     "data_0.txt",
+    //     "data_1.txt",
+    //     "dataset-card.png",
+    //     "homepage.md",
+    // ];
     #[test]
     #[ignore]
     fn generate_qr_codes() {
@@ -574,18 +592,18 @@ mod tests {
             //     if let Some(grid) = grids.get(0)
             //         && let Ok(_) = grid.decode_to(&mut buf)
             //     {
-                    println!("Working on frame {idx}");
+            println!("Working on frame {idx}");
             //         let data: [u8; FRAME_SIZE_BYTES] = from_fn(|idx| *buf.get(idx).unwrap_or(&0));
             //         let frame: Frame = data.into();
-                    e_in.push_frame(frame);
-                    idx += 1;
-                    if (0..FILES.len())
-                        .into_iter()
-                        .all(|i| !e_in.decoded_fragments[i].is_empty())
-                    {
-                        println!("decoded after {idx} frames 🥳");
-                        break;
-                    }
+            e_in.push_frame(frame);
+            idx += 1;
+            if (0..FILES.len())
+                .into_iter()
+                .all(|i| !e_in.decoded_fragments[i].is_empty())
+            {
+                println!("decoded after {idx} frames 🥳");
+                break;
+            }
             //     }
             // }
         }

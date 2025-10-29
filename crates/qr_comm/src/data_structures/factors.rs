@@ -3,6 +3,7 @@ use crate::{
     CODING_FACTORS_PER_FRAME, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
     MAX_PARTICIPANTS,
 };
+use std::io::Write;
 use std::ops::{Deref, DerefMut};
 
 mod ops;
@@ -68,59 +69,56 @@ pub enum Factor {
 }
 
 impl Factor {
-    pub fn get(&self, idx: usize) -> GaloisField2p4 {
+    pub fn get(&self, idx: usize) -> Option<GaloisField2p4> {
         match self {
             Factor::Sparse(this) => {
                 if let Ok(idx) = this.inner.binary_search_by_key(&idx, |(idx_f, _)| *idx_f) {
-                    this.inner[idx].1
+                    Some(this.inner[idx].1)
                 } else {
-                    GaloisField2p4::ZERO
+                    None
                 }
             }
-            Factor::Wide(this) => this.inner[idx],
+            Factor::Wide(this) => Some(this.inner[idx]),
         }
     }
     pub fn utilized_fragments(&self) -> Box<[bool; FRAGMENTS_PER_EPOCH]> {
         match self {
-            Factor::Sparse(this) => {this.utilized_fragments()}
-            Factor::Wide(this) => {this.utilized_fragments()}
+            Factor::Sparse(this) => this.utilized_fragments(),
+            Factor::Wide(this) => this.utilized_fragments(),
         }
     }
     pub fn first_factor(&self) -> (usize, GaloisField2p4) {
         match self {
-            Factor::Sparse(lhs) => {
-                *lhs.inner.first().expect("It's impossible to have equations without factors")
-            }
-            Factor::Wide(rhs) => {
-                rhs.inner.iter()
-                    .enumerate()
-                    .find_map(|(idx, f)| {
-                        if *f == GaloisField2p4::ZERO {
-                            None
-                        } else {
-                            Some((idx, *f))
-                        }
-                    })
-                    .expect("It's impossible to have equations without factors")
-            }
+            Factor::Sparse(lhs) => *lhs
+                .inner
+                .first()
+                .expect("It's impossible to have equations without factors"),
+            Factor::Wide(rhs) => rhs
+                .inner
+                .iter()
+                .enumerate()
+                .find_map(|(idx, f)| {
+                    if *f == GaloisField2p4::ZERO {
+                        None
+                    } else {
+                        Some((idx, *f))
+                    }
+                })
+                .expect("It's impossible to have equations without factors"),
         }
     }
     pub fn is_plain(&self) -> bool {
         match self {
-            Factor::Sparse(this) => {
-                this.inner.len() == 1
-            }
-            Factor::Wide(this) => {
-                this.is_plain()
-            }
+            Factor::Sparse(this) => this.inner.len() == 1,
+            Factor::Wide(this) => this.is_plain(),
         }
     }
     pub fn is_zero(&self) -> bool {
         match self {
-            Factor::Sparse(this) => {
-                this.inner.len() == 0
+            Factor::Sparse(this) => this.inner.is_empty(),
+            Factor::Wide(_) => {
+                todo!()
             }
-            Factor::Wide(_) => { todo!() }
         }
     }
     pub fn is_wide(&self) -> bool {
@@ -129,13 +127,19 @@ impl Factor {
     pub fn is_sparse(&self) -> bool {
         matches!(self, Factor::Sparse(_))
     }
-    pub(crate) fn print_matrix_row(&self, idx: impl IntoIterator<Item = usize>) {
+    pub(crate) fn print_matrix_row(&self, idx: impl IntoIterator<Item = usize>) -> String {
+        let mut matrix = Vec::new();
         for i in idx {
-            let f = self.get(i).inner;
-            let char = if f == 0 { " " } else { &*format!("{:x}", f) };
-            print!("{char} ")
+            if let Some(f) = self.get(i) {
+                // let char = if f == 0 { " " } else { &*format!("{:x}", f) };
+                let char = format!("{:x}", f.inner);
+                write!(&mut matrix, "{char} ").unwrap();
+            } else {
+                write!(&mut matrix, "  ").unwrap();
+            }
         }
-        println!();
+        writeln!(&mut matrix).unwrap();
+        String::try_from(matrix.to_vec()).unwrap()
     }
 }
 
@@ -238,14 +242,20 @@ impl From<FrameFactor> for WideFactor {
 impl From<FrameFactor> for SparseFactor {
     fn from(value: FrameFactor) -> Self {
         let mut inner = Vec::new();
-        let FrameFactor { widths, offsets, factors } = value;
+        let FrameFactor {
+            widths,
+            offsets,
+            factors,
+        } = value;
         let mut factors = factors.iter();
         for (participant, (width_u8, offset)) in widths.iter().zip(offsets.iter()).enumerate() {
             let width = (*width_u8 as usize) * 2;
             let idx = participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + (*offset as usize);
             for w in 0..width {
                 let factor = factors.next().unwrap();
-                inner.push((idx + w, *factor));
+                if *factor != GaloisField2p4::ZERO {
+                    inner.push((idx + w, *factor));
+                }
             }
         }
         SparseFactor { inner }
@@ -253,13 +263,18 @@ impl From<FrameFactor> for SparseFactor {
 }
 impl From<WideFactor> for SparseFactor {
     fn from(value: WideFactor) -> Self {
-        let sparse: Vec<(usize, GaloisField2p4)> = value.inner.iter().enumerate().filter_map(|(idx, f)| {
-            if *f != GaloisField2p4::ZERO {
-                Some((idx, *f))
-            } else {
-                None
-            }
-        }).collect();
+        let sparse: Vec<(usize, GaloisField2p4)> = value
+            .inner
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, f)| {
+                if *f != GaloisField2p4::ZERO {
+                    Some((idx, *f))
+                } else {
+                    None
+                }
+            })
+            .collect();
         SparseFactor { inner: sparse }
     }
 }
@@ -275,8 +290,8 @@ impl SparseFactor {
         let mut util: Box<[bool; FRAGMENTS_PER_EPOCH]> = vec![false; FRAGMENTS_PER_EPOCH]
             .try_into()
             .expect("Error allocating memory!");
-        for (idx, _) in self.inner.iter() {
-            util[*idx] = true;
+        for (idx, f) in self.inner.iter() {
+            util[*idx] = *f != GaloisField2p4::ZERO;
         }
         util
     }
