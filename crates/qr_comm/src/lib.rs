@@ -74,6 +74,7 @@ mod tests {
         assert_eq!(EPOCH_SIZE_BYTES, 540272080);
         // assert_eq!(BYTES_PER_PARTICIPANT, 67140608);
         assert_eq!(BYTES_PER_PARTICIPANT, 33767005);
+        // assert_eq!(QR_CODE_VERSION, Version::Normal(26));
         assert_eq!(QR_CODE_VERSION, Version::Normal(20));
         assert_eq!(QR_CODE_ECC, EcLevel::L);
         assert_eq!(AP_LENGTH_INDEX_SIZE_BITS, 19);

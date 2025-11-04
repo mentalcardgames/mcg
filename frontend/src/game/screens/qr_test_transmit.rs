@@ -186,7 +186,7 @@ impl ScreenDef for QrTestTransmit {
         };
         players.push(p);
         me.web_socket_connection
-            .connect("192.168.137.1:8000", players, on_msg, on_err, on_cls);
+            .connect("127.0.0.1:3000", players, on_msg, on_err, on_cls);
         Box::new(me)
     }
 }

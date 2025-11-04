@@ -75,7 +75,6 @@ impl Epoch {
         } = frame;
         let factors: SparseFactor = factors.into();
         let utilization: Box<[bool; FRAGMENTS_PER_EPOCH]> = factors.utilized_fragments();
-        let equation = Equation::new(factors, fragment);
 
         // Check for new fragments this frame
         for (current, utilized) in self.current_utilization.iter_mut().zip(utilization.iter()) {
@@ -91,41 +90,42 @@ impl Epoch {
         }
 
         if self.elimination_flag {
+            let equation = Equation::new(factors, fragment);
             self.equations.push(equation.clone());
             self.matrix.inner.push(equation);
 
             // Calculate how many equations are needed to solve new AP
-            let mut _plain_equations = Vec::new();
-            // let number_equations = self
-            //     .current_utilization
-            //     .iter()
-            //     .enumerate()
-            //     .filter(|(idx, u)| {
-            //         let participant_idx = idx / FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
-            //         let fragment_idx = idx % FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
-            //         if let Utilization::Some(_) = u {
-            //             if let Some(fragment) =
-            //                 self.decoded_fragments[participant_idx].get(fragment_idx)
-            //             {
-            //                 let equation = Equation::plain_at_index(*idx, fragment.clone());
-            //                 _plain_equations.push((*idx, equation));
-            //             } else {
-            //                 return true;
-            //             }
-            //         }
-            //         false
-            //     })
-            //     .count();
+            let mut plain_equations = Vec::new();
             let number_equations = self
                 .current_utilization
                 .iter()
-                .filter(|u| !matches!(u, Utilization::None))
+                .enumerate()
+                .filter(|(idx, u)| {
+                    let participant_idx = idx / FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
+                    let fragment_idx = idx % FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
+                    if let Utilization::Some(_) = u {
+                        if let Some(fragment) =
+                            self.decoded_fragments[participant_idx].get(fragment_idx)
+                        {
+                            let equation = Equation::plain_at_index(*idx, fragment.clone());
+                            plain_equations.push((*idx, equation));
+                        } else {
+                            return true;
+                        }
+                    }
+                    false
+                })
                 .count();
+            // let number_equations = self
+            //     .current_utilization
+            //     .iter()
+            //     .filter(|u| !matches!(u, Utilization::None))
+            //     .count();
             self.needed_eqs = number_equations;
 
             // Add already decoded fragments, that aren't in the matrix
-            if !_plain_equations.is_empty() {
-                for (idx, eq) in _plain_equations {
+            if !plain_equations.is_empty() {
+                for (idx, eq) in plain_equations {
                     let insert_idx = self
                         .matrix
                         .inner
@@ -289,7 +289,7 @@ impl Epoch {
                 (size as usize + AP_LENGTH_INDEX_SIZE_BYTES).div_ceil(FRAGMENT_SIZE_BYTES);
             fragment_index += number_used_fragments;
             package_index += 1;
-            // TODO add this range to self.meta_ap_fragments[participant] if its not inside
+            // TODO add this range to self.meta_ap_fragments[participant] if it is not inside
         }
         if fragment_index <= self.decoded_fragments[participant].len() {
             let start = fragment_index - number_used_fragments;

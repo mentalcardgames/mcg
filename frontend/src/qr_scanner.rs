@@ -367,9 +367,6 @@ impl QrScannerPopup {
                                 self.open = false;
                             } else if let Some(qr_result_raw) = camera.get_last_qr_result_raw() {
                                 *_target_raw = qr_result_raw.clone();
-                                camera.stop();
-                                self.started = false;
-                                self.open = false;
                                 camera.last_qr_result_raw.take();
                             }
                         } else {
