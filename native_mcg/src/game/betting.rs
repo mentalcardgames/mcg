@@ -142,6 +142,7 @@ impl Game {
                     let (add, _bet_to) = compute_open_bet_add(self, actor, x);
                     self.players[actor].stack -= add;
                     self.round_bets[actor] += add;
+                    self.hand_bets[actor] += add;
                     self.pot += add;
                     self.current_bet = self.round_bets[actor];
                     self.min_raise = add;
@@ -167,6 +168,7 @@ impl Game {
                             let pay = pay.min(need).min(self.players[actor].stack);
                             self.players[actor].stack -= pay;
                             self.round_bets[actor] += pay;
+                            self.hand_bets[actor] += pay;
                             self.pot += pay;
                             if pay < need {
                                 self.players[actor].all_in = true;
@@ -179,6 +181,7 @@ impl Game {
                         RaiseOutcome::Raise { add, by } => {
                             self.players[actor].stack -= add;
                             self.round_bets[actor] += add;
+                            self.hand_bets[actor] += add;
                             self.pot += add;
                             let new_to = self.round_bets[actor];
                             self.current_bet = new_to;

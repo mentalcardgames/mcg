@@ -75,7 +75,7 @@ impl App {
         let router = Router::new().ok();
 
         #[cfg(target_arch = "wasm32")]
-        let current_path = router
+        let mut current_path = router
             .as_ref()
             .map(|r| r.current_path().to_string())
             .unwrap_or_else(|| "/".to_string());
@@ -83,7 +83,18 @@ impl App {
         #[cfg(not(target_arch = "wasm32"))]
         let router: Option<()> = None;
         #[cfg(not(target_arch = "wasm32"))]
-        let current_path = "/".to_string();
+        let mut current_path = "/".to_string();
+
+        #[cfg(target_arch = "wasm32")]
+        let mut autostart_game = false;
+        #[cfg(target_arch = "wasm32")]
+        if let Some(window) = web_sys::window() {
+            if let Ok(location) = window.location().href() {
+                if location.contains("autostart=setup") {
+                    current_path = "/game-setup".to_string();
+                }
+            }
+        }
 
         let app_state = AppState::new();
         Self {
