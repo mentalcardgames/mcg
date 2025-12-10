@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 
 pub(crate) const MAX_RECENT_ACTIONS: usize = 50;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Player {
     pub id: PlayerId,
     pub name: String,
@@ -20,7 +20,7 @@ pub struct Player {
     pub all_in: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Game {
     // Table
     pub players: Vec<Player>,
@@ -201,6 +201,8 @@ impl Game {
         Ok(())
     }
 }
+
+// Conversion implementations for P2P state sync
 
 #[cfg(test)]
 mod tests {

@@ -45,6 +45,11 @@ pub enum ClientMsg {
     NewGame {
         players: Vec<PlayerConfig>,
     },
+    /// Push a complete game state to the server (P2P state sync between backend nodes)
+    /// The state is a serialized Game struct from native_mcg
+    PushState {
+        state: serde_json::Value,
+    },
 }
 
 /// Messages that the server can send to clients

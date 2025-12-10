@@ -325,6 +325,30 @@ async fn handle_new_game(
     }
 }
 
+/// Handle a PushState message from a peer node (P2P state sync)
+async fn handle_push_state(
+    app_state: &AppState,
+    game_state: serde_json::Value,
+) -> mcg_shared::ServerMsg {
+    match serde_json::from_value::<Game>(game_state) {
+        Ok(game) => {
+            let mut lobby = app_state.lobby.write().await;
+            lobby.game = Some(game);
+            lobby.last_printed_log_len = 0; // Reset log tracking since state was replaced
+            drop(lobby);
+
+            broadcast_state(app_state).await;
+            if let Some(gs) = current_state_public(app_state).await {
+                tracing::info!("Game state replaced via PushState from peer");
+                mcg_shared::ServerMsg::State(gs)
+            } else {
+                mcg_shared::ServerMsg::Error("Failed to produce state after PushState".into())
+            }
+        }
+        Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to deserialize game state: {}", e)),
+    }
+}
+
 /// Unified handler for ClientMsg coming from any transport.
 ///
 /// Centralizes validation, state mutation, and side-effects (broadcasting and
@@ -347,6 +371,9 @@ pub async fn handle_client_msg(
         }
         mcg_shared::ClientMsg::NextHand => handle_next_hand(state).await,
         mcg_shared::ClientMsg::NewGame { players } => handle_new_game(state, players).await,
+        mcg_shared::ClientMsg::PushState { state: game_state } => {
+            handle_push_state(state, game_state).await
+        }
     }
 }
 
