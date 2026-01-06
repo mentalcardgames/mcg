@@ -9,8 +9,8 @@ mod test {
   use ir::fsm_to_dot::*;
 
   fn show_graph(fsm: &FSM, name: &str) {
-    let dot_path_name: &str = &format!("target/fsm/{}.dot", name);
-    let png_path_name: &str = &format!("target/fsm/{}.png", name);
+    let dot_path_name: &str = &format!("tests_out/{}.dot", name);
+    let png_path_name: &str = &format!("tests_out/{}.png", name);
 
     let dot_path = Path::new(dot_path_name);
     let png_path = Path::new(png_path_name);
