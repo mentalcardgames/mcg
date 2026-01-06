@@ -186,6 +186,8 @@ fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, state: AppState) {
             match ep_accept.accept().await {
                 Some(connect_future) => match connect_future.await {
                     Ok(conn) => {
+                        let remote_node_id = conn.remote_id();
+                        tracing::info!(peer = %remote_node_id, "Accepted new iroh connection");
                         let state_for_conn = state_clone.clone();
                         tokio::spawn(async move {
                             if let Err(e) = handle_iroh_connection(state_for_conn, conn).await {
@@ -217,7 +219,7 @@ async fn handle_iroh_connection(
     let (mut send, recv) = connection.accept_bi().await?;
     let mut reader = BufReader::new(recv);
 
-    tracing::info!("[IROH CONNECT] Client");
+    tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
 
     let mut subscription: Option<broadcast::Receiver<ServerMsg>> = None;
 
