@@ -84,14 +84,15 @@ pub async fn watch_http(base: &str, json: bool) -> anyhow::Result<()> {
 /// Watch over an iroh bidirectional stream and print events as they arrive.
 pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
     // Import iroh APIs inside the function to limit compile-time exposure.
-    use iroh::endpoint::Endpoint;
+    use iroh::endpoint::{Endpoint, RelayMode};
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     // ALPN must match the server's ALPN
     const ALPN: &[u8] = b"mcg/iroh/1";
 
-    // Bind a local endpoint (discovery_n0 for default settings)
+    // Bind a local endpoint with relay support for NAT traversal
     let endpoint = Endpoint::builder()
+        .relay_mode(RelayMode::Default) // Use n0's production relay servers
         .discovery_n0()
         .bind()
         .await

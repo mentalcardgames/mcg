@@ -76,7 +76,7 @@ pub async fn run_once_iroh(
     printer: &mut MessagePrinter,
 ) -> anyhow::Result<()> {
     // Note: keep iroh imports local to avoid compile-time requirement when feature is disabled.
-    use iroh::endpoint::Endpoint;
+    use iroh::endpoint::{Endpoint, RelayMode};
     use iroh::PublicKey;
     use std::str::FromStr;
     use tokio::io::BufReader;
@@ -85,6 +85,7 @@ pub async fn run_once_iroh(
 
     // Build and bind local endpoint
     let endpoint = Endpoint::builder()
+        .relay_mode(RelayMode::Default) // Use n0's production relay servers
         .discovery_n0()
         .bind()
         .await
