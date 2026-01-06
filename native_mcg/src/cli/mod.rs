@@ -16,4 +16,8 @@ pub struct ServerCli {
     /// Persist CLI overrides back to the config file
     #[arg(long, default_value_t = false)]
     pub persist: bool,
+
+    /// Enable verbose debug logging
+    #[arg(long, short, default_value_t = false)]
+    pub debug: bool,
 }

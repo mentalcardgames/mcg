@@ -52,22 +52,23 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     let ep_for_wait = endpoint.clone();
     match tokio::time::timeout(std::time::Duration::from_secs(30), ep_for_wait.online()).await {
         Ok(()) => tracing::info!("iroh endpoint is online (relay connected)"),
-        Err(_) => tracing::warn!("timeout waiting for iroh endpoint to come online; proceeding anyway"),
+        Err(_) => {
+            tracing::warn!("timeout waiting for iroh endpoint to come online; proceeding anyway")
+        }
     }
 
     // Print endpoint id for CLI users (renamed from node_id in iroh 0.95)
     let pk = endpoint.id();
-    tracing::info!(iroh_node_id = %pk);
 
-    // Also log the full EndpointAddr which includes relay URL for better connectivity
-    // In iroh 0.95+, use endpoint.addr() instead of node_addr()
+    // Nice readable banner for the user
+    println!("\n\x1b[1;32m=== Iroh Endpoint Ready ===\x1b[0m");
+    println!("\x1b[1mNode ID:\x1b[0m {}", pk);
+    println!("\x1b[1;32m===========================\x1b[0m\n");
+
+    // Keep structured info for debug mode
     let addr = endpoint.addr();
-    tracing::info!(iroh_addr = ?addr, "full endpoint address (includes relay)");
-    // Log relay URLs separately for easy copying
     let relay_urls: Vec<_> = addr.relay_urls().collect();
-    if !relay_urls.is_empty() {
-        tracing::info!(relay_urls = ?relay_urls, "home relay URL(s)");
-    }
+    tracing::debug!(iroh_node_id = %pk, iroh_addr = ?addr, relay_urls = ?relay_urls);
 
     let public_path = path_for_config(state.config_path.as_deref());
     match PublicInfo::write_iroh_node_id(&public_path, pk.to_string()) {

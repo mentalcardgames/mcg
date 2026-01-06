@@ -6,8 +6,6 @@ use eframe::Frame;
 use egui::{Context, RichText, Ui};
 use mcg_shared::{PlayerAction, PlayerConfig};
 
-
-
 use super::betting_controls::BettingControls;
 use super::connection_manager::ConnectionManager;
 use super::player_manager::{render_player_setup, PlayerManager};

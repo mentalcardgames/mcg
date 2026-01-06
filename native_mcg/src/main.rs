@@ -19,6 +19,29 @@ async fn main() -> anyhow::Result<()> {
     // TODO extract config init into utility function
     let cli = cli::ServerCli::parse();
 
+    // Initialize tracing subscriber for logging
+    // If debug is on: show everything at DEBUG level
+    // If debug is off: show native_mcg at INFO, everything else at WARN/ERROR to reduce noise
+    let log_filter = if cli.debug {
+        "debug".to_string()
+    } else {
+        // Default to info for our crate, warn/error for others to keep noise down
+        // Suppress noisy netlink warnings on newer kernels
+        "native_mcg=info,mcg_shared=info,warn,iroh=error,iroh::magicsock=error,netlink_packet_route=error".to_string()
+    };
+
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_filter));
+
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        // Use compact format in non-debug mode for cleaner output
+        .with_target(cli.debug)
+        .with_thread_ids(cli.debug)
+        .with_file(cli.debug)
+        .with_line_number(cli.debug)
+        .init();
+
     let config_path: PathBuf = cli.config.clone();
 
     // Load or create config file (creates file if missing).
@@ -52,13 +75,6 @@ async fn main() -> anyhow::Result<()> {
     if port != 3000 {
         tracing::warn!(port, "port 3000 was not available, using alternative port");
     }
-
-    // Initialize tracing subscriber for logging; default to INFO if RUST_LOG not set
-    // Reduce iroh verbosity to avoid spam
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        tracing_subscriber::EnvFilter::new("info,iroh=warn,iroh::magicsock=error")
-    });
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Run the server
     server::run_server(addr, state).await?;
