@@ -65,6 +65,15 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
     };
 
     tracing::info!(display_addr = %display_addr, "MCG Server running");
+
+    // Nice clickable banner for the Web UI
+    println!("\n\x1b[1;36m=== Web UI Available ===\x1b[0m");
+    println!(
+        "\x1b[1mURL:\x1b[0m       \x1b[4;34mhttp://{}\x1b[0m",
+        display_addr
+    );
+    println!("\x1b[1;36m========================\x1b[0m\n");
+
     tracing::info!("open your browser and navigate to the above URL");
     tracing::debug!("blank line");
     let listener = tokio::net::TcpListener::bind(addr)
