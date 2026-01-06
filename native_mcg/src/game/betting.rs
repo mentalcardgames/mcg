@@ -20,7 +20,7 @@ fn compute_open_bet_add(game: &Game, actor: usize, desired_total: u32) -> (u32, 
 /// Internal outcome when attempting a raise over a non-zero current bet.
 #[derive(Debug, Clone, Copy)]
 enum RaiseOutcome {
-    Call { pay: u32 },
+    Call,
     Raise { add: u32, by: u32 },
 }
 
@@ -37,14 +37,12 @@ fn decide_raise_outcome(
     let add = required.min(game.players[actor].stack);
 
     if add <= need {
-        let pay = need.min(game.players[actor].stack);
-        return RaiseOutcome::Call { pay };
+        return RaiseOutcome::Call;
     }
 
     let required_add = prev_current_bet.saturating_sub(game.round_bets[actor]) + game.min_raise;
     if add < required_add {
-        let pay = need.min(game.players[actor].stack);
-        return RaiseOutcome::Call { pay };
+        return RaiseOutcome::Call;
     }
 
     let new_to = game.round_bets[actor] + add;
@@ -53,6 +51,34 @@ fn decide_raise_outcome(
 }
 
 impl Game {
+    /// Helper to execute a check or call.
+    /// Handles stack updates, pot contribution, all-in detection, and logging.
+    fn do_call(&mut self, actor: usize) {
+        let need = self.current_bet.saturating_sub(self.round_bets[actor]);
+        if need == 0 {
+            self.log(ActionEvent::player(
+                mcg_shared::PlayerId(actor),
+                ActionKind::Check,
+            ));
+        } else {
+            let pay = need.min(self.players[actor].stack);
+            self.players[actor].stack -= pay;
+            self.round_bets[actor] += pay;
+            self.pot += pay;
+            // distinct from "pay < need" check elsewhere: if pay consumes entire stack, they are all-in?
+            // "pay < need" implies they didn't have enough to cover the bet.
+            // If they had exactly enough, stack becomes 0, are they all-in?
+            // Usually yes if stack is 0.
+            if self.players[actor].stack == 0 {
+                self.players[actor].all_in = true;
+            }
+            self.log(ActionEvent::player(
+                mcg_shared::PlayerId(actor),
+                ActionKind::Call(pay),
+            ));
+        }
+    }
+
     /// Apply a player action, enforcing betting rules and advancing the game flow.
     pub fn apply_player_action(&mut self, actor: usize, action: PlayerAction) -> Result<()> {
         if actor != self.to_act {
@@ -65,14 +91,7 @@ impl Game {
             bail!("You are all-in");
         }
 
-        println!(
-            "[ACTION] {}: {:?} (stage: {:?}, stack: {}, all_in: {})",
-            self.players[actor].name,
-            action,
-            self.stage,
-            self.players[actor].stack,
-            self.players[actor].all_in
-        );
+        // Removed noisy [ACTION] println; relying on Game::log/ActionEvent.
 
         let prev_current_bet = self.current_bet;
         match action {
@@ -84,61 +103,14 @@ impl Game {
                 ));
             }
             PlayerAction::CheckCall => {
-                let need = self.current_bet.saturating_sub(self.round_bets[actor]);
-                if need == 0 {
-                    self.log(ActionEvent::player(
-                        mcg_shared::PlayerId(actor),
-                        ActionKind::Check,
-                    ));
-                } else {
-                    let pay = need.min(self.players[actor].stack);
-                    self.players[actor].stack -= pay;
-                    self.round_bets[actor] += pay;
-                    self.pot += pay;
-                    if pay < need {
-                        self.players[actor].all_in = true;
-                        println!(
-                            "[ALL-IN] {} called {} but needed {}, now all-in",
-                            self.players[actor].name, pay, need
-                        );
-                    }
-                    println!(
-                        "[CALL] {} called {}, stack now {}, pot now {}",
-                        self.players[actor].name, pay, self.players[actor].stack, self.pot
-                    );
-                    self.log(ActionEvent::player(
-                        mcg_shared::PlayerId(actor),
-                        ActionKind::Call(pay),
-                    ));
-                }
+                self.do_call(actor);
             }
             PlayerAction::Bet(x) => {
-                // Validate bet amount - if betting 0, treat as check/call instead
                 if x == 0 {
-                    println!(
-                        "[WARNING] Converting Bet(0) to CheckCall for player {}",
-                        actor
-                    );
-                    let need = self.current_bet.saturating_sub(self.round_bets[actor]);
-                    if need == 0 {
-                        self.log(ActionEvent::player(
-                            mcg_shared::PlayerId(actor),
-                            ActionKind::Check,
-                        ));
-                    } else {
-                        let pay = need.min(self.players[actor].stack);
-                        self.players[actor].stack -= pay;
-                        self.round_bets[actor] += pay;
-                        self.pot += pay;
-                        if pay < need {
-                            self.players[actor].all_in = true;
-                        }
-                        self.log(ActionEvent::player(
-                            mcg_shared::PlayerId(actor),
-                            ActionKind::Call(pay),
-                        ));
-                    }
+                    // Bet(0) is effectively a check/call
+                    self.do_call(actor);
                 } else if self.current_bet == 0 {
+                    // Open bet
                     let (add, _bet_to) = compute_open_bet_add(self, actor, x);
                     self.players[actor].stack -= add;
                     self.round_bets[actor] += add;
@@ -147,41 +119,23 @@ impl Game {
                     self.min_raise = add;
                     if self.players[actor].stack == 0 {
                         self.players[actor].all_in = true;
-                        println!(
-                            "[ALL-IN] {} is now all-in with stack 0",
-                            self.players[actor].name
-                        );
                     }
-                    println!(
-                        "[BET] {} bet {}, stack now {}, pot now {}",
-                        self.players[actor].name, add, self.players[actor].stack, self.pot
-                    );
                     self.log(ActionEvent::player(
                         mcg_shared::PlayerId(actor),
                         ActionKind::Bet(add),
                     ));
                 } else {
+                    // Raise attempt
                     match decide_raise_outcome(self, actor, x, prev_current_bet) {
-                        RaiseOutcome::Call { pay } => {
-                            let need = self.current_bet.saturating_sub(self.round_bets[actor]);
-                            let pay = pay.min(need).min(self.players[actor].stack);
-                            self.players[actor].stack -= pay;
-                            self.round_bets[actor] += pay;
-                            self.pot += pay;
-                            if pay < need {
-                                self.players[actor].all_in = true;
-                            }
-                            self.log(ActionEvent::player(
-                                mcg_shared::PlayerId(actor),
-                                ActionKind::Call(pay),
-                            ));
+                        RaiseOutcome::Call => {
+                            // If the raise wasn't valid or enough, it falls back to a call
+                            self.do_call(actor);
                         }
                         RaiseOutcome::Raise { add, by } => {
                             self.players[actor].stack -= add;
                             self.round_bets[actor] += add;
                             self.pot += add;
-                            let new_to = self.round_bets[actor];
-                            self.current_bet = new_to;
+                            self.current_bet = self.round_bets[actor];
                             self.min_raise = by;
                             if self.players[actor].stack == 0 {
                                 self.players[actor].all_in = true;
