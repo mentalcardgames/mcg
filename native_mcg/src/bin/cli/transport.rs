@@ -76,27 +76,27 @@ pub async fn run_once_iroh(
     printer: &mut MessagePrinter,
 ) -> anyhow::Result<()> {
     // Note: keep iroh imports local to avoid compile-time requirement when feature is disabled.
-    use iroh::endpoint::{Endpoint, RelayMode};
-    use iroh::PublicKey;
+    use iroh::endpoint::Endpoint;
+    use iroh::EndpointId;
     use std::str::FromStr;
     use tokio::io::BufReader;
 
     const ALPN: &[u8] = b"mcg/iroh/1";
 
     // Build and bind local endpoint
+    // Endpoint::builder() uses presets::N0 which includes DNS discovery and default relays
     let endpoint = Endpoint::builder()
-        .relay_mode(RelayMode::Default) // Use n0's production relay servers
-        .discovery_n0()
         .bind()
         .await
         .context("binding iroh endpoint for client")?;
 
-    // Resolve peer public key and open connection + bidirectional stream
-    let pk = PublicKey::from_str(peer_uri).context("parsing iroh public key (z-base-32)")?;
+    // Resolve peer endpoint id and open connection + bidirectional stream
+    // In iroh 0.95, PublicKey is renamed to EndpointId
+    let peer_id = EndpointId::from_str(peer_uri).context("parsing iroh endpoint id (z-base-32)")?;
     let connection = endpoint
-        .connect(pk, ALPN)
+        .connect(peer_id, ALPN)
         .await
-        .context("connecting to iroh peer (public key)")?;
+        .context("connecting to iroh peer (endpoint id)")?;
 
     let (mut send, recv) = connection
         .open_bi()

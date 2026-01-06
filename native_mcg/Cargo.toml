@@ -26,8 +26,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
 # Iroh transport support (enabled by default).
-# Use crates.io release 0.91.1 to match the docs/examples used by the rustdocs MCP server.
-iroh = "0.91.2"
+# Upgraded to 0.95 to match sendme example - includes online() and improved relay support.
+iroh = "0.95"
 getrandom = "0.2"
 
 # Required helper for async trait usage in iroh handler

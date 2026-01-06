@@ -48,25 +48,25 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
 
     // Wait for endpoint to be "online" (connected to relay, has addresses)
     // This is critical for reliable connections on restrictive networks.
+    // The online() method waits until we have a home relay connection and at least one address.
     let ep_for_wait = endpoint.clone();
     match tokio::time::timeout(std::time::Duration::from_secs(30), ep_for_wait.online()).await {
         Ok(()) => tracing::info!("iroh endpoint is online (relay connected)"),
         Err(_) => tracing::warn!("timeout waiting for iroh endpoint to come online; proceeding anyway"),
     }
 
-    // Print node id for CLI users
-    let pk = endpoint.node_id();
+    // Print endpoint id for CLI users (renamed from node_id in iroh 0.95)
+    let pk = endpoint.id();
     tracing::info!(iroh_node_id = %pk);
 
-    // Also log the full NodeAddr which includes relay URL for better connectivity
-    use iroh::Watcher;
-    if let Some(node_addr) = endpoint.node_addr().get() {
-        tracing::info!(iroh_node_addr = ?node_addr, "full node address (includes relay)");
-        // Log relay URLs separately for easy copying
-        let relay_urls: Vec<_> = node_addr.relay_urls().collect();
-        if !relay_urls.is_empty() {
-            tracing::info!(relay_urls = ?relay_urls, "home relay URL(s)");
-        }
+    // Also log the full EndpointAddr which includes relay URL for better connectivity
+    // In iroh 0.95+, use endpoint.addr() instead of node_addr()
+    let addr = endpoint.addr();
+    tracing::info!(iroh_addr = ?addr, "full endpoint address (includes relay)");
+    // Log relay URLs separately for easy copying
+    let relay_urls: Vec<_> = addr.relay_urls().collect();
+    if !relay_urls.is_empty() {
+        tracing::info!(relay_urls = ?relay_urls, "home relay URL(s)");
     }
 
     let public_path = path_for_config(state.config_path.as_deref());
@@ -160,13 +160,14 @@ async fn build_iroh_endpoint(
     secret_key: iroh::SecretKey,
     alpn: &[u8],
 ) -> Result<iroh::endpoint::Endpoint> {
-    use iroh::endpoint::{Endpoint, RelayMode};
+    use iroh::endpoint::Endpoint;
 
+    // Endpoint::builder() uses presets::N0 which includes:
+    // - DNS discovery via iroh.link
+    // - Default n0 relay servers (RelayMode::Default)
     let endpoint = Endpoint::builder()
         .alpns(vec![alpn.to_vec()])
         .secret_key(secret_key)
-        .relay_mode(RelayMode::Default) // Use n0's production relay servers
-        .discovery_n0()
         .bind()
         .await
         .context("binding iroh endpoint")?;

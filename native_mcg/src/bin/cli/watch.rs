@@ -84,27 +84,27 @@ pub async fn watch_http(base: &str, json: bool) -> anyhow::Result<()> {
 /// Watch over an iroh bidirectional stream and print events as they arrive.
 pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
     // Import iroh APIs inside the function to limit compile-time exposure.
-    use iroh::endpoint::{Endpoint, RelayMode};
+    use iroh::endpoint::Endpoint;
+    use iroh::EndpointId;
+    use std::str::FromStr;
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     // ALPN must match the server's ALPN
     const ALPN: &[u8] = b"mcg/iroh/1";
 
-    // Bind a local endpoint with relay support for NAT traversal
+    // Bind a local endpoint
+    // Endpoint::builder() uses presets::N0 which includes DNS discovery and default relays
     let endpoint = Endpoint::builder()
-        .relay_mode(RelayMode::Default) // Use n0's production relay servers
-        .discovery_n0()
         .bind()
         .await
         .context("binding iroh endpoint for client")?;
 
-    use iroh::PublicKey;
-    use std::str::FromStr;
-    let pk = PublicKey::from_str(peer_uri).context("parsing iroh public key (z-base-32)")?;
+    // In iroh 0.95, PublicKey is renamed to EndpointId
+    let peer_id = EndpointId::from_str(peer_uri).context("parsing iroh endpoint id (z-base-32)")?;
     let connection = endpoint
-        .connect(pk, ALPN)
+        .connect(peer_id, ALPN)
         .await
-        .context("connecting to iroh peer (public key)")?;
+        .context("connecting to iroh peer (endpoint id)")?;
 
     // Open a bidirectional stream
     let (mut send, recv) = connection
