@@ -172,7 +172,7 @@ fn test_hole_card_visibility() -> Result<()> {
 #[test]
 fn test_bot_ai_minimum_bet_enforcement() {
     use mcg_shared::{PlayerAction, Stage};
-    use native_mcg::bot::{BotAI, BotContext, SimpleBot};
+    use native_mcg::bot::{BotContext, SimpleBot};
 
     let bot = SimpleBot::default();
 

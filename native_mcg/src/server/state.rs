@@ -209,40 +209,25 @@ pub async fn validate_and_apply_action(
     player_id: PlayerId,
     action: mcg_shared::PlayerAction,
 ) -> Result<(), String> {
-    // First, ensure a game exists
-    {
-        let lobby_r = state.lobby.read().await;
-        if lobby_r.game.is_none() {
-            return Err("No active game. Please start a new game first.".into());
-        }
-    }
-
-    // Resolve provided player_id to the internal player index used by Game
+    // Single lock acquisition for all validation
     let actor_idx = {
         let lobby_r = state.lobby.read().await;
-        // TODO: extract this into utility function
-        if let Some(game) = &lobby_r.game {
-            match game.players.iter().position(|p| p.id == player_id) {
-                Some(idx) => idx,
-                None => return Err("Unknown player id".into()),
-            }
-        } else {
-            return Err("No active game. Please start a new game first.".into());
-        }
-    };
+        let game = lobby_r
+            .game
+            .as_ref()
+            .ok_or("No active game. Please start a new game first.")?;
 
-    // Ensure the requested player is allowed to act (compare against index)
-    let allowed = {
-        let lobby_r = state.lobby.read().await;
-        if let Some(game) = &lobby_r.game {
-            game.stage != mcg_shared::Stage::Showdown && game.to_act == actor_idx
-        } else {
-            false
+        let idx = game
+            .players
+            .iter()
+            .position(|p| p.id == player_id)
+            .ok_or("Unknown player id")?;
+
+        if game.stage == mcg_shared::Stage::Showdown || game.to_act != idx {
+            return Err("Not your turn".into());
         }
+        idx
     };
-    if !allowed {
-        return Err("Not your turn".into());
-    }
 
     // Apply the action using the existing helper. translate underlying errors to String.
     if let Some(e) = apply_action_to_game(state, actor_idx, action).await {

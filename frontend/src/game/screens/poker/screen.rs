@@ -6,7 +6,7 @@ use eframe::Frame;
 use egui::{Context, RichText, Ui};
 use mcg_shared::{PlayerAction, PlayerConfig};
 
-use crate::qr_scanner::QrScannerPopup;
+
 
 use super::betting_controls::BettingControls;
 use super::connection_manager::ConnectionManager;
@@ -14,21 +14,19 @@ use super::player_manager::{render_player_setup, PlayerManager};
 
 pub struct PokerOnlineScreen {
     conn: WebSocketConnection,
-    scanner: QrScannerPopup,
     connection_manager: ConnectionManager,
     player_manager: PlayerManager,
     betting_controls: BettingControls,
 }
 
 impl PokerOnlineScreen {
-    pub fn new() -> Self {
-        let app_state = AppState::new();
-        let settings = app_state.settings;
+    /// Default server address for the poker client.
+    const DEFAULT_SERVER_ADDRESS: &'static str = "127.0.0.1:3000";
 
+    pub fn new() -> Self {
         Self {
             conn: WebSocketConnection::new(),
-            scanner: QrScannerPopup::new(),
-            connection_manager: ConnectionManager::new(settings.server_address.clone()),
+            connection_manager: ConnectionManager::new(Self::DEFAULT_SERVER_ADDRESS.to_string()),
             player_manager: PlayerManager::new(),
             betting_controls: BettingControls::default(),
         }

@@ -26,12 +26,6 @@ pub struct BotContext {
     pub total_players: usize,
 }
 
-/// Trait defining the interface for bot AI implementations.
-pub trait BotAI {
-    /// Decide what action the bot should take given the current context.
-    fn decide_action(&self, context: &BotContext) -> PlayerAction;
-}
-
 /// Simple bot implementation using basic probabilistic decision making.
 /// This implements the same logic that was previously embedded in the backend state.
 #[derive(Debug, Clone)]
@@ -51,8 +45,9 @@ impl Default for SimpleBot {
     }
 }
 
-impl BotAI for SimpleBot {
-    fn decide_action(&self, context: &BotContext) -> PlayerAction {
+impl SimpleBot {
+    /// Decide what action the bot should take given the current context.
+    pub fn decide_action(&self, context: &BotContext) -> PlayerAction {
         if context.call_amount == 0 {
             // No outstanding bet: decide whether to check or make an opening bet
             if random::<f64>() < 0.3 {
@@ -125,44 +120,25 @@ impl BotAI for SimpleBot {
 
 /// Bot manager that handles bot decision-making and provides the interface
 /// between the backend state and bot AI implementations.
+///
+/// Note: Previously used `Box<dyn BotAI>` for theoretical extensibility, but since
+/// only `SimpleBot` is ever used, we now embed it directly for simplicity.
+#[derive(Debug, Clone, Default)]
 pub struct BotManager {
-    ai: Box<dyn BotAI + Send + Sync>,
-}
-
-impl std::fmt::Debug for BotManager {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BotManager")
-            .field("ai", &"<BotAI implementation>")
-            .finish()
-    }
-}
-
-impl Clone for BotManager {
-    fn clone(&self) -> Self {
-        // Clone by creating a new instance with the same AI type
-        // For now, we'll always use SimpleBot for clones
-        Self {
-            ai: Box::new(SimpleBot::default()),
-        }
-    }
+    bot: SimpleBot,
 }
 
 impl BotManager {
     /// Create a new bot manager with the default SimpleBot AI.
     pub fn new() -> Self {
         Self {
-            ai: Box::new(SimpleBot::default()),
+            bot: SimpleBot::default(),
         }
-    }
-
-    /// Create a new bot manager with a custom AI implementation.
-    pub fn with_ai(ai: Box<dyn BotAI + Send + Sync>) -> Self {
-        Self { ai }
     }
 
     /// Generate a bot action given the current game context.
     pub fn generate_action(&self, context: &BotContext) -> Result<PlayerAction> {
-        let action = self.ai.decide_action(context);
+        let action = self.bot.decide_action(context);
         tracing::debug!(
             "Bot decision: {:?} (call_amount: {}, stack: {}, stage: {:?})",
             action,
@@ -171,12 +147,6 @@ impl BotManager {
             context.stage
         );
         Ok(action)
-    }
-}
-
-impl Default for BotManager {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
