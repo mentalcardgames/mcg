@@ -148,6 +148,15 @@ impl WebSocketConnection {
         }
     }
 
+    /// Check if the WebSocket connection is open.
+    pub fn is_connected(&self) -> bool {
+        if let Some(ws) = &self.ws {
+            ws.ready_state() == WebSocket::OPEN
+        } else {
+            false
+        }
+    }
+
     /// Close the WebSocket connection.
     pub fn close(&mut self) {
         if let Some(ws) = self.ws.take() {

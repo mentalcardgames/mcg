@@ -73,7 +73,7 @@ impl PokerOnlineScreen {
         self.conn.send_msg(msg);
     }
 
-    fn render_full_player_setup(&mut self, ui: &mut Ui, ctx: &Context) {
+    fn render_full_player_setup(&mut self, ui: &mut Ui, ctx: &Context, app_state: &mut AppState) {
         render_player_setup(ui, ctx);
 
         // Add the player table and controls
@@ -83,7 +83,7 @@ impl PokerOnlineScreen {
         self.render_add_player_section(ui);
         ui.add_space(16.0);
 
-        self.render_start_game_button(ui);
+        self.render_start_game_button(ui, app_state, ctx);
         self.add_game_instructions(ui);
     }
 
@@ -287,11 +287,32 @@ impl PokerOnlineScreen {
         });
     }
 
-    fn render_start_game_button(&mut self, ui: &mut Ui) {
-        if ui.button("Start Game").clicked() {
-            self.send(&mcg_shared::ClientMsg::NewGame {
-                players: self.player_manager.get_players().clone(),
-            });
+    fn render_start_game_button(&mut self, ui: &mut Ui, app_state: &mut AppState, ctx: &Context) {
+        let connected = self.conn.is_connected();
+        let label = if connected {
+            "Start New Game"
+        } else {
+            "Connect & Start Game"
+        };
+
+        let button = ui.button(label);
+
+        // Add tooltip if disconnected to explain what will happen
+        let button = if !connected {
+            button.on_hover_text("Connects to server and starts the game")
+        } else {
+            button
+        };
+
+        if button.clicked() {
+            if connected {
+                self.send(&mcg_shared::ClientMsg::NewGame {
+                    players: self.player_manager.get_players().clone(),
+                });
+            } else {
+                // If not connected, connect (which sends NewGame automatically)
+                self.connect(app_state, ctx);
+            }
         }
     }
 
@@ -522,7 +543,7 @@ impl PokerOnlineScreen {
         egui::CollapsingHeader::new("Player Setup")
             .default_open(false)
             .show(ui, |ui| {
-                self.render_full_player_setup(ui, ctx);
+                self.render_full_player_setup(ui, ctx, app_state);
             });
 
         if let Some(err) = &app_state.last_error {
