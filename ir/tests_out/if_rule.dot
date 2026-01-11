@@ -1,9 +1,9 @@
 digraph FSM {
   rankdir=LR;
   node [shape = circle];
-  1 -> 2 [label="Action(CycleAction(Next))"];
   0 -> 2 [label="NotCondition(OutOfStagePlayer(Current))"];
   0 -> 1 [label="Condition(OutOfStagePlayer(Current))"];
+  1 -> 2 [label="Action(CycleAction(Next))"];
   start [shape=point];
   start -> 0;
 }

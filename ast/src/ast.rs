@@ -166,14 +166,7 @@ pub enum Quantity {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum IntRange {
-    Eq(IntExpr),
-    Neq(IntExpr),
-    Gt(IntExpr),
-    Lt(IntExpr),
-    Ge(IntExpr),
-    Le(IntExpr),
-}
+pub struct IntRange { pub op: IntCmpOp, pub int: IntExpr}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Quantifier {
@@ -208,12 +201,7 @@ pub enum FilterExpr {
     Adjacent(Key, Precedence),
     Higher(Key, Precedence),
     Lower(Key, Precedence),
-    SizeEq (Box<IntExpr>),
-    SizeNeq(Box<IntExpr>),
-    SizeGt (Box<IntExpr>),
-    SizeLt (Box<IntExpr>),
-    SizeGe (Box<IntExpr>),
-    SizeLe (Box<IntExpr>),
+    Size (IntCmpOp, Box<IntExpr>),
     KeyEq  (Key, Box<StringExpr>),
     KeyNeq (Key, Box<StringExpr>),
     NotCombo(Combo),
@@ -265,8 +253,7 @@ pub enum Rule {
     CreateLocationCollectionOnTable(LocationCollection),
     CreateCardOnLocation(Location, Types),
     CreateTokenOnLocation(IntExpr, Token, Location),
-    CreatePrecedence(Precedence, OnKeyPrec),
-    CreatePrecedencePairs(Precedence, KeyValuePairs),
+    CreatePrecedence(Precedence, Vec<(Key, Value)>),
     CreateCombo(Combo, FilterExpr),
     CreateMemoryIntPlayerCollection(Memory, IntExpr, PlayerCollection),
     CreateMemoryStringPlayerCollection(Memory, StringExpr, PlayerCollection),
@@ -274,8 +261,7 @@ pub enum Rule {
     CreateMemoryStringTable(Memory, StringExpr),
     CreateMemoryPlayerCollection(Memory, PlayerCollection),
     CreateMemoryTable(Memory),
-    CreatePointMap(Precedence, OnKeyPoint),
-    CreatePointMapPairs(Precedence, KeyValueInt),
+    CreatePointMap(Precedence, Vec<(Key, Value, IntExpr)>),
     // Actions
     FlipAction(CardSet, Status),
     ShuffleAction(CardSet),
@@ -310,34 +296,6 @@ pub enum Rule {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Types {
     pub types: Vec<(Key, Vec<Value>)>
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct OnKeyPrec {
-    pub key: Key,
-    pub values: Vec<Value>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct KeyValuePairs {
-    pub key_value: Vec<(Key, Value)>
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct ValueIntPair {
-    pub value: Value,
-    pub int: IntExpr
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct OnKeyPoint {
-    pub key: Key,
-    pub value_int_vec: Vec<ValueIntPair>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct KeyValueInt {
-    pub key_value_int_vec: Vec<(Key, Value, IntExpr)>,
 }
 
 #[derive(Debug, PartialEq, Clone)]

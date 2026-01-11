@@ -735,7 +735,7 @@ mod tests {
           "size == 3"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::SizeEq(Box::new(IntExpr::Int(3)))
+          FilterExpr::Size(IntCmpOp::Eq, Box::new(IntExpr::Int(3)))
         );
     }
 
@@ -745,7 +745,7 @@ mod tests {
           "size != 3"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::SizeNeq(Box::new(IntExpr::Int(3)))
+          FilterExpr::Size(IntCmpOp::Neq, Box::new(IntExpr::Int(3)))
         );
     }
 
@@ -755,7 +755,7 @@ mod tests {
           "size < 3"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::SizeLt(Box::new(IntExpr::Int(3)))
+          FilterExpr::Size(IntCmpOp::Lt, Box::new(IntExpr::Int(3)))
         );
     }
 
@@ -765,7 +765,7 @@ mod tests {
           "size > 3"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::SizeGt(Box::new(IntExpr::Int(3)))
+          FilterExpr::Size(IntCmpOp::Gt, Box::new(IntExpr::Int(3)))
         );
     }
 
@@ -775,7 +775,7 @@ mod tests {
           "size <= 3"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::SizeLe(Box::new(IntExpr::Int(3)))
+          FilterExpr::Size(IntCmpOp::Le, Box::new(IntExpr::Int(3)))
         );
     }
 
@@ -785,14 +785,14 @@ mod tests {
           "size >= 3"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::SizeGe(Box::new(IntExpr::Int(3)))
+          FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))
         );
     }
 
     #[test]
     fn parses_valid_filter_expr_rank_eq() {
         let parsed: FilterExpr = parse_str(
-          "Key(rank == ace)"
+          "key(rank == ace)"
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::KeyEq(
@@ -804,7 +804,7 @@ mod tests {
     #[test]
     fn parses_valid_filter_expr_rank_neq() {
         let parsed: FilterExpr = parse_str(
-          "Key(rank != ace)"
+          "key(rank != ace)"
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::KeyNeq(
@@ -1362,9 +1362,10 @@ mod tests {
           "range(== 2)"
         ).unwrap();
         assert_eq!(parsed,
-          IntRange::Eq(
-            IntExpr::Int(2)
-          )
+          IntRange {
+            op: IntCmpOp::Eq,
+            int: IntExpr::Int(2)
+          }
         );
     }
 
@@ -1374,9 +1375,10 @@ mod tests {
           "range(!= 2)"
         ).unwrap();
         assert_eq!(parsed,
-          IntRange::Neq(
-            IntExpr::Int(2)
-          )
+          IntRange {
+            op: IntCmpOp::Neq,
+            int: IntExpr::Int(2)
+          }
         );
     }
     
@@ -1386,9 +1388,10 @@ mod tests {
           "range(>= 2)"
         ).unwrap();
         assert_eq!(parsed,
-          IntRange::Ge(
-            IntExpr::Int(2)
-          )
+          IntRange {
+            op: IntCmpOp::Ge,
+            int: IntExpr::Int(2)
+          }
         );
     }
     
@@ -1398,9 +1401,10 @@ mod tests {
           "range(<= 2)"
         ).unwrap();
         assert_eq!(parsed,
-          IntRange::Le(
-            IntExpr::Int(2)
-          )
+          IntRange {
+            op: IntCmpOp::Le,
+            int: IntExpr::Int(2)
+          }
         );
     }
     
@@ -1410,9 +1414,10 @@ mod tests {
           "range(> 2)"
         ).unwrap();
         assert_eq!(parsed,
-          IntRange::Gt(
-            IntExpr::Int(2)
-          )
+          IntRange {
+            op: IntCmpOp::Gt,
+            int: IntExpr::Int(2)
+          }
         );
     }
     
@@ -1422,9 +1427,10 @@ mod tests {
           "range(< 2)"
         ).unwrap();
         assert_eq!(parsed,
-          IntRange::Lt(
-            IntExpr::Int(2)
-          )
+          IntRange {
+            op: IntCmpOp::Lt,
+            int: IntExpr::Int(2)
+          }
         );
     }
 
@@ -1451,7 +1457,10 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Quantity::IntRange(
-            IntRange::Eq(IntExpr::Int(3))
+            IntRange {
+              op: IntCmpOp::Eq,
+              int: IntExpr::Int(3)
+            }
           )
         );
     }
@@ -1884,24 +1893,21 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreatePrecedence(
             format_ident!("Rank"),
-            OnKeyPrec { 
-              key: format_ident!("Rank"),
-              values: vec![
-                format_ident!("Two"),
-                format_ident!("Three"),
-                format_ident!("Four"),
-                format_ident!("Five"),
-                format_ident!("Six"),
-                format_ident!("Seven"),
-                format_ident!("Eight"),
-                format_ident!("Nine"),
-                format_ident!("Ten"),
-                format_ident!("Jack"),
-                format_ident!("Queen"),
-                format_ident!("King"),
-                format_ident!("Ace")
-              ]
-            }
+            vec![ 
+              (format_ident!("Rank"), format_ident!("Two")),
+              (format_ident!("Rank"), format_ident!("Three")),
+              (format_ident!("Rank"), format_ident!("Four")),
+              (format_ident!("Rank"), format_ident!("Five")),
+              (format_ident!("Rank"), format_ident!("Six")),
+              (format_ident!("Rank"), format_ident!("Seven")),
+              (format_ident!("Rank"), format_ident!("Eight")),
+              (format_ident!("Rank"), format_ident!("Nine")),
+              (format_ident!("Rank"), format_ident!("Ten")),
+              (format_ident!("Rank"), format_ident!("Jack")),
+              (format_ident!("Rank"), format_ident!("Queen")),
+              (format_ident!("Rank"), format_ident!("King")),
+              (format_ident!("Rank"), format_ident!("Ace"))
+            ]
           )
         );
     }
@@ -1912,15 +1918,13 @@ mod tests {
           "precedence Rank (Rank(Two), Suite(Spades), Color(Red))"
         ).unwrap();
         assert_eq!(parsed,
-          Rule::CreatePrecedencePairs(
+          Rule::CreatePrecedence(
             format_ident!("Rank"),
-            KeyValuePairs {
-              key_value: vec![
-                (format_ident!("Rank"), format_ident!("Two")),
-                (format_ident!("Suite"), format_ident!("Spades")),
-                (format_ident!("Color"), format_ident!("Red")),
-              ]
-            }
+            vec![
+              (format_ident!("Rank"), format_ident!("Two")),
+              (format_ident!("Suite"), format_ident!("Spades")),
+              (format_ident!("Color"), format_ident!("Red")),
+            ]
           )
         );
     }
@@ -2057,80 +2061,22 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreatePointMap(
             format_ident!("Rank"),
-            OnKeyPoint { 
-              key: format_ident!("Rank"),
-              value_int_vec: vec![
-                ValueIntPair {
-                  value: format_ident!("Two"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Three"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Four"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Five"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Six"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Seven"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Eight"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Nine"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Ten"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Jack"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Queen"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("King"),
-                  int: IntExpr::Int(1)
-                },
-                ValueIntPair {
-                  value: format_ident!("Ace"),
-                  int: IntExpr::Int(1)
-                },
-              ]
-            }
+            vec![
+              (format_ident!("Rank"), format_ident!("Two"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Three"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Four"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Five"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Six"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Seven"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Eight"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Nine"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Ten"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Jack"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Queen"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("King"), IntExpr::Int(1)),
+              (format_ident!("Rank"), format_ident!("Ace"), IntExpr::Int(1)),
+            ]
           )
-        );
-    }
-
-    #[test]
-    fn parses_valid_key_value_int() {
-        let parsed: KeyValueInt = parse_str(
-          "(Rank(Two: 1), Suite(Spades: 1), Color(Red: 1))"
-        ).unwrap();
-        assert_eq!(parsed,
-            KeyValueInt {
-              key_value_int_vec: vec![
-                (format_ident!("Rank"), format_ident!("Two"), IntExpr::Int(1)),
-                (format_ident!("Suite"), format_ident!("Spades"), IntExpr::Int(1)),
-                (format_ident!("Color"), format_ident!("Red"), IntExpr::Int(1)),
-              ]
-            }
         );
     }
 
@@ -2140,16 +2086,13 @@ mod tests {
           "pointmap Rank (Rank(Two: 1), Suite(Spades: 1), Color(Red: 1))"
         ).unwrap();
         assert_eq!(parsed,
-          Rule::CreatePointMapPairs(
+          Rule::CreatePointMap(
             format_ident!("Rank"),
-            KeyValueInt {
-              key_value_int_vec: vec![
-                (format_ident!("Rank"), format_ident!("Two"), IntExpr::Int(1)),
-                (format_ident!("Suite"), format_ident!("Spades"), IntExpr::Int(1)),
-                (format_ident!("Color"), format_ident!("Red"), IntExpr::Int(1)),
-              ]
-            }
-            
+            vec![
+              (format_ident!("Rank"), format_ident!("Two"), IntExpr::Int(1)),
+              (format_ident!("Suite"), format_ident!("Spades"), IntExpr::Int(1)),
+              (format_ident!("Color"), format_ident!("Red"), IntExpr::Int(1)),
+            ]
           )
         );
     }
@@ -2739,87 +2682,42 @@ mod tests {
               FlowComponent::Rule(
                 Rule::CreatePrecedence(
                   format_ident!("RankOrder"),
-                  OnKeyPrec { 
-                    key: format_ident!("Rank"),
-                    values: vec![
-                      format_ident!("Ace"),
-                      format_ident!("Two"),
-                      format_ident!("Three"),
-                      format_ident!("Four"),
-                      format_ident!("Five"),
-                      format_ident!("Six"),
-                      format_ident!("Seven"),
-                      format_ident!("Eight"),
-                      format_ident!("Nine"),
-                      format_ident!("Ten"),
-                      format_ident!("Jack"),
-                      format_ident!("Queen"),
-                      format_ident!("King"),
-                    ]
-                  }
+                  vec![
+                    (format_ident!("Rank"), format_ident!("Ace")),
+                    (format_ident!("Rank"), format_ident!("Two")),
+                    (format_ident!("Rank"), format_ident!("Three")),
+                    (format_ident!("Rank"), format_ident!("Four")),
+                    (format_ident!("Rank"), format_ident!("Five")),
+                    (format_ident!("Rank"), format_ident!("Six")),
+                    (format_ident!("Rank"), format_ident!("Seven")),
+                    (format_ident!("Rank"), format_ident!("Eight")),
+                    (format_ident!("Rank"), format_ident!("Nine")),
+                    (format_ident!("Rank"), format_ident!("Ten")),
+                    (format_ident!("Rank"), format_ident!("Jack")),
+                    (format_ident!("Rank"), format_ident!("Queen")),
+                    (format_ident!("Rank"), format_ident!("King")),
+                  ]
                 )
               ),
               // Values
               FlowComponent::Rule(
                 Rule::CreatePointMap(
                   format_ident!("Values"),
-                  OnKeyPoint {
-                    key: format_ident!("Rank"),
-                    value_int_vec: vec![
-                      ValueIntPair{ 
-                        value: format_ident!("Ace"),
-                        int: IntExpr::Int(1),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Two"),
-                        int: IntExpr::Int(2),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Three"),
-                        int: IntExpr::Int(3),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Four"),
-                        int: IntExpr::Int(4),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Five"),
-                        int: IntExpr::Int(5),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Six"),
-                        int: IntExpr::Int(6),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Seven"),
-                        int: IntExpr::Int(7),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Eight"),
-                        int: IntExpr::Int(8),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Nine"),
-                        int: IntExpr::Int(9),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Ten"),
-                        int: IntExpr::Int(10),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Jack"),
-                        int: IntExpr::Int(10),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("Queen"),
-                        int: IntExpr::Int(10),
-                      },
-                      ValueIntPair{ 
-                        value: format_ident!("King"),
-                        int: IntExpr::Int(10),
-                      },
-                    ]
-                  }
+                  vec![
+                    (format_ident!("Rank"), format_ident!("Ace"), IntExpr::Int(1)),
+                    (format_ident!("Rank"), format_ident!("Two"), IntExpr::Int(2)),
+                    (format_ident!("Rank"), format_ident!("Three"), IntExpr::Int(3)),
+                    (format_ident!("Rank"), format_ident!("Four"), IntExpr::Int(4)),
+                    (format_ident!("Rank"), format_ident!("Five"), IntExpr::Int(5)),
+                    (format_ident!("Rank"), format_ident!("Six"), IntExpr::Int(6)),
+                    (format_ident!("Rank"), format_ident!("Seven"), IntExpr::Int(7)),
+                    (format_ident!("Rank"), format_ident!("Eight"), IntExpr::Int(8)),
+                    (format_ident!("Rank"), format_ident!("Nine"), IntExpr::Int(9)),
+                    (format_ident!("Rank"), format_ident!("Ten"), IntExpr::Int(10)),
+                    (format_ident!("Rank"), format_ident!("Jack"), IntExpr::Int(10)),
+                    (format_ident!("Rank"), format_ident!("Queen"), IntExpr::Int(10)),
+                    (format_ident!("Rank"), format_ident!("King"), IntExpr::Int(10)),
+                  ]
                 )
               ),
               // Combo Sequence
@@ -2828,7 +2726,7 @@ mod tests {
                   format_ident!("Sequence"),
                   FilterExpr::And(
                     Box::new(FilterExpr::And(
-                      Box::new(FilterExpr::SizeGe(Box::new(IntExpr::Int(3)))),
+                      Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
                       Box::new(FilterExpr::Same(format_ident!("Suite")))
                     )),
                     Box::new(FilterExpr::Adjacent(format_ident!("Rank"), format_ident!("RankOrder")))
@@ -2841,7 +2739,7 @@ mod tests {
                   format_ident!("Set"),
                   FilterExpr::And(
                     Box::new(FilterExpr::And(
-                      Box::new(FilterExpr::SizeGe(Box::new(IntExpr::Int(3)))),
+                      Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
                       Box::new(FilterExpr::Distinct(format_ident!("Suite")))
                     )),
                     Box::new(FilterExpr::Same(format_ident!("Rank")))

@@ -246,87 +246,42 @@ mod test {
           FlowComponent::Rule(
             Rule::CreatePrecedence(
               format_ident!("RankOrder"),
-              OnKeyPrec { 
-                key: format_ident!("Rank"),
-                values: vec![
-                  format_ident!("Ace"),
-                  format_ident!("Two"),
-                  format_ident!("Three"),
-                  format_ident!("Four"),
-                  format_ident!("Five"),
-                  format_ident!("Six"),
-                  format_ident!("Seven"),
-                  format_ident!("Eight"),
-                  format_ident!("Nine"),
-                  format_ident!("Ten"),
-                  format_ident!("Jack"),
-                  format_ident!("Queen"),
-                  format_ident!("King"),
-                ]
-              }
+              vec![
+                (format_ident!("Rank"), format_ident!("Ace")),
+                (format_ident!("Rank"), format_ident!("Two")),
+                (format_ident!("Rank"), format_ident!("Three")),
+                (format_ident!("Rank"), format_ident!("Four")),
+                (format_ident!("Rank"), format_ident!("Five")),
+                (format_ident!("Rank"), format_ident!("Six")),
+                (format_ident!("Rank"), format_ident!("Seven")),
+                (format_ident!("Rank"), format_ident!("Eight")),
+                (format_ident!("Rank"), format_ident!("Nine")),
+                (format_ident!("Rank"), format_ident!("Ten")),
+                (format_ident!("Rank"), format_ident!("Jack")),
+                (format_ident!("Rank"), format_ident!("Queen")),
+                (format_ident!("Rank"), format_ident!("King")),
+              ]
             )
           ),
           // Values
           FlowComponent::Rule(
             Rule::CreatePointMap(
               format_ident!("Values"),
-              OnKeyPoint {
-                key: format_ident!("Rank"),
-                value_int_vec: vec![
-                  ValueIntPair{ 
-                    value: format_ident!("Ace"),
-                    int: IntExpr::Int(1),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Two"),
-                    int: IntExpr::Int(2),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Three"),
-                    int: IntExpr::Int(3),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Four"),
-                    int: IntExpr::Int(4),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Five"),
-                    int: IntExpr::Int(5),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Six"),
-                    int: IntExpr::Int(6),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Seven"),
-                    int: IntExpr::Int(7),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Eight"),
-                    int: IntExpr::Int(8),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Nine"),
-                    int: IntExpr::Int(9),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Ten"),
-                    int: IntExpr::Int(10),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Jack"),
-                    int: IntExpr::Int(10),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("Queen"),
-                    int: IntExpr::Int(10),
-                  },
-                  ValueIntPair{ 
-                    value: format_ident!("King"),
-                    int: IntExpr::Int(10),
-                  },
-                ]
-              }
+              vec![
+                (format_ident!("Rank"), format_ident!("Ace"), IntExpr::Int(1)),
+                (format_ident!("Rank"), format_ident!("Two"), IntExpr::Int(2)),
+                (format_ident!("Rank"), format_ident!("Three"), IntExpr::Int(3)),
+                (format_ident!("Rank"), format_ident!("Four"), IntExpr::Int(4)),
+                (format_ident!("Rank"), format_ident!("Five"), IntExpr::Int(5)),
+                (format_ident!("Rank"), format_ident!("Six"), IntExpr::Int(6)),
+                (format_ident!("Rank"), format_ident!("Seven"), IntExpr::Int(7)),
+                (format_ident!("Rank"), format_ident!("Eight"), IntExpr::Int(8)),
+                (format_ident!("Rank"), format_ident!("Nine"), IntExpr::Int(9)),
+                (format_ident!("Rank"), format_ident!("Ten"), IntExpr::Int(10)),
+                (format_ident!("Rank"), format_ident!("Jack"), IntExpr::Int(10)),
+                (format_ident!("Rank"), format_ident!("Queen"), IntExpr::Int(10)),
+                (format_ident!("Rank"), format_ident!("King"), IntExpr::Int(10)),
+              ]
             )
           ),
           // Combo Sequence
@@ -335,7 +290,7 @@ mod test {
               format_ident!("Sequence"),
               FilterExpr::And(
                 Box::new(FilterExpr::And(
-                  Box::new(FilterExpr::SizeGe(Box::new(IntExpr::Int(3)))),
+                  Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
                   Box::new(FilterExpr::Same(format_ident!("Suite")))
                 )),
                 Box::new(FilterExpr::Adjacent(format_ident!("Rank"), format_ident!("RankOrder")))
@@ -348,7 +303,7 @@ mod test {
               format_ident!("Set"),
               FilterExpr::And(
                 Box::new(FilterExpr::And(
-                  Box::new(FilterExpr::SizeGe(Box::new(IntExpr::Int(3)))),
+                  Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
                   Box::new(FilterExpr::Distinct(format_ident!("Suite")))
                 )),
                 Box::new(FilterExpr::Same(format_ident!("Rank")))
