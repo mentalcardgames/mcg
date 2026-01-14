@@ -1,59 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use ast::{ast::*};
+    use ast::ast::*;
     use syn::parse_str;
-
-    const CURRENT: PlayerExpr = PlayerExpr::Current;
-    const PREVIOUS: PlayerExpr = PlayerExpr::Previous;
-    const COMPETITOR: PlayerExpr = PlayerExpr::Competitor;
-
-    fn id(id: &str) -> ID {
-      ID::new(id)
-    }
-
-    fn stage(id: &str) -> Stage {
-      Stage::new(ID::new(id))
-    }
-
-    fn playername(id: &str) -> PlayerName {
-      PlayerName::new(ID::new(id))
-    }
-
-    fn teamname(id: &str) -> TeamName {
-      TeamName::new(ID::new(id))
-    }
-
-    fn location(id: &str) -> Location {
-      Location::new(ID::new(id))
-    }
-
-    fn token(id: &str) -> Token {
-      Token::new(ID::new(id))
-    }
-
-    fn precedence(id: &str) -> Precedence {
-      Precedence::new(ID::new(id))
-    }
-
-    fn pointmap(id: &str) -> PointMap {
-      PointMap::new(ID::new(id))
-    }
-
-    fn combo(id: &str) -> Combo {
-      Combo::new(ID::new(id))
-    }
-    
-    fn memory(id: &str) -> Memory {
-      Memory::new(ID::new(id))
-    }
-
-    fn key(id: &str) -> Key {
-      Key::new(ID::new(id))
-    }
-    
-    fn value(id: &str) -> Value {
-      Value::new(ID::new(id))
-    }
+    use ast::test_helper::test_helper as th;
 
     // PlayerExpr ============================================================
     
@@ -62,7 +11,7 @@ mod tests {
         let parsed: PlayerExpr = parse_str(
           "current"
         ).unwrap();
-        assert_eq!(parsed, CURRENT);
+        assert_eq!(parsed, th::CURRENT);
     }
 
     #[test]
@@ -70,7 +19,7 @@ mod tests {
         let parsed: PlayerExpr = parse_str(
           "previous"
         ).unwrap();
-        assert_eq!(parsed, PREVIOUS);
+        assert_eq!(parsed, th::PREVIOUS);
     }
 
     #[test]
@@ -78,7 +27,7 @@ mod tests {
         let parsed: PlayerExpr = parse_str(
           "competitor"
         ).unwrap();
-        assert_eq!(parsed, COMPETITOR);
+        assert_eq!(parsed, th::COMPETITOR);
     }
 
     #[test]
@@ -88,7 +37,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           PlayerExpr::OwnerOfHighest(
-            memory("Mem")
+            th::memory("Mem")
           )
         );
     }
@@ -100,7 +49,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           PlayerExpr::OwnerOfLowest(
-            memory("Mem")
+            th::memory("Mem")
           )
         );
     }
@@ -119,7 +68,7 @@ mod tests {
           "P1"
         ).unwrap();
         assert_eq!(parsed, PlayerExpr::PlayerName(
-          playername("P1"))
+          th::playername("P1"))
         );
     }
 
@@ -275,7 +224,7 @@ mod tests {
         let parsed: TeamExpr = parse_str(
           "team of current"
         ).unwrap();
-        assert_eq!(parsed, TeamExpr::TeamOf(CURRENT));
+        assert_eq!(parsed, TeamExpr::TeamOf(th::CURRENT));
     }
 
     #[test]
@@ -284,7 +233,7 @@ mod tests {
           "T1"
         ).unwrap();
         assert_eq!(parsed, TeamExpr::TeamName(
-          teamname("T1"))
+          th::teamname("T1"))
         );
     }
 
@@ -298,7 +247,7 @@ mod tests {
           "top(Hand)"
         ).unwrap();
         assert_eq!(parsed, CardPosition::Top(
-          location("Hand"))
+          th::location("Hand"))
         );
     }
 
@@ -307,7 +256,7 @@ mod tests {
         let parsed: CardPosition = parse_str(
           "bottom(Hand)"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::Bottom(location("Hand")));
+        assert_eq!(parsed, CardPosition::Bottom(th::location("Hand")));
     }
 
     #[test]
@@ -315,7 +264,7 @@ mod tests {
         let parsed: CardPosition = parse_str(
           "max(Hand) using Aces"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::Max(Box::new(CardSet::Group(Group::Location(location("Hand")))), id("Aces")));
+        assert_eq!(parsed, CardPosition::Max(Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::id("Aces")));
     }
 
     #[test]
@@ -323,7 +272,7 @@ mod tests {
         let parsed: CardPosition = parse_str(
           "min(Hand) using Aces"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::Min(Box::new(CardSet::Group(Group::Location(location("Hand")))), id("Aces")));
+        assert_eq!(parsed, CardPosition::Min(Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::id("Aces")));
     }
 
     #[test]
@@ -331,7 +280,7 @@ mod tests {
         let parsed: CardPosition = parse_str(
           "Hand[3]"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::At(location("Hand"), IntExpr::Int(3)));
+        assert_eq!(parsed, CardPosition::At(th::location("Hand"), IntExpr::Int(3)));
     }
 
     // =======================================================================
@@ -384,7 +333,7 @@ mod tests {
           "sum of Hand using Aces"
         ).unwrap();
         assert_eq!(parsed, IntExpr::SumOfCardSet(
-          Box::new(CardSet::Group(Group::Location(location("Hand")))), pointmap("Aces"))
+          Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::pointmap("Aces"))
         );
     }
 
@@ -418,7 +367,7 @@ mod tests {
           "min of Hand using Aces"
         ).unwrap();
         assert_eq!(parsed, IntExpr::MinOf(
-          Box::new(CardSet::Group(Group::Location(location("Hand")))), pointmap("Aces"))
+          Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::pointmap("Aces"))
         );
     }
     
@@ -428,7 +377,7 @@ mod tests {
           "max of Hand using Aces"
         ).unwrap();
         assert_eq!(parsed, IntExpr::MaxOf(
-          Box::new(CardSet::Group(Group::Location(location("Hand")))), pointmap("Aces"))
+          Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::pointmap("Aces"))
         );
     }
     
@@ -449,7 +398,7 @@ mod tests {
         let parsed: BoolExpr = parse_str(
           "A == B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::Eq(id("A"), id("B")));
+        assert_eq!(parsed, BoolExpr::AmbiguousEq(th::id("A"), th::id("B")));
     }
 
     #[test]
@@ -457,7 +406,7 @@ mod tests {
         let parsed: BoolExpr = parse_str(
           "A != B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::Neq(id("A"), id("B")));
+        assert_eq!(parsed, BoolExpr::AmbiguousNeq(th::id("A"), th::id("B")));
     }
 
     #[test]
@@ -465,7 +414,7 @@ mod tests {
         let parsed: BoolExpr = parse_str(
           "current == A"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::PlayerEq(CURRENT, PlayerExpr::PlayerName(playername("A"))));
+        assert_eq!(parsed, BoolExpr::PlayerEq(th::CURRENT, PlayerExpr::PlayerName(th::playername("A"))));
     }
 
     #[test]
@@ -473,7 +422,7 @@ mod tests {
         let parsed: BoolExpr = parse_str(
           "A != current"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::PlayerNeq(PlayerExpr::PlayerName(playername("A")), CURRENT));
+        assert_eq!(parsed, BoolExpr::PlayerNeq(PlayerExpr::PlayerName(th::playername("A")), th::CURRENT));
     }
     
     #[test]
@@ -481,7 +430,7 @@ mod tests {
         let parsed: BoolExpr = parse_str(
           "team of A == B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::TeamEq(TeamExpr::TeamOf(PlayerExpr::PlayerName(playername("A"))), TeamExpr::TeamName(teamname("B"))));
+        assert_eq!(parsed, BoolExpr::TeamEq(TeamExpr::TeamOf(PlayerExpr::PlayerName(th::playername("A"))), TeamExpr::TeamName(th::teamname("B"))));
     }
 
     #[test]
@@ -489,7 +438,7 @@ mod tests {
         let parsed: BoolExpr = parse_str(
           "A != team of B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::TeamNeq(TeamExpr::TeamName(teamname("A")), TeamExpr::TeamOf(PlayerExpr::PlayerName(playername("B")))));
+        assert_eq!(parsed, BoolExpr::TeamNeq(TeamExpr::TeamName(th::teamname("A")), TeamExpr::TeamOf(PlayerExpr::PlayerName(th::playername("B")))));
     }
 
     #[test]
@@ -498,8 +447,8 @@ mod tests {
           "(A != B or A != B)"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::Or(
-          Box::new(BoolExpr::Neq(id("A"), id("B"))),
-          Box::new(BoolExpr::Neq(id("A"), id("B")))
+          Box::new(BoolExpr::AmbiguousNeq(th::id("A"), th::id("B"))),
+          Box::new(BoolExpr::AmbiguousNeq(th::id("A"), th::id("B")))
         ));
     }
     
@@ -509,8 +458,8 @@ mod tests {
           "(A != B and A != B)"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::And(
-          Box::new(BoolExpr::Neq(id("A"), id("B"))),
-          Box::new(BoolExpr::Neq(id("A"), id("B")))
+          Box::new(BoolExpr::AmbiguousNeq(th::id("A"), th::id("B"))),
+          Box::new(BoolExpr::AmbiguousNeq(th::id("A"), th::id("B")))
         ));
     }
     
@@ -532,8 +481,8 @@ mod tests {
           "Hand of current == Hand"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::CardSetEq(
-          CardSet::GroupOfPlayer(Group::Location(location("Hand")), CURRENT),
-          CardSet::Group(Group::Location(location("Hand"))),
+          CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), th::CURRENT),
+          CardSet::Group(Group::Location(th::location("Hand"))),
         ));
     }
     
@@ -543,8 +492,8 @@ mod tests {
           "Hand != Hand of current"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::CardSetNeq(
-          CardSet::Group(Group::Location(location("Hand"))),
-          CardSet::GroupOfPlayer(Group::Location(location("Hand")), CURRENT),
+          CardSet::Group(Group::Location(th::location("Hand"))),
+          CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), th::CURRENT),
         ));
     }
 
@@ -554,7 +503,7 @@ mod tests {
           "Hand is empty"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::CardSetIsEmpty(
-          CardSet::Group(Group::Location(location("Hand")))
+          CardSet::Group(Group::Location(th::location("Hand")))
         ));
     }
 
@@ -564,7 +513,7 @@ mod tests {
           "Hand is not empty"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::CardSetIsNotEmpty(
-          CardSet::Group(Group::Location(location("Hand")))
+          CardSet::Group(Group::Location(th::location("Hand")))
         ));
     }
     
@@ -587,7 +536,7 @@ mod tests {
           "current out of stage"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::OutOfStagePlayer(
-          CURRENT
+          th::CURRENT
         ));
     }
     
@@ -597,7 +546,7 @@ mod tests {
           "current out of game"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::OutOfGamePlayer(
-          CURRENT
+          th::CURRENT
         ));
     }
     
@@ -631,7 +580,7 @@ mod tests {
           "Monkey"
         ).unwrap();
         assert_eq!(parsed, StringExpr::ID(
-          id("Monkey")
+          th::id("Monkey")
         ));
     }
 
@@ -641,8 +590,8 @@ mod tests {
           "Rank of top(Hand)"
         ).unwrap();
         assert_eq!(parsed, StringExpr::KeyOf(
-          key("Rank"),
-          CardPosition::Top(location("Hand"))
+          th::key("Rank"),
+          CardPosition::Top(th::location("Hand"))
         ));
     }
 
@@ -654,9 +603,9 @@ mod tests {
         assert_eq!(parsed, StringExpr::StringCollectionAt(
           StringCollection {
             strings: vec![
-              StringExpr::ID(id("A")),
-              StringExpr::ID(id("B")),
-              StringExpr::ID(id("C"))
+              StringExpr::ID(th::id("A")),
+              StringExpr::ID(th::id("B")),
+              StringExpr::ID(th::id("C"))
             ]
           },
           IntExpr::Int(3)
@@ -705,8 +654,8 @@ mod tests {
         assert_eq!(parsed, 
           PlayerCollection::Player(
             vec![
-              CURRENT,
-              CURRENT,
+              th::CURRENT,
+              th::CURRENT,
             ]
           )
         );
@@ -734,7 +683,7 @@ mod tests {
           "same Rank"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Same(key("Rank"))
+          FilterExpr::Same(th::key("Rank"))
         );
     }
 
@@ -744,7 +693,7 @@ mod tests {
           "distinct Rank"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Distinct(key("Rank"))
+          FilterExpr::Distinct(th::key("Rank"))
         );
     }
 
@@ -754,7 +703,7 @@ mod tests {
           "adjacent Rank using Aces"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Adjacent(key("Rank"), precedence("Aces"))
+          FilterExpr::Adjacent(th::key("Rank"), th::precedence("Aces"))
         );
     }
 
@@ -764,7 +713,7 @@ mod tests {
           "higher Rank using Aces"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Higher(key("Rank"), precedence("Aces"))
+          FilterExpr::Higher(th::key("Rank"), th::precedence("Aces"))
         );
     }
 
@@ -774,7 +723,7 @@ mod tests {
           "lower Rank using Aces"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Lower(key("Rank"), precedence("Aces"))
+          FilterExpr::Lower(th::key("Rank"), th::precedence("Aces"))
         );
     }
 
@@ -845,9 +794,9 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::KeyEq(
-            key("Rank"),
+            th::key("Rank"),
             // TODO: Should be Value not StringExpr
-            Box::new(StringExpr::ID(id("Ace"))))
+            Box::new(StringExpr::ID(th::id("Ace"))))
         );
     }
 
@@ -858,9 +807,9 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::KeyNeq(
-            key("Rank"),
+            th::key("Rank"),
             // TODO: Should be Value not StringExpr
-            Box::new(StringExpr::ID(id("Ace"))))
+            Box::new(StringExpr::ID(th::id("Ace"))))
         );
     }
 
@@ -871,7 +820,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::NotCombo(
-            combo("Pair")
+            th::combo("Pair")
           )
         );
     }
@@ -883,7 +832,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::Combo(
-            combo("Pair")
+            th::combo("Pair")
           )
         );
     }
@@ -896,10 +845,10 @@ mod tests {
         assert_eq!(parsed, 
           FilterExpr::And(
             Box::new(FilterExpr::Combo(
-              combo("Pair")
+              th::combo("Pair")
             )),
             Box::new(FilterExpr::Combo(
-              combo("Triple")
+              th::combo("Triple")
             ))
           )
         );
@@ -913,10 +862,10 @@ mod tests {
         assert_eq!(parsed, 
           FilterExpr::Or(
             Box::new(FilterExpr::Combo(
-              combo("Pair")
+              th::combo("Pair")
             )),
             Box::new(FilterExpr::Combo(
-              combo("Triple")
+              th::combo("Triple")
             ))
           )
         );
@@ -932,7 +881,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           Group::Location(
-            location("Hand")
+            th::location("Hand")
           )
         );
     }
@@ -944,8 +893,8 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           Group::LocationWhere(
-            location("Hand"),
-            FilterExpr::Same(key("Rank"))
+            th::location("Hand"),
+            FilterExpr::Same(th::key("Rank"))
           )
         );
     }
@@ -959,8 +908,8 @@ mod tests {
           Group::LocationCollection(
             LocationCollection {
               locations: vec![
-                location("Hand"),
-                location("Stack")
+                th::location("Hand"),
+                th::location("Stack")
               ]
             }
           )
@@ -976,11 +925,11 @@ mod tests {
           Group::LocationCollectionWhere(
             LocationCollection {
               locations: vec![
-                location("Hand"),
-                location("Stack")
+                th::location("Hand"),
+                th::location("Stack")
               ]
             },
-            FilterExpr::Same(key("Rank"))
+            FilterExpr::Same(th::key("Rank"))
           )
         );
     }
@@ -993,8 +942,8 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           Group::ComboInLocation(
-            combo("Pair"),
-            location("Hand")
+            th::combo("Pair"),
+            th::location("Hand")
           )
         );
     }
@@ -1006,11 +955,11 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           Group::ComboInLocationCollection(
-            combo("Pair"),
+            th::combo("Pair"),
             LocationCollection {
               locations: vec![
-                location("Hand"),
-                location("Stack")
+                th::location("Hand"),
+                th::location("Stack")
               ]
             }
           )
@@ -1024,8 +973,8 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           Group::NotComboInLocation(
-            combo("Pair"),
-            location("Hand")
+            th::combo("Pair"),
+            th::location("Hand")
           )
         );
     }
@@ -1037,11 +986,11 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           Group::NotComboInLocationCollection(
-            combo("Pair"),
+            th::combo("Pair"),
             LocationCollection {
               locations: vec![
-                location("Hand"),
-                location("Stack")
+                th::location("Hand"),
+                th::location("Stack")
               ]
             }
           )
@@ -1055,7 +1004,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           Group::CardPosition(
-            CardPosition::Top(location("Hand"))
+            CardPosition::Top(th::location("Hand"))
           )
         );
     }
@@ -1072,7 +1021,7 @@ mod tests {
         assert_eq!(parsed, 
           CardSet::Group(
             Group::CardPosition(
-              CardPosition::Top(location("Hand"))
+              CardPosition::Top(th::location("Hand"))
             )
           )
         );
@@ -1086,10 +1035,10 @@ mod tests {
         assert_eq!(parsed, 
           CardSet::GroupOfPlayer(
             Group::LocationWhere(
-              location("Hand"),
-              FilterExpr::Same(key("Rank"))
+              th::location("Hand"),
+              FilterExpr::Same(th::key("Rank"))
             ),
-            CURRENT
+            th::CURRENT
           )
         );
     }
@@ -1102,8 +1051,8 @@ mod tests {
         assert_eq!(parsed, 
           CardSet::GroupOfPlayerCollection(
             Group::LocationWhere(
-              location("Hand"),
-              FilterExpr::Same(key("Rank"))
+              th::location("Hand"),
+              FilterExpr::Same(th::key("Rank"))
             ),
             PlayerCollection::Others
           )
@@ -1144,9 +1093,9 @@ mod tests {
         assert_eq!(parsed, 
           LocationCollection {
             locations: vec![
-              location("Hand"),
-              location("Deck"),
-              location("Hand"),
+              th::location("Hand"),
+              th::location("Deck"),
+              th::location("Hand"),
             ]
           }
         );
@@ -1174,8 +1123,8 @@ mod tests {
         assert_eq!(parsed,
           TeamCollection::Team(
             vec![
-              TeamExpr::TeamName(teamname("T1")),
-              TeamExpr::TeamName(teamname("T2")),
+              TeamExpr::TeamName(th::teamname("T1")),
+              TeamExpr::TeamName(th::teamname("T2")),
             ]
           )
         );
@@ -1193,8 +1142,8 @@ mod tests {
         assert_eq!(parsed,
           StringCollection {
             strings: vec![
-              StringExpr::ID(id("A")),
-              StringExpr::ID(id("B")),
+              StringExpr::ID(th::id("A")),
+              StringExpr::ID(th::id("B")),
             ]
           }
         );
@@ -1213,8 +1162,8 @@ mod tests {
           Collection::PlayerCollection(
             PlayerCollection::Player(
               vec![
-                CURRENT,
-                PREVIOUS,
+                th::CURRENT,
+                th::PREVIOUS,
               ]
             )
           )
@@ -1230,7 +1179,7 @@ mod tests {
           Collection::TeamCollection(
             TeamCollection::Team(
               vec![
-                TeamExpr::TeamName(teamname("T1")),
+                TeamExpr::TeamName(th::teamname("T1")),
                 TeamExpr::TeamOf(PlayerExpr::Current),
               ]
             )
@@ -1263,7 +1212,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Collection::CardSet(
-            Box::new(CardSet::GroupOfPlayer(Group::Location(location("Hand")), CURRENT))
+            Box::new(CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), th::CURRENT))
           )
         );
     }
@@ -1293,9 +1242,9 @@ mod tests {
           Collection::StringCollection(
             StringCollection {
             strings: vec![
-              StringExpr::ID(id("A")),
-              StringExpr::KeyOf(key("Rank"), CardPosition::Top(location("Hand"))),
-              StringExpr::ID(id("C")),
+              StringExpr::ID(th::id("A")),
+              StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
+              StringExpr::ID(th::id("C")),
             ]
           }
           )
@@ -1524,9 +1473,9 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           ClassicMove::Move(
-            CardSet::Group(Group::Location(location("Hand"))),
+            CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(location("Deck")))
+            CardSet::Group(Group::Location(th::location("Deck")))
           )
         );
     }
@@ -1539,9 +1488,9 @@ mod tests {
         assert_eq!(parsed,
           ClassicMove::MoveQuantity(
             Quantity::Quantifier(Quantifier::All),
-            CardSet::Group(Group::Location(location("Hand"))),
+            CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(location("Deck")))
+            CardSet::Group(Group::Location(th::location("Deck")))
           )
         );
     }
@@ -1557,9 +1506,9 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           DealMove::Deal(
-            CardSet::Group(Group::Location(location("Hand"))),
+            CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(location("Deck")))
+            CardSet::Group(Group::Location(th::location("Deck")))
           )
         );
     }
@@ -1572,9 +1521,9 @@ mod tests {
         assert_eq!(parsed,
           DealMove::DealQuantity(
             Quantity::Int(IntExpr::Int(12)),
-            CardSet::Group(Group::Location(location("Hand"))),
+            CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
-            CardSet::GroupOfPlayerCollection(Group::Location(location("Deck")), PlayerCollection::Quantifier(Quantifier::All))
+            CardSet::GroupOfPlayerCollection(Group::Location(th::location("Deck")), PlayerCollection::Quantifier(Quantifier::All))
           )
         );
     }
@@ -1590,9 +1539,9 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           ExchangeMove::Exchange(
-            CardSet::Group(Group::Location(location("Hand"))),
+            CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(location("Deck")))
+            CardSet::Group(Group::Location(th::location("Deck")))
           )
         );
     }
@@ -1605,9 +1554,9 @@ mod tests {
         assert_eq!(parsed,
           ExchangeMove::ExchangeQuantity(
             Quantity::Quantifier(Quantifier::All),
-            CardSet::Group(Group::Location(location("Hand"))),
+            CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(location("Deck")))
+            CardSet::Group(Group::Location(th::location("Deck")))
           )
         );
     }
@@ -1623,7 +1572,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           TokenLocExpr::Location(
-            location("Hand")
+            th::location("Hand")
           )
         );
     }
@@ -1635,8 +1584,8 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           TokenLocExpr::LocationPlayer(
-            location("Hand"),
-            CURRENT
+            th::location("Hand"),
+            th::CURRENT
           )
         );
     }
@@ -1648,7 +1597,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           TokenLocExpr::LocationPlayerCollection(
-            location("Hand"),
+            th::location("Hand"),
             PlayerCollection::Others
           )
         );
@@ -1663,8 +1612,8 @@ mod tests {
           TokenLocExpr::LocationCollection(
             LocationCollection {
               locations: vec![
-                location("Hand"),
-                location("Deck"),
+                th::location("Hand"),
+                th::location("Deck"),
               ]
             }
           )
@@ -1680,11 +1629,11 @@ mod tests {
           TokenLocExpr::LocationCollectionPlayer(
             LocationCollection {
               locations: vec![
-                location("Hand"),
-                location("Deck"),
+                th::location("Hand"),
+                th::location("Deck"),
               ]
             },
-            CURRENT
+            th::CURRENT
           )
         );
     }
@@ -1698,8 +1647,8 @@ mod tests {
           TokenLocExpr::LocationCollectionPlayerCollection(
             LocationCollection {
               locations: vec![
-                location("Hand"),
-                location("Deck"),
+                th::location("Hand"),
+                th::location("Deck"),
               ]
             },
             PlayerCollection::Others
@@ -1719,10 +1668,10 @@ mod tests {
         assert_eq!(parsed,
           TokenMove::Place(
             TokenLocExpr::Location(
-              location("Hand")
+              th::location("Hand")
             ),
             TokenLocExpr::Location(
-              location("Deck")
+              th::location("Deck")
             ),
           )
         );
@@ -1737,10 +1686,10 @@ mod tests {
           TokenMove::PlaceQuantity(
             Quantity::Quantifier(Quantifier::All),
             TokenLocExpr::Location(
-              location("Hand")
+              th::location("Hand")
             ),
             TokenLocExpr::Location(
-              location("Deck")
+              th::location("Deck")
             ),
           )
         );
@@ -1758,9 +1707,9 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreatePlayer(
             vec![
-              playername("P1"),
-              playername("P2"),
-              playername("P3"),
+              th::playername("P1"),
+              th::playername("P2"),
+              th::playername("P3"),
             ]
           )
         );
@@ -1773,11 +1722,11 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateTeam(
-            teamname("T1"),
+            th::teamname("T1"),
             vec![
-              playername("P1"),
-              playername("P2"),
-              playername("P3"),
+              th::playername("P1"),
+              th::playername("P2"),
+              th::playername("P3"),
             ]
           )
         );
@@ -1791,9 +1740,9 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreateTurnorder(
             vec![
-              playername("P1"),
-              playername("P2"),
-              playername("P3"),
+              th::playername("P1"),
+              th::playername("P2"),
+              th::playername("P3"),
             ]
           )
         );
@@ -1807,9 +1756,9 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreateTurnorderRandom(
             vec![
-              playername("P1"),
-              playername("P2"),
-              playername("P3"),
+              th::playername("P1"),
+              th::playername("P2"),
+              th::playername("P3"),
             ]
           )
         );
@@ -1822,12 +1771,12 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateLocationOnPlayerCollection(
-            location("Hand"),
+            th::location("Hand"),
             PlayerCollection::Player(
               vec![
-                PlayerExpr::PlayerName(playername("P1"),),
-                PlayerExpr::PlayerName(playername("P2"),),
-                PlayerExpr::PlayerName(playername("P3"),),
+                PlayerExpr::PlayerName(th::playername("P1"),),
+                PlayerExpr::PlayerName(th::playername("P2"),),
+                PlayerExpr::PlayerName(th::playername("P3"),),
               ]
             )
           )
@@ -1841,12 +1790,12 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateLocationOnTeamCollection(
-            location("Hand"),
+            th::location("Hand"),
             TeamCollection::Team(
               vec![
-                TeamExpr::TeamName(teamname("T1")),
-                TeamExpr::TeamName(teamname("T2")),
-                TeamExpr::TeamName(teamname("T3")),
+                TeamExpr::TeamName(th::teamname("T1")),
+                TeamExpr::TeamName(th::teamname("T2")),
+                TeamExpr::TeamName(th::teamname("T3")),
               ]
             )
           )
@@ -1860,7 +1809,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateLocationOnTable(
-            location("Stack")
+            th::location("Stack")
           )
         );
     }
@@ -1876,30 +1825,30 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateCardOnLocation(
-            location("Stack"),
+            th::location("Stack"),
             Types {
               types: vec![
-                ( key("Rank"), vec![
-                  value("Two"),
-                  value("Three"),
-                  value("Four"),
-                  value("Five"),
-                  value("Six"),
-                  value("Seven"),
-                  value("Eight"),
-                  value("Nine"),
-                  value("Ten"),
-                  value("Jack"),
-                  value("Queen"),
-                  value("King"),
-                  value("Ace"),
+                ( th::key("Rank"), vec![
+                  th::value("Two"),
+                  th::value("Three"),
+                  th::value("Four"),
+                  th::value("Five"),
+                  th::value("Six"),
+                  th::value("Seven"),
+                  th::value("Eight"),
+                  th::value("Nine"),
+                  th::value("Ten"),
+                  th::value("Jack"),
+                  th::value("Queen"),
+                  th::value("King"),
+                  th::value("Ace"),
                 ]),
-                (key("Suite"), vec![
-                  value("Spades"),
-                  value("Clubs"),
+                (th::key("Suite"), vec![
+                  th::value("Spades"),
+                  th::value("Clubs"),
                 ]),
-                (key("Color"), vec![
-                  value("Black"),
+                (th::key("Color"), vec![
+                  th::value("Black"),
                 ]),
               ]
             }
@@ -1915,8 +1864,8 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreateTokenOnLocation(
             IntExpr::Int(10),
-            token("Chip"),
-            location("Stack")
+            th::token("Chip"),
+            th::location("Stack")
           )
         );
     }
@@ -1928,21 +1877,21 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreatePrecedence(
-            precedence("Rank"),
+            th::precedence("Rank"),
             vec![ 
-              (key("Rank"), value("Two")),
-              (key("Rank"), value("Three")),
-              (key("Rank"), value("Four")),
-              (key("Rank"), value("Five")),
-              (key("Rank"), value("Six")),
-              (key("Rank"), value("Seven")),
-              (key("Rank"), value("Eight")),
-              (key("Rank"), value("Nine")),
-              (key("Rank"), value("Ten")),
-              (key("Rank"), value("Jack")),
-              (key("Rank"), value("Queen")),
-              (key("Rank"), value("King")),
-              (key("Rank"), value("Ace"))
+              (th::key("Rank"), th::value("Two")),
+              (th::key("Rank"), th::value("Three")),
+              (th::key("Rank"), th::value("Four")),
+              (th::key("Rank"), th::value("Five")),
+              (th::key("Rank"), th::value("Six")),
+              (th::key("Rank"), th::value("Seven")),
+              (th::key("Rank"), th::value("Eight")),
+              (th::key("Rank"), th::value("Nine")),
+              (th::key("Rank"), th::value("Ten")),
+              (th::key("Rank"), th::value("Jack")),
+              (th::key("Rank"), th::value("Queen")),
+              (th::key("Rank"), th::value("King")),
+              (th::key("Rank"), th::value("Ace"))
             ]
           )
         );
@@ -1955,11 +1904,11 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreatePrecedence(
-            precedence("Rank"),
+            th::precedence("Rank"),
             vec![
-              (key("Rank"), value("Two")),
-              (key("Suite"), value("Spades")),
-              (key("Color"), value("Red")),
+              (th::key("Rank"), th::value("Two")),
+              (th::key("Suite"), th::value("Spades")),
+              (th::key("Color"), th::value("Red")),
             ]
           )
         );
@@ -1972,8 +1921,8 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateCombo(
-            combo("SameSuite"),
-            FilterExpr::Same(key("Suite"))
+            th::combo("SameSuite"),
+            FilterExpr::Same(th::key("Suite"))
           )
         );
     }
@@ -1985,12 +1934,12 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryPlayerCollection(
-            memory("Square"),
+            th::memory("Square"),
             PlayerCollection::Player(
               vec![
-                CURRENT,
-                PlayerExpr::PlayerName(playername("P2")),
-                PlayerExpr::PlayerName(playername("P3")),
+                th::CURRENT,
+                PlayerExpr::PlayerName(th::playername("P2")),
+                PlayerExpr::PlayerName(th::playername("P3")),
               ]
             )
           )
@@ -2004,7 +1953,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryTable(
-            memory("Square")
+            th::memory("Square")
           )
         );
     }
@@ -2016,13 +1965,13 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryIntPlayerCollection(
-            memory("Square"),
+            th::memory("Square"),
             IntExpr::Int(10),
             PlayerCollection::Player(
               vec![
-                CURRENT,
-                PlayerExpr::PlayerName(playername("P2")),
-                PlayerExpr::PlayerName(playername("P3")),
+                th::CURRENT,
+                PlayerExpr::PlayerName(th::playername("P2")),
+                PlayerExpr::PlayerName(th::playername("P3")),
               ]
             )
           )
@@ -2036,7 +1985,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryIntTable(
-            memory("Square"),
+            th::memory("Square"),
             IntExpr::Int(10),
           )
         );
@@ -2049,13 +1998,13 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryStringPlayerCollection(
-            memory("Square"),
-            StringExpr::ID(id("Monkey")),
+            th::memory("Square"),
+            StringExpr::ID(th::id("Monkey")),
             PlayerCollection::Player(
               vec![
-                CURRENT,
-                PlayerExpr::PlayerName(playername("P2")),
-                PlayerExpr::PlayerName(playername("P3")),
+                th::CURRENT,
+                PlayerExpr::PlayerName(th::playername("P2")),
+                PlayerExpr::PlayerName(th::playername("P3")),
               ]
             )
           )
@@ -2069,8 +2018,8 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryStringTable(
-            memory("Square"),
-            StringExpr::ID(id("Monkey")),
+            th::memory("Square"),
+            StringExpr::ID(th::id("Monkey")),
           )
         );
     }
@@ -2096,21 +2045,21 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreatePointMap(
-            pointmap("Rank"),
+            th::pointmap("Rank"),
             vec![
-              (key("Rank"), value("Two"), IntExpr::Int(1)),
-              (key("Rank"), value("Three"), IntExpr::Int(1)),
-              (key("Rank"), value("Four"), IntExpr::Int(1)),
-              (key("Rank"), value("Five"), IntExpr::Int(1)),
-              (key("Rank"), value("Six"), IntExpr::Int(1)),
-              (key("Rank"), value("Seven"), IntExpr::Int(1)),
-              (key("Rank"), value("Eight"), IntExpr::Int(1)),
-              (key("Rank"), value("Nine"), IntExpr::Int(1)),
-              (key("Rank"), value("Ten"), IntExpr::Int(1)),
-              (key("Rank"), value("Jack"), IntExpr::Int(1)),
-              (key("Rank"), value("Queen"), IntExpr::Int(1)),
-              (key("Rank"), value("King"), IntExpr::Int(1)),
-              (key("Rank"), value("Ace"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Two"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Three"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Four"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Five"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Six"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Seven"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Eight"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Nine"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Ten"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Jack"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Queen"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("King"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Ace"), IntExpr::Int(1)),
             ]
           )
         );
@@ -2123,11 +2072,11 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreatePointMap(
-            pointmap("Rank"),
+            th::pointmap("Rank"),
             vec![
-              (key("Rank"), value("Two"), IntExpr::Int(1)),
-              (key("Suite"), value("Spades"), IntExpr::Int(1)),
-              (key("Color"), value("Red"), IntExpr::Int(1)),
+              (th::key("Rank"), th::value("Two"), IntExpr::Int(1)),
+              (th::key("Suite"), th::value("Spades"), IntExpr::Int(1)),
+              (th::key("Color"), th::value("Red"), IntExpr::Int(1)),
             ]
           )
         );
@@ -2140,7 +2089,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::FlipAction(
-            CardSet::Group(Group::Location(location("Hand"))),
+            CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private
           )
         );
@@ -2153,7 +2102,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::ShuffleAction(
-            CardSet::Group(Group::Location(location("Hand"))),
+            CardSet::Group(Group::Location(th::location("Hand"))),
           )
         );
     }
@@ -2165,7 +2114,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::PlayerOutOfStageAction(
-            CURRENT
+            th::CURRENT
           )
         );
     }
@@ -2177,7 +2126,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::PlayerOutOfGameSuccAction(
-            CURRENT
+            th::CURRENT
           )
         );
     }
@@ -2189,7 +2138,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::PlayerOutOfGameFailAction(
-            CURRENT
+            th::CURRENT
           )
         );
     }
@@ -2203,7 +2152,7 @@ mod tests {
           Rule::PlayerCollectionOutOfStageAction(
             PlayerCollection::Player(
               vec![
-                CURRENT
+                th::CURRENT
               ]
             )
           )
@@ -2219,7 +2168,7 @@ mod tests {
           Rule::PlayerCollectionOutOfGameSuccAction(
             PlayerCollection::Player(
               vec![
-                CURRENT
+                th::CURRENT
               ]
             )
           )
@@ -2235,7 +2184,7 @@ mod tests {
           Rule::PlayerCollectionOutOfGameFailAction(
             PlayerCollection::Player(
               vec![
-                CURRENT
+                th::CURRENT
               ]
             )
           )
@@ -2249,7 +2198,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::SetMemoryInt(
-            memory("Square"),
+            th::memory("Square"),
             IntExpr::Int(10)
           )
         );
@@ -2262,10 +2211,10 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::SetMemoryString(
-            memory("Square"),
+            th::memory("Square"),
             StringExpr::KeyOf(
-              key("Rank"),
-              CardPosition::Top(location("Hand"))
+              th::key("Rank"),
+              CardPosition::Top(th::location("Hand"))
             )
           )
         );
@@ -2278,8 +2227,8 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::SetMemoryAmbiguous(
-            memory("Square"),
-            id("A")
+            th::memory("Square"),
+            th::id("A")
           )
         );
     }
@@ -2291,11 +2240,11 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::SetMemoryCollection(
-            memory("Square"),
+            th::memory("Square"),
             Collection::PlayerCollection(
               PlayerCollection::Player(
                 vec![
-                  CURRENT
+                  th::CURRENT
                 ]
               )
             )
@@ -2334,7 +2283,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::BidActionMemory(
-            memory("Square"),
+            th::memory("Square"),
             Quantity::Quantifier(Quantifier::All)
           )
         );
@@ -2367,7 +2316,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::EndGameWithWinner(
-            CURRENT
+            th::CURRENT
           )
         );
     }
@@ -2380,7 +2329,7 @@ mod tests {
         assert_eq!(parsed,
           Rule::DemandCardPositionAction(
             CardPosition::Top(
-              location("Hand")
+              th::location("Hand")
             )
           )
         );
@@ -2394,7 +2343,7 @@ mod tests {
         assert_eq!(parsed,
           Rule::DemandStringAction(
             StringExpr::ID(
-              id("A")
+              th::id("A")
             )
           )
         );
@@ -2427,17 +2376,17 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           SeqStage {
-            stage: stage("Play"), 
-            player: CURRENT, 
+            stage: th::stage("Play"), 
+            player: th::CURRENT, 
             end_condition: EndCondition::UntilRep(Repititions { times: IntExpr::Int(1) }), 
             flows: vec![
               FlowComponent::Rule(
                 Rule::DealMove(
                   DealMove::DealQuantity(
                     Quantity::Int(IntExpr::Int(12)), 
-                    CardSet::Group(Group::Location(location("Stock"))), 
+                    CardSet::Group(Group::Location(th::location("Stock"))), 
                     Status::Private, 
-                    CardSet::GroupOfPlayerCollection(Group::Location(location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
+                    CardSet::GroupOfPlayerCollection(Group::Location(th::location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
                   )
                 )
               )
@@ -2461,7 +2410,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           IfRule {
-            condition: BoolExpr::OutOfStagePlayer(CURRENT),
+            condition: BoolExpr::OutOfStagePlayer(th::CURRENT),
             flows: vec![
               FlowComponent::Rule(
                 Rule::CycleAction(
@@ -2659,9 +2608,9 @@ mod tests {
               FlowComponent::Rule(
                 Rule::CreatePlayer(
                   vec![
-                    playername("P1"),
-                    playername("P2"),
-                    playername("P3"),
+                    th::playername("P1"),
+                    th::playername("P2"),
+                    th::playername("P3"),
                   ]
                 )
               ),
@@ -2669,9 +2618,9 @@ mod tests {
               FlowComponent::Rule(
                 Rule::CreateTurnorder(
                   vec![
-                    playername("P1"),
-                    playername("P2"),
-                    playername("P3"),
+                    th::playername("P1"),
+                    th::playername("P2"),
+                    th::playername("P3"),
                   ]
                 )
               ),
@@ -2680,9 +2629,9 @@ mod tests {
                 Rule::CreateLocationCollectionOnPlayerCollection(
                   LocationCollection {
                     locations: vec![
-                      location("Hand"),
-                      location("LayDown"),
-                      location("Trash"),
+                      th::location("Hand"),
+                      th::location("LayDown"),
+                      th::location("Trash"),
                     ]
                   },
                   PlayerCollection::Quantifier(Quantifier::All)
@@ -2693,8 +2642,8 @@ mod tests {
                 Rule::CreateLocationCollectionOnTable(
                   LocationCollection {
                     locations: vec![
-                      location("Stock"),
-                      location("Discard"),
+                      th::location("Stock"),
+                      th::location("Discard"),
                     ]
                   }
                 )
@@ -2702,29 +2651,29 @@ mod tests {
               // card on
               FlowComponent::Rule(
                 Rule::CreateCardOnLocation(
-                  location("Stock"),
+                  th::location("Stock"),
                   Types {
                     types: vec![
-                      (key("Rank"), vec![
-                        value("Two"),
-                        value("Three"),
-                        value("Four"),
-                        value("Five"),
-                        value("Six"),
-                        value("Seven"),
-                        value("Eight"),
-                        value("Nine"),
-                        value("Ten"),
-                        value("Jack"),
-                        value("Queen"),
-                        value("King"),
-                        value("Ace")
+                      (th::key("Rank"), vec![
+                        th::value("Two"),
+                        th::value("Three"),
+                        th::value("Four"),
+                        th::value("Five"),
+                        th::value("Six"),
+                        th::value("Seven"),
+                        th::value("Eight"),
+                        th::value("Nine"),
+                        th::value("Ten"),
+                        th::value("Jack"),
+                        th::value("Queen"),
+                        th::value("King"),
+                        th::value("Ace")
                       ]),
-                      (key("Suite"), vec![
-                        value("Diamonds"),
-                        value("Hearts"),
-                        value("Spades"),
-                        value("Clubs"),
+                      (th::key("Suite"), vec![
+                        th::value("Diamonds"),
+                        th::value("Hearts"),
+                        th::value("Spades"),
+                        th::value("Clubs"),
                       ]),
                     ]
                   }
@@ -2733,81 +2682,81 @@ mod tests {
               // RankOrder
               FlowComponent::Rule(
                 Rule::CreatePrecedence(
-                  precedence("RankOrder"),
+                  th::precedence("RankOrder"),
                   vec![
-                    (key("Rank"), value("Ace")),
-                    (key("Rank"), value("Two")),
-                    (key("Rank"), value("Three")),
-                    (key("Rank"), value("Four")),
-                    (key("Rank"), value("Five")),
-                    (key("Rank"), value("Six")),
-                    (key("Rank"), value("Seven")),
-                    (key("Rank"), value("Eight")),
-                    (key("Rank"), value("Nine")),
-                    (key("Rank"), value("Ten")),
-                    (key("Rank"), value("Jack")),
-                    (key("Rank"), value("Queen")),
-                    (key("Rank"), value("King")),
+                    (th::key("Rank"), th::value("Ace")),
+                    (th::key("Rank"), th::value("Two")),
+                    (th::key("Rank"), th::value("Three")),
+                    (th::key("Rank"), th::value("Four")),
+                    (th::key("Rank"), th::value("Five")),
+                    (th::key("Rank"), th::value("Six")),
+                    (th::key("Rank"), th::value("Seven")),
+                    (th::key("Rank"), th::value("Eight")),
+                    (th::key("Rank"), th::value("Nine")),
+                    (th::key("Rank"), th::value("Ten")),
+                    (th::key("Rank"), th::value("Jack")),
+                    (th::key("Rank"), th::value("Queen")),
+                    (th::key("Rank"), th::value("King")),
                   ]
                 )
               ),
               // Values
               FlowComponent::Rule(
                 Rule::CreatePointMap(
-                  pointmap("Values"),
+                  th::pointmap("Values"),
                   vec![
-                    (key("Rank"), value("Ace"), IntExpr::Int(1)),
-                    (key("Rank"), value("Two"), IntExpr::Int(2)),
-                    (key("Rank"), value("Three"), IntExpr::Int(3)),
-                    (key("Rank"), value("Four"), IntExpr::Int(4)),
-                    (key("Rank"), value("Five"), IntExpr::Int(5)),
-                    (key("Rank"), value("Six"), IntExpr::Int(6)),
-                    (key("Rank"), value("Seven"), IntExpr::Int(7)),
-                    (key("Rank"), value("Eight"), IntExpr::Int(8)),
-                    (key("Rank"), value("Nine"), IntExpr::Int(9)),
-                    (key("Rank"), value("Ten"), IntExpr::Int(10)),
-                    (key("Rank"), value("Jack"), IntExpr::Int(10)),
-                    (key("Rank"), value("Queen"), IntExpr::Int(10)),
-                    (key("Rank"), value("King"), IntExpr::Int(10)),
+                    (th::key("Rank"), th::value("Ace"), IntExpr::Int(1)),
+                    (th::key("Rank"), th::value("Two"), IntExpr::Int(2)),
+                    (th::key("Rank"), th::value("Three"), IntExpr::Int(3)),
+                    (th::key("Rank"), th::value("Four"), IntExpr::Int(4)),
+                    (th::key("Rank"), th::value("Five"), IntExpr::Int(5)),
+                    (th::key("Rank"), th::value("Six"), IntExpr::Int(6)),
+                    (th::key("Rank"), th::value("Seven"), IntExpr::Int(7)),
+                    (th::key("Rank"), th::value("Eight"), IntExpr::Int(8)),
+                    (th::key("Rank"), th::value("Nine"), IntExpr::Int(9)),
+                    (th::key("Rank"), th::value("Ten"), IntExpr::Int(10)),
+                    (th::key("Rank"), th::value("Jack"), IntExpr::Int(10)),
+                    (th::key("Rank"), th::value("Queen"), IntExpr::Int(10)),
+                    (th::key("Rank"), th::value("King"), IntExpr::Int(10)),
                   ]
                 )
               ),
               // Combo Sequence
               FlowComponent::Rule(
                 Rule::CreateCombo(
-                  combo("Sequence"),
+                  th::combo("Sequence"),
                   FilterExpr::And(
                     Box::new(FilterExpr::And(
                       Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
-                      Box::new(FilterExpr::Same(key("Suite")))
+                      Box::new(FilterExpr::Same(th::key("Suite")))
                     )),
-                    Box::new(FilterExpr::Adjacent(key("Rank"), precedence("RankOrder")))
+                    Box::new(FilterExpr::Adjacent(th::key("Rank"), th::precedence("RankOrder")))
                   )
                 )
               ),
               // Combo Set
               FlowComponent::Rule(
                 Rule::CreateCombo(
-                  combo("Set"),
+                  th::combo("Set"),
                   FilterExpr::And(
                     Box::new(FilterExpr::And(
                       Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
-                      Box::new(FilterExpr::Distinct(key("Suite")))
+                      Box::new(FilterExpr::Distinct(th::key("Suite")))
                     )),
-                    Box::new(FilterExpr::Same(key("Rank")))
+                    Box::new(FilterExpr::Same(th::key("Rank")))
                   )
                 )
               ),
               // Combo Set
               FlowComponent::Rule(
                 Rule::CreateCombo(
-                  combo("Deadwood"),
+                  th::combo("Deadwood"),
                   FilterExpr::And(
                     Box::new(
-                      FilterExpr::NotCombo(combo("Sequence"))
+                      FilterExpr::NotCombo(th::combo("Sequence"))
                     ),
                     Box::new(
-                      FilterExpr::NotCombo(combo("Set"))
+                      FilterExpr::NotCombo(th::combo("Set"))
                     )
                   )
                 )
@@ -2815,17 +2764,17 @@ mod tests {
               // Stage Preparation
               FlowComponent::Stage(
                 SeqStage {
-                  stage: stage("Preparation"), 
-                  player: CURRENT, 
+                  stage: th::stage("Preparation"), 
+                  player: th::CURRENT, 
                   end_condition: EndCondition::UntilRep(Repititions { times: IntExpr::Int(1) }), 
                   flows: vec![
                     FlowComponent::Rule(
                       Rule::DealMove(
                         DealMove::DealQuantity(
                           Quantity::Int(IntExpr::Int(12)), 
-                          CardSet::Group(Group::CardPosition(CardPosition::Top(location("Stock")))), 
+                          CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("Stock")))), 
                           Status::Private, 
-                          CardSet::GroupOfPlayerCollection(Group::Location(location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
+                          CardSet::GroupOfPlayerCollection(Group::Location(th::location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
                         )
                       )
                     )
@@ -2835,9 +2784,9 @@ mod tests {
               // Stage Collect
               FlowComponent::Stage(
                 SeqStage {
-                  stage: stage("Collect"), 
-                  player: CURRENT, 
-                  end_condition: EndCondition::UntilBool(BoolExpr::OutOfStagePlayer(PREVIOUS)), 
+                  stage: th::stage("Collect"), 
+                  player: th::CURRENT, 
+                  end_condition: EndCondition::UntilBool(BoolExpr::OutOfStagePlayer(th::PREVIOUS)), 
                   flows: vec![
                     // Choose
                     FlowComponent::ChoiceRule(
@@ -2847,9 +2796,9 @@ mod tests {
                           FlowComponent::Rule(
                             Rule::ClassicMove(
                               ClassicMove::Move(
-                                CardSet::Group(Group::CardPosition(CardPosition::Top(location("Discard")))),
+                                CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("Discard")))),
                                 Status::Private,
-                                CardSet::Group(Group::Location(location("Hand")))
+                                CardSet::Group(Group::Location(th::location("Hand")))
                               )
                             )
                           ),
@@ -2857,9 +2806,9 @@ mod tests {
                           FlowComponent::Rule(
                             Rule::ClassicMove(
                               ClassicMove::Move(
-                                CardSet::Group(Group::CardPosition(CardPosition::Top(location("Stock")))),
+                                CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("Stock")))),
                                 Status::Private,
-                                CardSet::Group(Group::Location(location("Hand")))
+                                CardSet::Group(Group::Location(th::location("Hand")))
                               )
                             )
                           ),
@@ -2870,9 +2819,9 @@ mod tests {
                       Rule::ClassicMove(
                         ClassicMove::MoveQuantity(
                           Quantity::Quantifier(Quantifier::Any),
-                          CardSet::Group(Group::Location(location("Hand"))),
+                          CardSet::Group(Group::Location(th::location("Hand"))),
                           Status::FaceUp,
-                          CardSet::Group(Group::CardPosition(CardPosition::Top(location("Discard")))),
+                          CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("Discard")))),
                         )
                       )
                     ),
@@ -2883,12 +2832,12 @@ mod tests {
                             Box::new(
                               CardSet::Group(
                                 Group::ComboInLocation(
-                                  combo("Deadwood"),
-                                  location("Hand")
+                                  th::combo("Deadwood"),
+                                  th::location("Hand")
                                 )
                               )
                             ), 
-                            pointmap("Values")
+                            th::pointmap("Values")
                           ), 
                           IntCmpOp::Le, 
                           IntExpr::Int(10)
@@ -2901,9 +2850,9 @@ mod tests {
                                   Rule::ClassicMove(
                                     ClassicMove::MoveQuantity(
                                       Quantity::Quantifier(Quantifier::All),
-                                      CardSet::Group(Group::ComboInLocation(combo("Set"), location("Hand"))),
+                                      CardSet::Group(Group::ComboInLocation(th::combo("Set"), th::location("Hand"))),
                                       Status::FaceUp,
-                                      CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
+                                      CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("LayDown")))),
                                     )
                                   )
                                 ),
@@ -2911,9 +2860,9 @@ mod tests {
                                   Rule::ClassicMove(
                                     ClassicMove::MoveQuantity(
                                       Quantity::Quantifier(Quantifier::All),
-                                      CardSet::Group(Group::ComboInLocation(combo("Sequence"), location("Hand"))),
+                                      CardSet::Group(Group::ComboInLocation(th::combo("Sequence"), th::location("Hand"))),
                                       Status::FaceUp,
-                                      CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
+                                      CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("LayDown")))),
                                     )
                                   )
                                 ),
@@ -2922,7 +2871,7 @@ mod tests {
                                   IfRule {
                                     condition: BoolExpr::CardSetIsEmpty(
                                       CardSet::Group(
-                                        Group::Location(location("Hand"))
+                                        Group::Location(th::location("Hand"))
                                       )
                                     ),
                                     flows: vec![
@@ -2930,9 +2879,9 @@ mod tests {
                                         Rule::ClassicMove(
                                           ClassicMove::MoveQuantity(
                                             Quantity::Quantifier(Quantifier::All),
-                                            CardSet::GroupOfPlayer(Group::ComboInLocation(combo("Set"), location("Hand")), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::ComboInLocation(th::combo("Set"), th::location("Hand")), PlayerExpr::Next),
                                             Status::FaceUp,
-                                            CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(location("LayDown"))), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(th::location("LayDown"))), PlayerExpr::Next),
                                           )
                                         )
                                       ),
@@ -2940,33 +2889,33 @@ mod tests {
                                         Rule::ClassicMove(
                                           ClassicMove::MoveQuantity(
                                             Quantity::Quantifier(Quantifier::All),
-                                            CardSet::GroupOfPlayer(Group::ComboInLocation(combo("Sequence"), location("Hand")), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::ComboInLocation(th::combo("Sequence"), th::location("Hand")), PlayerExpr::Next),
                                             Status::FaceUp,
-                                            CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(location("LayDown"))), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(th::location("LayDown"))), PlayerExpr::Next),
                                           )
                                         )
                                       ),
                                       FlowComponent::Rule(
                                         Rule::ClassicMove(
                                           ClassicMove::Move(
-                                            CardSet::GroupOfPlayer(Group::Location(location("Hand")), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), PlayerExpr::Next),
                                             Status::FaceUp,
-                                            CardSet::GroupOfPlayer(Group::Location(location("Trash")), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::Location(th::location("Trash")), PlayerExpr::Next),
                                           )
                                         )
                                       ),
                                       FlowComponent::Rule(
                                         Rule::ClassicMove(
                                           ClassicMove::Move(
-                                            CardSet::Group(Group::Location(location("Hand"))),
+                                            CardSet::Group(Group::Location(th::location("Hand"))),
                                             Status::FaceUp,
-                                            CardSet::Group(Group::Location(location("Trash"))),
+                                            CardSet::Group(Group::Location(th::location("Trash"))),
                                           )
                                         )
                                       ),
                                       FlowComponent::Rule(
                                         Rule::PlayerOutOfStageAction(
-                                          CURRENT
+                                          th::CURRENT
                                         )
                                       ),
                                     ]
@@ -2987,16 +2936,16 @@ mod tests {
               // Stage Preparation
               FlowComponent::Stage(
                 SeqStage {
-                  stage: stage("FinalLayDown"), 
-                  player: CURRENT, 
+                  stage: th::stage("FinalLayDown"), 
+                  player: th::CURRENT, 
                   end_condition: EndCondition::UntilRep(Repititions { times: IntExpr::Int(1) }), 
                   flows: vec![
                     FlowComponent::Rule(
                       Rule::ClassicMove(
                         ClassicMove::Move(
-                          CardSet::GroupOfPlayer(Group::Location(location("LayDown")), PREVIOUS),
+                          CardSet::GroupOfPlayer(Group::Location(th::location("LayDown")), th::PREVIOUS),
                           Status::FaceUp,
-                          CardSet::GroupOfPlayer(Group::Location(location("Hand")), CURRENT),
+                          CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), th::CURRENT),
                         )
                       )
                     ),
@@ -3004,9 +2953,9 @@ mod tests {
                       Rule::ClassicMove(
                         ClassicMove::MoveQuantity(
                           Quantity::Quantifier(Quantifier::All),
-                          CardSet::Group(Group::ComboInLocation(combo("Set"), location("Hand"))),
+                          CardSet::Group(Group::ComboInLocation(th::combo("Set"), th::location("Hand"))),
                           Status::FaceUp,
-                          CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
+                          CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("LayDown")))),
                         )
                       )
                     ),
@@ -3014,18 +2963,18 @@ mod tests {
                       Rule::ClassicMove(
                         ClassicMove::MoveQuantity(
                           Quantity::Quantifier(Quantifier::All),
-                          CardSet::Group(Group::ComboInLocation(combo("Sequence"), location("Hand"))),
+                          CardSet::Group(Group::ComboInLocation(th::combo("Sequence"), th::location("Hand"))),
                           Status::FaceUp,
-                          CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
+                          CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("LayDown")))),
                         )
                       )
                     ),
                     FlowComponent::Rule(
                       Rule::ClassicMove(
                         ClassicMove::Move(
-                          CardSet::Group(Group::Location(location("Hand"))),
+                          CardSet::Group(Group::Location(th::location("Hand"))),
                           Status::FaceUp,
-                          CardSet::Group(Group::Location(location("Trash"))),
+                          CardSet::Group(Group::Location(th::location("Trash"))),
                         )
                       )
                     ),
@@ -3039,13 +2988,13 @@ mod tests {
                       Box::new(
                         CardSet::Group(
                           Group::Location(
-                            location("Trash")
+                            th::location("Trash")
                           )
                         )
                       ),
-                      pointmap("Values")
+                      th::pointmap("Values")
                     ),
-                    memory("LeftOver"),
+                    th::memory("LeftOver"),
                     PlayerCollection::Quantifier(Quantifier::All),
                   )
                 )
@@ -3053,7 +3002,7 @@ mod tests {
               FlowComponent::Rule(
                 Rule::WinnerRule(
                   WinnerRule::WinnerLowestMemory(
-                    memory("LeftOver")
+                    th::memory("LeftOver")
                   )
                 )
               ),

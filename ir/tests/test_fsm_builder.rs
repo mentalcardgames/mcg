@@ -3,63 +3,10 @@ mod test {
   use std::{path::Path, process::Command};
 
   use ast::ast::*;
+  use ast::test_helper::test_helper as th;
 
   use ir::fsm::*;
   use ir::fsm_to_dot::*;
-
-  const CURRENT: PlayerExpr = PlayerExpr::Current;
-  const PREVIOUS: PlayerExpr = PlayerExpr::Previous;
-
-  #[warn(unused)]
-  fn id(id: &str) -> ID {
-    ID::new(id)
-  }
-
-  fn stage(id: &str) -> Stage {
-    Stage::new(ID::new(id))
-  }
-
-  fn playername(id: &str) -> PlayerName {
-    PlayerName::new(ID::new(id))
-  }
-
-  #[warn(unused)]
-  fn teamname(id: &str) -> TeamName {
-    TeamName::new(ID::new(id))
-  }
-
-  fn location(id: &str) -> Location {
-    Location::new(ID::new(id))
-  }
-
-  #[warn(unused)]
-  fn token(id: &str) -> Token {
-    Token::new(ID::new(id))
-  }
-
-  fn precedence(id: &str) -> Precedence {
-    Precedence::new(ID::new(id))
-  }
-
-  fn pointmap(id: &str) -> PointMap {
-    PointMap::new(ID::new(id))
-  }
-
-  fn combo(id: &str) -> Combo {
-    Combo::new(ID::new(id))
-  }
-  
-  fn memory(id: &str) -> Memory {
-    Memory::new(ID::new(id))
-  }
-
-  fn key(id: &str) -> Key {
-    Key::new(ID::new(id))
-  }
-  
-  fn value(id: &str) -> Value {
-    Value::new(ID::new(id))
-  }
 
   fn show_graph(fsm: &FSM, name: &str) {
     let dot_path_name: &str = &format!("tests_out/{}.dot", name);
@@ -189,7 +136,7 @@ mod test {
         flows: vec![
           FlowComponent::Stage(
             SeqStage {
-              stage: stage("Preparation"),
+              stage: th::stage("Preparation"),
               player: PlayerExpr::Current, 
               end_condition: EndCondition::UntilRep(Repititions { times: IntExpr::Int(1) }), 
               flows: vec![
@@ -197,9 +144,9 @@ mod test {
                   Rule::DealMove(
                     DealMove::DealQuantity(
                       Quantity::Int(IntExpr::Int(12)), 
-                      CardSet::Group(Group::CardPosition(CardPosition::Top(location("Stock")))), 
+                      CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("Stock")))), 
                       Status::Private, 
-                      CardSet::GroupOfPlayerCollection(Group::Location(location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
+                      CardSet::GroupOfPlayerCollection(Group::Location(th::location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
                     )
                   )
                 )
@@ -224,9 +171,9 @@ mod test {
           FlowComponent::Rule(
             Rule::CreatePlayer(
               vec![
-                playername("P1"),
-                playername("P2"),
-                playername("P3"),
+                th::playername("P1"),
+                th::playername("P2"),
+                th::playername("P3"),
               ]
             )
           ),
@@ -234,9 +181,9 @@ mod test {
           FlowComponent::Rule(
             Rule::CreateTurnorder(
               vec![
-                playername("P1"),
-                playername("P2"),
-                playername("P3"),
+                th::playername("P1"),
+                th::playername("P2"),
+                th::playername("P3"),
               ]
             )
           ),
@@ -245,9 +192,9 @@ mod test {
             Rule::CreateLocationCollectionOnPlayerCollection(
               LocationCollection {
                 locations: vec![
-                  location("Hand"),
-                  location("LayDown"),
-                  location("Trash"),
+                  th::location("Hand"),
+                  th::location("LayDown"),
+                  th::location("Trash"),
                 ]
               },
               PlayerCollection::Quantifier(Quantifier::All)
@@ -258,8 +205,8 @@ mod test {
             Rule::CreateLocationCollectionOnTable(
               LocationCollection {
                 locations: vec![
-                  location("Stock"),
-                  location("Discard"),
+                  th::location("Stock"),
+                  th::location("Discard"),
                 ]
               }
             )
@@ -267,29 +214,29 @@ mod test {
           // card on
           FlowComponent::Rule(
             Rule::CreateCardOnLocation(
-              location("Stock"),
+              th::location("Stock"),
               Types {
                 types: vec![
-                  (key("Rank"), vec![
-                    value("Two"),
-                    value("Three"),
-                    value("Four"),
-                    value("Five"),
-                    value("Six"),
-                    value("Seven"),
-                    value("Eight"),
-                    value("Nine"),
-                    value("Ten"),
-                    value("Jack"),
-                    value("Queen"),
-                    value("King"),
-                    value("Ace")
+                  (th::key("Rank"), vec![
+                    th::value("Two"),
+                    th::value("Three"),
+                    th::value("Four"),
+                    th::value("Five"),
+                    th::value("Six"),
+                    th::value("Seven"),
+                    th::value("Eight"),
+                    th::value("Nine"),
+                    th::value("Ten"),
+                    th::value("Jack"),
+                    th::value("Queen"),
+                    th::value("King"),
+                    th::value("Ace")
                   ]),
-                  (key("Suite"), vec![
-                    value("Diamonds"),
-                    value("Hearts"),
-                    value("Spades"),
-                    value("Clubs"),
+                  (th::key("Suite"), vec![
+                    th::value("Diamonds"),
+                    th::value("Hearts"),
+                    th::value("Spades"),
+                    th::value("Clubs"),
                   ]),
                 ]
               }
@@ -298,81 +245,81 @@ mod test {
           // RankOrder
           FlowComponent::Rule(
             Rule::CreatePrecedence(
-              precedence("RankOrder"),
+              th::precedence("RankOrder"),
               vec![
-                (key("Rank"), value("Ace")),
-                (key("Rank"), value("Two")),
-                (key("Rank"), value("Three")),
-                (key("Rank"), value("Four")),
-                (key("Rank"), value("Five")),
-                (key("Rank"), value("Six")),
-                (key("Rank"), value("Seven")),
-                (key("Rank"), value("Eight")),
-                (key("Rank"), value("Nine")),
-                (key("Rank"), value("Ten")),
-                (key("Rank"), value("Jack")),
-                (key("Rank"), value("Queen")),
-                (key("Rank"), value("King")),
+                (th::key("Rank"), th::value("Ace")),
+                (th::key("Rank"), th::value("Two")),
+                (th::key("Rank"), th::value("Three")),
+                (th::key("Rank"), th::value("Four")),
+                (th::key("Rank"), th::value("Five")),
+                (th::key("Rank"), th::value("Six")),
+                (th::key("Rank"), th::value("Seven")),
+                (th::key("Rank"), th::value("Eight")),
+                (th::key("Rank"), th::value("Nine")),
+                (th::key("Rank"), th::value("Ten")),
+                (th::key("Rank"), th::value("Jack")),
+                (th::key("Rank"), th::value("Queen")),
+                (th::key("Rank"), th::value("King")),
               ]
             )
           ),
           // Values
           FlowComponent::Rule(
             Rule::CreatePointMap(
-              pointmap("Values"),
+              th::pointmap("Values"),
               vec![
-                (key("Rank"), value("Ace"), IntExpr::Int(1)),
-                (key("Rank"), value("Two"), IntExpr::Int(2)),
-                (key("Rank"), value("Three"), IntExpr::Int(3)),
-                (key("Rank"), value("Four"), IntExpr::Int(4)),
-                (key("Rank"), value("Five"), IntExpr::Int(5)),
-                (key("Rank"), value("Six"), IntExpr::Int(6)),
-                (key("Rank"), value("Seven"), IntExpr::Int(7)),
-                (key("Rank"), value("Eight"), IntExpr::Int(8)),
-                (key("Rank"), value("Nine"), IntExpr::Int(9)),
-                (key("Rank"), value("Ten"), IntExpr::Int(10)),
-                (key("Rank"), value("Jack"), IntExpr::Int(10)),
-                (key("Rank"), value("Queen"), IntExpr::Int(10)),
-                (key("Rank"), value("King"), IntExpr::Int(10)),
+                (th::key("Rank"), th::value("Ace"), IntExpr::Int(1)),
+                (th::key("Rank"), th::value("Two"), IntExpr::Int(2)),
+                (th::key("Rank"), th::value("Three"), IntExpr::Int(3)),
+                (th::key("Rank"), th::value("Four"), IntExpr::Int(4)),
+                (th::key("Rank"), th::value("Five"), IntExpr::Int(5)),
+                (th::key("Rank"), th::value("Six"), IntExpr::Int(6)),
+                (th::key("Rank"), th::value("Seven"), IntExpr::Int(7)),
+                (th::key("Rank"), th::value("Eight"), IntExpr::Int(8)),
+                (th::key("Rank"), th::value("Nine"), IntExpr::Int(9)),
+                (th::key("Rank"), th::value("Ten"), IntExpr::Int(10)),
+                (th::key("Rank"), th::value("Jack"), IntExpr::Int(10)),
+                (th::key("Rank"), th::value("Queen"), IntExpr::Int(10)),
+                (th::key("Rank"), th::value("King"), IntExpr::Int(10)),
               ]
             )
           ),
           // Combo Sequence
           FlowComponent::Rule(
             Rule::CreateCombo(
-              combo("Sequence"),
+              th::combo("Sequence"),
               FilterExpr::And(
                 Box::new(FilterExpr::And(
                   Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
-                  Box::new(FilterExpr::Same(key("Suite")))
+                  Box::new(FilterExpr::Same(th::key("Suite")))
                 )),
-                Box::new(FilterExpr::Adjacent(key("Rank"), precedence("RankOrder")))
+                Box::new(FilterExpr::Adjacent(th::key("Rank"), th::precedence("RankOrder")))
               )
             )
           ),
           // Combo Set
           FlowComponent::Rule(
             Rule::CreateCombo(
-              combo("Set"),
+              th::combo("Set"),
               FilterExpr::And(
                 Box::new(FilterExpr::And(
                   Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
-                  Box::new(FilterExpr::Distinct(key("Suite")))
+                  Box::new(FilterExpr::Distinct(th::key("Suite")))
                 )),
-                Box::new(FilterExpr::Same(key("Rank")))
+                Box::new(FilterExpr::Same(th::key("Rank")))
               )
             )
           ),
           // Combo Set
           FlowComponent::Rule(
             Rule::CreateCombo(
-              combo("Deadwood"),
+              th::combo("Deadwood"),
               FilterExpr::And(
                 Box::new(
-                  FilterExpr::NotCombo(combo("Sequence"))
+                  FilterExpr::NotCombo(th::combo("Sequence"))
                 ),
                 Box::new(
-                  FilterExpr::NotCombo(combo("Set"))
+                  FilterExpr::NotCombo(th::combo("Set"))
                 )
               )
             )
@@ -380,17 +327,17 @@ mod test {
           // Stage Preparation
           FlowComponent::Stage(
             SeqStage {
-              stage: stage("Preparation"), 
-              player: CURRENT, 
+              stage: th::stage("Preparation"), 
+              player: th::CURRENT, 
               end_condition: EndCondition::UntilRep(Repititions { times: IntExpr::Int(1) }), 
               flows: vec![
                 FlowComponent::Rule(
                   Rule::DealMove(
                     DealMove::DealQuantity(
                       Quantity::Int(IntExpr::Int(12)), 
-                      CardSet::Group(Group::CardPosition(CardPosition::Top(location("Stock")))), 
+                      CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("Stock")))), 
                       Status::Private, 
-                      CardSet::GroupOfPlayerCollection(Group::Location(location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
+                      CardSet::GroupOfPlayerCollection(Group::Location(th::location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
                     )
                   )
                 )
@@ -400,9 +347,9 @@ mod test {
           // Stage Collect
           FlowComponent::Stage(
             SeqStage {
-              stage: stage("Collect"), 
-              player: CURRENT, 
-              end_condition: EndCondition::UntilBool(BoolExpr::OutOfStagePlayer(PREVIOUS)), 
+              stage: th::stage("Collect"), 
+              player: th::CURRENT, 
+              end_condition: EndCondition::UntilBool(BoolExpr::OutOfStagePlayer(th::PREVIOUS)), 
               flows: vec![
                 // Choose
                 FlowComponent::ChoiceRule(
@@ -412,9 +359,9 @@ mod test {
                       FlowComponent::Rule(
                         Rule::ClassicMove(
                           ClassicMove::Move(
-                            CardSet::Group(Group::CardPosition(CardPosition::Top(location("Discard")))),
+                            CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("Discard")))),
                             Status::Private,
-                            CardSet::Group(Group::Location(location("Hand")))
+                            CardSet::Group(Group::Location(th::location("Hand")))
                           )
                         )
                       ),
@@ -422,9 +369,9 @@ mod test {
                       FlowComponent::Rule(
                         Rule::ClassicMove(
                           ClassicMove::Move(
-                            CardSet::Group(Group::CardPosition(CardPosition::Top(location("Stock")))),
+                            CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("Stock")))),
                             Status::Private,
-                            CardSet::Group(Group::Location(location("Hand")))
+                            CardSet::Group(Group::Location(th::location("Hand")))
                           )
                         )
                       ),
@@ -435,9 +382,9 @@ mod test {
                   Rule::ClassicMove(
                     ClassicMove::MoveQuantity(
                       Quantity::Quantifier(Quantifier::Any),
-                      CardSet::Group(Group::Location(location("Hand"))),
+                      CardSet::Group(Group::Location(th::location("Hand"))),
                       Status::FaceUp,
-                      CardSet::Group(Group::CardPosition(CardPosition::Top(location("Discard")))),
+                      CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("Discard")))),
                     )
                   )
                 ),
@@ -448,12 +395,12 @@ mod test {
                         Box::new(
                           CardSet::Group(
                             Group::ComboInLocation(
-                              combo("Deadwood"),
-                              location("Hand")
+                              th::combo("Deadwood"),
+                              th::location("Hand")
                             )
                           )
                         ), 
-                        pointmap("Values")
+                        th::pointmap("Values")
                       ), 
                       IntCmpOp::Le, 
                       IntExpr::Int(10)
@@ -466,9 +413,9 @@ mod test {
                               Rule::ClassicMove(
                                 ClassicMove::MoveQuantity(
                                   Quantity::Quantifier(Quantifier::All),
-                                  CardSet::Group(Group::ComboInLocation(combo("Set"), location("Hand"))),
+                                  CardSet::Group(Group::ComboInLocation(th::combo("Set"), th::location("Hand"))),
                                   Status::FaceUp,
-                                  CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
+                                  CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("LayDown")))),
                                 )
                               )
                             ),
@@ -476,9 +423,9 @@ mod test {
                               Rule::ClassicMove(
                                 ClassicMove::MoveQuantity(
                                   Quantity::Quantifier(Quantifier::All),
-                                  CardSet::Group(Group::ComboInLocation(combo("Sequence"), location("Hand"))),
+                                  CardSet::Group(Group::ComboInLocation(th::combo("Sequence"), th::location("Hand"))),
                                   Status::FaceUp,
-                                  CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
+                                  CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("LayDown")))),
                                 )
                               )
                             ),
@@ -487,7 +434,7 @@ mod test {
                               IfRule {
                                 condition: BoolExpr::CardSetIsEmpty(
                                   CardSet::Group(
-                                    Group::Location(location("Hand"))
+                                    Group::Location(th::location("Hand"))
                                   )
                                 ),
                                 flows: vec![
@@ -495,9 +442,9 @@ mod test {
                                     Rule::ClassicMove(
                                       ClassicMove::MoveQuantity(
                                         Quantity::Quantifier(Quantifier::All),
-                                        CardSet::GroupOfPlayer(Group::ComboInLocation(combo("Set"), location("Hand")), PlayerExpr::Next),
+                                        CardSet::GroupOfPlayer(Group::ComboInLocation(th::combo("Set"), th::location("Hand")), PlayerExpr::Next),
                                         Status::FaceUp,
-                                        CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(location("LayDown"))), PlayerExpr::Next),
+                                        CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(th::location("LayDown"))), PlayerExpr::Next),
                                       )
                                     )
                                   ),
@@ -505,33 +452,33 @@ mod test {
                                     Rule::ClassicMove(
                                       ClassicMove::MoveQuantity(
                                         Quantity::Quantifier(Quantifier::All),
-                                        CardSet::GroupOfPlayer(Group::ComboInLocation(combo("Sequence"), location("Hand")), PlayerExpr::Next),
+                                        CardSet::GroupOfPlayer(Group::ComboInLocation(th::combo("Sequence"), th::location("Hand")), PlayerExpr::Next),
                                         Status::FaceUp,
-                                        CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(location("LayDown"))), PlayerExpr::Next),
+                                        CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(th::location("LayDown"))), PlayerExpr::Next),
                                       )
                                     )
                                   ),
                                   FlowComponent::Rule(
                                     Rule::ClassicMove(
                                       ClassicMove::Move(
-                                        CardSet::GroupOfPlayer(Group::Location(location("Hand")), PlayerExpr::Next),
+                                        CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), PlayerExpr::Next),
                                         Status::FaceUp,
-                                        CardSet::GroupOfPlayer(Group::Location(location("Trash")), PlayerExpr::Next),
+                                        CardSet::GroupOfPlayer(Group::Location(th::location("Trash")), PlayerExpr::Next),
                                       )
                                     )
                                   ),
                                   FlowComponent::Rule(
                                     Rule::ClassicMove(
                                       ClassicMove::Move(
-                                        CardSet::Group(Group::Location(location("Hand"))),
+                                        CardSet::Group(Group::Location(th::location("Hand"))),
                                         Status::FaceUp,
-                                        CardSet::Group(Group::Location(location("Trash"))),
+                                        CardSet::Group(Group::Location(th::location("Trash"))),
                                       )
                                     )
                                   ),
                                   FlowComponent::Rule(
                                     Rule::PlayerOutOfStageAction(
-                                      CURRENT
+                                      th::CURRENT
                                     )
                                   ),
                                 ]
@@ -552,16 +499,16 @@ mod test {
           // Stage Preparation
           FlowComponent::Stage(
             SeqStage {
-              stage: stage("FinalLayDown"), 
-              player: CURRENT, 
+              stage: th::stage("FinalLayDown"), 
+              player: th::CURRENT, 
               end_condition: EndCondition::UntilRep(Repititions { times: IntExpr::Int(1) }), 
               flows: vec![
                 FlowComponent::Rule(
                   Rule::ClassicMove(
                     ClassicMove::Move(
-                      CardSet::GroupOfPlayer(Group::Location(location("LayDown")), PREVIOUS),
+                      CardSet::GroupOfPlayer(Group::Location(th::location("LayDown")), th::PREVIOUS),
                       Status::FaceUp,
-                      CardSet::GroupOfPlayer(Group::Location(location("Hand")), CURRENT),
+                      CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), th::CURRENT),
                     )
                   )
                 ),
@@ -569,9 +516,9 @@ mod test {
                   Rule::ClassicMove(
                     ClassicMove::MoveQuantity(
                       Quantity::Quantifier(Quantifier::All),
-                      CardSet::Group(Group::ComboInLocation(combo("Set"), location("Hand"))),
+                      CardSet::Group(Group::ComboInLocation(th::combo("Set"), th::location("Hand"))),
                       Status::FaceUp,
-                      CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
+                      CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("LayDown")))),
                     )
                   )
                 ),
@@ -579,18 +526,18 @@ mod test {
                   Rule::ClassicMove(
                     ClassicMove::MoveQuantity(
                       Quantity::Quantifier(Quantifier::All),
-                      CardSet::Group(Group::ComboInLocation(combo("Sequence"), location("Hand"))),
+                      CardSet::Group(Group::ComboInLocation(th::combo("Sequence"), th::location("Hand"))),
                       Status::FaceUp,
-                      CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
+                      CardSet::Group(Group::CardPosition(CardPosition::Top(th::location("LayDown")))),
                     )
                   )
                 ),
                 FlowComponent::Rule(
                   Rule::ClassicMove(
                     ClassicMove::Move(
-                      CardSet::Group(Group::Location(location("Hand"))),
+                      CardSet::Group(Group::Location(th::location("Hand"))),
                       Status::FaceUp,
-                      CardSet::Group(Group::Location(location("Trash"))),
+                      CardSet::Group(Group::Location(th::location("Trash"))),
                     )
                   )
                 ),
@@ -604,13 +551,13 @@ mod test {
                   Box::new(
                     CardSet::Group(
                       Group::Location(
-                        location("Trash")
+                        th::location("Trash")
                       )
                     )
                   ),
-                  pointmap("Values")
+                  th::pointmap("Values")
                 ),
-                memory("LeftOver"),
+                th::memory("LeftOver"),
                 PlayerCollection::Quantifier(Quantifier::All),
               )
             )
@@ -618,7 +565,7 @@ mod test {
           FlowComponent::Rule(
             Rule::WinnerRule(
               WinnerRule::WinnerLowestMemory(
-                memory("LeftOver")
+                th::memory("LeftOver")
               )
             )
           ),

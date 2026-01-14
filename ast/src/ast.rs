@@ -1,6 +1,6 @@
 // IDs
 #[derive(Debug, PartialEq, Clone)]
-pub struct ID(String);
+pub struct ID(pub String);
 
 impl ID {
     pub fn new<T: ToString>(id: T) -> Self {
@@ -9,7 +9,7 @@ impl ID {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Stage(String);
+pub struct Stage(pub String);
 
 impl Stage {
     pub fn new(id: ID) -> Self {
@@ -18,7 +18,7 @@ impl Stage {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct PlayerName(String);
+pub struct PlayerName(pub String);
 
 impl PlayerName {
     pub fn new(id: ID) -> Self {
@@ -27,7 +27,7 @@ impl PlayerName {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct TeamName(String);
+pub struct TeamName(pub String);
 
 impl TeamName {
     pub fn new(id: ID) -> Self {
@@ -36,7 +36,7 @@ impl TeamName {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Location(String);
+pub struct Location(pub String);
 
 impl Location {
     pub fn new(id: ID) -> Self {
@@ -45,7 +45,7 @@ impl Location {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Token(String);
+pub struct Token(pub String);
 
 impl Token {
     pub fn new(id: ID) -> Self {
@@ -54,7 +54,7 @@ impl Token {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Precedence(String);
+pub struct Precedence(pub String);
 
 impl Precedence {
     pub fn new(id: ID) -> Self {
@@ -63,7 +63,7 @@ impl Precedence {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct PointMap(String);
+pub struct PointMap(pub String);
 
 impl PointMap {
     pub fn new(id: ID) -> Self {
@@ -72,7 +72,7 @@ impl PointMap {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Combo(String);
+pub struct Combo(pub String);
 
 impl Combo {
     pub fn new(id: ID) -> Self {
@@ -81,7 +81,7 @@ impl Combo {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Memory(String);
+pub struct Memory(pub String);
 
 impl Memory {
     pub fn new(id: ID) -> Self {
@@ -90,7 +90,7 @@ impl Memory {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Key(String);
+pub struct Key(pub String);
 
 impl Key {
     pub fn new(id: ID) -> Self {
@@ -99,7 +99,7 @@ impl Key {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Value(String);
+pub struct Value(pub String);
 
 impl Value {
     pub fn new(id: ID) -> Self {
@@ -210,12 +210,9 @@ pub enum BoolExpr {
     IntCmp(IntExpr, IntCmpOp, IntExpr),
     CardSetIsEmpty(CardSet),
     CardSetIsNotEmpty(CardSet),
-    // Analyze Eq and Neq later
-    // because it could be:
-    // CardSet, String, Player, Team
     // ---------------------------------
-    Eq(ID, ID),
-    Neq(ID, ID),
+    AmbiguousEq(ID, ID),
+    AmbiguousNeq(ID, ID),
     // ---------------------------------
     CardSetEq(CardSet, CardSet),
     CardSetNeq(CardSet, CardSet),

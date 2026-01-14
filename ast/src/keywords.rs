@@ -5,9 +5,6 @@
 pub mod kw {
   use std::collections::HashSet;
 
-  use quote::format_ident;
-  use syn::Ident;
-
   syn::custom_keyword!(position);
   syn::custom_keyword!(score);
   syn::custom_keyword!(choose);
@@ -94,8 +91,8 @@ pub mod kw {
   syn::custom_keyword!(locations);
   syn::custom_keyword!(ints);
 
-  pub fn in_custom_key_words(value: &Ident) -> bool {
-    let custom_keywords: HashSet<Ident> = vec![
+  pub fn in_custom_key_words<T: ToString>(value: &T) -> bool {
+    let custom_keywords: HashSet<String> = vec![
         "position", "score", "choose", "optional", "next", "turn",
         "winner", "demand", "cycle", "bid", "successful", "fail",
         "set", "shuffle", "flip", "combo", "memory", "pointmap",
@@ -109,9 +106,9 @@ pub mod kw {
         "not", "is", "empty", "out", "players", "playersin", "playersout",
         "others", "lower", "higher", "adjacent", "distinct", "same", "key",
         "other", "teams", "player", "locations", "ints",
-    ].iter().map(|x| format_ident!("{}", x)).collect();
+    ].iter().map(|x| x.to_string()).collect();
 
-    if custom_keywords.contains(value) {
+    if custom_keywords.contains(&value.to_string()) {
       return true
     }
 

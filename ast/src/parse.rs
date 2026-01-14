@@ -629,10 +629,8 @@ impl Parse for BoolExpr {
             parse_bool_team_neq,
             parse_bool_string_neq,
             parse_bool_string_eq,
-            // Fall back to the Analyzer because of possible
-            // ambiguous parsing.
-            parse_bool_id_eq,
-            parse_bool_id_neq,
+            parse_bool_id_eq_ambiguous,
+            parse_bool_id_neq_ambiguous,
         ])
     }
 }
@@ -665,20 +663,20 @@ fn parse_bool_or(input: ParseStream) -> Result<BoolExpr> {
     return Ok(BoolExpr::Or(Box::new(left), Box::new(right)))
 }
 
-fn parse_bool_id_eq(input: ParseStream) -> Result<BoolExpr> {
+fn parse_bool_id_eq_ambiguous(input: ParseStream) -> Result<BoolExpr> {
   let left = input.parse::<ID>()?;
   input.parse::<Token![==]>()?;
   let right = input.parse::<ID>()?;
 
-  return Ok(BoolExpr::Eq(left, right))
+  return Ok(BoolExpr::AmbiguousEq(left, right))
 }
 
-fn parse_bool_id_neq(input: ParseStream) -> Result<BoolExpr> {
+fn parse_bool_id_neq_ambiguous(input: ParseStream) -> Result<BoolExpr> {
   let left = input.parse::<ID>()?;
   input.parse::<Token![!=]>()?;
   let right = input.parse::<ID>()?;
 
-  return Ok(BoolExpr::Neq(left, right))
+  return Ok(BoolExpr::AmbiguousNeq(left, right))
 }
 
 fn parse_bool_string_eq(input: ParseStream) -> Result<BoolExpr> {

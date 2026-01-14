@@ -1,12 +1,12 @@
 digraph FSM {
   rankdir=LR;
   node [shape = circle];
-  2 -> 5 [label="StageExit(Stage(Preparation))"];
-  4 -> 1 [label="StageCounter(Stage(Preparation))"];
-  1 -> 2 [label="NotEndCondition(UntilRep(Repititions { times: Int(1) }))"];
   1 -> 3 [label="EndCondition(UntilRep(Repititions { times: Int(1) }))"];
   3 -> 4 [label="Action(DealMove(DealQuantity(Int(Int(12)), Group(CardPosition(Top(Location(Stock)))), Private, GroupOfPlayerCollection(Location(Location(Hand)), Quantifier(All)))))"];
   0 -> 1 [label="StageEntry(Stage(Preparation))"];
+  4 -> 1 [label="StageCounter(Stage(Preparation))"];
+  1 -> 2 [label="NotEndCondition(UntilRep(Repititions { times: Int(1) }))"];
+  2 -> 5 [label="StageExit(Stage(Preparation))"];
   start [shape=point];
   start -> 0;
 }

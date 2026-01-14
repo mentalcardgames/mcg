@@ -1,8 +1,8 @@
 digraph FSM {
   rankdir=LR;
   node [shape = circle];
-  0 -> 2 [label="Optional"];
   0 -> 1 [label="Optional"];
+  0 -> 2 [label="Optional"];
   1 -> 2 [label="Action(EndTurn)"];
   start [shape=point];
   start -> 0;
