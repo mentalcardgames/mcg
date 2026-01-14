@@ -1,20 +1,111 @@
-use syn::Ident;
+// IDs
+#[derive(Debug, PartialEq, Clone)]
+pub struct ID(String);
 
-// Types
-pub type Stage = Ident;
-pub type PlayerName = Ident;
-pub type TeamName = Ident;
-pub type Location = Ident;
-pub type Token = Ident;
+impl ID {
+    pub fn new<T: ToString>(id: T) -> Self {
+        ID(id.to_string())
+    }
+}
 
-pub type Precedence = Ident;
-pub type PointMap = Ident;
-pub type Combo = Ident;
-pub type Memory = Ident;
-pub type Key = Ident;
-pub type Value = Ident;
+#[derive(Debug, PartialEq, Clone)]
+pub struct Stage(String);
 
-pub type ID = Ident; 
+impl Stage {
+    pub fn new(id: ID) -> Self {
+        Stage(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct PlayerName(String);
+
+impl PlayerName {
+    pub fn new(id: ID) -> Self {
+        PlayerName(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TeamName(String);
+
+impl TeamName {
+    pub fn new(id: ID) -> Self {
+        TeamName(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Location(String);
+
+impl Location {
+    pub fn new(id: ID) -> Self {
+        Location(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Token(String);
+
+impl Token {
+    pub fn new(id: ID) -> Self {
+        Token(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Precedence(String);
+
+impl Precedence {
+    pub fn new(id: ID) -> Self {
+        Precedence(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct PointMap(String);
+
+impl PointMap {
+    pub fn new(id: ID) -> Self {
+        PointMap(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Combo(String);
+
+impl Combo {
+    pub fn new(id: ID) -> Self {
+        Combo(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Memory(String);
+
+impl Memory {
+    pub fn new(id: ID) -> Self {
+        Memory(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Key(String);
+
+impl Key {
+    pub fn new(id: ID) -> Self {
+        Key(id.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Value(String);
+
+impl Value {
+    pub fn new(id: ID) -> Self {
+        Value(id.0)
+    }
+}
 
 // Structs + Enums
 #[derive(Debug, PartialEq, Clone)]
@@ -63,6 +154,8 @@ pub enum Collection {
     PlayerCollection(PlayerCollection),
     TeamCollection(TeamCollection),
     CardSet(Box<CardSet>),
+    // LocationCollection can be ambiguous
+    Ambiguous(Vec<ID>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -107,24 +200,30 @@ pub enum CardPosition {
     At(Location, IntExpr),
     Top(Location),
     Bottom(Location),
-    MaxPrec (Box<CardSet>, Precedence),
-    MinPrec (Box<CardSet>, Precedence),
-    MaxPoint(Box<CardSet>, PointMap),
-    MinPoint(Box<CardSet>, PointMap),
+    // Analyzer decides afterwards if it is Precedence or PointMap
+    Max (Box<CardSet>, ID),
+    Min (Box<CardSet>, ID),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum BoolExpr {
-    StringEq(StringExpr, StringExpr),
-    StringNeq(StringExpr, StringExpr),
     IntCmp(IntExpr, IntCmpOp, IntExpr),
-    CardSetEq(CardSet, CardSet),
-    CardSetNeq(CardSet, CardSet),
     CardSetIsEmpty(CardSet),
     CardSetIsNotEmpty(CardSet),
-    PlayerEq(PlayerExpr, PlayerExpr),
+    // Analyze Eq and Neq later
+    // because it could be:
+    // CardSet, String, Player, Team
+    // ---------------------------------
+    Eq(ID, ID),
+    Neq(ID, ID),
+    // ---------------------------------
+    CardSetEq(CardSet, CardSet),
+    CardSetNeq(CardSet, CardSet),
+    StringEq (StringExpr, StringExpr),
+    StringNeq(StringExpr, StringExpr),
+    PlayerEq (PlayerExpr, PlayerExpr),
     PlayerNeq(PlayerExpr, PlayerExpr),
-    TeamEq(TeamExpr, TeamExpr),
+    TeamEq (TeamExpr, TeamExpr),
     TeamNeq(TeamExpr, TeamExpr),
     And(Box<BoolExpr>, Box<BoolExpr>),
     Or(Box<BoolExpr>, Box<BoolExpr>),
@@ -261,7 +360,7 @@ pub enum Rule {
     CreateMemoryStringTable(Memory, StringExpr),
     CreateMemoryPlayerCollection(Memory, PlayerCollection),
     CreateMemoryTable(Memory),
-    CreatePointMap(Precedence, Vec<(Key, Value, IntExpr)>),
+    CreatePointMap(PointMap, Vec<(Key, Value, IntExpr)>),
     // Actions
     FlipAction(CardSet, Status),
     ShuffleAction(CardSet),
@@ -274,6 +373,7 @@ pub enum Rule {
     SetMemoryInt(Memory, IntExpr),
     SetMemoryString(Memory, StringExpr),
     SetMemoryCollection(Memory, Collection),
+    SetMemoryAmbiguous(Memory, ID),
     CycleAction(PlayerExpr),
     BidAction(Quantity),
     BidActionMemory(Memory, Quantity),

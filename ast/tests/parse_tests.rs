@@ -1,8 +1,59 @@
 #[cfg(test)]
 mod tests {
-    use ast::ast::*;
+    use ast::{ast::*};
     use syn::parse_str;
-    use quote::format_ident;
+
+    const CURRENT: PlayerExpr = PlayerExpr::Current;
+    const PREVIOUS: PlayerExpr = PlayerExpr::Previous;
+    const COMPETITOR: PlayerExpr = PlayerExpr::Competitor;
+
+    fn id(id: &str) -> ID {
+      ID::new(id)
+    }
+
+    fn stage(id: &str) -> Stage {
+      Stage::new(ID::new(id))
+    }
+
+    fn playername(id: &str) -> PlayerName {
+      PlayerName::new(ID::new(id))
+    }
+
+    fn teamname(id: &str) -> TeamName {
+      TeamName::new(ID::new(id))
+    }
+
+    fn location(id: &str) -> Location {
+      Location::new(ID::new(id))
+    }
+
+    fn token(id: &str) -> Token {
+      Token::new(ID::new(id))
+    }
+
+    fn precedence(id: &str) -> Precedence {
+      Precedence::new(ID::new(id))
+    }
+
+    fn pointmap(id: &str) -> PointMap {
+      PointMap::new(ID::new(id))
+    }
+
+    fn combo(id: &str) -> Combo {
+      Combo::new(ID::new(id))
+    }
+    
+    fn memory(id: &str) -> Memory {
+      Memory::new(ID::new(id))
+    }
+
+    fn key(id: &str) -> Key {
+      Key::new(ID::new(id))
+    }
+    
+    fn value(id: &str) -> Value {
+      Value::new(ID::new(id))
+    }
 
     // PlayerExpr ============================================================
     
@@ -11,7 +62,7 @@ mod tests {
         let parsed: PlayerExpr = parse_str(
           "current"
         ).unwrap();
-        assert_eq!(parsed, PlayerExpr::Current);
+        assert_eq!(parsed, CURRENT);
     }
 
     #[test]
@@ -19,7 +70,7 @@ mod tests {
         let parsed: PlayerExpr = parse_str(
           "previous"
         ).unwrap();
-        assert_eq!(parsed, PlayerExpr::Previous);
+        assert_eq!(parsed, PREVIOUS);
     }
 
     #[test]
@@ -27,23 +78,31 @@ mod tests {
         let parsed: PlayerExpr = parse_str(
           "competitor"
         ).unwrap();
-        assert_eq!(parsed, PlayerExpr::Competitor);
+        assert_eq!(parsed, COMPETITOR);
     }
 
     #[test]
     fn parses_valid_player_owner_highest() {
         let parsed: PlayerExpr = parse_str(
-          "owner of highest P1"
+          "owner of highest Mem"
         ).unwrap();
-        assert_eq!(parsed, PlayerExpr::OwnerOfHighest(format_ident!("P1")));
+        assert_eq!(parsed,
+          PlayerExpr::OwnerOfHighest(
+            memory("Mem")
+          )
+        );
     }
 
     #[test]
     fn parses_valid_player_owner_lowest() {
         let parsed: PlayerExpr = parse_str(
-          "owner of lowest P1"
+          "owner of lowest Mem"
         ).unwrap();
-        assert_eq!(parsed, PlayerExpr::OwnerOfLowest(format_ident!("P1")));
+        assert_eq!(parsed,
+          PlayerExpr::OwnerOfLowest(
+            memory("Mem")
+          )
+        );
     }
 
     #[test]
@@ -59,7 +118,9 @@ mod tests {
         let parsed: PlayerExpr = parse_str(
           "P1"
         ).unwrap();
-        assert_eq!(parsed, PlayerExpr::PlayerName(format_ident!("P1")));
+        assert_eq!(parsed, PlayerExpr::PlayerName(
+          playername("P1"))
+        );
     }
 
     // =======================================================================
@@ -214,7 +275,7 @@ mod tests {
         let parsed: TeamExpr = parse_str(
           "team of current"
         ).unwrap();
-        assert_eq!(parsed, TeamExpr::TeamOf(PlayerExpr::Current));
+        assert_eq!(parsed, TeamExpr::TeamOf(CURRENT));
     }
 
     #[test]
@@ -222,7 +283,9 @@ mod tests {
         let parsed: TeamExpr = parse_str(
           "T1"
         ).unwrap();
-        assert_eq!(parsed, TeamExpr::TeamName(format_ident!("T1")));
+        assert_eq!(parsed, TeamExpr::TeamName(
+          teamname("T1"))
+        );
     }
 
     // =======================================================================
@@ -232,57 +295,43 @@ mod tests {
     #[test]
     fn parses_valid_cardposition_top_of() {
         let parsed: CardPosition = parse_str(
-          "top(hand)"
+          "top(Hand)"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::Top(format_ident!("hand")));
+        assert_eq!(parsed, CardPosition::Top(
+          location("Hand"))
+        );
     }
 
     #[test]
     fn parses_valid_cardposition_bottom_of() {
         let parsed: CardPosition = parse_str(
-          "bottom(hand)"
+          "bottom(Hand)"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::Bottom(format_ident!("hand")));
+        assert_eq!(parsed, CardPosition::Bottom(location("Hand")));
     }
 
     #[test]
-    fn parses_valid_cardposition_max_of_using_prec() {
+    fn parses_valid_cardposition_max() {
         let parsed: CardPosition = parse_str(
-          "max(hand) using prec(aces)"
+          "max(Hand) using Aces"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::MaxPrec(Box::new(CardSet::Group(Group::Location(format_ident!("hand")))), format_ident!("aces")));
+        assert_eq!(parsed, CardPosition::Max(Box::new(CardSet::Group(Group::Location(location("Hand")))), id("Aces")));
     }
 
     #[test]
-    fn parses_valid_cardposition_min_of_using_prec() {
+    fn parses_valid_cardposition_min() {
         let parsed: CardPosition = parse_str(
-          "min(hand) using prec(aces)"
+          "min(Hand) using Aces"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::MinPrec(Box::new(CardSet::Group(Group::Location(format_ident!("hand")))), format_ident!("aces")));
-    }
-
-    #[test]
-    fn parses_valid_cardposition_max_of_using_point() {
-        let parsed: CardPosition = parse_str(
-          "max(hand) using point(aces)"
-        ).unwrap();
-        assert_eq!(parsed, CardPosition::MaxPoint(Box::new(CardSet::Group(Group::Location(format_ident!("hand")))), format_ident!("aces")));
-    }
-
-    #[test]
-    fn parses_valid_cardposition_min_of_using_point() {
-        let parsed: CardPosition = parse_str(
-          "min(hand) using point(aces)"
-        ).unwrap();
-        assert_eq!(parsed, CardPosition::MinPoint(Box::new(CardSet::Group(Group::Location(format_ident!("hand")))), format_ident!("aces")));
+        assert_eq!(parsed, CardPosition::Min(Box::new(CardSet::Group(Group::Location(location("Hand")))), id("Aces")));
     }
 
     #[test]
     fn parses_valid_cardposition_at() {
         let parsed: CardPosition = parse_str(
-          "hand[3]"
+          "Hand[3]"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::At(format_ident!("hand"), IntExpr::Int(3)));
+        assert_eq!(parsed, CardPosition::At(location("Hand"), IntExpr::Int(3)));
     }
 
     // =======================================================================
@@ -308,7 +357,7 @@ mod tests {
     #[test]
     fn parses_valid_intexpr_size_of() {
         let parsed: IntExpr = parse_str(
-          "size of ints(3, 3)"
+          "size of (3, 3)"
         ).unwrap();
         assert_eq!(parsed, IntExpr::SizeOf(Collection::IntCollection(
           IntCollection {
@@ -332,10 +381,10 @@ mod tests {
     #[test]
     fn parses_valid_intexpr_sum_of() {
         let parsed: IntExpr = parse_str(
-          "sum of hand using aces"
+          "sum of Hand using Aces"
         ).unwrap();
         assert_eq!(parsed, IntExpr::SumOfCardSet(
-          Box::new(CardSet::Group(Group::Location(format_ident!("hand")))), format_ident!("aces"))
+          Box::new(CardSet::Group(Group::Location(location("Hand")))), pointmap("Aces"))
         );
     }
 
@@ -366,20 +415,20 @@ mod tests {
     #[test]
     fn parses_valid_intexpr_min_pointmap() {
         let parsed: IntExpr = parse_str(
-          "min of hand using aces"
+          "min of Hand using Aces"
         ).unwrap();
         assert_eq!(parsed, IntExpr::MinOf(
-          Box::new(CardSet::Group(Group::Location(format_ident!("hand")))), format_ident!("aces"))
+          Box::new(CardSet::Group(Group::Location(location("Hand")))), pointmap("Aces"))
         );
     }
     
     #[test]
     fn parses_valid_intexpr_max_pointmap() {
         let parsed: IntExpr = parse_str(
-          "max of hand using aces"
+          "max of Hand using Aces"
         ).unwrap();
         assert_eq!(parsed, IntExpr::MaxOf(
-          Box::new(CardSet::Group(Group::Location(format_ident!("hand")))), format_ident!("aces"))
+          Box::new(CardSet::Group(Group::Location(location("Hand")))), pointmap("Aces"))
         );
     }
     
@@ -396,72 +445,72 @@ mod tests {
     // BoolExpr ==============================================================
 
     #[test]
-    fn parses_valid_boolexpr_stringeq() {
+    fn parses_valid_boolexpr_eq() {
         let parsed: BoolExpr = parse_str(
           "A == B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::StringEq(StringExpr::ID(format_ident!("A")), StringExpr::ID(format_ident!("B"))));
+        assert_eq!(parsed, BoolExpr::Eq(id("A"), id("B")));
     }
 
     #[test]
-    fn parses_valid_boolexpr_stringneq() {
+    fn parses_valid_boolexpr_neq() {
         let parsed: BoolExpr = parse_str(
           "A != B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::StringNeq(StringExpr::ID(format_ident!("A")), StringExpr::ID(format_ident!("B"))));
+        assert_eq!(parsed, BoolExpr::Neq(id("A"), id("B")));
     }
 
     #[test]
-    fn parses_valid_boolexpr_playereq() {
+    fn parses_valid_boolexpr_player_eq() {
         let parsed: BoolExpr = parse_str(
-          "player(A == B)"
+          "current == A"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::PlayerEq(PlayerExpr::PlayerName(format_ident!("A")), PlayerExpr::PlayerName(format_ident!("B"))));
+        assert_eq!(parsed, BoolExpr::PlayerEq(CURRENT, PlayerExpr::PlayerName(playername("A"))));
     }
 
     #[test]
-    fn parses_valid_boolexpr_playerneq() {
+    fn parses_valid_boolexpr_player_neq() {
         let parsed: BoolExpr = parse_str(
-          "player(A != B)"
+          "A != current"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::PlayerNeq(PlayerExpr::PlayerName(format_ident!("A")), PlayerExpr::PlayerName(format_ident!("B"))));
+        assert_eq!(parsed, BoolExpr::PlayerNeq(PlayerExpr::PlayerName(playername("A")), CURRENT));
     }
     
     #[test]
     fn parses_valid_boolexpr_team_eq() {
         let parsed: BoolExpr = parse_str(
-          "team(A == B)"
+          "team of A == B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::TeamEq(TeamExpr::TeamName(format_ident!("A")), TeamExpr::TeamName(format_ident!("B"))));
+        assert_eq!(parsed, BoolExpr::TeamEq(TeamExpr::TeamOf(PlayerExpr::PlayerName(playername("A"))), TeamExpr::TeamName(teamname("B"))));
     }
 
     #[test]
     fn parses_valid_boolexpr_team_neq() {
         let parsed: BoolExpr = parse_str(
-          "team(A != B)"
+          "A != team of B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::TeamNeq(TeamExpr::TeamName(format_ident!("A")), TeamExpr::TeamName(format_ident!("B"))));
+        assert_eq!(parsed, BoolExpr::TeamNeq(TeamExpr::TeamName(teamname("A")), TeamExpr::TeamOf(PlayerExpr::PlayerName(playername("B")))));
     }
 
     #[test]
     fn parses_valid_boolexpr_or() {
         let parsed: BoolExpr = parse_str(
-          "(player(A != B) or player(A != B))"
+          "(A != B or A != B)"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::Or(
-          Box::new(BoolExpr::PlayerNeq(PlayerExpr::PlayerName(format_ident!("A")), PlayerExpr::PlayerName(format_ident!("B")))),
-          Box::new(BoolExpr::PlayerNeq(PlayerExpr::PlayerName(format_ident!("A")), PlayerExpr::PlayerName(format_ident!("B"))))
+          Box::new(BoolExpr::Neq(id("A"), id("B"))),
+          Box::new(BoolExpr::Neq(id("A"), id("B")))
         ));
     }
     
     #[test]
     fn parses_valid_boolexpr_and() {
         let parsed: BoolExpr = parse_str(
-          "(player(A != B) and player(A != B))"
+          "(A != B and A != B)"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::And(
-          Box::new(BoolExpr::PlayerNeq(PlayerExpr::PlayerName(format_ident!("A")), PlayerExpr::PlayerName(format_ident!("B")))),
-          Box::new(BoolExpr::PlayerNeq(PlayerExpr::PlayerName(format_ident!("A")), PlayerExpr::PlayerName(format_ident!("B"))))
+          Box::new(BoolExpr::Neq(id("A"), id("B"))),
+          Box::new(BoolExpr::Neq(id("A"), id("B")))
         ));
     }
     
@@ -480,42 +529,42 @@ mod tests {
     #[test]
     fn parses_valid_boolexpr_cardset_eq() {
         let parsed: BoolExpr = parse_str(
-          "cards(hand == hand)"
+          "Hand of current == Hand"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::CardSetEq(
-          CardSet::Group(Group::Location(format_ident!("hand"))),
-          CardSet::Group(Group::Location(format_ident!("hand"))),
+          CardSet::GroupOfPlayer(Group::Location(location("Hand")), CURRENT),
+          CardSet::Group(Group::Location(location("Hand"))),
         ));
     }
     
     #[test]
     fn parses_valid_boolexpr_cardset_neq() {
         let parsed: BoolExpr = parse_str(
-          "cards(hand != hand)"
+          "Hand != Hand of current"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::CardSetNeq(
-          CardSet::Group(Group::Location(format_ident!("hand"))),
-          CardSet::Group(Group::Location(format_ident!("hand"))),
+          CardSet::Group(Group::Location(location("Hand"))),
+          CardSet::GroupOfPlayer(Group::Location(location("Hand")), CURRENT),
         ));
     }
 
     #[test]
     fn parses_valid_boolexpr_cardset_empty() {
         let parsed: BoolExpr = parse_str(
-          "hand is empty"
+          "Hand is empty"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::CardSetIsEmpty(
-          CardSet::Group(Group::Location(format_ident!("hand")))
+          CardSet::Group(Group::Location(location("Hand")))
         ));
     }
 
     #[test]
     fn parses_valid_boolexpr_cardset_not_empty() {
         let parsed: BoolExpr = parse_str(
-          "hand is not empty"
+          "Hand is not empty"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::CardSetIsNotEmpty(
-          CardSet::Group(Group::Location(format_ident!("hand")))
+          CardSet::Group(Group::Location(location("Hand")))
         ));
     }
     
@@ -538,7 +587,7 @@ mod tests {
           "current out of stage"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::OutOfStagePlayer(
-          PlayerExpr::Current
+          CURRENT
         ));
     }
     
@@ -548,7 +597,7 @@ mod tests {
           "current out of game"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::OutOfGamePlayer(
-          PlayerExpr::Current
+          CURRENT
         ));
     }
     
@@ -582,18 +631,18 @@ mod tests {
           "Monkey"
         ).unwrap();
         assert_eq!(parsed, StringExpr::ID(
-          format_ident!("Monkey")
+          id("Monkey")
         ));
     }
 
     #[test]
     fn parses_valid_stringexpr_key_of() {
         let parsed: StringExpr = parse_str(
-          "rank of top(hand)"
+          "Rank of top(Hand)"
         ).unwrap();
         assert_eq!(parsed, StringExpr::KeyOf(
-          format_ident!("rank"),
-          CardPosition::Top(format_ident!("hand"))
+          key("Rank"),
+          CardPosition::Top(location("Hand"))
         ));
     }
 
@@ -605,9 +654,9 @@ mod tests {
         assert_eq!(parsed, StringExpr::StringCollectionAt(
           StringCollection {
             strings: vec![
-              StringExpr::ID(format_ident!("A")),
-              StringExpr::ID(format_ident!("B")),
-              StringExpr::ID(format_ident!("C"))
+              StringExpr::ID(id("A")),
+              StringExpr::ID(id("B")),
+              StringExpr::ID(id("C"))
             ]
           },
           IntExpr::Int(3)
@@ -656,8 +705,8 @@ mod tests {
         assert_eq!(parsed, 
           PlayerCollection::Player(
             vec![
-              PlayerExpr::Current,
-              PlayerExpr::Current,
+              CURRENT,
+              CURRENT,
             ]
           )
         );
@@ -682,50 +731,50 @@ mod tests {
     #[test]
     fn parses_valid_filter_expr_same_key() {
         let parsed: FilterExpr = parse_str(
-          "same rank"
+          "same Rank"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Same(format_ident!("rank"))
+          FilterExpr::Same(key("Rank"))
         );
     }
 
     #[test]
     fn parses_valid_filter_expr_distinct_key() {
         let parsed: FilterExpr = parse_str(
-          "distinct rank"
+          "distinct Rank"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Distinct(format_ident!("rank"))
+          FilterExpr::Distinct(key("Rank"))
         );
     }
 
     #[test]
     fn parses_valid_filter_expr_adjacent_key() {
         let parsed: FilterExpr = parse_str(
-          "adjacent rank using aces"
+          "adjacent Rank using Aces"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Adjacent(format_ident!("rank"), format_ident!("aces"))
+          FilterExpr::Adjacent(key("Rank"), precedence("Aces"))
         );
     }
 
     #[test]
     fn parses_valid_filter_expr_higher_key() {
         let parsed: FilterExpr = parse_str(
-          "higher rank using aces"
+          "higher Rank using Aces"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Higher(format_ident!("rank"), format_ident!("aces"))
+          FilterExpr::Higher(key("Rank"), precedence("Aces"))
         );
     }
 
     #[test]
     fn parses_valid_filter_expr_lower_key() {
         let parsed: FilterExpr = parse_str(
-          "lower rank using aces"
+          "lower Rank using Aces"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::Lower(format_ident!("rank"), format_ident!("aces"))
+          FilterExpr::Lower(key("Rank"), precedence("Aces"))
         );
     }
 
@@ -792,24 +841,26 @@ mod tests {
     #[test]
     fn parses_valid_filter_expr_rank_eq() {
         let parsed: FilterExpr = parse_str(
-          "key(rank == ace)"
+          "Rank == Ace"
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::KeyEq(
-            format_ident!("rank"),
-            Box::new(StringExpr::ID(format_ident!("ace"))))
+            key("Rank"),
+            // TODO: Should be Value not StringExpr
+            Box::new(StringExpr::ID(id("Ace"))))
         );
     }
 
     #[test]
     fn parses_valid_filter_expr_rank_neq() {
         let parsed: FilterExpr = parse_str(
-          "key(rank != ace)"
+          "Rank != Ace"
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::KeyNeq(
-            format_ident!("rank"),
-            Box::new(StringExpr::ID(format_ident!("ace"))))
+            key("Rank"),
+            // TODO: Should be Value not StringExpr
+            Box::new(StringExpr::ID(id("Ace"))))
         );
     }
 
@@ -820,7 +871,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::NotCombo(
-            format_ident!("Pair")
+            combo("Pair")
           )
         );
     }
@@ -832,7 +883,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed, 
           FilterExpr::Combo(
-            format_ident!("Pair")
+            combo("Pair")
           )
         );
     }
@@ -845,10 +896,10 @@ mod tests {
         assert_eq!(parsed, 
           FilterExpr::And(
             Box::new(FilterExpr::Combo(
-              format_ident!("Pair")
+              combo("Pair")
             )),
             Box::new(FilterExpr::Combo(
-              format_ident!("Triple")
+              combo("Triple")
             ))
           )
         );
@@ -862,10 +913,10 @@ mod tests {
         assert_eq!(parsed, 
           FilterExpr::Or(
             Box::new(FilterExpr::Combo(
-              format_ident!("Pair")
+              combo("Pair")
             )),
             Box::new(FilterExpr::Combo(
-              format_ident!("Triple")
+              combo("Triple")
             ))
           )
         );
@@ -874,15 +925,14 @@ mod tests {
     // =======================================================================
 
     // Group =================================================================
-
     #[test]
     fn parses_valid_group_location() {
         let parsed: Group = parse_str(
-          "hand"
+          "Hand"
         ).unwrap();
         assert_eq!(parsed, 
           Group::Location(
-            format_ident!("hand")
+            location("Hand")
           )
         );
     }
@@ -890,12 +940,12 @@ mod tests {
     #[test]
     fn parses_valid_group_location_filter() {
         let parsed: Group = parse_str(
-          "hand where same rank"
+          "Hand where same Rank"
         ).unwrap();
         assert_eq!(parsed, 
           Group::LocationWhere(
-            format_ident!("hand"),
-            FilterExpr::Same(format_ident!("rank"))
+            location("Hand"),
+            FilterExpr::Same(key("Rank"))
           )
         );
     }
@@ -903,14 +953,14 @@ mod tests {
     #[test]
     fn parses_valid_group_location_collection() {
         let parsed: Group = parse_str(
-          "(hand, stack)"
+          "(Hand, Stack)"
         ).unwrap();
         assert_eq!(parsed, 
           Group::LocationCollection(
             LocationCollection {
               locations: vec![
-                format_ident!("hand"),
-                format_ident!("stack")
+                location("Hand"),
+                location("Stack")
               ]
             }
           )
@@ -920,17 +970,17 @@ mod tests {
     #[test]
     fn parses_valid_group_location_collection_filter() {
         let parsed: Group = parse_str(
-          "(hand, stack) where same rank"
+          "(Hand, Stack) where same Rank"
         ).unwrap();
         assert_eq!(parsed, 
           Group::LocationCollectionWhere(
             LocationCollection {
               locations: vec![
-                format_ident!("hand"),
-                format_ident!("stack")
+                location("Hand"),
+                location("Stack")
               ]
             },
-            FilterExpr::Same(format_ident!("rank"))
+            FilterExpr::Same(key("Rank"))
           )
         );
     }
@@ -939,12 +989,12 @@ mod tests {
     #[test]
     fn parses_valid_group_combo_in_location() {
         let parsed: Group = parse_str(
-          "Pair in hand"
+          "Pair in Hand"
         ).unwrap();
         assert_eq!(parsed, 
           Group::ComboInLocation(
-            format_ident!("Pair"),
-            format_ident!("hand")
+            combo("Pair"),
+            location("Hand")
           )
         );
     }
@@ -952,15 +1002,15 @@ mod tests {
     #[test]
     fn parses_valid_group_combo_in_location_collection() {
         let parsed: Group = parse_str(
-          "Pair in (hand, stack)"
+          "Pair in (Hand, Stack)"
         ).unwrap();
         assert_eq!(parsed, 
           Group::ComboInLocationCollection(
-            format_ident!("Pair"),
+            combo("Pair"),
             LocationCollection {
               locations: vec![
-                format_ident!("hand"),
-                format_ident!("stack")
+                location("Hand"),
+                location("Stack")
               ]
             }
           )
@@ -970,12 +1020,12 @@ mod tests {
     #[test]
     fn parses_valid_group_combo_not_in_location() {
         let parsed: Group = parse_str(
-          "Pair not in hand"
+          "Pair not in Hand"
         ).unwrap();
         assert_eq!(parsed, 
           Group::NotComboInLocation(
-            format_ident!("Pair"),
-            format_ident!("hand")
+            combo("Pair"),
+            location("Hand")
           )
         );
     }
@@ -983,15 +1033,15 @@ mod tests {
     #[test]
     fn parses_valid_group_combo_not_in_location_collection() {
         let parsed: Group = parse_str(
-          "Pair not in (hand, stack)"
+          "Pair not in (Hand, Stack)"
         ).unwrap();
         assert_eq!(parsed, 
           Group::NotComboInLocationCollection(
-            format_ident!("Pair"),
+            combo("Pair"),
             LocationCollection {
               locations: vec![
-                format_ident!("hand"),
-                format_ident!("stack")
+                location("Hand"),
+                location("Stack")
               ]
             }
           )
@@ -1001,11 +1051,11 @@ mod tests {
     #[test]
     fn parses_valid_group_cardposition() {
         let parsed: Group = parse_str(
-          "top(hand)"
+          "top(Hand)"
         ).unwrap();
         assert_eq!(parsed, 
           Group::CardPosition(
-            CardPosition::Top(format_ident!("hand"))
+            CardPosition::Top(location("Hand"))
           )
         );
     }
@@ -1017,12 +1067,12 @@ mod tests {
     #[test]
     fn parses_valid_cardset_group() {
         let parsed: CardSet = parse_str(
-          "top(hand)"
+          "top(Hand)"
         ).unwrap();
         assert_eq!(parsed, 
           CardSet::Group(
             Group::CardPosition(
-              CardPosition::Top(format_ident!("hand"))
+              CardPosition::Top(location("Hand"))
             )
           )
         );
@@ -1031,15 +1081,15 @@ mod tests {
     #[test]
     fn parses_valid_cardset_group_of_player() {
         let parsed: CardSet = parse_str(
-          "hand where same rank of current"
+          "Hand where same Rank of current"
         ).unwrap();
         assert_eq!(parsed, 
           CardSet::GroupOfPlayer(
             Group::LocationWhere(
-              format_ident!("hand"),
-              FilterExpr::Same(format_ident!("rank"))
+              location("Hand"),
+              FilterExpr::Same(key("Rank"))
             ),
-            PlayerExpr::Current
+            CURRENT
           )
         );
     }
@@ -1047,13 +1097,13 @@ mod tests {
     #[test]
     fn parses_valid_cardset_group_of_player_collection() {
         let parsed: CardSet = parse_str(
-          "hand where same rank of others"
+          "Hand where same Rank of others"
         ).unwrap();
         assert_eq!(parsed, 
           CardSet::GroupOfPlayerCollection(
             Group::LocationWhere(
-              format_ident!("hand"),
-              FilterExpr::Same(format_ident!("rank"))
+              location("Hand"),
+              FilterExpr::Same(key("Rank"))
             ),
             PlayerCollection::Others
           )
@@ -1089,14 +1139,14 @@ mod tests {
     #[test]
     fn parses_valid_locationcollection() {
         let parsed: LocationCollection = parse_str(
-          "(hand, deck, hand)"
+          "(Hand, Deck, Hand)"
         ).unwrap();
         assert_eq!(parsed, 
           LocationCollection {
             locations: vec![
-              format_ident!("hand"),
-              format_ident!("deck"),
-              format_ident!("hand"),
+              location("Hand"),
+              location("Deck"),
+              location("Hand"),
             ]
           }
         );
@@ -1124,8 +1174,8 @@ mod tests {
         assert_eq!(parsed,
           TeamCollection::Team(
             vec![
-              TeamExpr::TeamName(format_ident!("T1")),
-              TeamExpr::TeamName(format_ident!("T2")),
+              TeamExpr::TeamName(teamname("T1")),
+              TeamExpr::TeamName(teamname("T2")),
             ]
           )
         );
@@ -1143,8 +1193,8 @@ mod tests {
         assert_eq!(parsed,
           StringCollection {
             strings: vec![
-              StringExpr::ID(format_ident!("A")),
-              StringExpr::ID(format_ident!("B")),
+              StringExpr::ID(id("A")),
+              StringExpr::ID(id("B")),
             ]
           }
         );
@@ -1157,14 +1207,14 @@ mod tests {
     #[test]
     fn parses_valid_collection_playercollection() {
         let parsed: Collection = parse_str(
-          "players(current, previous)"
+          "(current, previous)"
         ).unwrap();
         assert_eq!(parsed,
           Collection::PlayerCollection(
             PlayerCollection::Player(
               vec![
-                PlayerExpr::Current,
-                PlayerExpr::Previous,
+                CURRENT,
+                PREVIOUS,
               ]
             )
           )
@@ -1174,14 +1224,14 @@ mod tests {
     #[test]
     fn parses_valid_collection_teamcollection() {
         let parsed: Collection = parse_str(
-          "teams(T1, T2)"
+          "(T1, team of current)"
         ).unwrap();
         assert_eq!(parsed,
           Collection::TeamCollection(
             TeamCollection::Team(
               vec![
-                TeamExpr::TeamName(format_ident!("T1")),
-                TeamExpr::TeamName(format_ident!("T2")),
+                TeamExpr::TeamName(teamname("T1")),
+                TeamExpr::TeamOf(PlayerExpr::Current),
               ]
             )
           )
@@ -1191,7 +1241,7 @@ mod tests {
     #[test]
     fn parses_valid_collection_intcollection() {
         let parsed: Collection = parse_str(
-          "ints(1, 2, 3)"
+          "(1, 2, 3)"
         ).unwrap();
         assert_eq!(parsed,
           Collection::IntCollection(
@@ -1207,43 +1257,29 @@ mod tests {
     }
 
     #[test]
-    fn parses_valid_collection_locationcollection() {
+    fn parses_valid_collection_cardset() {
         let parsed: Collection = parse_str(
-          "locations(hand, deck, hand)"
+          "Hand of current"
         ).unwrap();
         assert_eq!(parsed,
-          Collection::LocationCollection(
-            LocationCollection {
-              locations: vec![
-                format_ident!("hand"),
-                format_ident!("deck"),
-                format_ident!("hand")
-              ]
-            }
+          Collection::CardSet(
+            Box::new(CardSet::GroupOfPlayer(Group::Location(location("Hand")), CURRENT))
           )
         );
     }
 
     #[test]
-    fn parses_valid_collection_cardset() {
+    fn parses_valid_collection_cardset_ambiguous() {
         let parsed: Collection = parse_str(
-          "cards(hand, deck, hand)"
+          "(Hand, Deck, Hand)"
         ).unwrap();
         assert_eq!(parsed,
-          Collection::CardSet(
-            Box::new(
-              CardSet::Group(
-                Group::LocationCollection(
-                  LocationCollection {
-                    locations: vec![
-                      format_ident!("hand"),
-                      format_ident!("deck"),
-                      format_ident!("hand")
-                    ]
-                  }
-                )
-              )
-            )
+          Collection::Ambiguous(
+            vec![
+              ID::new("Hand"),
+              ID::new("Deck"),
+              ID::new("Hand"),
+            ]
           )
         );
     }
@@ -1251,15 +1287,15 @@ mod tests {
     #[test]
     fn parses_valid_collection_stringcollection() {
         let parsed: Collection = parse_str(
-          "(A, B, C)"
+          "(A, Rank of top(Hand), C)"
         ).unwrap();
         assert_eq!(parsed,
           Collection::StringCollection(
             StringCollection {
             strings: vec![
-              StringExpr::ID(format_ident!("A")),
-              StringExpr::ID(format_ident!("B")),
-              StringExpr::ID(format_ident!("C")),
+              StringExpr::ID(id("A")),
+              StringExpr::KeyOf(key("Rank"), CardPosition::Top(location("Hand"))),
+              StringExpr::ID(id("C")),
             ]
           }
           )
@@ -1359,7 +1395,7 @@ mod tests {
     #[test]
     fn parses_valid_endcondition_intrange_eq() {
         let parsed: IntRange = parse_str(
-          "range(== 2)"
+          "== 2"
         ).unwrap();
         assert_eq!(parsed,
           IntRange {
@@ -1372,7 +1408,7 @@ mod tests {
     #[test]
     fn parses_valid_endcondition_intrange_neq() {
         let parsed: IntRange = parse_str(
-          "range(!= 2)"
+          "!= 2"
         ).unwrap();
         assert_eq!(parsed,
           IntRange {
@@ -1385,7 +1421,7 @@ mod tests {
     #[test]
     fn parses_valid_endcondition_intrange_ge() {
         let parsed: IntRange = parse_str(
-          "range(>= 2)"
+          ">= 2"
         ).unwrap();
         assert_eq!(parsed,
           IntRange {
@@ -1398,7 +1434,7 @@ mod tests {
     #[test]
     fn parses_valid_endcondition_intrange_le() {
         let parsed: IntRange = parse_str(
-          "range(<= 2)"
+          "<= 2"
         ).unwrap();
         assert_eq!(parsed,
           IntRange {
@@ -1411,7 +1447,7 @@ mod tests {
     #[test]
     fn parses_valid_endcondition_intrange_gt() {
         let parsed: IntRange = parse_str(
-          "range(> 2)"
+          "> 2"
         ).unwrap();
         assert_eq!(parsed,
           IntRange {
@@ -1424,7 +1460,7 @@ mod tests {
     #[test]
     fn parses_valid_endcondition_intrange_lt() {
         let parsed: IntRange = parse_str(
-          "range(< 2)"
+          "< 2"
         ).unwrap();
         assert_eq!(parsed,
           IntRange {
@@ -1453,7 +1489,7 @@ mod tests {
     #[test]
     fn parses_valid_quantity_intrange() {
         let parsed: Quantity = parse_str(
-          "range(== 3)"
+          "== 3"
         ).unwrap();
         assert_eq!(parsed,
           Quantity::IntRange(
@@ -1484,13 +1520,13 @@ mod tests {
     #[test]
     fn parses_valid_classicmove_move() {
         let parsed: ClassicMove = parse_str(
-          "move hand private to deck"
+          "move Hand private to Deck"
         ).unwrap();
         assert_eq!(parsed,
           ClassicMove::Move(
-            CardSet::Group(Group::Location(format_ident!("hand"))),
+            CardSet::Group(Group::Location(location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(format_ident!("deck")))
+            CardSet::Group(Group::Location(location("Deck")))
           )
         );
     }
@@ -1498,14 +1534,14 @@ mod tests {
     #[test]
     fn parses_valid_classicmove_move_quantity() {
         let parsed: ClassicMove = parse_str(
-          "move all from hand private to deck"
+          "move all from Hand private to Deck"
         ).unwrap();
         assert_eq!(parsed,
           ClassicMove::MoveQuantity(
             Quantity::Quantifier(Quantifier::All),
-            CardSet::Group(Group::Location(format_ident!("hand"))),
+            CardSet::Group(Group::Location(location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(format_ident!("deck")))
+            CardSet::Group(Group::Location(location("Deck")))
           )
         );
     }
@@ -1517,13 +1553,13 @@ mod tests {
     #[test]
     fn parses_valid_dealmove_deal() {
         let parsed: DealMove = parse_str(
-          "deal hand private to deck"
+          "deal Hand private to Deck"
         ).unwrap();
         assert_eq!(parsed,
           DealMove::Deal(
-            CardSet::Group(Group::Location(format_ident!("hand"))),
+            CardSet::Group(Group::Location(location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(format_ident!("deck")))
+            CardSet::Group(Group::Location(location("Deck")))
           )
         );
     }
@@ -1531,14 +1567,14 @@ mod tests {
     #[test]
     fn parses_valid_dealmove_deal_quantity() {
         let parsed: DealMove = parse_str(
-          "deal 12 from hand private to deck of all"
+          "deal 12 from Hand private to Deck of all"
         ).unwrap();
         assert_eq!(parsed,
           DealMove::DealQuantity(
             Quantity::Int(IntExpr::Int(12)),
-            CardSet::Group(Group::Location(format_ident!("hand"))),
+            CardSet::Group(Group::Location(location("Hand"))),
             Status::Private,
-            CardSet::GroupOfPlayerCollection(Group::Location(format_ident!("deck")), PlayerCollection::Quantifier(Quantifier::All))
+            CardSet::GroupOfPlayerCollection(Group::Location(location("Deck")), PlayerCollection::Quantifier(Quantifier::All))
           )
         );
     }
@@ -1550,13 +1586,13 @@ mod tests {
     #[test]
     fn parses_valid_exchangemove_exchange() {
         let parsed: ExchangeMove = parse_str(
-          "exchange hand private with deck"
+          "exchange Hand private with Deck"
         ).unwrap();
         assert_eq!(parsed,
           ExchangeMove::Exchange(
-            CardSet::Group(Group::Location(format_ident!("hand"))),
+            CardSet::Group(Group::Location(location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(format_ident!("deck")))
+            CardSet::Group(Group::Location(location("Deck")))
           )
         );
     }
@@ -1564,14 +1600,14 @@ mod tests {
     #[test]
     fn parses_valid_exchangemove_exchange_quantity() {
         let parsed: ExchangeMove = parse_str(
-          "exchange all from hand private with deck"
+          "exchange all from Hand private with Deck"
         ).unwrap();
         assert_eq!(parsed,
           ExchangeMove::ExchangeQuantity(
             Quantity::Quantifier(Quantifier::All),
-            CardSet::Group(Group::Location(format_ident!("hand"))),
+            CardSet::Group(Group::Location(location("Hand"))),
             Status::Private,
-            CardSet::Group(Group::Location(format_ident!("deck")))
+            CardSet::Group(Group::Location(location("Deck")))
           )
         );
     }
@@ -1583,11 +1619,11 @@ mod tests {
     #[test]
     fn parses_valid_tokenloc_expr_location() {
         let parsed: TokenLocExpr = parse_str(
-          "hand"
+          "Hand"
         ).unwrap();
         assert_eq!(parsed,
           TokenLocExpr::Location(
-            format_ident!("hand")
+            location("Hand")
           )
         );
     }
@@ -1595,12 +1631,12 @@ mod tests {
     #[test]
     fn parses_valid_tokenloc_expr_location_player() {
         let parsed: TokenLocExpr = parse_str(
-          "hand of current"
+          "Hand of current"
         ).unwrap();
         assert_eq!(parsed,
           TokenLocExpr::LocationPlayer(
-            format_ident!("hand"),
-            PlayerExpr::Current
+            location("Hand"),
+            CURRENT
           )
         );
     }
@@ -1608,11 +1644,11 @@ mod tests {
     #[test]
     fn parses_valid_tokenloc_expr_location_playercollection() {
         let parsed: TokenLocExpr = parse_str(
-          "hand of others"
+          "Hand of others"
         ).unwrap();
         assert_eq!(parsed,
           TokenLocExpr::LocationPlayerCollection(
-            format_ident!("hand"),
+            location("Hand"),
             PlayerCollection::Others
           )
         );
@@ -1621,14 +1657,14 @@ mod tests {
     #[test]
     fn parses_valid_tokenloc_expr_locationcollection() {
         let parsed: TokenLocExpr = parse_str(
-          "(hand, deck)"
+          "(Hand, Deck)"
         ).unwrap();
         assert_eq!(parsed,
           TokenLocExpr::LocationCollection(
             LocationCollection {
               locations: vec![
-                format_ident!("hand"),
-                format_ident!("deck"),
+                location("Hand"),
+                location("Deck"),
               ]
             }
           )
@@ -1638,17 +1674,17 @@ mod tests {
     #[test]
     fn parses_valid_tokenloc_expr_locationcollection_player() {
         let parsed: TokenLocExpr = parse_str(
-          "(hand, deck) of current"
+          "(Hand, Deck) of current"
         ).unwrap();
         assert_eq!(parsed,
           TokenLocExpr::LocationCollectionPlayer(
             LocationCollection {
               locations: vec![
-                format_ident!("hand"),
-                format_ident!("deck"),
+                location("Hand"),
+                location("Deck"),
               ]
             },
-            PlayerExpr::Current
+            CURRENT
           )
         );
     }
@@ -1656,14 +1692,14 @@ mod tests {
     #[test]
     fn parses_valid_tokenloc_expr_locationcollection_playercollection() {
         let parsed: TokenLocExpr = parse_str(
-          "(hand, deck) of others"
+          "(Hand, Deck) of others"
         ).unwrap();
         assert_eq!(parsed,
           TokenLocExpr::LocationCollectionPlayerCollection(
             LocationCollection {
               locations: vec![
-                format_ident!("hand"),
-                format_ident!("deck"),
+                location("Hand"),
+                location("Deck"),
               ]
             },
             PlayerCollection::Others
@@ -1678,15 +1714,15 @@ mod tests {
     #[test]
     fn parses_valid_tokenmove_place() {
         let parsed: TokenMove = parse_str(
-          "place hand to deck"
+          "place Hand to Deck"
         ).unwrap();
         assert_eq!(parsed,
           TokenMove::Place(
             TokenLocExpr::Location(
-              format_ident!("hand")
+              location("Hand")
             ),
             TokenLocExpr::Location(
-              format_ident!("deck")
+              location("Deck")
             ),
           )
         );
@@ -1695,16 +1731,16 @@ mod tests {
     #[test]
     fn parses_valid_tokenmove_place_quantity() {
         let parsed: TokenMove = parse_str(
-          "place all from hand to deck"
+          "place all from Hand to Deck"
         ).unwrap();
         assert_eq!(parsed,
           TokenMove::PlaceQuantity(
             Quantity::Quantifier(Quantifier::All),
             TokenLocExpr::Location(
-              format_ident!("hand")
+              location("Hand")
             ),
             TokenLocExpr::Location(
-              format_ident!("deck")
+              location("Deck")
             ),
           )
         );
@@ -1722,9 +1758,9 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreatePlayer(
             vec![
-              format_ident!("P1"),
-              format_ident!("P2"),
-              format_ident!("P3"),
+              playername("P1"),
+              playername("P2"),
+              playername("P3"),
             ]
           )
         );
@@ -1737,11 +1773,11 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateTeam(
-            format_ident!("T1"),
+            teamname("T1"),
             vec![
-              format_ident!("P1"),
-              format_ident!("P2"),
-              format_ident!("P3"),
+              playername("P1"),
+              playername("P2"),
+              playername("P3"),
             ]
           )
         );
@@ -1755,9 +1791,9 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreateTurnorder(
             vec![
-              format_ident!("P1"),
-              format_ident!("P2"),
-              format_ident!("P3"),
+              playername("P1"),
+              playername("P2"),
+              playername("P3"),
             ]
           )
         );
@@ -1771,9 +1807,9 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreateTurnorderRandom(
             vec![
-              format_ident!("P1"),
-              format_ident!("P2"),
-              format_ident!("P3"),
+              playername("P1"),
+              playername("P2"),
+              playername("P3"),
             ]
           )
         );
@@ -1782,16 +1818,16 @@ mod tests {
     #[test]
     fn parses_valid_rule_createlocation_playercollection() {
         let parsed: Rule = parse_str(
-          "location hand on players(P1, P2, P3)"
+          "location Hand on players(P1, P2, P3)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateLocationOnPlayerCollection(
-            format_ident!("hand"),
+            location("Hand"),
             PlayerCollection::Player(
               vec![
-                PlayerExpr::PlayerName(format_ident!("P1")),
-                PlayerExpr::PlayerName(format_ident!("P2")),
-                PlayerExpr::PlayerName(format_ident!("P3")),
+                PlayerExpr::PlayerName(playername("P1"),),
+                PlayerExpr::PlayerName(playername("P2"),),
+                PlayerExpr::PlayerName(playername("P3"),),
               ]
             )
           )
@@ -1801,16 +1837,16 @@ mod tests {
     #[test]
     fn parses_valid_rule_createlocation_teamcollection() {
         let parsed: Rule = parse_str(
-          "location hand on teams(T1, T2, T3)"
+          "location Hand on teams(T1, T2, T3)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateLocationOnTeamCollection(
-            format_ident!("hand"),
+            location("Hand"),
             TeamCollection::Team(
               vec![
-                TeamExpr::TeamName(format_ident!("T1")),
-                TeamExpr::TeamName(format_ident!("T2")),
-                TeamExpr::TeamName(format_ident!("T3")),
+                TeamExpr::TeamName(teamname("T1")),
+                TeamExpr::TeamName(teamname("T2")),
+                TeamExpr::TeamName(teamname("T3")),
               ]
             )
           )
@@ -1820,11 +1856,11 @@ mod tests {
     #[test]
     fn parses_valid_rule_createlocation_table() {
         let parsed: Rule = parse_str(
-          "location stack on table"
+          "location Stack on table"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateLocationOnTable(
-            format_ident!("stack")
+            location("Stack")
           )
         );
     }
@@ -1832,7 +1868,7 @@ mod tests {
     #[test]
     fn parses_valid_rule_createcard() {
         let parsed: Rule = parse_str(
-          "card on stack: 
+          "card on Stack: 
             Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)
               for Suite(Spades, Clubs)
                 for Color(Black)
@@ -1840,30 +1876,30 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateCardOnLocation(
-            format_ident!("stack"),
+            location("Stack"),
             Types {
               types: vec![
-                (format_ident!("Rank"), vec![
-                  format_ident!("Two"),
-                  format_ident!("Three"),
-                  format_ident!("Four"),
-                  format_ident!("Five"),
-                  format_ident!("Six"),
-                  format_ident!("Seven"),
-                  format_ident!("Eight"),
-                  format_ident!("Nine"),
-                  format_ident!("Ten"),
-                  format_ident!("Jack"),
-                  format_ident!("Queen"),
-                  format_ident!("King"),
-                  format_ident!("Ace")
+                ( key("Rank"), vec![
+                  value("Two"),
+                  value("Three"),
+                  value("Four"),
+                  value("Five"),
+                  value("Six"),
+                  value("Seven"),
+                  value("Eight"),
+                  value("Nine"),
+                  value("Ten"),
+                  value("Jack"),
+                  value("Queen"),
+                  value("King"),
+                  value("Ace"),
                 ]),
-                (format_ident!("Suite"), vec![
-                  format_ident!("Spades"),
-                  format_ident!("Clubs"),
+                (key("Suite"), vec![
+                  value("Spades"),
+                  value("Clubs"),
                 ]),
-                (format_ident!("Color"), vec![
-                  format_ident!("Black"),
+                (key("Color"), vec![
+                  value("Black"),
                 ]),
               ]
             }
@@ -1874,13 +1910,13 @@ mod tests {
     #[test]
     fn parses_valid_rule_createtoken() {
         let parsed: Rule = parse_str(
-          "token 10 Chip on stack"
+          "token 10 Chip on Stack"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateTokenOnLocation(
             IntExpr::Int(10),
-            format_ident!("Chip"),
-            format_ident!("stack")
+            token("Chip"),
+            location("Stack")
           )
         );
     }
@@ -1892,21 +1928,21 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreatePrecedence(
-            format_ident!("Rank"),
+            precedence("Rank"),
             vec![ 
-              (format_ident!("Rank"), format_ident!("Two")),
-              (format_ident!("Rank"), format_ident!("Three")),
-              (format_ident!("Rank"), format_ident!("Four")),
-              (format_ident!("Rank"), format_ident!("Five")),
-              (format_ident!("Rank"), format_ident!("Six")),
-              (format_ident!("Rank"), format_ident!("Seven")),
-              (format_ident!("Rank"), format_ident!("Eight")),
-              (format_ident!("Rank"), format_ident!("Nine")),
-              (format_ident!("Rank"), format_ident!("Ten")),
-              (format_ident!("Rank"), format_ident!("Jack")),
-              (format_ident!("Rank"), format_ident!("Queen")),
-              (format_ident!("Rank"), format_ident!("King")),
-              (format_ident!("Rank"), format_ident!("Ace"))
+              (key("Rank"), value("Two")),
+              (key("Rank"), value("Three")),
+              (key("Rank"), value("Four")),
+              (key("Rank"), value("Five")),
+              (key("Rank"), value("Six")),
+              (key("Rank"), value("Seven")),
+              (key("Rank"), value("Eight")),
+              (key("Rank"), value("Nine")),
+              (key("Rank"), value("Ten")),
+              (key("Rank"), value("Jack")),
+              (key("Rank"), value("Queen")),
+              (key("Rank"), value("King")),
+              (key("Rank"), value("Ace"))
             ]
           )
         );
@@ -1919,11 +1955,11 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreatePrecedence(
-            format_ident!("Rank"),
+            precedence("Rank"),
             vec![
-              (format_ident!("Rank"), format_ident!("Two")),
-              (format_ident!("Suite"), format_ident!("Spades")),
-              (format_ident!("Color"), format_ident!("Red")),
+              (key("Rank"), value("Two")),
+              (key("Suite"), value("Spades")),
+              (key("Color"), value("Red")),
             ]
           )
         );
@@ -1936,8 +1972,8 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateCombo(
-            format_ident!("SameSuite"),
-            FilterExpr::Same(format_ident!("Suite"))
+            combo("SameSuite"),
+            FilterExpr::Same(key("Suite"))
           )
         );
     }
@@ -1945,16 +1981,16 @@ mod tests {
     #[test]
     fn parses_valid_rule_create_memory_playercollection() {
         let parsed: Rule = parse_str(
-          "memory Square on (P1, P2, P3)"
+          "memory Square on (current, P2, P3)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryPlayerCollection(
-            format_ident!("Square"),
+            memory("Square"),
             PlayerCollection::Player(
               vec![
-                PlayerExpr::PlayerName(format_ident!("P1")),
-                PlayerExpr::PlayerName(format_ident!("P2")),
-                PlayerExpr::PlayerName(format_ident!("P3")),
+                CURRENT,
+                PlayerExpr::PlayerName(playername("P2")),
+                PlayerExpr::PlayerName(playername("P3")),
               ]
             )
           )
@@ -1968,7 +2004,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryTable(
-            format_ident!("Square")
+            memory("Square")
           )
         );
     }
@@ -1976,17 +2012,17 @@ mod tests {
     #[test]
     fn parses_valid_rule_create_memory_int_playercollection() {
         let parsed: Rule = parse_str(
-          "memory Square 10 on (P1, P2, P3)"
+          "memory Square 10 on (current, P2, P3)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryIntPlayerCollection(
-            format_ident!("Square"),
+            memory("Square"),
             IntExpr::Int(10),
             PlayerCollection::Player(
               vec![
-                PlayerExpr::PlayerName(format_ident!("P1")),
-                PlayerExpr::PlayerName(format_ident!("P2")),
-                PlayerExpr::PlayerName(format_ident!("P3")),
+                CURRENT,
+                PlayerExpr::PlayerName(playername("P2")),
+                PlayerExpr::PlayerName(playername("P3")),
               ]
             )
           )
@@ -2000,7 +2036,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryIntTable(
-            format_ident!("Square"),
+            memory("Square"),
             IntExpr::Int(10),
           )
         );
@@ -2009,17 +2045,17 @@ mod tests {
     #[test]
     fn parses_valid_rule_create_memory_string_playercollection() {
         let parsed: Rule = parse_str(
-          "memory Square monkey on (P1, P2, P3)"
+          "memory Square Monkey on (current, P2, P3)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryStringPlayerCollection(
-            format_ident!("Square"),
-            StringExpr::ID(format_ident!("monkey")),
+            memory("Square"),
+            StringExpr::ID(id("Monkey")),
             PlayerCollection::Player(
               vec![
-                PlayerExpr::PlayerName(format_ident!("P1")),
-                PlayerExpr::PlayerName(format_ident!("P2")),
-                PlayerExpr::PlayerName(format_ident!("P3")),
+                CURRENT,
+                PlayerExpr::PlayerName(playername("P2")),
+                PlayerExpr::PlayerName(playername("P3")),
               ]
             )
           )
@@ -2029,12 +2065,12 @@ mod tests {
     #[test]
     fn parses_valid_rule_create_memory_string_table() {
         let parsed: Rule = parse_str(
-          "memory Square monkey on table"
+          "memory Square Monkey on table"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryStringTable(
-            format_ident!("Square"),
-            StringExpr::ID(format_ident!("monkey")),
+            memory("Square"),
+            StringExpr::ID(id("Monkey")),
           )
         );
     }
@@ -2060,21 +2096,21 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreatePointMap(
-            format_ident!("Rank"),
+            pointmap("Rank"),
             vec![
-              (format_ident!("Rank"), format_ident!("Two"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Three"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Four"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Five"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Six"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Seven"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Eight"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Nine"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Ten"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Jack"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Queen"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("King"), IntExpr::Int(1)),
-              (format_ident!("Rank"), format_ident!("Ace"), IntExpr::Int(1)),
+              (key("Rank"), value("Two"), IntExpr::Int(1)),
+              (key("Rank"), value("Three"), IntExpr::Int(1)),
+              (key("Rank"), value("Four"), IntExpr::Int(1)),
+              (key("Rank"), value("Five"), IntExpr::Int(1)),
+              (key("Rank"), value("Six"), IntExpr::Int(1)),
+              (key("Rank"), value("Seven"), IntExpr::Int(1)),
+              (key("Rank"), value("Eight"), IntExpr::Int(1)),
+              (key("Rank"), value("Nine"), IntExpr::Int(1)),
+              (key("Rank"), value("Ten"), IntExpr::Int(1)),
+              (key("Rank"), value("Jack"), IntExpr::Int(1)),
+              (key("Rank"), value("Queen"), IntExpr::Int(1)),
+              (key("Rank"), value("King"), IntExpr::Int(1)),
+              (key("Rank"), value("Ace"), IntExpr::Int(1)),
             ]
           )
         );
@@ -2087,11 +2123,11 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreatePointMap(
-            format_ident!("Rank"),
+            pointmap("Rank"),
             vec![
-              (format_ident!("Rank"), format_ident!("Two"), IntExpr::Int(1)),
-              (format_ident!("Suite"), format_ident!("Spades"), IntExpr::Int(1)),
-              (format_ident!("Color"), format_ident!("Red"), IntExpr::Int(1)),
+              (key("Rank"), value("Two"), IntExpr::Int(1)),
+              (key("Suite"), value("Spades"), IntExpr::Int(1)),
+              (key("Color"), value("Red"), IntExpr::Int(1)),
             ]
           )
         );
@@ -2100,11 +2136,11 @@ mod tests {
     #[test]
     fn parses_valid_rule_flip_action() {
         let parsed: Rule = parse_str(
-          "flip hand to private"
+          "flip Hand to private"
         ).unwrap();
         assert_eq!(parsed,
           Rule::FlipAction(
-            CardSet::Group(Group::Location(format_ident!("hand"))),
+            CardSet::Group(Group::Location(location("Hand"))),
             Status::Private
           )
         );
@@ -2113,11 +2149,11 @@ mod tests {
     #[test]
     fn parses_valid_rule_shuffle_action() {
         let parsed: Rule = parse_str(
-          "shuffle hand"
+          "shuffle Hand"
         ).unwrap();
         assert_eq!(parsed,
           Rule::ShuffleAction(
-            CardSet::Group(Group::Location(format_ident!("hand"))),
+            CardSet::Group(Group::Location(location("Hand"))),
           )
         );
     }
@@ -2129,7 +2165,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::PlayerOutOfStageAction(
-            PlayerExpr::Current
+            CURRENT
           )
         );
     }
@@ -2141,7 +2177,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::PlayerOutOfGameSuccAction(
-            PlayerExpr::Current
+            CURRENT
           )
         );
     }
@@ -2153,7 +2189,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::PlayerOutOfGameFailAction(
-            PlayerExpr::Current
+            CURRENT
           )
         );
     }
@@ -2167,7 +2203,7 @@ mod tests {
           Rule::PlayerCollectionOutOfStageAction(
             PlayerCollection::Player(
               vec![
-                PlayerExpr::Current
+                CURRENT
               ]
             )
           )
@@ -2183,7 +2219,7 @@ mod tests {
           Rule::PlayerCollectionOutOfGameSuccAction(
             PlayerCollection::Player(
               vec![
-                PlayerExpr::Current
+                CURRENT
               ]
             )
           )
@@ -2199,7 +2235,7 @@ mod tests {
           Rule::PlayerCollectionOutOfGameFailAction(
             PlayerCollection::Player(
               vec![
-                PlayerExpr::Current
+                CURRENT
               ]
             )
           )
@@ -2213,7 +2249,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::SetMemoryInt(
-            format_ident!("Square"),
+            memory("Square"),
             IntExpr::Int(10)
           )
         );
@@ -2222,12 +2258,28 @@ mod tests {
     #[test]
     fn parses_valid_rule_set_memory_string() {
         let parsed: Rule = parse_str(
-          "Square is A"
+          "Square is Rank of top(Hand)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::SetMemoryString(
-            format_ident!("Square"),
-            StringExpr::ID(format_ident!("A"))
+            memory("Square"),
+            StringExpr::KeyOf(
+              key("Rank"),
+              CardPosition::Top(location("Hand"))
+            )
+          )
+        );
+    }
+
+    #[test]
+    fn parses_valid_rule_set_memory_ambiguous() {
+        let parsed: Rule = parse_str(
+          "Square is A"
+        ).unwrap();
+        assert_eq!(parsed,
+          Rule::SetMemoryAmbiguous(
+            memory("Square"),
+            id("A")
           )
         );
     }
@@ -2235,15 +2287,15 @@ mod tests {
     #[test]
     fn parses_valid_rule_set_memory_collection() {
         let parsed: Rule = parse_str(
-          "Square is players(current)"
+          "Square is (current)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::SetMemoryCollection(
-            format_ident!("Square"),
+            memory("Square"),
             Collection::PlayerCollection(
               PlayerCollection::Player(
                 vec![
-                  PlayerExpr::Current
+                  CURRENT
                 ]
               )
             )
@@ -2282,7 +2334,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::BidActionMemory(
-            format_ident!("Square"),
+            memory("Square"),
             Quantity::Quantifier(Quantifier::All)
           )
         );
@@ -2315,7 +2367,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::EndGameWithWinner(
-            PlayerExpr::Current
+            CURRENT
           )
         );
     }
@@ -2323,12 +2375,12 @@ mod tests {
     #[test]
     fn parses_valid_rule_demand_card_position() {
         let parsed: Rule = parse_str(
-          "demand top(hand)"
+          "demand top(Hand)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::DemandCardPositionAction(
             CardPosition::Top(
-              format_ident!("hand")
+              location("Hand")
             )
           )
         );
@@ -2342,7 +2394,7 @@ mod tests {
         assert_eq!(parsed,
           Rule::DemandStringAction(
             StringExpr::ID(
-              format_ident!("A")
+              id("A")
             )
           )
         );
@@ -2369,23 +2421,23 @@ mod tests {
         let parsed: SeqStage = parse_str(
           "
             stage Play for current until(1 times) {
-              deal 12 from stock private to hand of all;
+              deal 12 from Stock private to Hand of all;
             }
           "
         ).unwrap();
         assert_eq!(parsed,
           SeqStage {
-            stage: format_ident!("Play"), 
-            player: PlayerExpr::Current, 
+            stage: stage("Play"), 
+            player: CURRENT, 
             end_condition: EndCondition::UntilRep(Repititions { times: IntExpr::Int(1) }), 
             flows: vec![
               FlowComponent::Rule(
                 Rule::DealMove(
                   DealMove::DealQuantity(
                     Quantity::Int(IntExpr::Int(12)), 
-                    CardSet::Group(Group::Location(format_ident!("stock"))), 
+                    CardSet::Group(Group::Location(location("Stock"))), 
                     Status::Private, 
-                    CardSet::GroupOfPlayerCollection(Group::Location(format_ident!("hand")), PlayerCollection::Quantifier(Quantifier::All))
+                    CardSet::GroupOfPlayerCollection(Group::Location(location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
                   )
                 )
               )
@@ -2409,7 +2461,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           IfRule {
-            condition: BoolExpr::OutOfStagePlayer(PlayerExpr::Current),
+            condition: BoolExpr::OutOfStagePlayer(CURRENT),
             flows: vec![
               FlowComponent::Rule(
                 Rule::CycleAction(
@@ -2545,9 +2597,9 @@ mod tests {
           "
             players: (P1, P2, P3);
             turnorder: (P1, P2, P3);
-            location (hand, laydown, trash) on players all;
-            location (stock, discard) on table;
-            card on stock:
+            location (Hand, LayDown, Trash) on players all;
+            location (Stock, Discard) on table;
+            card on Stock:
               Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)
                 for Suite(Diamonds, Hearts, Spades, Clubs);
             precedence RankOrder on Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King);
@@ -2557,29 +2609,29 @@ mod tests {
             combo Deadwood where (not Sequence and not Set);
 
             stage Preparation for current until(1 times) {
-              deal 12 from top(stock) private to hand of all;
+              deal 12 from top(Stock) private to Hand of all;
             }
 
             stage Collect for current until(previous out of stage) {
               choose {
-                move top(discard) private to hand;
+                move top(Discard) private to Hand;
                 or
-                move top(stock) private to hand;
+                move top(Stock) private to Hand;
               }
 
-              move any from hand face up to top(discard);
+              move any from Hand face up to top(Discard);
 
-              if (sum of Deadwood in hand using Values <= 10) {
+              if (sum of Deadwood in Hand using Values <= 10) {
                 optional {
-                  move all from Set in hand face up to top(laydown);
-                  move all from Sequence in hand face up to top(laydown);
+                  move all from Set in Hand face up to top(LayDown);
+                  move all from Sequence in Hand face up to top(LayDown);
 
-                  if (hand is empty) {
-                    move all from Set in hand of next face up to top(laydown) of next;
-                    move all from Sequence in hand of next face up to top(laydown) of next;
-                    move hand of next face up to trash of next;
+                  if (Hand is empty) {
+                    move all from Set in Hand of next face up to top(LayDown) of next;
+                    move all from Sequence in Hand of next face up to top(LayDown) of next;
+                    move Hand of next face up to Trash of next;
 
-                    move hand face up to trash;
+                    move Hand face up to Trash;
                     set current out of stage;
                   }
                 }
@@ -2589,14 +2641,14 @@ mod tests {
             }
 
             stage FinalLayDown for current until(1 times) {
-              move laydown of previous face up to hand of current;
-              move all from Set in hand face up to top(laydown);
-              move all from Sequence in hand face up to top(laydown);
+              move LayDown of previous face up to Hand of current;
+              move all from Set in Hand face up to top(LayDown);
+              move all from Sequence in Hand face up to top(LayDown);
 
-              move hand face up to trash;
+              move Hand face up to Trash;
             }
 
-            score sum of trash using Values to LeftOver of all;
+            score sum of Trash using Values to LeftOver of all;
             winner is lowest LeftOver;
           "
         ).unwrap();
@@ -2607,9 +2659,9 @@ mod tests {
               FlowComponent::Rule(
                 Rule::CreatePlayer(
                   vec![
-                    format_ident!("P1"),
-                    format_ident!("P2"),
-                    format_ident!("P3"),
+                    playername("P1"),
+                    playername("P2"),
+                    playername("P3"),
                   ]
                 )
               ),
@@ -2617,9 +2669,9 @@ mod tests {
               FlowComponent::Rule(
                 Rule::CreateTurnorder(
                   vec![
-                    format_ident!("P1"),
-                    format_ident!("P2"),
-                    format_ident!("P3"),
+                    playername("P1"),
+                    playername("P2"),
+                    playername("P3"),
                   ]
                 )
               ),
@@ -2628,9 +2680,9 @@ mod tests {
                 Rule::CreateLocationCollectionOnPlayerCollection(
                   LocationCollection {
                     locations: vec![
-                      format_ident!("hand"),
-                      format_ident!("laydown"),
-                      format_ident!("trash"),
+                      location("Hand"),
+                      location("LayDown"),
+                      location("Trash"),
                     ]
                   },
                   PlayerCollection::Quantifier(Quantifier::All)
@@ -2641,8 +2693,8 @@ mod tests {
                 Rule::CreateLocationCollectionOnTable(
                   LocationCollection {
                     locations: vec![
-                      format_ident!("stock"),
-                      format_ident!("discard"),
+                      location("Stock"),
+                      location("Discard"),
                     ]
                   }
                 )
@@ -2650,29 +2702,29 @@ mod tests {
               // card on
               FlowComponent::Rule(
                 Rule::CreateCardOnLocation(
-                  format_ident!("stock"),
+                  location("Stock"),
                   Types {
                     types: vec![
-                      (format_ident!("Rank"), vec![
-                        format_ident!("Two"),
-                        format_ident!("Three"),
-                        format_ident!("Four"),
-                        format_ident!("Five"),
-                        format_ident!("Six"),
-                        format_ident!("Seven"),
-                        format_ident!("Eight"),
-                        format_ident!("Nine"),
-                        format_ident!("Ten"),
-                        format_ident!("Jack"),
-                        format_ident!("Queen"),
-                        format_ident!("King"),
-                        format_ident!("Ace")
+                      (key("Rank"), vec![
+                        value("Two"),
+                        value("Three"),
+                        value("Four"),
+                        value("Five"),
+                        value("Six"),
+                        value("Seven"),
+                        value("Eight"),
+                        value("Nine"),
+                        value("Ten"),
+                        value("Jack"),
+                        value("Queen"),
+                        value("King"),
+                        value("Ace")
                       ]),
-                      (format_ident!("Suite"), vec![
-                        format_ident!("Diamonds"),
-                        format_ident!("Hearts"),
-                        format_ident!("Spades"),
-                        format_ident!("Clubs"),
+                      (key("Suite"), vec![
+                        value("Diamonds"),
+                        value("Hearts"),
+                        value("Spades"),
+                        value("Clubs"),
                       ]),
                     ]
                   }
@@ -2681,81 +2733,81 @@ mod tests {
               // RankOrder
               FlowComponent::Rule(
                 Rule::CreatePrecedence(
-                  format_ident!("RankOrder"),
+                  precedence("RankOrder"),
                   vec![
-                    (format_ident!("Rank"), format_ident!("Ace")),
-                    (format_ident!("Rank"), format_ident!("Two")),
-                    (format_ident!("Rank"), format_ident!("Three")),
-                    (format_ident!("Rank"), format_ident!("Four")),
-                    (format_ident!("Rank"), format_ident!("Five")),
-                    (format_ident!("Rank"), format_ident!("Six")),
-                    (format_ident!("Rank"), format_ident!("Seven")),
-                    (format_ident!("Rank"), format_ident!("Eight")),
-                    (format_ident!("Rank"), format_ident!("Nine")),
-                    (format_ident!("Rank"), format_ident!("Ten")),
-                    (format_ident!("Rank"), format_ident!("Jack")),
-                    (format_ident!("Rank"), format_ident!("Queen")),
-                    (format_ident!("Rank"), format_ident!("King")),
+                    (key("Rank"), value("Ace")),
+                    (key("Rank"), value("Two")),
+                    (key("Rank"), value("Three")),
+                    (key("Rank"), value("Four")),
+                    (key("Rank"), value("Five")),
+                    (key("Rank"), value("Six")),
+                    (key("Rank"), value("Seven")),
+                    (key("Rank"), value("Eight")),
+                    (key("Rank"), value("Nine")),
+                    (key("Rank"), value("Ten")),
+                    (key("Rank"), value("Jack")),
+                    (key("Rank"), value("Queen")),
+                    (key("Rank"), value("King")),
                   ]
                 )
               ),
               // Values
               FlowComponent::Rule(
                 Rule::CreatePointMap(
-                  format_ident!("Values"),
+                  pointmap("Values"),
                   vec![
-                    (format_ident!("Rank"), format_ident!("Ace"), IntExpr::Int(1)),
-                    (format_ident!("Rank"), format_ident!("Two"), IntExpr::Int(2)),
-                    (format_ident!("Rank"), format_ident!("Three"), IntExpr::Int(3)),
-                    (format_ident!("Rank"), format_ident!("Four"), IntExpr::Int(4)),
-                    (format_ident!("Rank"), format_ident!("Five"), IntExpr::Int(5)),
-                    (format_ident!("Rank"), format_ident!("Six"), IntExpr::Int(6)),
-                    (format_ident!("Rank"), format_ident!("Seven"), IntExpr::Int(7)),
-                    (format_ident!("Rank"), format_ident!("Eight"), IntExpr::Int(8)),
-                    (format_ident!("Rank"), format_ident!("Nine"), IntExpr::Int(9)),
-                    (format_ident!("Rank"), format_ident!("Ten"), IntExpr::Int(10)),
-                    (format_ident!("Rank"), format_ident!("Jack"), IntExpr::Int(10)),
-                    (format_ident!("Rank"), format_ident!("Queen"), IntExpr::Int(10)),
-                    (format_ident!("Rank"), format_ident!("King"), IntExpr::Int(10)),
+                    (key("Rank"), value("Ace"), IntExpr::Int(1)),
+                    (key("Rank"), value("Two"), IntExpr::Int(2)),
+                    (key("Rank"), value("Three"), IntExpr::Int(3)),
+                    (key("Rank"), value("Four"), IntExpr::Int(4)),
+                    (key("Rank"), value("Five"), IntExpr::Int(5)),
+                    (key("Rank"), value("Six"), IntExpr::Int(6)),
+                    (key("Rank"), value("Seven"), IntExpr::Int(7)),
+                    (key("Rank"), value("Eight"), IntExpr::Int(8)),
+                    (key("Rank"), value("Nine"), IntExpr::Int(9)),
+                    (key("Rank"), value("Ten"), IntExpr::Int(10)),
+                    (key("Rank"), value("Jack"), IntExpr::Int(10)),
+                    (key("Rank"), value("Queen"), IntExpr::Int(10)),
+                    (key("Rank"), value("King"), IntExpr::Int(10)),
                   ]
                 )
               ),
               // Combo Sequence
               FlowComponent::Rule(
                 Rule::CreateCombo(
-                  format_ident!("Sequence"),
+                  combo("Sequence"),
                   FilterExpr::And(
                     Box::new(FilterExpr::And(
                       Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
-                      Box::new(FilterExpr::Same(format_ident!("Suite")))
+                      Box::new(FilterExpr::Same(key("Suite")))
                     )),
-                    Box::new(FilterExpr::Adjacent(format_ident!("Rank"), format_ident!("RankOrder")))
+                    Box::new(FilterExpr::Adjacent(key("Rank"), precedence("RankOrder")))
                   )
                 )
               ),
               // Combo Set
               FlowComponent::Rule(
                 Rule::CreateCombo(
-                  format_ident!("Set"),
+                  combo("Set"),
                   FilterExpr::And(
                     Box::new(FilterExpr::And(
                       Box::new(FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))),
-                      Box::new(FilterExpr::Distinct(format_ident!("Suite")))
+                      Box::new(FilterExpr::Distinct(key("Suite")))
                     )),
-                    Box::new(FilterExpr::Same(format_ident!("Rank")))
+                    Box::new(FilterExpr::Same(key("Rank")))
                   )
                 )
               ),
               // Combo Set
               FlowComponent::Rule(
                 Rule::CreateCombo(
-                  format_ident!("Deadwood"),
+                  combo("Deadwood"),
                   FilterExpr::And(
                     Box::new(
-                      FilterExpr::NotCombo(format_ident!("Sequence"))
+                      FilterExpr::NotCombo(combo("Sequence"))
                     ),
                     Box::new(
-                      FilterExpr::NotCombo(format_ident!("Set"))
+                      FilterExpr::NotCombo(combo("Set"))
                     )
                   )
                 )
@@ -2763,17 +2815,17 @@ mod tests {
               // Stage Preparation
               FlowComponent::Stage(
                 SeqStage {
-                  stage: format_ident!("Preparation"), 
-                  player: PlayerExpr::Current, 
+                  stage: stage("Preparation"), 
+                  player: CURRENT, 
                   end_condition: EndCondition::UntilRep(Repititions { times: IntExpr::Int(1) }), 
                   flows: vec![
                     FlowComponent::Rule(
                       Rule::DealMove(
                         DealMove::DealQuantity(
                           Quantity::Int(IntExpr::Int(12)), 
-                          CardSet::Group(Group::CardPosition(CardPosition::Top(format_ident!("stock")))), 
+                          CardSet::Group(Group::CardPosition(CardPosition::Top(location("Stock")))), 
                           Status::Private, 
-                          CardSet::GroupOfPlayerCollection(Group::Location(format_ident!("hand")), PlayerCollection::Quantifier(Quantifier::All))
+                          CardSet::GroupOfPlayerCollection(Group::Location(location("Hand")), PlayerCollection::Quantifier(Quantifier::All))
                         )
                       )
                     )
@@ -2783,31 +2835,31 @@ mod tests {
               // Stage Collect
               FlowComponent::Stage(
                 SeqStage {
-                  stage: format_ident!("Collect"), 
-                  player: PlayerExpr::Current, 
-                  end_condition: EndCondition::UntilBool(BoolExpr::OutOfStagePlayer(PlayerExpr::Previous)), 
+                  stage: stage("Collect"), 
+                  player: CURRENT, 
+                  end_condition: EndCondition::UntilBool(BoolExpr::OutOfStagePlayer(PREVIOUS)), 
                   flows: vec![
                     // Choose
                     FlowComponent::ChoiceRule(
                       ChoiceRule {
                         options: vec![
-                          // move top of discard to hand
+                          // move top of Discard to Hand
                           FlowComponent::Rule(
                             Rule::ClassicMove(
                               ClassicMove::Move(
-                                CardSet::Group(Group::CardPosition(CardPosition::Top(format_ident!("discard")))),
+                                CardSet::Group(Group::CardPosition(CardPosition::Top(location("Discard")))),
                                 Status::Private,
-                                CardSet::Group(Group::Location(format_ident!("hand")))
+                                CardSet::Group(Group::Location(location("Hand")))
                               )
                             )
                           ),
-                          // move top of stock to hand
+                          // move top of Stock to Hand
                           FlowComponent::Rule(
                             Rule::ClassicMove(
                               ClassicMove::Move(
-                                CardSet::Group(Group::CardPosition(CardPosition::Top(format_ident!("stock")))),
+                                CardSet::Group(Group::CardPosition(CardPosition::Top(location("Stock")))),
                                 Status::Private,
-                                CardSet::Group(Group::Location(format_ident!("hand")))
+                                CardSet::Group(Group::Location(location("Hand")))
                               )
                             )
                           ),
@@ -2818,9 +2870,9 @@ mod tests {
                       Rule::ClassicMove(
                         ClassicMove::MoveQuantity(
                           Quantity::Quantifier(Quantifier::Any),
-                          CardSet::Group(Group::Location(format_ident!("hand"))),
+                          CardSet::Group(Group::Location(location("Hand"))),
                           Status::FaceUp,
-                          CardSet::Group(Group::CardPosition(CardPosition::Top(format_ident!("discard")))),
+                          CardSet::Group(Group::CardPosition(CardPosition::Top(location("Discard")))),
                         )
                       )
                     ),
@@ -2831,12 +2883,12 @@ mod tests {
                             Box::new(
                               CardSet::Group(
                                 Group::ComboInLocation(
-                                  format_ident!("Deadwood"),
-                                  format_ident!("hand")
+                                  combo("Deadwood"),
+                                  location("Hand")
                                 )
                               )
                             ), 
-                            format_ident!("Values")
+                            pointmap("Values")
                           ), 
                           IntCmpOp::Le, 
                           IntExpr::Int(10)
@@ -2849,9 +2901,9 @@ mod tests {
                                   Rule::ClassicMove(
                                     ClassicMove::MoveQuantity(
                                       Quantity::Quantifier(Quantifier::All),
-                                      CardSet::Group(Group::ComboInLocation(format_ident!("Set"), format_ident!("hand"))),
+                                      CardSet::Group(Group::ComboInLocation(combo("Set"), location("Hand"))),
                                       Status::FaceUp,
-                                      CardSet::Group(Group::CardPosition(CardPosition::Top(format_ident!("laydown")))),
+                                      CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
                                     )
                                   )
                                 ),
@@ -2859,9 +2911,9 @@ mod tests {
                                   Rule::ClassicMove(
                                     ClassicMove::MoveQuantity(
                                       Quantity::Quantifier(Quantifier::All),
-                                      CardSet::Group(Group::ComboInLocation(format_ident!("Sequence"), format_ident!("hand"))),
+                                      CardSet::Group(Group::ComboInLocation(combo("Sequence"), location("Hand"))),
                                       Status::FaceUp,
-                                      CardSet::Group(Group::CardPosition(CardPosition::Top(format_ident!("laydown")))),
+                                      CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
                                     )
                                   )
                                 ),
@@ -2870,7 +2922,7 @@ mod tests {
                                   IfRule {
                                     condition: BoolExpr::CardSetIsEmpty(
                                       CardSet::Group(
-                                        Group::Location(format_ident!("hand"))
+                                        Group::Location(location("Hand"))
                                       )
                                     ),
                                     flows: vec![
@@ -2878,9 +2930,9 @@ mod tests {
                                         Rule::ClassicMove(
                                           ClassicMove::MoveQuantity(
                                             Quantity::Quantifier(Quantifier::All),
-                                            CardSet::GroupOfPlayer(Group::ComboInLocation(format_ident!("Set"), format_ident!("hand")), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::ComboInLocation(combo("Set"), location("Hand")), PlayerExpr::Next),
                                             Status::FaceUp,
-                                            CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(format_ident!("laydown"))), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(location("LayDown"))), PlayerExpr::Next),
                                           )
                                         )
                                       ),
@@ -2888,33 +2940,33 @@ mod tests {
                                         Rule::ClassicMove(
                                           ClassicMove::MoveQuantity(
                                             Quantity::Quantifier(Quantifier::All),
-                                            CardSet::GroupOfPlayer(Group::ComboInLocation(format_ident!("Sequence"), format_ident!("hand")), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::ComboInLocation(combo("Sequence"), location("Hand")), PlayerExpr::Next),
                                             Status::FaceUp,
-                                            CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(format_ident!("laydown"))), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::CardPosition(CardPosition::Top(location("LayDown"))), PlayerExpr::Next),
                                           )
                                         )
                                       ),
                                       FlowComponent::Rule(
                                         Rule::ClassicMove(
                                           ClassicMove::Move(
-                                            CardSet::GroupOfPlayer(Group::Location(format_ident!("hand")), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::Location(location("Hand")), PlayerExpr::Next),
                                             Status::FaceUp,
-                                            CardSet::GroupOfPlayer(Group::Location(format_ident!("trash")), PlayerExpr::Next),
+                                            CardSet::GroupOfPlayer(Group::Location(location("Trash")), PlayerExpr::Next),
                                           )
                                         )
                                       ),
                                       FlowComponent::Rule(
                                         Rule::ClassicMove(
                                           ClassicMove::Move(
-                                            CardSet::Group(Group::Location(format_ident!("hand"))),
+                                            CardSet::Group(Group::Location(location("Hand"))),
                                             Status::FaceUp,
-                                            CardSet::Group(Group::Location(format_ident!("trash"))),
+                                            CardSet::Group(Group::Location(location("Trash"))),
                                           )
                                         )
                                       ),
                                       FlowComponent::Rule(
                                         Rule::PlayerOutOfStageAction(
-                                          PlayerExpr::Current
+                                          CURRENT
                                         )
                                       ),
                                     ]
@@ -2935,16 +2987,16 @@ mod tests {
               // Stage Preparation
               FlowComponent::Stage(
                 SeqStage {
-                  stage: format_ident!("FinalLayDown"), 
-                  player: PlayerExpr::Current, 
+                  stage: stage("FinalLayDown"), 
+                  player: CURRENT, 
                   end_condition: EndCondition::UntilRep(Repititions { times: IntExpr::Int(1) }), 
                   flows: vec![
                     FlowComponent::Rule(
                       Rule::ClassicMove(
                         ClassicMove::Move(
-                          CardSet::GroupOfPlayer(Group::Location(format_ident!("laydown")), PlayerExpr::Previous),
+                          CardSet::GroupOfPlayer(Group::Location(location("LayDown")), PREVIOUS),
                           Status::FaceUp,
-                          CardSet::GroupOfPlayer(Group::Location(format_ident!("hand")), PlayerExpr::Current),
+                          CardSet::GroupOfPlayer(Group::Location(location("Hand")), CURRENT),
                         )
                       )
                     ),
@@ -2952,9 +3004,9 @@ mod tests {
                       Rule::ClassicMove(
                         ClassicMove::MoveQuantity(
                           Quantity::Quantifier(Quantifier::All),
-                          CardSet::Group(Group::ComboInLocation(format_ident!("Set"), format_ident!("hand"))),
+                          CardSet::Group(Group::ComboInLocation(combo("Set"), location("Hand"))),
                           Status::FaceUp,
-                          CardSet::Group(Group::CardPosition(CardPosition::Top(format_ident!("laydown")))),
+                          CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
                         )
                       )
                     ),
@@ -2962,18 +3014,18 @@ mod tests {
                       Rule::ClassicMove(
                         ClassicMove::MoveQuantity(
                           Quantity::Quantifier(Quantifier::All),
-                          CardSet::Group(Group::ComboInLocation(format_ident!("Sequence"), format_ident!("hand"))),
+                          CardSet::Group(Group::ComboInLocation(combo("Sequence"), location("Hand"))),
                           Status::FaceUp,
-                          CardSet::Group(Group::CardPosition(CardPosition::Top(format_ident!("laydown")))),
+                          CardSet::Group(Group::CardPosition(CardPosition::Top(location("LayDown")))),
                         )
                       )
                     ),
                     FlowComponent::Rule(
                       Rule::ClassicMove(
                         ClassicMove::Move(
-                          CardSet::Group(Group::Location(format_ident!("hand"))),
+                          CardSet::Group(Group::Location(location("Hand"))),
                           Status::FaceUp,
-                          CardSet::Group(Group::Location(format_ident!("trash"))),
+                          CardSet::Group(Group::Location(location("Trash"))),
                         )
                       )
                     ),
@@ -2987,13 +3039,13 @@ mod tests {
                       Box::new(
                         CardSet::Group(
                           Group::Location(
-                            format_ident!("trash")
+                            location("Trash")
                           )
                         )
                       ),
-                      format_ident!("Values")
+                      pointmap("Values")
                     ),
-                    format_ident!("LeftOver"),
+                    memory("LeftOver"),
                     PlayerCollection::Quantifier(Quantifier::All),
                   )
                 )
@@ -3001,7 +3053,7 @@ mod tests {
               FlowComponent::Rule(
                 Rule::WinnerRule(
                   WinnerRule::WinnerLowestMemory(
-                    format_ident!("LeftOver")
+                    memory("LeftOver")
                   )
                 )
               ),

@@ -1,102 +1,12 @@
-use crate::ast::*;
+use crate::{ast::*};
+use crate::keywords::kw as kw;
+use crate::analyzer::Analyzer;
 
 use syn::parse::discouraged::Speculative;
 use syn::parse::{Parse, ParseStream, Result};
 use syn::punctuated::Punctuated;
-use syn::{LitInt, Token, braced, bracketed, parenthesized};
+use syn::{Ident, LitInt, Token, braced, bracketed, parenthesized};
 
-
-// ------------------------
-// Keywords declarations
-// ------------------------
-
-mod kw {
-  syn::custom_keyword!(position);
-  syn::custom_keyword!(score);
-  syn::custom_keyword!(choose);
-  syn::custom_keyword!(optional);
-  syn::custom_keyword!(next);
-  syn::custom_keyword!(turn);
-  syn::custom_keyword!(winner);
-  syn::custom_keyword!(demand);
-  syn::custom_keyword!(cycle);
-  syn::custom_keyword!(bid);
-  syn::custom_keyword!(successful);
-  syn::custom_keyword!(fail);
-  syn::custom_keyword!(set);
-  syn::custom_keyword!(shuffle);
-  syn::custom_keyword!(flip);
-  syn::custom_keyword!(combo);
-  syn::custom_keyword!(memory);
-  syn::custom_keyword!(pointmap);
-  syn::custom_keyword!(precedence);
-  syn::custom_keyword!(token);
-  syn::custom_keyword!(random);
-  syn::custom_keyword!(location);
-  syn::custom_keyword!(table);
-  syn::custom_keyword!(on);
-  syn::custom_keyword!(card);
-  syn::custom_keyword!(with);
-  syn::custom_keyword!(place);
-  syn::custom_keyword!(exchange);
-  syn::custom_keyword!(deal);
-  syn::custom_keyword!(range);
-  syn::custom_keyword!(from);
-  syn::custom_keyword!(to);
-  syn::custom_keyword!(until);
-  syn::custom_keyword!(end);
-  syn::custom_keyword!(times);
-  syn::custom_keyword!(cards);
-  syn::custom_keyword!(face);
-  syn::custom_keyword!(down);
-  syn::custom_keyword!(up);
-  syn::custom_keyword!(private);
-  syn::custom_keyword!(all);
-  syn::custom_keyword!(any);
-  syn::custom_keyword!(current);
-  syn::custom_keyword!(previous);
-  syn::custom_keyword!(owner);
-  syn::custom_keyword!(of);
-  syn::custom_keyword!(highest);
-  syn::custom_keyword!(lowest);
-  syn::custom_keyword!(competitor);
-  syn::custom_keyword!(turnorder);
-  syn::custom_keyword!(top);
-  syn::custom_keyword!(bottom);
-  syn::custom_keyword!(team);
-  syn::custom_keyword!(at);
-  syn::custom_keyword!(using);
-  syn::custom_keyword!(prec);
-  syn::custom_keyword!(point);
-  syn::custom_keyword!(min);
-  syn::custom_keyword!(max);
-  syn::custom_keyword!(stageroundcounter);
-  syn::custom_keyword!(size);
-  syn::custom_keyword!(sum);
-  syn::custom_keyword!(or);
-  syn::custom_keyword!(and);
-  syn::custom_keyword!(stage);
-  syn::custom_keyword!(game);
-  syn::custom_keyword!(not);
-  syn::custom_keyword!(is);
-  syn::custom_keyword!(empty);
-  syn::custom_keyword!(out);
-  syn::custom_keyword!(players);
-  syn::custom_keyword!(playersin);
-  syn::custom_keyword!(playersout);
-  syn::custom_keyword!(others);
-  syn::custom_keyword!(lower);
-  syn::custom_keyword!(higher);
-  syn::custom_keyword!(adjacent);
-  syn::custom_keyword!(distinct);
-  syn::custom_keyword!(same);
-  syn::custom_keyword!(key);
-  syn::custom_keyword!(other);
-  syn::custom_keyword!(teams);
-  syn::custom_keyword!(player);
-  syn::custom_keyword!(locations);
-  syn::custom_keyword!(ints);
-}
 
 // ------------------------
 // Parsing implementations
@@ -113,6 +23,117 @@ fn parse_with_alternatives<T>(input: ParseStream, alts: &[fn(ParseStream) -> Res
         }
     }
     Err(input.error("no alternative matched"))
+}
+
+// ===========================================================================
+
+// IDs
+// ===========================================================================
+impl Parse for ID {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let fork = input.fork();
+      let id = fork.parse::<Ident>()?;
+
+      // check correct "shape" of ID
+      match Analyzer::check_id(&id) {
+        Ok(_) => {},
+        Err(err) => {
+          return Err(input.error(&err))
+        }
+      }
+
+      input.advance_to(&fork);
+
+      return Ok(ID::new(id))
+  }
+}
+
+impl Parse for Stage {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(Stage::new(id))
+  }
+}
+
+impl Parse for PlayerName {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(PlayerName::new(id))
+  }
+}
+
+impl Parse for TeamName {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(TeamName::new(id))
+  }
+}
+
+impl Parse for Location {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(Location::new(id))
+  }
+}
+
+impl Parse for Token {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(Token::new(id))
+  }
+}
+
+impl Parse for Precedence {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(Precedence::new(id))
+  }
+}
+
+impl Parse for PointMap {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(PointMap::new(id))
+  }
+}
+
+impl Parse for Combo {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(Combo::new(id))
+  }
+}
+
+impl Parse for Memory {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(Memory::new(id))
+  }
+}
+
+impl Parse for Key {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(Key::new(id))
+  }
+}
+
+impl Parse for Value {
+  fn parse(input: ParseStream) -> Result<Self> {
+      let id = input.parse::<ID>()?;
+
+      return Ok(Value::new(id))
+  }
 }
 
 // ===========================================================================
@@ -220,7 +241,6 @@ fn parse_intcmpop_gt(input: ParseStream) -> Result<IntCmpOp> {
   return Ok(IntCmpOp::Gt)
 }
 
-
 // ===========================================================================
 
 
@@ -257,6 +277,7 @@ fn parse_status_private(input: ParseStream) -> Result<Status> {
 
   return Ok(Status::Private)
 }
+
 // ===========================================================================
 
 
@@ -283,7 +304,6 @@ fn parse_quantifier_any(input: ParseStream) -> Result<Quantifier> {
 
   return Ok(Quantifier::Any)
 }
-
 
 // ===========================================================================
 
@@ -379,7 +399,6 @@ fn parse_player_playername(input: ParseStream) -> Result<PlayerExpr> {
   return Ok(PlayerExpr::PlayerName(playername))
 }
 
-
 // ===========================================================================
 
 
@@ -421,10 +440,8 @@ impl Parse for CardPosition {
         &[
           parse_cardposition_top,
           parse_cardposition_bottom,
-          parse_cardposition_max_prec,
-          parse_cardposition_min_prec,
-          parse_cardposition_max_point,
-          parse_cardposition_min_point,
+          parse_cardposition_max,
+          parse_cardposition_min,
           parse_cardposition_at,
         ]
       )
@@ -449,60 +466,26 @@ fn parse_cardposition_bottom(input: ParseStream) -> Result<CardPosition> {
   return Ok(CardPosition::Bottom(location))
 }
 
-fn parse_cardposition_max_prec(input: ParseStream) -> Result<CardPosition> {
+fn parse_cardposition_max(input: ParseStream) -> Result<CardPosition> {
   input.parse::<kw::max>()?;        
   let content;
   parenthesized!(content in input);
   let cardset = content.parse::<CardSet>()?;
   input.parse::<kw::using>()?;
-  input.parse::<kw::prec>()?;
-  let content;
-  parenthesized!(content in input);
-  let precedence = content.parse::<Precedence>()?;
+  let id = input.parse::<ID>()?;
 
-  return Ok(CardPosition::MaxPrec(Box::new(cardset), precedence))
+  return Ok(CardPosition::Max(Box::new(cardset), id))
 }
 
-fn parse_cardposition_max_point(input: ParseStream) -> Result<CardPosition> {
-  input.parse::<kw::max>()?;        
-  let content;
-  parenthesized!(content in input);
-  let cardset = content.parse::<CardSet>()?;
-  input.parse::<kw::using>()?;
-  input.parse::<kw::point>()?;
-  let content;
-  parenthesized!(content in input);
-  let pointmap = content.parse::<PointMap>()?;
-
-  return Ok(CardPosition::MaxPoint(Box::new(cardset), pointmap))
-}
-
-fn parse_cardposition_min_prec(input: ParseStream) -> Result<CardPosition> {
+fn parse_cardposition_min(input: ParseStream) -> Result<CardPosition> {
   input.parse::<kw::min>()?;        
   let content;
   parenthesized!(content in input);
   let cardset = content.parse::<CardSet>()?;
   input.parse::<kw::using>()?;
-  input.parse::<kw::prec>()?;
-  let content;
-  parenthesized!(content in input);
-  let precedence = content.parse::<Precedence>()?;
+  let id = input.parse::<ID>()?;
 
-  return Ok(CardPosition::MinPrec(Box::new(cardset), precedence))
-}
-
-fn parse_cardposition_min_point(input: ParseStream) -> Result<CardPosition> {
-  input.parse::<kw::min>()?;        
-  let content;
-  parenthesized!(content in input);
-  let cardset = content.parse::<CardSet>()?;
-  input.parse::<kw::using>()?;
-  input.parse::<kw::point>()?;
-  let content;
-  parenthesized!(content in input);
-  let pointmap = content.parse::<PointMap>()?;
-
-  return Ok(CardPosition::MinPoint(Box::new(cardset), pointmap))
+  return Ok(CardPosition::Min(Box::new(cardset), id))
 }
 
 fn parse_cardposition_at(input: ParseStream) -> Result<CardPosition> {
@@ -635,17 +618,21 @@ impl Parse for BoolExpr {
             parse_bool_out_of_game_player,
             parse_bool_out_of_stage_player_collection,
             parse_bool_out_of_game_player_collection,
-            parse_bool_cardset_eq,
-            parse_bool_cardset_neq,
             parse_bool_cardset_empty,
             parse_bool_cardset_not_empty,
+            parse_bool_int,
+            parse_bool_cardset_eq,
+            parse_bool_cardset_neq,
             parse_bool_player_eq,
             parse_bool_player_neq,
             parse_bool_team_eq,
             parse_bool_team_neq,
             parse_bool_string_neq,
             parse_bool_string_eq,
-            parse_bool_int,
+            // Fall back to the Analyzer because of possible
+            // ambiguous parsing.
+            parse_bool_id_eq,
+            parse_bool_id_neq,
         ])
     }
 }
@@ -678,10 +665,31 @@ fn parse_bool_or(input: ParseStream) -> Result<BoolExpr> {
     return Ok(BoolExpr::Or(Box::new(left), Box::new(right)))
 }
 
+fn parse_bool_id_eq(input: ParseStream) -> Result<BoolExpr> {
+  let left = input.parse::<ID>()?;
+  input.parse::<Token![==]>()?;
+  let right = input.parse::<ID>()?;
+
+  return Ok(BoolExpr::Eq(left, right))
+}
+
+fn parse_bool_id_neq(input: ParseStream) -> Result<BoolExpr> {
+  let left = input.parse::<ID>()?;
+  input.parse::<Token![!=]>()?;
+  let right = input.parse::<ID>()?;
+
+  return Ok(BoolExpr::Neq(left, right))
+}
+
 fn parse_bool_string_eq(input: ParseStream) -> Result<BoolExpr> {
     let left = input.parse::<StringExpr>()?;
     input.parse::<Token![==]>()?;
     let right = input.parse::<StringExpr>()?;
+
+    if   matches!(left, StringExpr::ID(_))
+      && matches!(right, StringExpr::ID(_)) {
+        return Err(input.error("Ambiguous parsing!"))
+    }
 
     return Ok(BoolExpr::StringEq(left, right))
 }
@@ -690,6 +698,11 @@ fn parse_bool_string_neq(input: ParseStream) -> Result<BoolExpr> {
     let left = input.parse::<StringExpr>()?;
     input.parse::<Token![!=]>()?;
     let right = input.parse::<StringExpr>()?;
+
+    if   matches!(left, StringExpr::ID(_))
+      && matches!(right, StringExpr::ID(_)) {
+        return Err(input.error("Ambiguous parsing!"))
+    }
 
     return Ok(BoolExpr::StringNeq(left, right))
 }
@@ -703,23 +716,27 @@ fn parse_bool_int(input: ParseStream) -> Result<BoolExpr> {
 }
 
 fn parse_bool_cardset_eq(input: ParseStream) -> Result<BoolExpr> {
-    input.parse::<kw::cards>()?;
-    let content;
-    parenthesized!(content in input);
-    let left = content.parse::<CardSet>()?;
-    content.parse::<Token![==]>()?;
-    let right = content.parse::<CardSet>()?;
+    let left = input.parse::<CardSet>()?;
+    input.parse::<Token![==]>()?;
+    let right = input.parse::<CardSet>()?;
+
+    if   matches!(left, CardSet::Group(Group::Location(_)))
+      && matches!(right, CardSet::Group(Group::Location(_))) {
+        return Err(input.error("Ambiguous parsing!"))
+    }
 
     return Ok(BoolExpr::CardSetEq(left, right))
 }
 
 fn parse_bool_cardset_neq(input: ParseStream) -> Result<BoolExpr> {
-    input.parse::<kw::cards>()?;
-    let content;
-    parenthesized!(content in input);
-    let left = content.parse::<CardSet>()?;
-    content.parse::<Token![!=]>()?;
-    let right = content.parse::<CardSet>()?;
+    let left = input.parse::<CardSet>()?;
+    input.parse::<Token![!=]>()?;
+    let right = input.parse::<CardSet>()?;
+
+    if   matches!(left, CardSet::Group(Group::Location(_)))
+      && matches!(right, CardSet::Group(Group::Location(_))) {
+        return Err(input.error("Ambiguous parsing!"))
+    }
 
     return Ok(BoolExpr::CardSetNeq(left, right))
 }
@@ -742,45 +759,53 @@ fn parse_bool_cardset_not_empty(input: ParseStream) -> Result<BoolExpr> {
 }
 
 fn parse_bool_player_eq(input: ParseStream) -> Result<BoolExpr> {
-    input.parse::<kw::player>()?;
-    let content;
-    parenthesized!(content in input);
-    let left = content.parse::<PlayerExpr>()?;
-    content.parse::<Token![==]>()?;
-    let right = content.parse::<PlayerExpr>()?;
+    let left = input.parse::<PlayerExpr>()?;
+    input.parse::<Token![==]>()?;
+    let right = input.parse::<PlayerExpr>()?;
+
+    if   matches!(left, PlayerExpr::PlayerName(_))
+      && matches!(right, PlayerExpr::PlayerName(_)) {
+        return Err(input.error("Ambiguous parsing!"))
+    }
 
     return Ok(BoolExpr::PlayerEq(left, right))
 }
 
 fn parse_bool_player_neq(input: ParseStream) -> Result<BoolExpr> {
-    input.parse::<kw::player>()?;
-    let content;
-    parenthesized!(content in input);
-    let left = content.parse::<PlayerExpr>()?;
-    content.parse::<Token![!=]>()?;
-    let right = content.parse::<PlayerExpr>()?;
+    let left = input.parse::<PlayerExpr>()?;
+    input.parse::<Token![!=]>()?;
+    let right = input.parse::<PlayerExpr>()?;
+
+    if   matches!(left, PlayerExpr::PlayerName(_))
+      && matches!(right, PlayerExpr::PlayerName(_)) {
+        return Err(input.error("Ambiguous parsing!"))
+    }
 
     return Ok(BoolExpr::PlayerNeq(left, right))
 }
 
 fn parse_bool_team_eq(input: ParseStream) -> Result<BoolExpr> {
-    input.parse::<kw::team>()?;
-    let content;
-    parenthesized!(content in input);
-    let left = content.parse::<TeamExpr>()?;
-    content.parse::<Token![==]>()?;
-    let right = content.parse::<TeamExpr>()?;
+    let left = input.parse::<TeamExpr>()?;
+    input.parse::<Token![==]>()?;
+    let right = input.parse::<TeamExpr>()?;
+
+    if   matches!(left, TeamExpr::TeamName(_))
+      && matches!(right, TeamExpr::TeamName(_)) {
+        return Err(input.error("Ambiguous parsing!"))
+    }
 
     return Ok(BoolExpr::TeamEq(left, right))
 }
 
 fn parse_bool_team_neq(input: ParseStream) -> Result<BoolExpr> {
-    input.parse::<kw::team>()?;
-    let content;
-    parenthesized!(content in input);
-    let left = content.parse::<TeamExpr>()?;
-    content.parse::<Token![!=]>()?;
-    let right = content.parse::<TeamExpr>()?;
+    let left = input.parse::<TeamExpr>()?;
+    input.parse::<Token![!=]>()?;
+    let right = input.parse::<TeamExpr>()?;
+
+    if   matches!(left, TeamExpr::TeamName(_))
+      && matches!(right, TeamExpr::TeamName(_)) {
+        return Err(input.error("Ambiguous parsing!"))
+    }
 
     return Ok(BoolExpr::TeamNeq(left, right))
 }
@@ -824,7 +849,8 @@ fn parse_bool_out_of_game_player_collection(input: ParseStream) -> Result<BoolEx
 // ===========================================================================
 
 
-// StringExpr ================================================================
+// StringExpr
+// ===========================================================================
 impl Parse for StringExpr {
     fn parse(input: ParseStream) -> Result<Self> {
       parse_with_alternatives(input, 
@@ -859,6 +885,9 @@ fn parse_string_expr_id(input: ParseStream) -> Result<StringExpr> {
   
   return Ok(StringExpr::ID(id))
 }
+
+// ===========================================================================
+
 
 // PlayerCollection
 // ===========================================================================
@@ -923,11 +952,11 @@ impl Parse for FilterExpr {
         parse_filter_same,
         parse_filter_higher,
         parse_filter_lower,
-        parse_filter_key_eq,
-        parse_filter_key_neq,
         parse_filter_size,
         parse_filter_and,
         parse_filter_or,
+        parse_filter_key_eq,
+        parse_filter_key_neq,
         parse_filter_not_combo,
         parse_filter_combo,
       ]
@@ -985,23 +1014,17 @@ fn parse_filter_size(input: ParseStream) -> Result<FilterExpr> {
 }
 
 fn parse_filter_key_eq(input: ParseStream) -> Result<FilterExpr> {
-  input.parse::<kw::key>()?;
-  let content;
-  parenthesized!(content in input);
-  let key = content.parse::<Key>()?;
-  content.parse::<Token![==]>()?;
-  let string = content.parse::<StringExpr>()?;
+  let key = input.parse::<Key>()?;
+  input.parse::<Token![==]>()?;
+  let string = input.parse::<StringExpr>()?;
 
   return Ok(FilterExpr::KeyEq(key, Box::new(string)))
 }
 
 fn parse_filter_key_neq(input: ParseStream) -> Result<FilterExpr> {
-  input.parse::<kw::key>()?;
-  let content;
-  parenthesized!(content in input);
-  let key = content.parse::<Key>()?;
-  content.parse::<Token![!=]>()?;
-  let string = content.parse::<StringExpr>()?;
+  let key = input.parse::<Key>()?;
+  input.parse::<Token![!=]>()?;
+  let string = input.parse::<StringExpr>()?;
 
   return Ok(FilterExpr::KeyNeq(key, Box::new(string)))
 }
@@ -1038,7 +1061,6 @@ fn parse_filter_combo(input: ParseStream) -> Result<FilterExpr> {
 
   return Ok(FilterExpr::Combo(combo))
 }
-
 
 // ===========================================================================
 
@@ -1234,7 +1256,6 @@ fn parse_team_collection_team(input: ParseStream) -> Result<TeamCollection> {
   return Ok(TeamCollection::Team(teams.into_iter().collect()))
 }
 
-
 // ===========================================================================
 
 
@@ -1264,45 +1285,90 @@ impl Parse for Collection {
         parse_collection_player_collection,
         parse_collection_team_collection,
         parse_collection_int_collection,
-        parse_collection_location_collection,
+        // parse_collection_location_collection,
         parse_collection_cardset,
         parse_collection_string_collection,
+        parse_collection_ambiguous,
       ]
     )
   }
 }
 
 fn parse_collection_player_collection(input: ParseStream) -> Result<Collection> {
-  input.parse::<kw::players>()?;
   let playercollection = input.parse::<PlayerCollection>()?;
+
+  match &playercollection {
+    PlayerCollection::Player(players) => {
+      // check if parsing is ambiguous
+      for player in players.iter() {
+        // break if is not ambiguous
+        if !matches!(player, PlayerExpr::PlayerName(_)) {
+          return Ok(Collection::PlayerCollection(playercollection))
+        }
+      }
+
+      // return if parsing ambiguous
+      return Err(input.error("Ambiguous parsing!"))
+    },
+    _ => {}
+  }
 
   return Ok(Collection::PlayerCollection(playercollection))
 }
 
 fn parse_collection_team_collection(input: ParseStream) -> Result<Collection> {
-  input.parse::<kw::teams>()?;
   let teamcollection = input.parse::<TeamCollection>()?;
+
+  match &teamcollection {
+    TeamCollection::Team(teams) => {
+      // check if parsing is ambiguous
+      for team in teams.iter() {
+        // break if is not ambiguous
+        if !matches!(team, TeamExpr::TeamName(_)) {
+          return Ok(Collection::TeamCollection(teamcollection))
+        }
+      }
+
+      // return if parsing ambiguous
+      return Err(input.error("Ambiguous parsing!"))
+    },
+    _ => {}
+  }
 
   return Ok(Collection::TeamCollection(teamcollection))
 }
 
 fn parse_collection_int_collection(input: ParseStream) -> Result<Collection> {
-  input.parse::<kw::ints>()?;
   let intcollection = input.parse::<IntCollection>()?;
 
   return Ok(Collection::IntCollection(intcollection))
 }
 
-fn parse_collection_location_collection(input: ParseStream) -> Result<Collection> {
-  input.parse::<kw::locations>()?;
-  let locationcollection = input.parse::<LocationCollection>()?;
-
-  return Ok(Collection::LocationCollection(locationcollection))
-}
+// Collection for LocationCollection is ambiguous to StringCollection
+// fn parse_collection_location_collection(input: ParseStream) -> Result<Collection> {
+//   let locationcollection = input.parse::<LocationCollection>()?;
+//
+//   // Always ambiguous with StringExpr
+//   return Ok(Collection::LocationCollection(locationcollection))
+// }
 
 fn parse_collection_cardset(input: ParseStream) -> Result<Collection> {
-  input.parse::<kw::cards>()?;
   let cardset = input.parse::<CardSet>()?;
+
+  match &cardset {
+    CardSet::Group(group) => {
+      // check if parsing is ambiguous
+      if !matches!(group, Group::LocationCollection(_))
+        && !matches!(group, Group::Location(_))
+      {
+        return Ok(Collection::CardSet(Box::new(cardset)))
+      }
+    
+      // return if parsing ambiguous
+      return Err(input.error("Ambiguous parsing!"))
+    },
+    _ => {}
+  }
 
   return Ok(Collection::CardSet(Box::new(cardset)))
 }
@@ -1310,9 +1376,25 @@ fn parse_collection_cardset(input: ParseStream) -> Result<Collection> {
 fn parse_collection_string_collection(input: ParseStream) -> Result<Collection> {
   let stringcollection = input.parse::<StringCollection>()?;
 
-  return Ok(Collection::StringCollection(stringcollection))
+  for string in stringcollection.strings.iter() {
+    // check if parsing is ambiguous
+    if !matches!(string, StringExpr::ID(_)) {
+      return Ok(Collection::StringCollection(stringcollection))
+    }
+  }
+
+  // return if parsing ambiguous
+  return Err(input.error("Ambiguous parsing!"))
 }
 
+fn parse_collection_ambiguous(input: ParseStream) -> Result<Collection> {
+  let content;
+  parenthesized!(content in input);
+  let ids: Punctuated<ID, Token![,]> =
+      content.parse_terminated(ID::parse, Token![,])?;
+
+  return Ok(Collection::Ambiguous(ids.into_iter().collect()))
+}
 
 // ===========================================================================
 
@@ -1403,11 +1485,11 @@ fn parse_endcondition_until_bool_or_rep(input: ParseStream) -> Result<EndConditi
 // ===========================================================================
 impl Parse for IntRange {
   fn parse(input: ParseStream) -> Result<Self> {
-    input.parse::<kw::range>()?;
-    let content;
-    parenthesized!(content in input);
-    let op = content.parse::<IntCmpOp>()?;
-    let int = content.parse::<IntExpr>()?;
+    // input.parse::<kw::range>()?;
+    // let content;
+    // parenthesized!(content in input);
+    let op = input.parse::<IntCmpOp>()?;
+    let int = input.parse::<IntExpr>()?;
 
     return Ok(IntRange {op: op, int: int})
   }
@@ -1422,8 +1504,8 @@ impl Parse for Quantity {
   fn parse(input: ParseStream) -> Result<Self> {
     parse_with_alternatives(input, 
       &[
-        parse_quantity_int,
         parse_quantity_intrange,
+        parse_quantity_int,
         parse_quantity_quantifier,
       ]
     )
@@ -1626,7 +1708,6 @@ fn parse_token_loc_collection_location_player_collection(input: ParseStream) -> 
   return Ok(TokenLocExpr::LocationCollectionPlayerCollection(locationcollection, playercollection))
 }
 
-
 // ===========================================================================
 
 
@@ -1719,6 +1800,7 @@ impl Parse for Rule {
         parse_set_memory_collection,
         parse_set_memory_int,
         parse_set_memory_string,
+        parse_set_memory_ambiguous,
       ]
     )
   }
@@ -2226,6 +2308,10 @@ fn parse_set_memory_collection(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::is>()?;
   let collection = input.parse::<Collection>()?;
 
+  if matches!(collection, Collection::Ambiguous(_)) {
+    return Err(input.error("Ambiguous parsing"))
+  }
+
   return Ok(Rule::SetMemoryCollection(memory, collection))
 }
 
@@ -2242,7 +2328,19 @@ fn parse_set_memory_string(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::is>()?;
   let string = input.parse::<StringExpr>()?;
 
+  if matches!(string, StringExpr::ID(_)) {
+    return Err(input.error("Ambiguous parsing"))
+  }
+
   return Ok(Rule::SetMemoryString(memory, string))
+}
+
+fn parse_set_memory_ambiguous(input: ParseStream) -> Result<Rule> {
+  let memory = input.parse::<Memory>()?;
+  input.parse::<kw::is>()?;
+  let id = input.parse::<ID>()?;
+
+  return Ok(Rule::SetMemoryAmbiguous(memory, id))
 }
 
 // ===========================================================================
@@ -2274,6 +2372,7 @@ impl Parse for Types {
 }
 
 // ===========================================================================
+
 
 // ScoreRule
 // ===========================================================================
@@ -2405,6 +2504,7 @@ fn parse_winner_winner_is_highest_memory(input: ParseStream) -> Result<WinnerRul
 
   return Ok(WinnerRule::WinnerHighestMemory(memory))
 }
+
 // ===========================================================================
 
 
@@ -2507,6 +2607,7 @@ impl Parse for ChoiceRule {
     return Ok(ChoiceRule { options: options.into_iter().collect() })
   }
 }
+
 // ===========================================================================
 
 
@@ -2564,15 +2665,15 @@ fn parse_flowcomponent_rule(input: ParseStream) -> Result<FlowComponent> {
 // ===========================================================================
 impl Parse for Game {
   fn parse(input: ParseStream) -> Result<Self> {
-      let mut flows = Vec::new();
+    let mut flows = Vec::new();
 
-      while !input.is_empty() {
-        let flow = input.parse::<FlowComponent>()?;
+    while !input.is_empty() {
+      let flow = input.parse::<FlowComponent>()?;
 
-        flows.push(flow);
-      }
+      flows.push(flow);
+    }
 
-      return Ok(Game { flows })
+    return Ok(Game { flows })
   }
 }
 

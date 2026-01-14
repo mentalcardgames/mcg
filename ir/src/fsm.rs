@@ -13,7 +13,9 @@ pub enum Transition {
   NotCondition(BoolExpr),
   EndCondition(EndCondition),
   NotEndCondition(EndCondition),
-  StageCounter,
+  StageCounter(Stage),
+  StageEntry(Stage),
+  StageExit(Stage),
   Optional,
   Choice,
 }
@@ -187,7 +189,19 @@ impl FSMBuilder {
   }
 
   fn build_seq_stage(&mut self, stage: &SeqStage) {
-    let entry = self.current_state_id;
+    // Getting the StateID to keep track on when it starts, ends and
+    // the stage-counter increments for the specific Stage
+    let stage_id = stage.stage.clone();
+    // Adding more to when a Stage starts
+    let stage_entry = self.current_state_id;
+    let entry = self.new_state();
+
+    self.new_transition(
+      stage_entry,
+      entry,
+      Transition::StageEntry(stage_id.clone())
+    );
+
     let exit = self.new_exit();
     self.stage_exits.push(exit);
     let end_condition = stage.end_condition.clone();
@@ -211,13 +225,23 @@ impl FSMBuilder {
     self.new_transition(
       self.current_state_id,
       entry,
-      Transition::StageCounter
+      Transition::StageCounter(stage_id.clone())
     );
 
     self.stage_exits.pop();
 
     // continue building from the exit
     self.current_state_id = exit;
+
+    // Adding a specific end transition to mark the end of
+    // the specific stage
+    let stage_exit = self.new_state();
+
+    self.new_transition(
+      exit,
+      stage_exit,
+      Transition::StageExit(stage_id.clone())
+    );
   }
   
   fn build_rule(&mut self, rule: &Rule) {
