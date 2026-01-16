@@ -1,3 +1,4 @@
+#[derive(Debug, Clone, PartialEq)]
 pub enum DSLType {
   Player,
   Team,
@@ -7,4 +8,6 @@ pub enum DSLType {
   Precedence,
   PointMap,
   Combo,
+  Token,
+  Memory,
 } 

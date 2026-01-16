@@ -1,6 +1,6 @@
 use crate::{ast::*};
 use crate::keywords::kw as kw;
-use crate::analyzer::Analyzer;
+use crate::analyzer::analyzer::Analyzer;
 
 use syn::parse::discouraged::Speculative;
 use syn::parse::{Parse, ParseStream, Result};
@@ -1854,7 +1854,6 @@ fn parse_create_location_collection_on_player_collection(input: ParseStream) -> 
   input.parse::<kw::location>()?;
   let locationcollection = input.parse::<LocationCollection>()?;
   input.parse::<kw::on>()?;
-  input.parse::<kw::players>()?;
   let playercollection = input.parse::<PlayerCollection>()?;
 
   return Ok(
@@ -1895,7 +1894,6 @@ fn parse_create_location_on_player_collection(input: ParseStream) -> Result<Rule
   input.parse::<kw::location>()?;
   let location = input.parse::<Location>()?;
   input.parse::<kw::on>()?;
-  input.parse::<kw::players>()?;
   let playercollection = input.parse::<PlayerCollection>()?;
 
   return Ok(

@@ -1767,7 +1767,7 @@ mod tests {
     #[test]
     fn parses_valid_rule_createlocation_playercollection() {
         let parsed: Rule = parse_str(
-          "location Hand on players(P1, P2, P3)"
+          "location Hand on (P1, P2, P3)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateLocationOnPlayerCollection(
@@ -2546,7 +2546,7 @@ mod tests {
           "
             players: (P1, P2, P3);
             turnorder: (P1, P2, P3);
-            location (Hand, LayDown, Trash) on players all;
+            location (Hand, LayDown, Trash) on all;
             location (Stock, Discard) on table;
             card on Stock:
               Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)
