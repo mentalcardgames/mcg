@@ -1,6 +1,15 @@
 use std::collections::HashMap;
 
-use crate::{{asts::game_type::GameType, analyzer::type_analyzer::TypedVars, asts::typed_ast::{self, IntExpr, PlayerExpr, StringExpr, TeamExpr, TypedID}}, asts::ast::{self}};
+use crate::{analyzer::{analyzer_error::AnalyzerError, type_analyzer::TypedVars}, asts::{ast::{self, Game}, game_type::GameType, typed_ast::{self, IntExpr, PlayerExpr, StringExpr, TeamExpr, TypedID}}};
+
+pub fn parse_ast(ctx: TypedVars, ast: &Game) -> Result<typed_ast::Game, AnalyzerError> {
+  let lowering_ctx = LoweringCtx::new(ctx);
+
+  match ast.lower(&lowering_ctx) {
+    Ok(game) => Ok(game),
+    Err(type_error) => Err(AnalyzerError::TypeError(type_error))
+  }
+}
 
 fn all_same(v: &Vec<GameType>) -> Result<GameType, TypeError> {
     match v.split_first() {

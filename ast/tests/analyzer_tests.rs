@@ -1,5 +1,5 @@
 mod test {
-  use ast::{analyzer::analyzer::Analyzer, asts::ast::*};
+  use ast::{analyzer::analyzer::analyze_ast, asts::ast::*};
   use syn::parse_str;
 
 
@@ -9,8 +9,7 @@ mod test {
       "players: (P1, P2, P3);"
     ).unwrap();
 
-    let mut analyzer = Analyzer::default();
-    let res = analyzer.analyze_game(&parsed);
+    let res = analyze_ast(&parsed);
 
     println!("{:?}", res)
   }
@@ -21,8 +20,7 @@ mod test {
       "players: (P1, P1, P3);"
     ).unwrap();
 
-    let mut analyzer = Analyzer::default();
-    let res = analyzer.analyze_game(&parsed);
+    let res = analyze_ast(&parsed);
 
     println!("{:?}", res)
   }
@@ -33,8 +31,7 @@ mod test {
       "team T1: (P1, P2, P3);"
     ).unwrap();
 
-    let mut analyzer = Analyzer::default();
-    let res = analyzer.analyze_game(&parsed);
+    let res = analyze_ast(&parsed);
 
     println!("{:?}", res)
   }
@@ -48,8 +45,7 @@ mod test {
       "
     ).unwrap();
 
-    let mut analyzer = Analyzer::default();
-    let res = analyzer.analyze_game(&parsed);
+    let res = analyze_ast(&parsed);
 
     println!("{:?}", res)
   }
@@ -117,12 +113,8 @@ mod test {
       "
     ).unwrap();
 
-    let mut analyzer = Analyzer::default();
-    let res = analyzer.analyze_game(&parsed);
+    let res = analyze_ast(&parsed);
 
     println!("{:?}", res)
   }
-
-  
-
 }

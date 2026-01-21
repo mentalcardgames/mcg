@@ -1,26 +1,24 @@
-use crate::{asts::game_type::GameType, asts::ast::*};
+use crate::{analyzer::analyzer_error::AnalyzerError, asts::{ast::*, game_type::GameType}};
 
 pub type TypedVars = Vec<(String, GameType)>;
 
-pub fn check_type(game: &Game) -> bool {
-  ambiguous(ctx(game))
-}
-
-fn ambiguous(ctx: TypedVars) -> bool {
+pub fn ambiguous(ctx: TypedVars) -> Result<(), AnalyzerError> {
   let mut new_ctx = ctx;
   let (next, _) = new_ctx.first().unwrap().clone();
   let ctx_same = new_ctx.clone().into_iter().filter(|(s, _)| *s == next).collect();
   
-  if all_no_type(&ctx_same) || multiple_options(&ctx_same) {
-    println!("{}", next);
-
-    return true
+  if all_no_type(&ctx_same) {
+    return Err(AnalyzerError::IDWithNoType { id: next })
   }
 
+  if multiple_options(&ctx_same) {
+    return Err(AnalyzerError::IDWithMultipleTypes { id: next })
+  }
+  
   new_ctx = new_ctx.into_iter().filter(|(s, _)| *s != next).collect::<TypedVars>();
 
   if new_ctx.is_empty() {
-    return false
+    return Ok(())
   }
 
   ambiguous(new_ctx)

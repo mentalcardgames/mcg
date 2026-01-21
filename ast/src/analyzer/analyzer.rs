@@ -1,34 +1,14 @@
 use crate::analyzer::analyzer_error::AnalyzerError;
-use crate::parse::ast_to_typed_ast::{Lower, LoweringCtx};
-use crate::analyzer::type_analyzer::{check_type as ct, ctx};
+use crate::parse::ast_to_typed_ast::{parse_ast};
+use crate::analyzer::type_analyzer::{ambiguous, ctx};
 
 use crate::asts::ast::*;
 
-pub struct Analyzer {
-}
+pub fn analyze_ast(ast: &Game) -> Result<(), AnalyzerError> {
+  let ctx = ctx(ast);
 
-impl Default for Analyzer {
-  fn default() -> Self {
-      Analyzer {
-      }
-  }
-}
+  ambiguous(ctx.clone())?;
+  parse_ast(ctx, ast)?;
 
-impl Analyzer {
-  pub fn analyze_game(&mut self, game: &Game) -> Result<(), AnalyzerError> {
-    if ct(game) {
-      return Err(AnalyzerError::Default)
-    }
-
-    let ctx = ctx(game);
-    let lowering_ctx = LoweringCtx::new(ctx);
-
-    match game.lower(&lowering_ctx) {
-      Ok(game) => println!("{:?}", game),
-      Err(e) => return Err(AnalyzerError::TypeError(e))
-    }
-    
-
-    Ok(())
-  }
+  Ok(())
 }
