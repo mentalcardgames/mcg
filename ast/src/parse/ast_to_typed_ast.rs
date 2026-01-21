@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{analyzer::{analyzer_error::AnalyzerError, type_analyzer::TypedVars}, asts::{ast::{self, Game}, game_type::GameType, typed_ast::{self, IntExpr, PlayerExpr, StringExpr, TeamExpr, TypedID}}};
 
-pub fn parse_ast(ctx: TypedVars, ast: &Game) -> Result<typed_ast::Game, AnalyzerError> {
+pub fn parse_ast_to_typed_ast(ctx: TypedVars, ast: &Game) -> Result<typed_ast::Game, AnalyzerError> {
   let lowering_ctx = LoweringCtx::new(ctx);
 
   match ast.lower(&lowering_ctx) {
