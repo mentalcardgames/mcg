@@ -1,4 +1,3 @@
-pub mod analyzer;
 pub mod analyzer_error;
-pub mod symbol;
-pub mod dsl_type;
+pub mod type_analyzer;
+pub mod analyzer;

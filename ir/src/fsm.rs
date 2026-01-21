@@ -1,5 +1,7 @@
 use std::{collections::HashMap};
-use ast::ast::*;
+use ast::asts::typed_ast::*;
+
+pub type Stage = String;
 
 pub type StateID = i32;
 pub type StageExit = i32;
@@ -191,7 +193,7 @@ impl FSMBuilder {
   fn build_seq_stage(&mut self, stage: &SeqStage) {
     // Getting the StateID to keep track on when it starts, ends and
     // the stage-counter increments for the specific Stage
-    let stage_id = stage.stage.clone();
+    let stage_id = stage.stage.id.clone();
     // Adding more to when a Stage starts
     let stage_entry = self.current_state_id;
     let entry = self.new_state();

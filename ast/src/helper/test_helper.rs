@@ -1,55 +1,55 @@
 pub mod test_helper {
-  use crate::ast::*;
+  use crate::asts::ast::*;
 
   pub const CURRENT: PlayerExpr = PlayerExpr::Current;
   pub const PREVIOUS: PlayerExpr = PlayerExpr::Previous;
   pub const COMPETITOR: PlayerExpr = PlayerExpr::Competitor;
 
-  pub fn id(id: &str) -> ID {
-    ID::new(id)
+  pub fn id(id: &str) -> String {
+    id.to_string()
   }
 
   pub fn stage(id: &str) -> Stage {
-    Stage::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn playername(id: &str) -> PlayerName {
-    PlayerName::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn teamname(id: &str) -> TeamName {
-    TeamName::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn location(id: &str) -> Location {
-    Location::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn token(id: &str) -> Token {
-    Token::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn precedence(id: &str) -> Precedence {
-    Precedence::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn pointmap(id: &str) -> PointMap {
-    PointMap::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn combo(id: &str) -> Combo {
-    Combo::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn memory(id: &str) -> Memory {
-    Memory::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn key(id: &str) -> Key {
-    Key::new(ID::new(id))
+    id.to_string()
   }
 
   pub fn value(id: &str) -> Value {
-    Value::new(ID::new(id))
+    id.to_string()
   }
 }

@@ -1,13 +1,15 @@
 #[derive(Debug, Clone, PartialEq)]
-pub enum DSLType {
+pub enum GameType {
   Player,
   Team,
   Location,
-  Key,
-  Value,
   Precedence,
   PointMap,
   Combo,
-  Token,
+  Key,
+  Value,
   Memory,
-} 
+  Token,
+  Stage,
+  NoType,
+}

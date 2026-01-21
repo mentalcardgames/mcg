@@ -1,6 +1,5 @@
-use crate::{ast::*};
-use crate::keywords::kw as kw;
-use crate::analyzer::analyzer::Analyzer;
+use crate::{asts::ast::*};
+use crate::parse::keywords::kw as kw;
 
 use syn::parse::discouraged::Speculative;
 use syn::parse::{Parse, ParseStream, Result};
@@ -24,118 +23,26 @@ fn parse_with_alternatives<T>(input: ParseStream, alts: &[fn(ParseStream) -> Res
     }
     Err(input.error("no alternative matched"))
 }
-
 // ===========================================================================
+
 
 // IDs
 // ===========================================================================
 impl Parse for ID {
   fn parse(input: ParseStream) -> Result<Self> {
       let fork = input.fork();
-      let id = fork.parse::<Ident>()?;
+      let id = fork.parse::<Ident>()?.to_string();
 
       // check correct "shape" of ID
-      match Analyzer::check_id(&id) {
-        Ok(_) => {},
-        Err(err) => {
-          return Err(input.error(&err))
-        }
+      if kw::in_custom_key_words(&id) {
+        return Err(input.error(&format!("ID: {} is custom_keyword", id)))
       }
 
       input.advance_to(&fork);
 
-      return Ok(ID::new(id))
+      return Ok(ID(id))
   }
 }
-
-impl Parse for Stage {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(Stage::new(id))
-  }
-}
-
-impl Parse for PlayerName {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(PlayerName::new(id))
-  }
-}
-
-impl Parse for TeamName {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(TeamName::new(id))
-  }
-}
-
-impl Parse for Location {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(Location::new(id))
-  }
-}
-
-impl Parse for Token {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(Token::new(id))
-  }
-}
-
-impl Parse for Precedence {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(Precedence::new(id))
-  }
-}
-
-impl Parse for PointMap {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(PointMap::new(id))
-  }
-}
-
-impl Parse for Combo {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(Combo::new(id))
-  }
-}
-
-impl Parse for Memory {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(Memory::new(id))
-  }
-}
-
-impl Parse for Key {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(Key::new(id))
-  }
-}
-
-impl Parse for Value {
-  fn parse(input: ParseStream) -> Result<Self> {
-      let id = input.parse::<ID>()?;
-
-      return Ok(Value::new(id))
-  }
-}
-
 // ===========================================================================
 
 
@@ -362,7 +269,7 @@ fn parse_player_owner_of_highest(input: ParseStream) -> Result<PlayerExpr> {
   input.parse::<kw::owner>()?;
   input.parse::<kw::of>()?;
   input.parse::<kw::highest>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
 
   return Ok(PlayerExpr::OwnerOfHighest(memory))
 }
@@ -371,7 +278,7 @@ fn parse_player_owner_of_lowest(input: ParseStream) -> Result<PlayerExpr> {
   input.parse::<kw::owner>()?;
   input.parse::<kw::of>()?;
   input.parse::<kw::lowest>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
 
   return Ok(PlayerExpr::OwnerOfLowest(memory))
 }
@@ -394,7 +301,7 @@ fn parse_player_owner_of_cardposition(input: ParseStream) -> Result<PlayerExpr> 
 }
 
 fn parse_player_playername(input: ParseStream) -> Result<PlayerExpr> {
-  let playername = input.parse::<PlayerName>()?;
+  let playername = input.parse::<ID>()?.to_string();
       
   return Ok(PlayerExpr::PlayerName(playername))
 }
@@ -424,7 +331,7 @@ fn parse_team_team_of(input: ParseStream) -> Result<TeamExpr> {
 }
 
 fn parse_team_teamname(input: ParseStream) -> Result<TeamExpr> {
-  let teamname = input.parse::<TeamName>()?;
+  let teamname = input.parse::<ID>()?.to_string();
       
   return Ok(TeamExpr::TeamName(teamname))
 }
@@ -452,7 +359,7 @@ fn parse_cardposition_top(input: ParseStream) -> Result<CardPosition> {
   input.parse::<kw::top>()?;
   let content;
   parenthesized!(content in input);
-  let location = content.parse::<Location>()?;
+  let location = content.parse::<ID>()?.to_string();
 
   return Ok(CardPosition::Top(location))
 }
@@ -461,7 +368,7 @@ fn parse_cardposition_bottom(input: ParseStream) -> Result<CardPosition> {
   input.parse::<kw::bottom>()?;
   let content;
   parenthesized!(content in input);
-  let location = content.parse::<Location>()?;
+  let location = content.parse::<ID>()?.to_string();
 
   return Ok(CardPosition::Bottom(location))
 }
@@ -472,7 +379,7 @@ fn parse_cardposition_max(input: ParseStream) -> Result<CardPosition> {
   parenthesized!(content in input);
   let cardset = content.parse::<CardSet>()?;
   input.parse::<kw::using>()?;
-  let id = input.parse::<ID>()?;
+  let id = input.parse::<ID>()?.to_string();
 
   return Ok(CardPosition::Max(Box::new(cardset), id))
 }
@@ -483,13 +390,13 @@ fn parse_cardposition_min(input: ParseStream) -> Result<CardPosition> {
   parenthesized!(content in input);
   let cardset = content.parse::<CardSet>()?;
   input.parse::<kw::using>()?;
-  let id = input.parse::<ID>()?;
+  let id = input.parse::<ID>()?.to_string();
 
   return Ok(CardPosition::Min(Box::new(cardset), id))
 }
 
 fn parse_cardposition_at(input: ParseStream) -> Result<CardPosition> {
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
   let content;
   bracketed!(content in input);
   let int = content.parse::<IntExpr>()?;
@@ -545,7 +452,7 @@ fn parse_int_sum_of(input: ParseStream) -> Result<IntExpr> {
   input.parse::<kw::of>()?;
   let cardset = input.parse::<CardSet>()?;
   input.parse::<kw::using>()?;
-  let pointmap = input.parse::<PointMap>()?;
+  let pointmap = input.parse::<ID>()?.to_string();
 
   return Ok(IntExpr::SumOfCardSet(Box::new(cardset), pointmap))
 }
@@ -562,7 +469,7 @@ fn parse_int_min_of_cardset(input: ParseStream) -> Result<IntExpr> {
   input.parse::<kw::of>()?;
   let cardset = input.parse::<CardSet>()?;
   input.parse::<kw::using>()?;
-  let pointmap = input.parse::<PointMap>()?;
+  let pointmap = input.parse::<ID>()?.to_string();
 
   return Ok(IntExpr::MinOf(Box::new(cardset), pointmap))
 }
@@ -572,7 +479,7 @@ fn parse_int_max_of_cardset(input: ParseStream) -> Result<IntExpr> {
   input.parse::<kw::of>()?;
   let cardset = input.parse::<CardSet>()?;
   input.parse::<kw::using>()?;
-  let pointmap = input.parse::<PointMap>()?;
+  let pointmap = input.parse::<ID>()?.to_string();
 
   return Ok(IntExpr::MaxOf(Box::new(cardset), pointmap))
 }
@@ -664,17 +571,17 @@ fn parse_bool_or(input: ParseStream) -> Result<BoolExpr> {
 }
 
 fn parse_bool_id_eq_ambiguous(input: ParseStream) -> Result<BoolExpr> {
-  let left = input.parse::<ID>()?;
+  let left = input.parse::<ID>()?.to_string();
   input.parse::<Token![==]>()?;
-  let right = input.parse::<ID>()?;
+  let right = input.parse::<ID>()?.to_string();
 
   return Ok(BoolExpr::AmbiguousEq(left, right))
 }
 
 fn parse_bool_id_neq_ambiguous(input: ParseStream) -> Result<BoolExpr> {
-  let left = input.parse::<ID>()?;
+  let left = input.parse::<ID>()?.to_string();
   input.parse::<Token![!=]>()?;
-  let right = input.parse::<ID>()?;
+  let right = input.parse::<ID>()?.to_string();
 
   return Ok(BoolExpr::AmbiguousNeq(left, right))
 }
@@ -684,11 +591,6 @@ fn parse_bool_string_eq(input: ParseStream) -> Result<BoolExpr> {
     input.parse::<Token![==]>()?;
     let right = input.parse::<StringExpr>()?;
 
-    if   matches!(left, StringExpr::ID(_))
-      && matches!(right, StringExpr::ID(_)) {
-        return Err(input.error("Ambiguous parsing!"))
-    }
-
     return Ok(BoolExpr::StringEq(left, right))
 }
 
@@ -696,11 +598,6 @@ fn parse_bool_string_neq(input: ParseStream) -> Result<BoolExpr> {
     let left = input.parse::<StringExpr>()?;
     input.parse::<Token![!=]>()?;
     let right = input.parse::<StringExpr>()?;
-
-    if   matches!(left, StringExpr::ID(_))
-      && matches!(right, StringExpr::ID(_)) {
-        return Err(input.error("Ambiguous parsing!"))
-    }
 
     return Ok(BoolExpr::StringNeq(left, right))
 }
@@ -855,14 +752,13 @@ impl Parse for StringExpr {
         &[
           parse_string_expr_key_of,
           parse_string_expr_collection_at,
-          parse_string_expr_id,
         ]
       )
     }
 }
 
 fn parse_string_expr_key_of(input: ParseStream) -> Result<StringExpr> {
-    let key = input.parse::<Key>()?;
+    let key = input.parse::<ID>()?.to_string();
     input.parse::<kw::of>()?;
     let position = input.parse::<CardPosition>()?;
 
@@ -876,12 +772,6 @@ fn parse_string_expr_collection_at(input: ParseStream) -> Result<StringExpr> {
     let int: IntExpr = content.parse()?;
 
     return Ok(StringExpr::StringCollectionAt(string_collection, int))
-}
-
-fn parse_string_expr_id(input: ParseStream) -> Result<StringExpr> {
-  let id = input.parse::<ID>()?;
-  
-  return Ok(StringExpr::ID(id))
 }
 
 // ===========================================================================
@@ -953,8 +843,10 @@ impl Parse for FilterExpr {
         parse_filter_size,
         parse_filter_and,
         parse_filter_or,
-        parse_filter_key_eq,
-        parse_filter_key_neq,
+        parse_filter_key_eq_string,
+        parse_filter_key_neq_string,
+        parse_filter_key_eq_value,
+        parse_filter_key_neq_value,
         parse_filter_not_combo,
         parse_filter_combo,
       ]
@@ -964,41 +856,41 @@ impl Parse for FilterExpr {
 
 fn parse_filter_same(input: ParseStream) -> Result<FilterExpr> {
   input.parse::<kw::same>()?;
-  let key = input.parse::<Key>()?;
+  let key = input.parse::<ID>()?.to_string();
 
   return Ok(FilterExpr::Same(key))
 }
 
 fn parse_filter_distinct(input: ParseStream) -> Result<FilterExpr> {
   input.parse::<kw::distinct>()?;
-  let key = input.parse::<Key>()?;
+  let key = input.parse::<ID>()?.to_string();
 
   return Ok(FilterExpr::Distinct(key))
 }
 
 fn parse_filter_adjacent(input: ParseStream) -> Result<FilterExpr> {
   input.parse::<kw::adjacent>()?;
-  let key = input.parse::<Key>()?;
+  let key = input.parse::<ID>()?.to_string();
   input.parse::<kw::using>()?;
-  let precedence = input.parse::<Precedence>()?;
+  let precedence = input.parse::<ID>()?.to_string();
 
   return Ok(FilterExpr::Adjacent(key, precedence))
 }
 
 fn parse_filter_higher(input: ParseStream) -> Result<FilterExpr> {
   input.parse::<kw::higher>()?;
-  let key = input.parse::<Key>()?;
+  let key = input.parse::<ID>()?.to_string();
   input.parse::<kw::using>()?;
-  let precedence = input.parse::<Precedence>()?;
+  let precedence = input.parse::<ID>()?.to_string();
 
   return Ok(FilterExpr::Higher(key, precedence))
 }
 
 fn parse_filter_lower(input: ParseStream) -> Result<FilterExpr> {
   input.parse::<kw::lower>()?;
-  let key = input.parse::<Key>()?;
+  let key = input.parse::<ID>()?.to_string();
   input.parse::<kw::using>()?;
-  let precedence = input.parse::<Precedence>()?;
+  let precedence = input.parse::<ID>()?.to_string();
 
   return Ok(FilterExpr::Lower(key, precedence))
 }
@@ -1011,20 +903,36 @@ fn parse_filter_size(input: ParseStream) -> Result<FilterExpr> {
   return Ok(FilterExpr::Size(operator, Box::new(int)))
 }
 
-fn parse_filter_key_eq(input: ParseStream) -> Result<FilterExpr> {
-  let key = input.parse::<Key>()?;
+fn parse_filter_key_eq_string(input: ParseStream) -> Result<FilterExpr> {
+  let key = input.parse::<ID>()?.to_string();
   input.parse::<Token![==]>()?;
   let string = input.parse::<StringExpr>()?;
 
-  return Ok(FilterExpr::KeyEq(key, Box::new(string)))
+  return Ok(FilterExpr::KeyEqString(key, Box::new(string)))
 }
 
-fn parse_filter_key_neq(input: ParseStream) -> Result<FilterExpr> {
-  let key = input.parse::<Key>()?;
+fn parse_filter_key_neq_string(input: ParseStream) -> Result<FilterExpr> {
+  let key = input.parse::<ID>()?.to_string();
   input.parse::<Token![!=]>()?;
   let string = input.parse::<StringExpr>()?;
 
-  return Ok(FilterExpr::KeyNeq(key, Box::new(string)))
+  return Ok(FilterExpr::KeyNeqString(key, Box::new(string)))
+}
+
+fn parse_filter_key_eq_value(input: ParseStream) -> Result<FilterExpr> {
+  let key = input.parse::<ID>()?.to_string();
+  input.parse::<Token![==]>()?;
+  let value = input.parse::<ID>()?.to_string();
+
+  return Ok(FilterExpr::KeyEqValue(key, value))
+}
+
+fn parse_filter_key_neq_value(input: ParseStream) -> Result<FilterExpr> {
+  let key = input.parse::<ID>()?.to_string();
+  input.parse::<Token![!=]>()?;
+  let value = input.parse::<ID>()?.to_string();
+
+  return Ok(FilterExpr::KeyNeqValue(key, value))
 }
 
 fn parse_filter_and(input: ParseStream) -> Result<FilterExpr> {
@@ -1049,13 +957,13 @@ fn parse_filter_or(input: ParseStream) -> Result<FilterExpr> {
 
 fn parse_filter_not_combo(input: ParseStream) -> Result<FilterExpr> {
   input.parse::<kw::not>()?;
-  let combo = input.parse::<Combo>()?;
+  let combo = input.parse::<ID>()?.to_string();
 
   return Ok(FilterExpr::NotCombo(combo))
 }
 
 fn parse_filter_combo(input: ParseStream) -> Result<FilterExpr> {
-  let combo = input.parse::<Combo>()?;
+  let combo = input.parse::<ID>()?.to_string();
 
   return Ok(FilterExpr::Combo(combo))
 }
@@ -1090,16 +998,16 @@ fn parse_group_cardposition(input: ParseStream) -> Result<Group> {
 }
 
 fn parse_group_not_combo_in_location(input: ParseStream) -> Result<Group> {
-  let combo = input.parse::<Combo>()?;
+  let combo = input.parse::<ID>()?.to_string();
   input.parse::<kw::not>()?;
   input.parse::<Token![in]>()?;
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
 
   return Ok(Group::NotComboInLocation(combo, location));
 }
 
 fn parse_group_not_combo_in_location_collection(input: ParseStream) -> Result<Group> {
-  let combo = input.parse::<Combo>()?;
+  let combo = input.parse::<ID>()?.to_string();
   input.parse::<kw::not>()?;
   input.parse::<Token![in]>()?;
   let locationcollection = input.parse::<LocationCollection>()?;
@@ -1108,15 +1016,15 @@ fn parse_group_not_combo_in_location_collection(input: ParseStream) -> Result<Gr
 }
 
 fn parse_group_combo_in_location(input: ParseStream) -> Result<Group> {
-  let combo = input.parse::<Combo>()?;
+  let combo = input.parse::<ID>()?.to_string();
   input.parse::<Token![in]>()?;
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
 
   return Ok(Group::ComboInLocation(combo, location));
 }
 
 fn parse_group_combo_in_location_collection(input: ParseStream) -> Result<Group> {
-  let combo = input.parse::<Combo>()?;
+  let combo = input.parse::<ID>()?.to_string();
   input.parse::<Token![in]>()?;
   let locationcollection = input.parse::<LocationCollection>()?;
 
@@ -1138,7 +1046,7 @@ fn parse_group_locaiton_collection(input: ParseStream) -> Result<Group> {
 }
 
 fn parse_group_locaiton_where(input: ParseStream) -> Result<Group> {
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
   input.parse::<Token![where]>()?;
   let filter: FilterExpr = input.parse()?;
   
@@ -1146,7 +1054,7 @@ fn parse_group_locaiton_where(input: ParseStream) -> Result<Group> {
 }
 
 fn parse_group_locaiton(input: ParseStream) -> Result<Group> {
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
   
   return Ok(Group::Location(location));
 }
@@ -1215,10 +1123,10 @@ impl Parse for LocationCollection {
   fn parse(input: ParseStream) -> Result<Self> {
     let content;
     parenthesized!(content in input);
-    let locations: Punctuated<Location, Token![,]> =
-        content.parse_terminated(Location::parse, Token![,])?;
+    let locations: Punctuated<ID, Token![,]> =
+        content.parse_terminated(ID::parse, Token![,])?;
 
-    return Ok(LocationCollection { locations: locations.into_iter().collect() })
+    return Ok(LocationCollection { locations: locations.into_iter().map(|l| l.to_string()).collect() })
   }
 }
 
@@ -1374,15 +1282,7 @@ fn parse_collection_cardset(input: ParseStream) -> Result<Collection> {
 fn parse_collection_string_collection(input: ParseStream) -> Result<Collection> {
   let stringcollection = input.parse::<StringCollection>()?;
 
-  for string in stringcollection.strings.iter() {
-    // check if parsing is ambiguous
-    if !matches!(string, StringExpr::ID(_)) {
-      return Ok(Collection::StringCollection(stringcollection))
-    }
-  }
-
-  // return if parsing ambiguous
-  return Err(input.error("Ambiguous parsing!"))
+  return Ok(Collection::StringCollection(stringcollection))
 }
 
 fn parse_collection_ambiguous(input: ParseStream) -> Result<Collection> {
@@ -1391,7 +1291,7 @@ fn parse_collection_ambiguous(input: ParseStream) -> Result<Collection> {
   let ids: Punctuated<ID, Token![,]> =
       content.parse_terminated(ID::parse, Token![,])?;
 
-  return Ok(Collection::Ambiguous(ids.into_iter().collect()))
+  return Ok(Collection::Ambiguous(ids.into_iter().map(|id| id.to_string()).collect()))
 }
 
 // ===========================================================================
@@ -1663,13 +1563,13 @@ impl Parse for TokenLocExpr {
 }
 
 fn parse_token_loc_expr_location(input: ParseStream) -> Result<TokenLocExpr> {
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
 
   return Ok(TokenLocExpr::Location(location))
 }
 
 fn parse_token_loc_expr_location_player(input: ParseStream) -> Result<TokenLocExpr> {
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
   input.parse::<kw::of>()?;
   let player = input.parse::<PlayerExpr>()?;
       
@@ -1677,7 +1577,7 @@ fn parse_token_loc_expr_location_player(input: ParseStream) -> Result<TokenLocEx
 }
 
 fn parse_token_loc_expr_location_player_collection(input: ParseStream) -> Result<TokenLocExpr> {
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
   input.parse::<kw::of>()?;
   let playercollection = input.parse::<PlayerCollection>()?;
       
@@ -1725,21 +1625,23 @@ impl Parse for TokenMove {
 fn parse_token_move_place_quantity(input: ParseStream) -> Result<TokenMove> {
   input.parse::<kw::place>()?;
   let quantity = input.parse::<Quantity>()?;
+  let token = input.parse::<ID>()?.to_string();
   input.parse::<kw::from>()?;
   let from_tokenloc = input.parse::<TokenLocExpr>()?;
   input.parse::<kw::to>()?;
   let to_tokenloc = input.parse::<TokenLocExpr>()?;
 
-  return Ok(TokenMove::PlaceQuantity(quantity, from_tokenloc, to_tokenloc))
+  return Ok(TokenMove::PlaceQuantity(quantity, token, from_tokenloc, to_tokenloc))
 }
 
 fn parse_token_move_place(input: ParseStream) -> Result<TokenMove> {
   input.parse::<kw::place>()?;
+  let token = input.parse::<ID>()?.to_string();
   let from_tokenloc = input.parse::<TokenLocExpr>()?;
   input.parse::<kw::to>()?;
   let to_tokenloc = input.parse::<TokenLocExpr>()?;
 
-  return Ok(TokenMove::Place(from_tokenloc, to_tokenloc))
+  return Ok(TokenMove::Place(token, from_tokenloc, to_tokenloc))
 }
 
 // ===========================================================================
@@ -1798,7 +1700,6 @@ impl Parse for Rule {
         parse_set_memory_collection,
         parse_set_memory_int,
         parse_set_memory_string,
-        parse_set_memory_ambiguous,
       ]
     )
   }
@@ -1809,22 +1710,22 @@ fn parse_create_players(input: ParseStream) -> Result<Rule> {
   input.parse::<Token![:]>()?;
   let content;
   parenthesized!(content in input);
-  let players: Punctuated<PlayerName, Token![,]> =
-      content.parse_terminated(PlayerName::parse, Token![,])?;
+  let players: Punctuated<ID, Token![,]> =
+      content.parse_terminated(ID::parse, Token![,])?;
 
-  return Ok(Rule::CreatePlayer(players.into_iter().collect()))
+  return Ok(Rule::CreatePlayer(players.into_iter().map(|p| p.to_string()).collect()))
 }
 
 fn parse_create_team(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::team>()?;
-  let teamname = input.parse::<TeamName>()?;
+  let teamname = input.parse::<ID>()?.to_string();
   input.parse::<Token![:]>()?;
   let content;
   parenthesized!(content in input);
-  let players: Punctuated<PlayerName, Token![,]> =
-      content.parse_terminated(PlayerName::parse, Token![,])?;
+  let players: Punctuated<ID, Token![,]> =
+      content.parse_terminated(ID::parse, Token![,])?;
 
-  return Ok(Rule::CreateTeam(teamname, players.into_iter().collect()))
+  return Ok(Rule::CreateTeam(teamname, players.into_iter().map(|p| p.to_string()).collect()))
 }
 
 fn parse_create_turnorder_random(input: ParseStream) -> Result<Rule> {
@@ -1833,10 +1734,10 @@ fn parse_create_turnorder_random(input: ParseStream) -> Result<Rule> {
   input.parse::<Token![:]>()?;
   let content;
   parenthesized!(content in input);
-  let players: Punctuated<PlayerName, Token![,]> =
-      content.parse_terminated(PlayerName::parse, Token![,])?;
+  let players: Punctuated<ID, Token![,]> =
+      content.parse_terminated(ID::parse, Token![,])?;
 
-  return Ok(Rule::CreateTurnorderRandom(players.into_iter().collect()))
+  return Ok(Rule::CreateTurnorderRandom(players.into_iter().map(|p| p.to_string()).collect()))
 }
 
 fn parse_create_turnorder(input: ParseStream) -> Result<Rule> {
@@ -1844,10 +1745,10 @@ fn parse_create_turnorder(input: ParseStream) -> Result<Rule> {
   input.parse::<Token![:]>()?;
   let content;
   parenthesized!(content in input);
-  let players: Punctuated<PlayerName, Token![,]> =
-      content.parse_terminated(PlayerName::parse, Token![,])?;
+  let players: Punctuated<ID, Token![,]> =
+      content.parse_terminated(ID::parse, Token![,])?;
 
-  return Ok(Rule::CreateTurnorder(players.into_iter().collect()))
+  return Ok(Rule::CreateTurnorder(players.into_iter().map(|p| p.to_string()).collect()))
 }
 
 fn parse_create_location_collection_on_player_collection(input: ParseStream) -> Result<Rule> {
@@ -1892,7 +1793,7 @@ fn parse_create_location_collection_on_table(input: ParseStream) -> Result<Rule>
 
 fn parse_create_location_on_player_collection(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::location>()?;
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
   input.parse::<kw::on>()?;
   let playercollection = input.parse::<PlayerCollection>()?;
 
@@ -1905,7 +1806,7 @@ fn parse_create_location_on_player_collection(input: ParseStream) -> Result<Rule
 
 fn parse_create_location_on_team_collection(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::location>()?;
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
   input.parse::<kw::on>()?;
   input.parse::<kw::teams>()?;
   let teamcollection = input.parse::<TeamCollection>()?;
@@ -1919,7 +1820,7 @@ fn parse_create_location_on_team_collection(input: ParseStream) -> Result<Rule> 
 
 fn parse_create_location_on_table(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::location>()?;
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
   input.parse::<kw::on>()?;
   input.parse::<kw::table>()?;
   
@@ -1933,7 +1834,7 @@ fn parse_create_location_on_table(input: ParseStream) -> Result<Rule> {
 fn parse_create_card_on_location(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::card>()?;
   input.parse::<kw::on>()?;
-  let location= input.parse::<Location>()?;
+  let location= input.parse::<ID>()?.to_string();
   input.parse::<Token![:]>()?;
   let types = input.parse::<Types>()?;
 
@@ -1945,9 +1846,9 @@ fn parse_create_card_on_location(input: ParseStream) -> Result<Rule> {
 fn parse_create_token_on_location(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::token>()?;
   let amount = input.parse::<IntExpr>()?;
-  let token_type = input.parse::<Token>()?;
+  let token_type = input.parse::<ID>()?.to_string();
   input.parse::<kw::on>()?;
-  let location = input.parse::<Location>()?;
+  let location = input.parse::<ID>()?.to_string();
 
   return Ok(Rule::CreateTokenOnLocation(
     amount, token_type, location
@@ -1956,17 +1857,17 @@ fn parse_create_token_on_location(input: ParseStream) -> Result<Rule> {
 
 fn parse_create_precedence(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::precedence>()?;
-  let precedence = input.parse::<Precedence>()?;
+  let precedence = input.parse::<ID>()?.to_string();
   
   if input.peek(kw::on) {
     input.parse::<kw::on>()?;
-    let key = input.parse::<Key>()?;
+    let key = input.parse::<ID>()?.to_string();
     let content;
     parenthesized!(content in input);
-    let values: Punctuated<Value, Token![,]> =
-      content.parse_terminated(Value::parse, Token![,])?;
+    let values: Punctuated<ID, Token![,]> =
+      content.parse_terminated(ID::parse, Token![,])?;
 
-    let key_value_pairs = values.into_iter().map(|v| (key.clone(), v)).collect();
+    let key_value_pairs = values.into_iter().map(|v| (key.clone(), v.to_string())).collect();
 
     return Ok(Rule::CreatePrecedence(precedence, key_value_pairs))
   }
@@ -1975,10 +1876,10 @@ fn parse_create_precedence(input: ParseStream) -> Result<Rule> {
   parenthesized!(content in input);
   let mut key_value_pairs = Vec::new();
   while !content.is_empty() {
-    let key = content.parse::<Key>()?;
+    let key = content.parse::<ID>()?.to_string();
     let in_content;
     parenthesized!(in_content in content);
-    let value = in_content.parse::<Value>()?;
+    let value = in_content.parse::<ID>()?.to_string();
     key_value_pairs.push((key, value));
 
     if content.peek(Token![,]) {
@@ -1995,17 +1896,17 @@ fn parse_create_precedence(input: ParseStream) -> Result<Rule> {
 
 fn parse_create_pointmap(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::pointmap>()?;
-  let pointmap = input.parse::<PointMap>()?;
+  let pointmap = input.parse::<ID>()?.to_string();
   
   if input.peek(kw::on) {
     input.parse::<kw::on>()?;
-    let key = input.parse::<Key>()?;
+    let key = input.parse::<ID>()?.to_string();
     let content;
     parenthesized!(content in input);
     let mut key_value_int_triples = Vec::new();
     
     while !content.is_empty() {
-      let value = content.parse::<Value>()?;
+      let value = content.parse::<ID>()?.to_string();
       content.parse::<Token![:]>()?;
       let int = content.parse::<IntExpr>()?;
       key_value_int_triples.push((key.clone(), value, int));
@@ -2027,10 +1928,10 @@ fn parse_create_pointmap(input: ParseStream) -> Result<Rule> {
   let mut key_value_int_triples = Vec::new();
   
   while !content.is_empty() {
-    let key = content.parse::<Key>()?;
+    let key = content.parse::<ID>()?.to_string();
     let in_content;
     parenthesized!(in_content in content);
-    let value = in_content.parse::<Value>()?;
+    let value = in_content.parse::<ID>()?.to_string();
     in_content.parse::<Token![:]>()?;
     let int = in_content.parse::<IntExpr>()?;
     key_value_int_triples.push((key.clone(), value, int));
@@ -2049,7 +1950,7 @@ fn parse_create_pointmap(input: ParseStream) -> Result<Rule> {
 
 fn parse_create_combo(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::combo>()?;
-  let combo = input.parse::<Combo>()?;
+  let combo = input.parse::<ID>()?.to_string();
   input.parse::<Token![where]>()?;
   let filter = input.parse::<FilterExpr>()?;
 
@@ -2058,7 +1959,7 @@ fn parse_create_combo(input: ParseStream) -> Result<Rule> {
 
 fn parse_create_memory_table(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::memory>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   input.parse::<kw::on>()?;
   input.parse::<kw::table>()?;
 
@@ -2067,7 +1968,7 @@ fn parse_create_memory_table(input: ParseStream) -> Result<Rule> {
 
 fn parse_create_memory_player_collection(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::memory>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   input.parse::<kw::on>()?;
   let player_collection = input.parse::<PlayerCollection>()?;
 
@@ -2076,7 +1977,7 @@ fn parse_create_memory_player_collection(input: ParseStream) -> Result<Rule> {
 
 fn parse_create_memory_int_table(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::memory>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   let int = input.parse::<IntExpr>()?;
   input.parse::<kw::on>()?;
   input.parse::<kw::table>()?;
@@ -2086,7 +1987,7 @@ fn parse_create_memory_int_table(input: ParseStream) -> Result<Rule> {
 
 fn parse_create_memory_int_player_collection(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::memory>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   let int = input.parse::<IntExpr>()?;
   input.parse::<kw::on>()?;
   let player_collection = input.parse::<PlayerCollection>()?;
@@ -2096,7 +1997,7 @@ fn parse_create_memory_int_player_collection(input: ParseStream) -> Result<Rule>
 
 fn parse_create_memory_string_table(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::memory>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   let string = input.parse::<StringExpr>()?;
   input.parse::<kw::on>()?;
   input.parse::<kw::table>()?;
@@ -2106,7 +2007,7 @@ fn parse_create_memory_string_table(input: ParseStream) -> Result<Rule> {
 
 fn parse_create_memory_string_player_collection(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::memory>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   let string = input.parse::<StringExpr>()?;
   input.parse::<kw::on>()?;
   let player_collection = input.parse::<PlayerCollection>()?;
@@ -2213,7 +2114,7 @@ fn parse_bid_action_memory(input: ParseStream) -> Result<Rule> {
   input.parse::<kw::bid>()?;
   let quantity = input.parse::<Quantity>()?;
   input.parse::<kw::on>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   
   return Ok(Rule::BidActionMemory(memory, quantity))
 }
@@ -2300,7 +2201,7 @@ fn parse_winner_rule(input: ParseStream) -> Result<Rule> {
 }
 
 fn parse_set_memory_collection(input: ParseStream) -> Result<Rule> {
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   input.parse::<kw::is>()?;
   let collection = input.parse::<Collection>()?;
 
@@ -2312,7 +2213,7 @@ fn parse_set_memory_collection(input: ParseStream) -> Result<Rule> {
 }
 
 fn parse_set_memory_int(input: ParseStream) -> Result<Rule> {
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   input.parse::<kw::is>()?;
   let int = input.parse::<IntExpr>()?;
 
@@ -2320,23 +2221,11 @@ fn parse_set_memory_int(input: ParseStream) -> Result<Rule> {
 }
 
 fn parse_set_memory_string(input: ParseStream) -> Result<Rule> {
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   input.parse::<kw::is>()?;
   let string = input.parse::<StringExpr>()?;
 
-  if matches!(string, StringExpr::ID(_)) {
-    return Err(input.error("Ambiguous parsing"))
-  }
-
   return Ok(Rule::SetMemoryString(memory, string))
-}
-
-fn parse_set_memory_ambiguous(input: ParseStream) -> Result<Rule> {
-  let memory = input.parse::<Memory>()?;
-  input.parse::<kw::is>()?;
-  let id = input.parse::<ID>()?;
-
-  return Ok(Rule::SetMemoryAmbiguous(memory, id))
 }
 
 // ===========================================================================
@@ -2347,14 +2236,14 @@ fn parse_set_memory_ambiguous(input: ParseStream) -> Result<Rule> {
 impl Parse for Types {
   fn parse(input: ParseStream) -> Result<Self> {
     let mut types = Vec::new();
-    let key = input.parse::<Key>()?;
+    let key = input.parse::<ID>()?.to_string();
     let content;
     parenthesized!(content in input);
 
-    let values: Punctuated<Value, Token![,]> =
-      content.parse_terminated(Value::parse, Token![,])?;
+    let values: Punctuated<ID, Token![,]> =
+      content.parse_terminated(ID::parse, Token![,])?;
 
-    types.push((key, values.into_iter().collect()));
+    types.push((key, values.into_iter().map(|v| v.to_string()).collect()));
 
     if input.peek(Token![for]) {
       input.parse::<Token![for]>()?;
@@ -2389,7 +2278,7 @@ fn parse_score_player_collection_memory(input: ParseStream) -> Result<ScoreRule>
   input.parse::<kw::score>()?;
   let int = input.parse::<IntExpr>()?;
   input.parse::<kw::to>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   input.parse::<kw::of>()?;
   let playercollection = input.parse::<PlayerCollection>()?;
 
@@ -2400,7 +2289,7 @@ fn parse_score_player_memory(input: ParseStream) -> Result<ScoreRule> {
   input.parse::<kw::score>()?;
   let int = input.parse::<IntExpr>()?;
   input.parse::<kw::to>()?;
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
   input.parse::<kw::of>()?;
   let player = input.parse::<PlayerExpr>()?;
 
@@ -2468,7 +2357,7 @@ fn parse_winner_winner_is_lowest_memory(input: ParseStream) -> Result<WinnerRule
   input.parse::<kw::is>()?;
   input.parse::<kw::lowest>()?;
 
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
 
   return Ok(WinnerRule::WinnerLowestMemory(memory))
 }
@@ -2496,7 +2385,7 @@ fn parse_winner_winner_is_highest_memory(input: ParseStream) -> Result<WinnerRul
   input.parse::<kw::is>()?;
   input.parse::<kw::highest>()?;
 
-  let memory = input.parse::<Memory>()?;
+  let memory = input.parse::<ID>()?.to_string();
 
   return Ok(WinnerRule::WinnerHighestMemory(memory))
 }
@@ -2509,7 +2398,7 @@ fn parse_winner_winner_is_highest_memory(input: ParseStream) -> Result<WinnerRul
 impl Parse for SeqStage {
   fn parse(input: ParseStream) -> Result<Self> {
     input.parse::<kw::stage>()?;
-    let stage = input.parse::<Stage>()?;
+    let stage = input.parse::<ID>()?.to_string();
 
     input.parse::<Token![for]>()?;
     let player = input.parse::<PlayerExpr>()?;

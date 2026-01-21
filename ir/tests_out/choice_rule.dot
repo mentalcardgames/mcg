@@ -1,12 +1,12 @@
 digraph FSM {
   rankdir=LR;
   node [shape = circle];
+  2 -> 1 [label="Action(EndTurn)"];
+  0 -> 2 [label="Choice"];
+  3 -> 1 [label="Optional"];
+  0 -> 3 [label="Choice"];
   3 -> 4 [label="Optional"];
   4 -> 1 [label="Action(EndTurn)"];
-  0 -> 3 [label="Choice"];
-  3 -> 1 [label="Optional"];
-  0 -> 2 [label="Choice"];
-  2 -> 1 [label="Action(EndTurn)"];
   start [shape=point];
   start -> 0;
 }

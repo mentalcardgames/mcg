@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use ast::ast::*;
+    use ast::{asts::ast::*, helper::test_helper::test_helper::location};
     use syn::parse_str;
-    use ast::test_helper::test_helper as th;
+    use ast::helper::test_helper::test_helper as th;
 
     // PlayerExpr ============================================================
     
@@ -575,16 +575,6 @@ mod tests {
     // StringExpr ============================================================
     
     #[test]
-    fn parses_valid_stringexpr_id() {
-        let parsed: StringExpr = parse_str(
-          "Monkey"
-        ).unwrap();
-        assert_eq!(parsed, StringExpr::ID(
-          th::id("Monkey")
-        ));
-    }
-
-    #[test]
     fn parses_valid_stringexpr_key_of() {
         let parsed: StringExpr = parse_str(
           "Rank of top(Hand)"
@@ -595,22 +585,22 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn parses_valid_stringexpr_collection_at() {
-        let parsed: StringExpr = parse_str(
-          "(A, B, C)[3]"
-        ).unwrap();
-        assert_eq!(parsed, StringExpr::StringCollectionAt(
-          StringCollection {
-            strings: vec![
-              StringExpr::ID(th::id("A")),
-              StringExpr::ID(th::id("B")),
-              StringExpr::ID(th::id("C"))
-            ]
-          },
-          IntExpr::Int(3)
-        ));
-    }
+    // #[test]
+    // fn parses_valid_stringexpr_collection_at() {
+    //     let parsed: StringExpr = parse_str(
+    //       "(A, B, C)[3]"
+    //     ).unwrap();
+    //     assert_eq!(parsed, StringExpr::StringCollectionAt(
+    //       StringCollection {
+    //         strings: vec![
+    //           StringExpr::ID(th::id("A")),
+    //           StringExpr::ID(th::id("B")),
+    //           StringExpr::ID(th::id("C"))
+    //         ]
+    //       },
+    //       IntExpr::Int(3)
+    //     ));
+    // }
 
     // =======================================================================
 
@@ -793,10 +783,10 @@ mod tests {
           "Rank == Ace"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::KeyEq(
+          FilterExpr::KeyEqValue(
             th::key("Rank"),
-            // TODO: Should be Value not StringExpr
-            Box::new(StringExpr::ID(th::id("Ace"))))
+            th::value("Ace"),
+          )
         );
     }
 
@@ -806,10 +796,10 @@ mod tests {
           "Rank != Ace"
         ).unwrap();
         assert_eq!(parsed, 
-          FilterExpr::KeyNeq(
+          FilterExpr::KeyNeqValue(
             th::key("Rank"),
-            // TODO: Should be Value not StringExpr
-            Box::new(StringExpr::ID(th::id("Ace"))))
+            th::value("Ace"),
+          )
         );
     }
 
@@ -1134,20 +1124,20 @@ mod tests {
 
     // StringCollection ======================================================
 
-    #[test]
-    fn parses_valid_stringcollection() {
-        let parsed: StringCollection = parse_str(
-          "(A, B)"
-        ).unwrap();
-        assert_eq!(parsed,
-          StringCollection {
-            strings: vec![
-              StringExpr::ID(th::id("A")),
-              StringExpr::ID(th::id("B")),
-            ]
-          }
-        );
-    }
+    // #[test]
+    // fn parses_valid_stringcollection() {
+    //     let parsed: StringCollection = parse_str(
+    //       "(A, B)"
+    //     ).unwrap();
+    //     assert_eq!(parsed,
+    //       StringCollection {
+    //         strings: vec![
+    //           StringExpr::ID(th::id("A")),
+    //           StringExpr::ID(th::id("B")),
+    //         ]
+    //       }
+    //     );
+    // }
 
     // =======================================================================
 
@@ -1225,9 +1215,9 @@ mod tests {
         assert_eq!(parsed,
           Collection::Ambiguous(
             vec![
-              ID::new("Hand"),
-              ID::new("Deck"),
-              ID::new("Hand"),
+              ("Hand").to_string(),
+              ("Deck").to_string(),
+              ("Hand").to_string(),
             ]
           )
         );
@@ -1236,15 +1226,15 @@ mod tests {
     #[test]
     fn parses_valid_collection_stringcollection() {
         let parsed: Collection = parse_str(
-          "(A, Rank of top(Hand), C)"
+          "(Rank of top(Hand), Rank of top(Hand), Rank of top(Hand))"
         ).unwrap();
         assert_eq!(parsed,
           Collection::StringCollection(
             StringCollection {
             strings: vec![
-              StringExpr::ID(th::id("A")),
               StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
-              StringExpr::ID(th::id("C")),
+              StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
+              StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
             ]
           }
           )
@@ -1663,10 +1653,11 @@ mod tests {
     #[test]
     fn parses_valid_tokenmove_place() {
         let parsed: TokenMove = parse_str(
-          "place Hand to Deck"
+          "place Token Hand to Deck"
         ).unwrap();
         assert_eq!(parsed,
           TokenMove::Place(
+            th::token("Token"),
             TokenLocExpr::Location(
               th::location("Hand")
             ),
@@ -1680,11 +1671,12 @@ mod tests {
     #[test]
     fn parses_valid_tokenmove_place_quantity() {
         let parsed: TokenMove = parse_str(
-          "place all from Hand to Deck"
+          "place all Token from Hand to Deck"
         ).unwrap();
         assert_eq!(parsed,
           TokenMove::PlaceQuantity(
             Quantity::Quantifier(Quantifier::All),
+            th::token("Token"),
             TokenLocExpr::Location(
               th::location("Hand")
             ),
@@ -1994,12 +1986,12 @@ mod tests {
     #[test]
     fn parses_valid_rule_create_memory_string_playercollection() {
         let parsed: Rule = parse_str(
-          "memory Square Monkey on (current, P2, P3)"
+          "memory Square Rank of top(Hand) on (current, P2, P3)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryStringPlayerCollection(
             th::memory("Square"),
-            StringExpr::ID(th::id("Monkey")),
+            StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(location("Hand"))),
             PlayerCollection::Player(
               vec![
                 th::CURRENT,
@@ -2014,12 +2006,12 @@ mod tests {
     #[test]
     fn parses_valid_rule_create_memory_string_table() {
         let parsed: Rule = parse_str(
-          "memory Square Monkey on table"
+          "memory Square Rank of top(Hand) on table"
         ).unwrap();
         assert_eq!(parsed,
           Rule::CreateMemoryStringTable(
             th::memory("Square"),
-            StringExpr::ID(th::id("Monkey")),
+            StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(location("Hand"))),
           )
         );
     }
@@ -2220,18 +2212,18 @@ mod tests {
         );
     }
 
-    #[test]
-    fn parses_valid_rule_set_memory_ambiguous() {
-        let parsed: Rule = parse_str(
-          "Square is A"
-        ).unwrap();
-        assert_eq!(parsed,
-          Rule::SetMemoryAmbiguous(
-            th::memory("Square"),
-            th::id("A")
-          )
-        );
-    }
+    // #[test]
+    // fn parses_valid_rule_set_memory_ambiguous() {
+    //     let parsed: Rule = parse_str(
+    //       "Square is A"
+    //     ).unwrap();
+    //     assert_eq!(parsed,
+    //       Rule::SetMemoryAmbiguous(
+    //         th::memory("Square"),
+    //         th::id("A")
+    //       )
+    //     );
+    // }
 
     #[test]
     fn parses_valid_rule_set_memory_collection() {
@@ -2338,13 +2330,11 @@ mod tests {
     #[test]
     fn parses_valid_rule_demand_string() {
         let parsed: Rule = parse_str(
-          "demand A"
+          "demand Rank of top(Hand)"
         ).unwrap();
         assert_eq!(parsed,
           Rule::DemandStringAction(
-            StringExpr::ID(
-              th::id("A")
-            )
+            StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(location("Hand"))),
           )
         );
     }

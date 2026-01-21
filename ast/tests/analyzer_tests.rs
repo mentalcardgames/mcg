@@ -1,46 +1,61 @@
 mod test {
-  use ast::{analyzer::analyzer::Analyzer, ast::*};
+  use ast::{analyzer::analyzer::Analyzer, asts::ast::*};
   use syn::parse_str;
 
 
   #[test]
   fn analyzer_valid_create_player() {
-    let parsed: Rule = parse_str(
-      "players: (P1, P2, P3)"
+    let parsed: Game = parse_str(
+      "players: (P1, P2, P3);"
     ).unwrap();
 
     let mut analyzer = Analyzer::default();
-    let res = analyzer.analyze_rule(&parsed);
+    let res = analyzer.analyze_game(&parsed);
 
     println!("{:?}", res)
   }
   
   #[test]
   fn analyzer_fail_create_player() {
-    let parsed: Rule = parse_str(
-      "players: (P1, P1, P3)"
+    let parsed: Game = parse_str(
+      "players: (P1, P1, P3);"
     ).unwrap();
 
     let mut analyzer = Analyzer::default();
-    let res = analyzer.analyze_rule(&parsed);
+    let res = analyzer.analyze_game(&parsed);
 
     println!("{:?}", res)
   }
 
   #[test]
   fn analyzer_fail_create_team() {
-    let parsed: Rule = parse_str(
-      "team T1: (P1, P2, P3)"
+    let parsed: Game = parse_str(
+      "team T1: (P1, P2, P3);"
     ).unwrap();
 
     let mut analyzer = Analyzer::default();
-    let res = analyzer.analyze_rule(&parsed);
+    let res = analyzer.analyze_game(&parsed);
 
     println!("{:?}", res)
   }
 
   #[test]
-  fn analyzer_fail_game() {
+  fn analyzer_fail_create_team_game() {
+    let parsed: Game = parse_str(
+      "
+        players: (P1, P2, P3);
+        team T1: (P1, P2, P3);
+      "
+    ).unwrap();
+
+    let mut analyzer = Analyzer::default();
+    let res = analyzer.analyze_game(&parsed);
+
+    println!("{:?}", res)
+  }
+
+  #[test]
+  fn analyzer_valid_game() {
     let parsed: Game = parse_str(
       "
         players: (P1, P2, P3);
@@ -96,7 +111,7 @@ mod test {
           move Hand face up to Trash;
         }
 
-        LeftOver is 0;
+        memory LeftOver on all;
         score sum of Trash using Values to LeftOver of all;
         winner is lowest LeftOver;
       "

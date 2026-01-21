@@ -1,6 +1,8 @@
 use std::fmt;
 use std::fmt::Display;
 
+use crate::parse::ast_to_typed_ast::TypeError;
+
 #[derive(Debug)]
 pub enum AnalyzerError {
     NoDslType,
@@ -11,6 +13,9 @@ pub enum AnalyzerError {
     UnknownID(String),
     UnknownPlayerNameUsed(String),
     DuplicateIDs(Vec<String>),
+    TypeError(TypeError),
+    // TODO: find better AnalyzerError names
+    Default,
 }
 
 impl Display for AnalyzerError {
@@ -32,6 +37,11 @@ impl Display for AnalyzerError {
           write!(f, "ID {} unknown", id),
       AnalyzerError::DuplicateIDs(ids) => 
           write!(f, "Duplicate IDs in {:?}", ids),
+      AnalyzerError::TypeError(te) => 
+          write!(f, "{:?}", dbg!(te)),
+      AnalyzerError::Default => 
+          write!(f, "Default Error"),
+    
     }
   }
 }
