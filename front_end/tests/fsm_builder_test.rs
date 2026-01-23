@@ -1,10 +1,10 @@
 mod test {
   use std::{path::Path, process::Command};
 
-  use front_end::analyzer::analyze_ast;
+  use front_end::analysis::analyze_ast;
 
-  use front_end::fsm::*;
-  use front_end::fsm_to_dot::*;
+  use front_end::ir::*;
+  use front_end::helper::fsm_to_dot::*;
   use syn::parse_str;
 
   fn show_graph(fsm: &FSM, name: &str) {
@@ -230,6 +230,8 @@ mod test {
       );
 
       show_graph(&fsm, "game");
-    }    
+    }
+
+    println!("{:?}", analyze_ast(&game))
   }
 }

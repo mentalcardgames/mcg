@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use crate::fsm::*;
+use crate::ir::*;
 
 pub fn fsm_to_dot(fsm: &FSM, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::create(path).unwrap();

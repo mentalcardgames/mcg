@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use front_end::{ast::*, test_helper::test_helper::location};
+    use front_end::ast::*;
+    use front_end::helper::test_helper as th;
+
     use syn::parse_str;
-    use front_end::test_helper::test_helper as th;
 
     // PlayerExpr ============================================================
     
@@ -2017,7 +2018,7 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreateMemoryStringPlayerCollection(
             th::memory("Square"),
-            StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(location("Hand"))),
+            StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
             PlayerCollection::Player(
               vec![
                 th::CURRENT,
@@ -2037,7 +2038,7 @@ mod tests {
         assert_eq!(parsed,
           Rule::CreateMemoryStringTable(
             th::memory("Square"),
-            StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(location("Hand"))),
+            StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
           )
         );
     }
@@ -2360,7 +2361,7 @@ mod tests {
         ).unwrap();
         assert_eq!(parsed,
           Rule::DemandStringAction(
-            StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(location("Hand"))),
+            StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
           )
         );
     }

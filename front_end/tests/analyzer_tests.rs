@@ -1,5 +1,5 @@
 mod test {
-  use front_end::{analyzer::analyze_ast, ast::*};
+  use front_end::{analysis::analyze_ast, ast::*};
   use syn::parse_str;
 
 

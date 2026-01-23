@@ -1,4 +1,18 @@
-use crate::game_type::GameType;
+#[derive(Debug, PartialEq, Clone)]
+pub enum GameType {
+  Player,
+  Team,
+  Location,
+  Precedence,
+  PointMap,
+  Combo,
+  Key,
+  Value,
+  Memory,
+  Token,
+  Stage,
+  NoType,
+}
 
 // IDs
 #[derive(Debug, PartialEq, Clone)]

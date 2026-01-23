@@ -1,9 +1,9 @@
-use crate::{ast_to_typed_ast::TypeError, visit_typed_vars::TypedVars};
+use crate::{ast::Game, transform_to_typed::{TypeError, parse_ast_to_typed_ast}, typed_ast, symbols::TypedVars, visitor::Visitor};
 
 #[derive(Debug)]
 pub enum AnalyzerError {
     NoDslType,
-    IdUsed,
+    IdUsed { id: String },
     IdNotCapitalOrEmpty,
     InvalidInteger,
     ReservedKeyword,
@@ -17,4 +17,15 @@ pub enum AnalyzerError {
     NonDeterministicInitialization { created: TypedVars },
     // TODO: More precise AnalyzerErrors
     Default,
+}
+
+// Find a final ast to return (right now typed ast)
+pub fn analyze_ast(ast: &Game) -> Result<typed_ast::Game, AnalyzerError> {
+  let mut ctx: TypedVars = vec![];
+  ast.visit(&mut ctx)?;
+
+  println!("{:?}", ctx);
+
+  // Current return type
+  parse_ast_to_typed_ast(ctx, ast)
 }

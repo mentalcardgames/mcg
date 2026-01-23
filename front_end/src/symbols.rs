@@ -1,4 +1,4 @@
-use crate::{{analyzer_error::AnalyzerError}, {ast::*, game_type::GameType}, visitor::Visitor};
+use crate::{{analysis::AnalyzerError}, {ast::*, typed_ast::GameType}, visitor::Visitor};
 
 pub type TypedVars = Vec<(String, GameType)>;
 
@@ -12,12 +12,12 @@ fn id_not_initialized(value: &TypedVars, id: &String) -> Result<(), AnalyzerErro
 
 fn id_used(value: &mut TypedVars, id: &String, ty: GameType) -> Result<(), AnalyzerError> {
   if !value.iter().map(|(s, _)| s.clone()).collect::<Vec<String>>().contains(id) {
+    value.push((id.clone(), ty));
+
     return Ok(())
   }
 
-  value.push((id.clone(), ty));
-
-  return Err(AnalyzerError::IDNotInitialized { id: id.clone() })
+  return Err(AnalyzerError::IdUsed { id: id.clone() })
 }
 
 impl Visitor<TypedVars> for Game {
@@ -644,7 +644,7 @@ impl Visitor<TypedVars> for Rule {
         }
       },
       Rule::CreateCardOnLocation(location, types) => {
-        id_used(value, location, GameType::Location)?;
+        id_not_initialized(value, location)?;
         types.visit(value)?;
       },
       Rule::CreateTokenOnLocation(int_expr, token, location) => {
