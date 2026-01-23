@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{analyzer::{analyzer_error::AnalyzerError, type_analyzer::TypedVars}, asts::{ast::{self, Game}, game_type::GameType, typed_ast::{self, IntExpr, PlayerExpr, StringExpr, TeamExpr, TypedID}}};
+use crate::{analyzer::{analyzer_error::AnalyzerError, ctx::TypedVars}, asts::{ast::{self, Game}, game_type::GameType, typed_ast::{self, IntExpr, PlayerExpr, StringExpr, TeamExpr, TypedID}}};
 
 pub fn parse_ast_to_typed_ast(ctx: TypedVars, ast: &Game) -> Result<typed_ast::Game, AnalyzerError> {
   let lowering_ctx = LoweringCtx::new(ctx);
@@ -414,8 +414,6 @@ impl Lower<typed_ast::IntRange> for ast::IntRange {
       }
     )
   }
-
-  
 }
 
 impl Lower<typed_ast::LocationCollection> for ast::LocationCollection {
@@ -650,10 +648,10 @@ impl Lower<typed_ast::CardPosition> for ast::CardPosition {
 
           match ty {
             GameType::Precedence => {
-              T::MaxPrecedence(Box::new(card_set.lower(ctx)?), ctx.find(id, GameType::Precedence)?)
+              T::Max(Box::new(card_set.lower(ctx)?), ctx.find(id, GameType::Precedence)?)
             },
             GameType::PointMap => {
-              T::MaxPointMap(Box::new(card_set.lower(ctx)?), ctx.find(id, GameType::PointMap)?)
+              T::Max(Box::new(card_set.lower(ctx)?), ctx.find(id, GameType::PointMap)?)
             },
             _ => {
               return Err(TypeError::PrecedenceOrPointMap { found: ty })
@@ -665,10 +663,10 @@ impl Lower<typed_ast::CardPosition> for ast::CardPosition {
 
           match ty {
             GameType::Precedence => {
-              T::MinPrecedence(Box::new(card_set.lower(ctx)?), ctx.find(id, GameType::Precedence)?)
+              T::Min(Box::new(card_set.lower(ctx)?), ctx.find(id, GameType::Precedence)?)
             },
             GameType::PointMap => {
-              T::MinPointMap(Box::new(card_set.lower(ctx)?), ctx.find(id, GameType::PointMap)?)
+              T::Min(Box::new(card_set.lower(ctx)?), ctx.find(id, GameType::PointMap)?)
             },
             _ => {
               return Err(TypeError::PrecedenceOrPointMap { found: ty })
@@ -823,70 +821,6 @@ impl Lower<typed_ast::BoolExpr> for ast::BoolExpr {
         },
         ast::BoolExpr::OutOfGameCollection(player_collection) => {
           T::OutOfGameCollection(player_collection.lower(ctx)?)
-        },
-        ast::BoolExpr::AmbiguousEq(id, id1) => {
-          let ty = ctx.lookup(id)?;
-          let ty1 = ctx.lookup(id1)?;
-
-          if ty != ty1 {
-            return Err(TypeError::NotMatchingTypes { first: ty, second: ty1 })
-          }
-
-          match ty {
-            GameType::Player => {
-              T::PlayerEq(
-                typed_ast::PlayerExpr::PlayerName(ctx.find(id, GameType::Player)?),
-                typed_ast::PlayerExpr::PlayerName(ctx.find(id1, GameType::Player)?)
-              )
-            },
-            GameType::Team => {
-              T::TeamEq(
-                typed_ast::TeamExpr::TeamName(ctx.find(id, GameType::Team)?),
-                typed_ast::TeamExpr::TeamName(ctx.find(id1, GameType::Team)?)
-              )
-            },
-            GameType::Location => {
-              T::CardSetEq(
-                typed_ast::CardSet::Group(typed_ast::Group::Location(ctx.find(id, GameType::Location)?)),
-                typed_ast::CardSet::Group(typed_ast::Group::Location(ctx.find(id1, GameType::Location)?)),
-              )
-            },
-            _ => {
-              return Err(TypeError::NoBoolExpr { first: ty, second: ty1 })
-            },
-          }
-        },
-        ast::BoolExpr::AmbiguousNeq(id, id1) => {
-          let ty = ctx.lookup(id)?;
-          let ty1 = ctx.lookup(id1)?;
-
-          if ty != ty1 {
-            return Err(TypeError::NotMatchingTypes { first: ty, second: ty1 })
-          }
-
-          match ty {
-            GameType::Player => {
-              T::PlayerNeq(
-                typed_ast::PlayerExpr::PlayerName(ctx.find(id, GameType::Player)?),
-                typed_ast::PlayerExpr::PlayerName(ctx.find(id1, GameType::Player)?)
-              )
-            },
-            GameType::Team => {
-              T::TeamNeq(
-                typed_ast::TeamExpr::TeamName(ctx.find(id, GameType::Team)?),
-                typed_ast::TeamExpr::TeamName(ctx.find(id1, GameType::Team)?)
-              )
-            },
-            GameType::Location => {
-              T::CardSetNeq(
-                typed_ast::CardSet::Group(typed_ast::Group::Location(ctx.find(id, GameType::Location)?)),
-                typed_ast::CardSet::Group(typed_ast::Group::Location(ctx.find(id1, GameType::Location)?)),
-              )
-            },
-            _ => {
-              return Err(TypeError::NoBoolExpr { first: ty, second: ty1 })
-            },
-          }
         },
       }
     )

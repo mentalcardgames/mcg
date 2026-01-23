@@ -1,3 +1,3 @@
 pub mod analyzer_error;
-pub mod type_analyzer;
+pub mod ctx;
 pub mod analyzer;

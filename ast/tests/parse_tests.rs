@@ -398,7 +398,10 @@ mod tests {
         let parsed: BoolExpr = parse_str(
           "A == B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::AmbiguousEq(th::id("A"), th::id("B")));
+        assert_eq!(parsed, BoolExpr::CardSetEq(
+          CardSet::Group(Group::Location(th::location("A"))),
+          CardSet::Group(Group::Location(th::location("B"))),
+        ));
     }
 
     #[test]
@@ -406,7 +409,10 @@ mod tests {
         let parsed: BoolExpr = parse_str(
           "A != B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::AmbiguousNeq(th::id("A"), th::id("B")));
+        assert_eq!(parsed, BoolExpr::CardSetNeq(
+          CardSet::Group(Group::Location(th::location("A"))),
+          CardSet::Group(Group::Location(th::location("B"))),
+        ));
     }
 
     #[test]
@@ -447,8 +453,18 @@ mod tests {
           "(A != B or A != B)"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::Or(
-          Box::new(BoolExpr::AmbiguousNeq(th::id("A"), th::id("B"))),
-          Box::new(BoolExpr::AmbiguousNeq(th::id("A"), th::id("B")))
+          Box::new(
+            BoolExpr::CardSetNeq(
+              CardSet::Group(Group::Location(th::location("A"))),
+              CardSet::Group(Group::Location(th::location("B"))),
+            )
+          ),
+          Box::new(
+            BoolExpr::CardSetNeq(
+              CardSet::Group(Group::Location(th::location("A"))),
+              CardSet::Group(Group::Location(th::location("B"))),
+            )
+          )
         ));
     }
     
@@ -458,8 +474,18 @@ mod tests {
           "(A != B and A != B)"
         ).unwrap();
         assert_eq!(parsed, BoolExpr::And(
-          Box::new(BoolExpr::AmbiguousNeq(th::id("A"), th::id("B"))),
-          Box::new(BoolExpr::AmbiguousNeq(th::id("A"), th::id("B")))
+          Box::new(
+            BoolExpr::CardSetNeq(
+              CardSet::Group(Group::Location(th::location("A"))),
+              CardSet::Group(Group::Location(th::location("B"))),
+            )
+          ),
+          Box::new(
+            BoolExpr::CardSetNeq(
+              CardSet::Group(Group::Location(th::location("A"))),
+              CardSet::Group(Group::Location(th::location("B"))),
+            )
+          )
         ));
     }
     

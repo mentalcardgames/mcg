@@ -140,8 +140,10 @@ pub enum BoolExpr {
     OutOfStageCollection(PlayerCollection),
     OutOfGameCollection(PlayerCollection),
     // Catch case if we have something like P1 == P2 or T1 == T2
-    AmbiguousEq (String, String),
-    AmbiguousNeq(String, String),
+    // Matching IDs like P1 == P2 should not be done and will not be handled.
+    // This will directly be interpreted as CardSet! 
+    // AmbiguousEq (String, String),
+    // AmbiguousNeq(String, String),
 }
 
 #[derive(Debug, PartialEq, Clone)]

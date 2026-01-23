@@ -13,6 +13,7 @@ pub enum AnalyzerError {
     TypeError(TypeError),
     IDWithMultipleTypes { id: String },
     IDWithNoType { id: String },
+    IDNotInitialized {id: String },
     // TODO: More precise AnalyzerErrors
     Default,
 }

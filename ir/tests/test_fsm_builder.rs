@@ -1,9 +1,7 @@
 mod test {
   use std::{path::Path, process::Command};
 
-  use ast::parse::ast_to_typed_ast::Lower;
-  use ast::parse::ast_to_typed_ast::LoweringCtx;
-  use ast::analyzer::type_analyzer::ctx;
+  use ast::analyzer::analyzer::analyze_ast;
 
   use ir::fsm::*;
   use ir::fsm_to_dot::*;
@@ -226,17 +224,12 @@ mod test {
       "
     ).unwrap();
 
+    if let Ok(typed_game) = analyze_ast(&game) {
+      let fsm = builder.build_fsm(
+        typed_game
+      );
 
-    let ctx = ctx(&game);
-    let lowering_ctx = LoweringCtx::new(ctx);
-
-    let typed_game = game.lower(&lowering_ctx).unwrap();
-
-    let fsm = builder.build_fsm(
-      typed_game
-    );
-
-    show_graph(&fsm, "game");
+      show_graph(&fsm, "game");
+    }    
   }
-  
 }

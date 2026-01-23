@@ -106,10 +106,8 @@ pub enum CardPosition {
     At(TypedID, IntExpr),
     Top(TypedID),
     Bottom(TypedID),
-    MaxPrecedence (Box<CardSet>, TypedID),
-    MinPrecedence (Box<CardSet>, TypedID),
-    MaxPointMap (Box<CardSet>, TypedID),
-    MinPointMap (Box<CardSet>, TypedID),
+    Max (Box<CardSet>, TypedID),
+    Min (Box<CardSet>, TypedID),
 }
 
 #[derive(Debug, PartialEq, Clone)]

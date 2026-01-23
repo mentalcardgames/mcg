@@ -536,8 +536,8 @@ impl Parse for BoolExpr {
             parse_bool_team_neq,
             parse_bool_string_neq,
             parse_bool_string_eq,
-            parse_bool_id_eq_ambiguous,
-            parse_bool_id_neq_ambiguous,
+            // parse_bool_id_eq_ambiguous,
+            // parse_bool_id_neq_ambiguous,
         ])
     }
 }
@@ -570,21 +570,21 @@ fn parse_bool_or(input: ParseStream) -> Result<BoolExpr> {
     return Ok(BoolExpr::Or(Box::new(left), Box::new(right)))
 }
 
-fn parse_bool_id_eq_ambiguous(input: ParseStream) -> Result<BoolExpr> {
-  let left = input.parse::<ID>()?.to_string();
-  input.parse::<Token![==]>()?;
-  let right = input.parse::<ID>()?.to_string();
+// fn parse_bool_id_eq_ambiguous(input: ParseStream) -> Result<BoolExpr> {
+//   let left = input.parse::<ID>()?.to_string();
+//   input.parse::<Token![==]>()?;
+//   let right = input.parse::<ID>()?.to_string();
 
-  return Ok(BoolExpr::AmbiguousEq(left, right))
-}
+//   return Ok(BoolExpr::AmbiguousEq(left, right))
+// }
 
-fn parse_bool_id_neq_ambiguous(input: ParseStream) -> Result<BoolExpr> {
-  let left = input.parse::<ID>()?.to_string();
-  input.parse::<Token![!=]>()?;
-  let right = input.parse::<ID>()?.to_string();
+// fn parse_bool_id_neq_ambiguous(input: ParseStream) -> Result<BoolExpr> {
+//   let left = input.parse::<ID>()?.to_string();
+//   input.parse::<Token![!=]>()?;
+//   let right = input.parse::<ID>()?.to_string();
 
-  return Ok(BoolExpr::AmbiguousNeq(left, right))
-}
+//   return Ok(BoolExpr::AmbiguousNeq(left, right))
+// }
 
 fn parse_bool_string_eq(input: ParseStream) -> Result<BoolExpr> {
     let left = input.parse::<StringExpr>()?;
@@ -615,10 +615,12 @@ fn parse_bool_cardset_eq(input: ParseStream) -> Result<BoolExpr> {
     input.parse::<Token![==]>()?;
     let right = input.parse::<CardSet>()?;
 
-    if   matches!(left, CardSet::Group(Group::Location(_)))
-      && matches!(right, CardSet::Group(Group::Location(_))) {
-        return Err(input.error("Ambiguous parsing!"))
-    }
+
+    // This is the only thing making sense semantically
+    // if   matches!(left, CardSet::Group(Group::Location(_)))
+    //   && matches!(right, CardSet::Group(Group::Location(_))) {
+    //     return Err(input.error("Ambiguous parsing!"))
+    // }
 
     return Ok(BoolExpr::CardSetEq(left, right))
 }
@@ -628,10 +630,11 @@ fn parse_bool_cardset_neq(input: ParseStream) -> Result<BoolExpr> {
     input.parse::<Token![!=]>()?;
     let right = input.parse::<CardSet>()?;
 
-    if   matches!(left, CardSet::Group(Group::Location(_)))
-      && matches!(right, CardSet::Group(Group::Location(_))) {
-        return Err(input.error("Ambiguous parsing!"))
-    }
+    // This is the only thing making sense semantically
+    // if   matches!(left, CardSet::Group(Group::Location(_)))
+    //   && matches!(right, CardSet::Group(Group::Location(_))) {
+    //     return Err(input.error("Ambiguous parsing!"))
+    // }
 
     return Ok(BoolExpr::CardSetNeq(left, right))
 }
@@ -660,7 +663,7 @@ fn parse_bool_player_eq(input: ParseStream) -> Result<BoolExpr> {
 
     if   matches!(left, PlayerExpr::PlayerName(_))
       && matches!(right, PlayerExpr::PlayerName(_)) {
-        return Err(input.error("Ambiguous parsing!"))
+        return Err(input.error("No Semantic Value!"))
     }
 
     return Ok(BoolExpr::PlayerEq(left, right))
@@ -673,7 +676,7 @@ fn parse_bool_player_neq(input: ParseStream) -> Result<BoolExpr> {
 
     if   matches!(left, PlayerExpr::PlayerName(_))
       && matches!(right, PlayerExpr::PlayerName(_)) {
-        return Err(input.error("Ambiguous parsing!"))
+        return Err(input.error("No Semantic Value!"))
     }
 
     return Ok(BoolExpr::PlayerNeq(left, right))
@@ -686,7 +689,7 @@ fn parse_bool_team_eq(input: ParseStream) -> Result<BoolExpr> {
 
     if   matches!(left, TeamExpr::TeamName(_))
       && matches!(right, TeamExpr::TeamName(_)) {
-        return Err(input.error("Ambiguous parsing!"))
+        return Err(input.error("No Semantic Value!"))
     }
 
     return Ok(BoolExpr::TeamEq(left, right))
@@ -699,7 +702,7 @@ fn parse_bool_team_neq(input: ParseStream) -> Result<BoolExpr> {
 
     if   matches!(left, TeamExpr::TeamName(_))
       && matches!(right, TeamExpr::TeamName(_)) {
-        return Err(input.error("Ambiguous parsing!"))
+        return Err(input.error("No Semantic Value!"))
     }
 
     return Ok(BoolExpr::TeamNeq(left, right))
