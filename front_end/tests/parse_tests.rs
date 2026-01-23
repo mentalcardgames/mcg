@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use ast::{asts::ast::*, helper::test_helper::test_helper::location};
+    use front_end::{ast::*, test_helper::test_helper::location};
     use syn::parse_str;
-    use ast::helper::test_helper::test_helper as th;
+    use front_end::test_helper::test_helper as th;
 
     // PlayerExpr ============================================================
     

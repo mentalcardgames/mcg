@@ -1,4 +1,6 @@
-use crate::{analyzer::{analyzer_error::AnalyzerError, ctx::TypedVars}, asts::{ast::*, game_type::GameType}, parse::visitor::Visitor};
+use crate::{{analyzer_error::AnalyzerError}, {ast::*, game_type::GameType}, visitor::Visitor};
+
+pub type TypedVars = Vec<(String, GameType)>;
 
 fn id_not_initialized(value: &TypedVars, id: &String) -> Result<(), AnalyzerError> {
   if value.iter().map(|(s, _)| s.clone()).collect::<Vec<String>>().contains(id) {
@@ -73,7 +75,20 @@ impl Visitor<TypedVars> for IfRule {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     self.condition.visit(value)?;
-    self.flows.visit(value)?;
+    // There might be some initialization of variables.
+    for flow in self.flows.iter() {
+      let former_value = value.clone();
+      flow.visit(value)?;
+
+      // There has been some initialization been done.
+      // However this initialization is optional!
+      // Not deterministic.
+      if former_value.clone() != value.clone() {
+        // calculate the difference from former value and value afterwards
+        value.retain(|x| !former_value.contains(x));
+        return Err(AnalyzerError::NonDeterministicInitialization { created: value.clone() })
+      }
+    }
 
     Ok(())
   }
@@ -83,7 +98,20 @@ impl Visitor<TypedVars> for ChoiceRule {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    self.options.visit(value)?;
+    // There might be some initialization of variables.
+    for flow in self.options.iter() {
+      let former_value = value.clone();
+      flow.visit(value)?;
+
+      // There has been some initialization been done.
+      // However this initialization is optional!
+      // Not deterministic.
+      if former_value.clone() != value.clone() {
+        // calculate the difference from former value and value afterwards
+        value.retain(|x| !former_value.contains(x));
+        return Err(AnalyzerError::NonDeterministicInitialization { created: value.clone() })
+      }
+    }
 
     Ok(())
   }
@@ -93,7 +121,20 @@ impl Visitor<TypedVars> for OptionalRule {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    self.flows.visit(value)?;
+    // There might be some initialization of variables.
+    for flow in self.flows.iter() {
+      let former_value = value.clone();
+      flow.visit(value)?;
+
+      // There has been some initialization been done.
+      // However this initialization is optional!
+      // Not deterministic.
+      if former_value.clone() != value.clone() {
+        // calculate the difference from former value and value afterwards
+        value.retain(|x| !former_value.contains(x));
+        return Err(AnalyzerError::NonDeterministicInitialization { created: value.clone() })
+      }
+    }
 
     Ok(())
   }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{analyzer::{analyzer_error::AnalyzerError, ctx::TypedVars}, asts::{ast::{self, Game}, game_type::GameType, typed_ast::{self, IntExpr, PlayerExpr, StringExpr, TeamExpr, TypedID}}};
+use crate::{analyzer_error::AnalyzerError, ast::{self, Game}, game_type::GameType, typed_ast::{self, IntExpr, PlayerExpr, StringExpr, TeamExpr, TypedID}, visit_typed_vars::TypedVars};
 
 pub fn parse_ast_to_typed_ast(ctx: TypedVars, ast: &Game) -> Result<typed_ast::Game, AnalyzerError> {
   let lowering_ctx = LoweringCtx::new(ctx);

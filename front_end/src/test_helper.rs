@@ -1,5 +1,5 @@
 pub mod test_helper {
-  use crate::asts::ast::*;
+  use crate::ast::*;
 
   pub const CURRENT: PlayerExpr = PlayerExpr::Current;
   pub const PREVIOUS: PlayerExpr = PlayerExpr::Previous;

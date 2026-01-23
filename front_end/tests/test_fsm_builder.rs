@@ -1,10 +1,10 @@
 mod test {
   use std::{path::Path, process::Command};
 
-  use ast::analyzer::analyzer::analyze_ast;
+  use front_end::analyzer::analyze_ast;
 
-  use ir::fsm::*;
-  use ir::fsm_to_dot::*;
+  use front_end::fsm::*;
+  use front_end::fsm_to_dot::*;
   use syn::parse_str;
 
   fn show_graph(fsm: &FSM, name: &str) {
@@ -163,7 +163,7 @@ mod test {
   fn test_game() {
     let mut builder = FSMBuilder::default();
 
-    let game: ast::asts::ast::Game = parse_str(
+    let game: front_end::ast::Game = parse_str(
       "
         players: (P1, P2, P3);
         turnorder: (P1, P2, P3);

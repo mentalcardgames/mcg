@@ -1,36 +1,33 @@
-// IDs
-pub struct ID(pub String);
+use crate::game_type::GameType;
 
-impl ToString for ID {
-    fn to_string(&self) -> String {
-        self.0.clone()
-    }
+// IDs
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypedID {
+    pub id: String,
+    ty: GameType,
 }
 
-pub type PlayerName = String;
-pub type TeamName = String;
-pub type Location = String;
-pub type Precedence = String;
-pub type PointMap = String;
-pub type Combo = String;
-pub type Key = String;
-pub type Value = String;
-pub type Memory = String;
-pub type Token = String;
-pub type Stage = String;
+impl TypedID {
+    pub fn new(id: String, ty: GameType) -> TypedID {
+        TypedID {
+            id: id,
+            ty: ty
+        }
+    }
+}
 
 // Structs + Enums
 #[derive(Debug, PartialEq, Clone)]
 pub enum PlayerExpr {
-    PlayerName(PlayerName),
+    PlayerName(TypedID),
     Current,
     Next,
     Previous,
     Competitor,
     Turnorder(IntExpr),
     OwnerOf(Box<CardPosition>),
-    OwnerOfHighest(Memory),
-    OwnerOfLowest(Memory),
+    OwnerOfHighest(TypedID),
+    OwnerOfLowest(TypedID),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -40,13 +37,13 @@ pub enum IntExpr {
     IntCollectionAt(Box<IntExpr>),
     SizeOf(Collection),
     SumOfIntCollection(IntCollection),
-    SumOfCardSet(Box<CardSet>, PointMap),
-    MinOf(Box<CardSet>, PointMap),
-    MaxOf(Box<CardSet>, PointMap),
+    SumOfCardSet(Box<CardSet>, TypedID),
+    MinOf(Box<CardSet>, TypedID),
+    MaxOf(Box<CardSet>, TypedID),
     MinIntCollection(IntCollection),
     MaxIntCollection(IntCollection),
     StageRoundCounter,
-    // PlayRoundCounter,
+    PlayRoundCounter,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -66,7 +63,6 @@ pub enum Collection {
     PlayerCollection(PlayerCollection),
     TeamCollection(TeamCollection),
     CardSet(Box<CardSet>),
-    Ambiguous(Vec<String>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -81,7 +77,7 @@ pub struct StringCollection {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LocationCollection {
-    pub locations: Vec<Location>
+    pub locations: Vec<TypedID>
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -101,22 +97,17 @@ pub enum TeamCollection {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum StringExpr {
-    // I think StringExpr ID has no value.
-    // It has no type and therefore
-    // can't be checked or use securely.
-    // ID(ID),
-    KeyOf(Key, CardPosition),
+    KeyOf(TypedID, CardPosition),
     StringCollectionAt(StringCollection, IntExpr),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum CardPosition {
-    At(Location, IntExpr),
-    Top(Location),
-    Bottom(Location),
-    // Analyzer decides afterwards if it is Precedence or PointMap
-    Max (Box<CardSet>, String),
-    Min (Box<CardSet>, String),
+    At(TypedID, IntExpr),
+    Top(TypedID),
+    Bottom(TypedID),
+    Max (Box<CardSet>, TypedID),
+    Min (Box<CardSet>, TypedID),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -139,11 +130,6 @@ pub enum BoolExpr {
     OutOfGamePlayer(PlayerExpr),
     OutOfStageCollection(PlayerCollection),
     OutOfGameCollection(PlayerCollection),
-    // Catch case if we have something like P1 == P2 or T1 == T2
-    // Matching IDs like P1 == P2 should not be done and will not be handled.
-    // This will directly be interpreted as CardSet! 
-    // AmbiguousEq (String, String),
-    // AmbiguousNeq(String, String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -165,7 +151,7 @@ pub enum Status {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TeamExpr {
-    TeamName(TeamName),
+    TeamName(TypedID),
     TeamOf(PlayerExpr)
 }
 
@@ -194,31 +180,31 @@ pub enum CardSet {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Group {
-    Location(Location),
-    LocationWhere(Location, FilterExpr),
+    Location(TypedID),
+    LocationWhere(TypedID, FilterExpr),
     LocationCollection(LocationCollection),
     LocationCollectionWhere(LocationCollection, FilterExpr),
-    ComboInLocation(Combo, Location),
-    ComboInLocationCollection(Combo, LocationCollection),
-    NotComboInLocation(Combo, Location),
-    NotComboInLocationCollection(Combo, LocationCollection),
+    ComboInLocation(TypedID, TypedID),
+    ComboInLocationCollection(TypedID, LocationCollection),
+    NotComboInLocation(TypedID, TypedID),
+    NotComboInLocationCollection(TypedID, LocationCollection),
     CardPosition(CardPosition),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum FilterExpr {
-    Same(Key),
-    Distinct(Key),
-    Adjacent(Key, Precedence),
-    Higher(Key, Precedence),
-    Lower(Key, Precedence),
+    Same(TypedID),
+    Distinct(TypedID),
+    Adjacent(TypedID, TypedID),
+    Higher(TypedID, TypedID),
+    Lower(TypedID, TypedID),
     Size (IntCmpOp, Box<IntExpr>),
-    KeyEqString  (Key, Box<StringExpr>),
-    KeyNeqString (Key, Box<StringExpr>),
-    KeyEqValue  (Key, Value),
-    KeyNeqValue (Key, Value),
-    NotCombo(Combo),
-    Combo(Combo),
+    KeyEqString  (TypedID, Box<StringExpr>),
+    KeyNeqString (TypedID, Box<StringExpr>),
+    KeyEqValue  (TypedID, TypedID),
+    KeyNeqValue (TypedID, TypedID),
+    NotCombo(TypedID),
+    Combo(TypedID),
     And(Box<FilterExpr>, Box<FilterExpr>),
     Or(Box<FilterExpr>, Box<FilterExpr>),
 }
@@ -254,27 +240,27 @@ pub struct Repititions {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Rule {
     // Creations
-    CreatePlayer(Vec<PlayerName>),
-    CreateTeam(TeamName, Vec<PlayerName>),
-    CreateTurnorder(Vec<PlayerName>),
-    CreateTurnorderRandom(Vec<PlayerName>),
-    CreateLocationOnPlayerCollection(Location, PlayerCollection),
-    CreateLocationOnTeamCollection(Location, TeamCollection),
-    CreateLocationOnTable(Location),
+    CreatePlayer(Vec<TypedID>),
+    CreateTeam(TypedID, Vec<TypedID>),
+    CreateTurnorder(Vec<TypedID>),
+    CreateTurnorderRandom(Vec<TypedID>),
+    CreateLocationOnPlayerCollection(TypedID, PlayerCollection),
+    CreateLocationOnTeamCollection(TypedID, TeamCollection),
+    CreateLocationOnTable(TypedID),
     CreateLocationCollectionOnPlayerCollection(LocationCollection, PlayerCollection),
     CreateLocationCollectionOnTeamCollection(LocationCollection, TeamCollection),
     CreateLocationCollectionOnTable(LocationCollection),
-    CreateCardOnLocation(Location, Types),
-    CreateTokenOnLocation(IntExpr, Token, Location),
-    CreatePrecedence(Precedence, Vec<(Key, Value)>),
-    CreateCombo(Combo, FilterExpr),
-    CreateMemoryIntPlayerCollection(Memory, IntExpr, PlayerCollection),
-    CreateMemoryStringPlayerCollection(Memory, StringExpr, PlayerCollection),
-    CreateMemoryIntTable(Memory, IntExpr),
-    CreateMemoryStringTable(Memory, StringExpr),
-    CreateMemoryPlayerCollection(Memory, PlayerCollection),
-    CreateMemoryTable(Memory),
-    CreatePointMap(PointMap, Vec<(Key, Value, IntExpr)>),
+    CreateCardOnLocation(TypedID, Types),
+    CreateTokenOnLocation(IntExpr, TypedID, TypedID),
+    CreatePrecedence(TypedID, Vec<(TypedID, TypedID)>),
+    CreateCombo(TypedID, FilterExpr),
+    CreateMemoryIntPlayerCollection(TypedID, IntExpr, PlayerCollection),
+    CreateMemoryStringPlayerCollection(TypedID, StringExpr, PlayerCollection),
+    CreateMemoryIntTable(TypedID, IntExpr),
+    CreateMemoryStringTable(TypedID, StringExpr),
+    CreateMemoryPlayerCollection(TypedID, PlayerCollection),
+    CreateMemoryTable(TypedID),
+    CreatePointMap(TypedID, Vec<(TypedID, TypedID, IntExpr)>),
     // Actions
     FlipAction(CardSet, Status),
     ShuffleAction(CardSet),
@@ -284,12 +270,12 @@ pub enum Rule {
     PlayerCollectionOutOfStageAction(PlayerCollection),
     PlayerCollectionOutOfGameSuccAction(PlayerCollection),
     PlayerCollectionOutOfGameFailAction(PlayerCollection),
-    SetMemoryInt(Memory, IntExpr),
-    SetMemoryString(Memory, StringExpr),
-    SetMemoryCollection(Memory, Collection),
+    SetMemoryInt(TypedID, IntExpr),
+    SetMemoryString(TypedID, StringExpr),
+    SetMemoryCollection(TypedID, Collection),
     CycleAction(PlayerExpr),
     BidAction(Quantity),
-    BidActionMemory(Memory, Quantity),
+    BidActionMemory(TypedID, Quantity),
     EndTurn,
     EndStage,
     EndGameWithWinner(PlayerExpr),
@@ -308,12 +294,12 @@ pub enum Rule {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Types {
-    pub types: Vec<(Key, Vec<Value>)>
+    pub types: Vec<(TypedID, Vec<TypedID>)>
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SeqStage {
-    pub stage: Stage,
+    pub stage: TypedID,
     pub player: PlayerExpr,
     pub end_condition: EndCondition,
     pub flows: Vec<FlowComponent>,
@@ -355,26 +341,26 @@ pub enum ExchangeMove {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenMove {
-    Place(Token, TokenLocExpr, TokenLocExpr),
-    PlaceQuantity(Quantity, Token, TokenLocExpr, TokenLocExpr),
+    Place(TypedID, TokenLocExpr, TokenLocExpr),
+    PlaceQuantity(Quantity, TypedID, TokenLocExpr, TokenLocExpr),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenLocExpr {
-    Location(Location),
+    Location(TypedID),
     LocationCollection(LocationCollection),
-    LocationPlayer(Location, PlayerExpr),
+    LocationPlayer(TypedID, PlayerExpr),
     LocationCollectionPlayer(LocationCollection, PlayerExpr),
-    LocationPlayerCollection(Location, PlayerCollection),
+    LocationPlayerCollection(TypedID, PlayerCollection),
     LocationCollectionPlayerCollection(LocationCollection, PlayerCollection),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ScoreRule {
     ScorePlayer(IntExpr, PlayerExpr),
-    ScorePlayerMemory(IntExpr, Memory, PlayerExpr),
+    ScorePlayerMemory(IntExpr, TypedID, PlayerExpr),
     ScorePlayerCollection(IntExpr, PlayerCollection),
-    ScorePlayerCollectionMemory(IntExpr, Memory, PlayerCollection),
+    ScorePlayerCollectionMemory(IntExpr, TypedID, PlayerCollection),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -383,8 +369,8 @@ pub enum WinnerRule {
     WinnerPlayerCollection(PlayerCollection),
     WinnerLowestScore,
     WinnerHighestScore,
-    WinnerLowestMemory(Memory),
-    WinnerHighestMemory(Memory),
+    WinnerLowestMemory(TypedID),
+    WinnerHighestMemory(TypedID),
     WinnerLowestPosition,
     WinnerHighestPosition,   
 }

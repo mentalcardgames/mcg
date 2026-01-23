@@ -1,5 +1,5 @@
 use std::{collections::HashMap};
-use ast::asts::typed_ast::*;
+use crate::typed_ast::*;
 
 pub type Stage = String;
 

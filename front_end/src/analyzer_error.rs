@@ -1,4 +1,4 @@
-use crate::parse::ast_to_typed_ast::TypeError;
+use crate::{ast_to_typed_ast::TypeError, visit_typed_vars::TypedVars};
 
 #[derive(Debug)]
 pub enum AnalyzerError {
@@ -14,6 +14,7 @@ pub enum AnalyzerError {
     IDWithMultipleTypes { id: String },
     IDWithNoType { id: String },
     IDNotInitialized {id: String },
+    NonDeterministicInitialization { created: TypedVars },
     // TODO: More precise AnalyzerErrors
     Default,
 }
