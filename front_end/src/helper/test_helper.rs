@@ -1,53 +1,119 @@
-use crate::ast::*;
+use proc_macro2::Span;
+
+use crate::{symbols::Var, transform_to_typed::LoweringCtx, typed_ast::*};
 
 pub const CURRENT: PlayerExpr = PlayerExpr::Current;
 pub const PREVIOUS: PlayerExpr = PlayerExpr::Previous;
 pub const COMPETITOR: PlayerExpr = PlayerExpr::Competitor;
 
-pub fn id(id: &str) -> String {
-  id.to_string()
+pub fn ctx() -> LoweringCtx {
+  LoweringCtx::new(vec![])
 }
 
-pub fn stage(id: &str) -> Stage {
-  id.to_string()
+pub fn ctx_min_cardpos() -> LoweringCtx {
+  LoweringCtx::new(vec![
+    (
+      Var {
+        id: "Aces".to_string(),
+        span: Span::call_site(),
+      },
+      GameType::Precedence
+    )
+  ])
 }
 
-pub fn playername(id: &str) -> PlayerName {
-  id.to_string()
+pub fn ctx_max_cardpos() -> LoweringCtx {
+  LoweringCtx::new(vec![
+    (
+      Var {
+        id: "Aces".to_string(),
+        span: Span::call_site(),
+      },
+      GameType::PointMap
+    )
+  ])
 }
 
-pub fn teamname(id: &str) -> TeamName {
-  id.to_string()
+pub fn id(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::NoType,
+  }
 }
 
-pub fn location(id: &str) -> Location {
-  id.to_string()
+pub fn stage(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Stage,
+  }
 }
 
-pub fn token(id: &str) -> Token {
-  id.to_string()
+pub fn playername(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Player,
+  }
 }
 
-pub fn precedence(id: &str) -> Precedence {
-  id.to_string()
+pub fn teamname(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Team,
+  }
 }
 
-pub fn pointmap(id: &str) -> PointMap {
-  id.to_string()
+pub fn location(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Location,
+  }
 }
 
-pub fn combo(id: &str) -> Combo {
-  id.to_string()
+pub fn token(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Token,
+  }
 }
 
-pub fn memory(id: &str) -> Memory {
-  id.to_string()
+pub fn precedence(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Precedence,
+  }
 }
 
-pub fn key(id: &str) -> Key {
-  id.to_string()
+pub fn pointmap(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::PointMap,
+  }
 }
 
-pub fn value(id: &str) -> Value {
-  id.to_string()
+pub fn combo(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Combo,
+  }
+}
+
+pub fn memory(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Memory,
+  }
+}
+
+pub fn key(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Key,
+  }
+}
+
+pub fn value(id: &str) -> TypedID {
+  TypedID {
+    id: id.to_string(),
+    ty: GameType::Value,
+  }
 }

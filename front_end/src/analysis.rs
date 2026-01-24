@@ -1,4 +1,4 @@
-use crate::{ast::Game, transform_to_typed::{TypeError, parse_ast_to_typed_ast}, typed_ast, symbols::TypedVars, visitor::Visitor};
+use crate::{diagnostic::SGame, symbols::TypedVars, transform_to_typed::{TypeError, parse_ast_to_typed_ast}, typed_ast, visitor::Visitor};
 
 #[derive(Debug)]
 pub enum AnalyzerError {
@@ -20,8 +20,9 @@ pub enum AnalyzerError {
 }
 
 // Find a final ast to return (right now typed ast)
-pub fn analyze_ast(ast: &Game) -> Result<typed_ast::Game, AnalyzerError> {
+pub fn analyze_ast(ast: &SGame) -> Result<typed_ast::Game, AnalyzerError> {
   let mut ctx: TypedVars = vec![];
+
   ast.visit(&mut ctx)?;
 
   println!("{:?}", ctx);

@@ -3,7 +3,8 @@ mod test {
 
   use front_end::analysis::analyze_ast;
 
-  use front_end::ir::*;
+  use front_end::diagnostic::SGame;
+use front_end::ir::*;
   use front_end::helper::fsm_to_dot::*;
   use syn::parse_str;
 
@@ -163,7 +164,7 @@ mod test {
   fn test_game() {
     let mut builder = FSMBuilder::default();
 
-    let game: front_end::ast::Game = parse_str(
+    let game: SGame = parse_str(
       "
         players: (P1, P2, P3);
         turnorder: (P1, P2, P3);

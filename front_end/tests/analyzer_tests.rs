@@ -1,11 +1,11 @@
 mod test {
-  use front_end::{analysis::analyze_ast, ast::*};
+  use front_end::{analysis::analyze_ast, diagnostic::SGame};
   use syn::parse_str;
 
 
   #[test]
   fn analyzer_valid_create_player() {
-    let parsed: Game = parse_str(
+    let parsed: SGame = parse_str(
       "players: (P1, P2, P3);"
     ).unwrap();
 
@@ -16,7 +16,7 @@ mod test {
   
   #[test]
   fn analyzer_fail_create_player() {
-    let parsed: Game = parse_str(
+    let parsed: SGame = parse_str(
       "players: (P1, P1, P3);"
     ).unwrap();
 
@@ -27,7 +27,7 @@ mod test {
 
   #[test]
   fn analyzer_fail_create_team() {
-    let parsed: Game = parse_str(
+    let parsed: SGame = parse_str(
       "team T1: (P1, P2, P3);"
     ).unwrap();
 
@@ -38,7 +38,7 @@ mod test {
 
   #[test]
   fn analyzer_fail_create_team_game() {
-    let parsed: Game = parse_str(
+    let parsed: SGame = parse_str(
       "
         players: (P1, P2, P3);
         team T1: (P1, P2, P3);
@@ -52,7 +52,7 @@ mod test {
 
   #[test]
   fn analyzer_valid_game() {
-    let parsed: Game = parse_str(
+    let parsed: SGame = parse_str(
       "
         players: (P1, P2, P3);
         turnorder: (P1, P2, P3);

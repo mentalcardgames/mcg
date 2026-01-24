@@ -34,6 +34,7 @@ name = "front_end"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "proc-macro2",
  "quote",
  "regex",
  "ron",

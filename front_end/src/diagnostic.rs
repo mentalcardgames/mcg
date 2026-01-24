@@ -1,15 +1,14 @@
-use std::sync::mpsc::RecvError;
-
 use proc_macro2::Span;
 
-use crate::ast::*;
+use crate::spanned_ast::*;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Spanned<T> {
     pub node: T,
     pub span: Span,
 }
 
+pub type SID = Spanned<String>;
 pub type SPlayerExpr = Spanned<PlayerExpr>;
 pub type SIntExpr = Spanned<IntExpr>;
 pub type SOp = Spanned<Op>;
@@ -22,10 +21,10 @@ pub type STeamCollection = Spanned<TeamCollection>;
 pub type SStringExpr = Spanned<StringExpr>;
 pub type SCardPosition = Spanned<CardPosition>;
 pub type SBoolExpr = Spanned<BoolExpr>;
-pub type SIntComp = Spanned<IntCmpOp>;
+pub type SIntCmpOp = Spanned<IntCmpOp>;
 pub type SStatus = Spanned<Status>; 
 pub type STeamExpr = Spanned<TeamExpr>;
-pub type SQuantity = SpannedM<Quantity>;
+pub type SQuantity = Spanned<Quantity>;
 pub type SIntRange = Spanned<IntRange>;
 pub type SQuantifier = Spanned<Quantifier>;
 pub type SCardSet = Spanned<CardSet>;
@@ -47,5 +46,5 @@ pub type SExchangeMove = Spanned<ExchangeMove>;
 pub type STokenMove = Spanned<TokenMove>;
 pub type STokenLocExpr = Spanned<TokenLocExpr>;
 pub type SScoreRule = Spanned<ScoreRule>;
-pub type SWinnerRule = Spanned<SWinnerRule>;
+pub type SWinnerRule = Spanned<WinnerRule>;
 

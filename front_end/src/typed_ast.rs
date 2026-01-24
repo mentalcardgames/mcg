@@ -18,7 +18,7 @@ pub enum GameType {
 #[derive(Debug, PartialEq, Clone)]
 pub struct TypedID {
     pub id: String,
-    ty: GameType,
+    pub(crate) ty: GameType,
 }
 
 impl TypedID {
@@ -77,6 +77,7 @@ pub enum Collection {
     PlayerCollection(PlayerCollection),
     TeamCollection(TeamCollection),
     CardSet(Box<CardSet>),
+    Ambiguous(Vec<TypedID>),
 }
 
 #[derive(Debug, PartialEq, Clone)]

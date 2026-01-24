@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use front_end::ast::*;
-    use front_end::helper::test_helper as th;
+    use front_end::transform_to_typed::Lower;
+    use front_end::typed_ast::*;
+    use front_end::helper::test_helper::{self as th, ctx_max_cardpos, ctx_min_cardpos};
+    use front_end::helper::test_helper::ctx;
+    use front_end::diagnostic::*;
 
     use syn::parse_str;
 
@@ -9,68 +12,68 @@ mod tests {
     
     #[test]
     fn parses_valid_player_current() {
-        let parsed: PlayerExpr = parse_str(
+        let parsed: SPlayerExpr = parse_str(
           "current"
         ).unwrap();
-        assert_eq!(parsed, th::CURRENT);
+        assert_eq!(parsed.lower(&ctx()), Ok( th::CURRENT));
     }
 
     #[test]
     fn parses_valid_player_previous() {
-        let parsed: PlayerExpr = parse_str(
+        let parsed: SPlayerExpr = parse_str(
           "previous"
         ).unwrap();
-        assert_eq!(parsed, th::PREVIOUS);
+        assert_eq!(parsed.lower(&ctx()), Ok( th::PREVIOUS));
     }
 
     #[test]
     fn parses_valid_player_competitor() {
-        let parsed: PlayerExpr = parse_str(
+        let parsed: SPlayerExpr = parse_str(
           "competitor"
         ).unwrap();
-        assert_eq!(parsed, th::COMPETITOR);
+        assert_eq!(parsed.lower(&ctx()), Ok( th::COMPETITOR));
     }
 
     #[test]
     fn parses_valid_player_owner_highest() {
-        let parsed: PlayerExpr = parse_str(
+        let parsed: SPlayerExpr = parse_str(
           "owner of highest Mem"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           PlayerExpr::OwnerOfHighest(
             th::memory("Mem")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_player_owner_lowest() {
-        let parsed: PlayerExpr = parse_str(
+        let parsed: SPlayerExpr = parse_str(
           "owner of lowest Mem"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           PlayerExpr::OwnerOfLowest(
             th::memory("Mem")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_player_turnorder() {
-        let parsed: PlayerExpr = parse_str(
+        let parsed: SPlayerExpr = parse_str(
           "turnorder(3)"
         ).unwrap();
-        assert_eq!(parsed, PlayerExpr::Turnorder(IntExpr::Int(3)));
+        assert_eq!(parsed.lower(&ctx()), Ok( PlayerExpr::Turnorder(IntExpr::Int(3))));
     }
     
     #[test]
     fn parses_valid_player_id() {
-        let parsed: PlayerExpr = parse_str(
+        let parsed: SPlayerExpr = parse_str(
           "P1"
         ).unwrap();
-        assert_eq!(parsed, PlayerExpr::PlayerName(
+        assert_eq!(parsed.lower(&ctx()), Ok( PlayerExpr::PlayerName(
           th::playername("P1"))
-        );
+        ));
     }
 
     // =======================================================================
@@ -79,42 +82,42 @@ mod tests {
     
     #[test]
     fn parses_valid_op_plus() {
-        let parsed: Op = parse_str(
+        let parsed: SOp = parse_str(
           "+"
         ).unwrap();
-        assert_eq!(parsed, Op::Plus);
+        assert_eq!(parsed.lower(&ctx()), Ok( Op::Plus));
     }
 
     #[test]
     fn parses_valid_op_minus() {
-        let parsed: Op = parse_str(
+        let parsed: SOp = parse_str(
           "-"
         ).unwrap();
-        assert_eq!(parsed, Op::Minus);
+        assert_eq!(parsed.lower(&ctx()), Ok( Op::Minus));
     }
 
     #[test]
     fn parses_valid_op_div() {
-        let parsed: Op = parse_str(
+        let parsed: SOp = parse_str(
           "/"
         ).unwrap();
-        assert_eq!(parsed, Op::Div);
+        assert_eq!(parsed.lower(&ctx()), Ok( Op::Div));
     }
 
     #[test]
     fn parses_valid_op_mul() {
-        let parsed: Op = parse_str(
+        let parsed: SOp = parse_str(
           "*"
         ).unwrap();
-        assert_eq!(parsed, Op::Mul);
+        assert_eq!(parsed.lower(&ctx()), Ok( Op::Mul));
     }
     
     #[test]
     fn parses_valid_op_mod() {
-        let parsed: Op = parse_str(
+        let parsed: SOp = parse_str(
           "%"
         ).unwrap();
-        assert_eq!(parsed, Op::Mod);
+        assert_eq!(parsed.lower(&ctx()), Ok( Op::Mod));
     }
     // =======================================================================
 
@@ -122,50 +125,50 @@ mod tests {
     
     #[test]
     fn parses_valid_intcmpop_eq() {
-        let parsed: IntCmpOp = parse_str(
+        let parsed: SIntCmpOp = parse_str(
           "=="
         ).unwrap();
-        assert_eq!(parsed, IntCmpOp::Eq);
+        assert_eq!(parsed.lower(&ctx()), Ok( IntCmpOp::Eq));
     }
 
     #[test]
     fn parses_valid_intcmpop_neq() {
-        let parsed: IntCmpOp = parse_str(
+        let parsed: SIntCmpOp = parse_str(
           "!="
         ).unwrap();
-        assert_eq!(parsed, IntCmpOp::Neq);
+        assert_eq!(parsed.lower(&ctx()), Ok( IntCmpOp::Neq));
     }
 
     #[test]
     fn parses_valid_intcmpop_le() {
-        let parsed: IntCmpOp = parse_str(
+        let parsed: SIntCmpOp = parse_str(
           "<="
         ).unwrap();
-        assert_eq!(parsed, IntCmpOp::Le);
+        assert_eq!(parsed.lower(&ctx()), Ok( IntCmpOp::Le));
     }
 
     #[test]
     fn parses_valid_intcmpop_ge() {
-        let parsed: IntCmpOp = parse_str(
+        let parsed: SIntCmpOp = parse_str(
           ">="
         ).unwrap();
-        assert_eq!(parsed, IntCmpOp::Ge);
+        assert_eq!(parsed.lower(&ctx()), Ok( IntCmpOp::Ge));
     }
 
     #[test]
     fn parses_valid_intcmpop_lt() {
-        let parsed: IntCmpOp = parse_str(
+        let parsed: SIntCmpOp = parse_str(
           "<"
         ).unwrap();
-        assert_eq!(parsed, IntCmpOp::Lt);
+        assert_eq!(parsed.lower(&ctx()), Ok( IntCmpOp::Lt));
     }
 
     #[test]
     fn parses_valid_intcmpop_gt() {
-        let parsed: IntCmpOp = parse_str(
+        let parsed: SIntCmpOp = parse_str(
           ">"
         ).unwrap();
-        assert_eq!(parsed, IntCmpOp::Gt);
+        assert_eq!(parsed.lower(&ctx()), Ok( IntCmpOp::Gt));
     }
     
     // =======================================================================
@@ -174,26 +177,26 @@ mod tests {
 
     #[test]
     fn parses_valid_status_facup() {
-        let parsed: Status = parse_str(
+        let parsed: SStatus = parse_str(
           "face up"
         ).unwrap();
-        assert_eq!(parsed, Status::FaceUp);
+        assert_eq!(parsed.lower(&ctx()), Ok( Status::FaceUp));
     }
 
     #[test]
     fn parses_valid_facedown() {
-        let parsed: Status = parse_str(
+        let parsed: SStatus = parse_str(
           "face down"
         ).unwrap();
-        assert_eq!(parsed, Status::FaceDown);
+        assert_eq!(parsed.lower(&ctx()), Ok( Status::FaceDown));
     }
     
     #[test]
     fn parses_valid_private() {
-        let parsed: Status = parse_str(
+        let parsed: SStatus = parse_str(
           "private"
         ).unwrap();
-        assert_eq!(parsed, Status::Private);
+        assert_eq!(parsed.lower(&ctx()), Ok( Status::Private));
     }
     
     // =======================================================================
@@ -202,18 +205,18 @@ mod tests {
     
     #[test]
     fn parses_valid_quantifier_all() {
-        let parsed: Quantifier = parse_str(
+        let parsed: SQuantifier = parse_str(
           "all"
         ).unwrap();
-        assert_eq!(parsed, Quantifier::All);
+        assert_eq!(parsed.lower(&ctx()), Ok( Quantifier::All));
     }
 
     #[test]
     fn parses_valid_quantifier_any() {
-        let parsed: Quantifier = parse_str(
+        let parsed: SQuantifier = parse_str(
           "any"
         ).unwrap();
-        assert_eq!(parsed, Quantifier::Any);
+        assert_eq!(parsed.lower(&ctx()), Ok( Quantifier::Any));
     }
 
     // =======================================================================
@@ -222,20 +225,20 @@ mod tests {
     
     #[test]
     fn parses_valid_teamexpr_team_of() {
-        let parsed: TeamExpr = parse_str(
+        let parsed: STeamExpr = parse_str(
           "team of current"
         ).unwrap();
-        assert_eq!(parsed, TeamExpr::TeamOf(th::CURRENT));
+        assert_eq!(parsed.lower(&ctx()), Ok( TeamExpr::TeamOf(th::CURRENT)));
     }
 
     #[test]
     fn parses_valid_teamexpr_team_id() {
-        let parsed: TeamExpr = parse_str(
+        let parsed: STeamExpr = parse_str(
           "T1"
         ).unwrap();
-        assert_eq!(parsed, TeamExpr::TeamName(
+        assert_eq!(parsed.lower(&ctx()), Ok( TeamExpr::TeamName(
           th::teamname("T1"))
-        );
+        ));
     }
 
     // =======================================================================
@@ -244,44 +247,44 @@ mod tests {
 
     #[test]
     fn parses_valid_cardposition_top_of() {
-        let parsed: CardPosition = parse_str(
+        let parsed: SCardPosition = parse_str(
           "top(Hand)"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::Top(
+        assert_eq!(parsed.lower(&ctx()), Ok( CardPosition::Top(
           th::location("Hand"))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_cardposition_bottom_of() {
-        let parsed: CardPosition = parse_str(
+        let parsed: SCardPosition = parse_str(
           "bottom(Hand)"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::Bottom(th::location("Hand")));
+        assert_eq!(parsed.lower(&ctx()), Ok( CardPosition::Bottom(th::location("Hand"))));
     }
 
     #[test]
     fn parses_valid_cardposition_max() {
-        let parsed: CardPosition = parse_str(
+        let parsed: SCardPosition = parse_str(
           "max(Hand) using Aces"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::Max(Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::id("Aces")));
+        assert_eq!(parsed.lower(&ctx_max_cardpos()), Ok( CardPosition::Max(Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::pointmap("Aces"))));
     }
 
     #[test]
     fn parses_valid_cardposition_min() {
-        let parsed: CardPosition = parse_str(
+        let parsed: SCardPosition = parse_str(
           "min(Hand) using Aces"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::Min(Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::id("Aces")));
+        assert_eq!(parsed.lower(&ctx_min_cardpos()), Ok( CardPosition::Min(Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::precedence("Aces"))));
     }
 
     #[test]
     fn parses_valid_cardposition_at() {
-        let parsed: CardPosition = parse_str(
+        let parsed: SCardPosition = parse_str(
           "Hand[3]"
         ).unwrap();
-        assert_eq!(parsed, CardPosition::At(th::location("Hand"), IntExpr::Int(3)));
+        assert_eq!(parsed.lower(&ctx()), Ok( CardPosition::At(th::location("Hand"), IntExpr::Int(3))));
     }
 
     // =======================================================================
@@ -290,104 +293,104 @@ mod tests {
 
     #[test]
     fn parses_valid_intexpr_int() {
-        let parsed: IntExpr = parse_str(
+        let parsed: SIntExpr = parse_str(
           "3"
         ).unwrap();
-        assert_eq!(parsed, IntExpr::Int(3));
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::Int(3)));
     }
 
     #[test]
     fn parses_valid_intexpr_op() {
-        let parsed: IntExpr = parse_str(
+        let parsed: SIntExpr = parse_str(
           "(3 + 3)"
         ).unwrap();
-        assert_eq!(parsed, IntExpr::IntOp(Box::new(IntExpr::Int(3)), Op::Plus, Box::new(IntExpr::Int(3))));
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::IntOp(Box::new(IntExpr::Int(3)), Op::Plus, Box::new(IntExpr::Int(3)))));
     }
 
     #[test]
     fn parses_valid_intexpr_size_of() {
-        let parsed: IntExpr = parse_str(
+        let parsed: SIntExpr = parse_str(
           "size of (3, 3)"
         ).unwrap();
-        assert_eq!(parsed, IntExpr::SizeOf(Collection::IntCollection(
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::SizeOf(Collection::IntCollection(
+          IntCollection {
+            ints: vec![IntExpr::Int(3), IntExpr::Int(3)]
+          }
+        ))));
+    }
+
+    #[test]
+    fn parses_valid_intexpr_sum() {
+        let parsed: SIntExpr = parse_str(
+          "sum(3, 3)"
+        ).unwrap();
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::SumOfIntCollection(
           IntCollection {
             ints: vec![IntExpr::Int(3), IntExpr::Int(3)]
           }
         )));
     }
-
-    #[test]
-    fn parses_valid_intexpr_sum() {
-        let parsed: IntExpr = parse_str(
-          "sum(3, 3)"
-        ).unwrap();
-        assert_eq!(parsed, IntExpr::SumOfIntCollection(
-          IntCollection {
-            ints: vec![IntExpr::Int(3), IntExpr::Int(3)]
-          }
-        ));
-    }
     
     #[test]
     fn parses_valid_intexpr_sum_of() {
-        let parsed: IntExpr = parse_str(
+        let parsed: SIntExpr = parse_str(
           "sum of Hand using Aces"
         ).unwrap();
-        assert_eq!(parsed, IntExpr::SumOfCardSet(
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::SumOfCardSet(
           Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::pointmap("Aces"))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_intexpr_min_intcollection() {
-        let parsed: IntExpr = parse_str(
+        let parsed: SIntExpr = parse_str(
           "min(3, 3)"
         ).unwrap();
-        assert_eq!(parsed, IntExpr::MinIntCollection(
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::MinIntCollection(
           IntCollection {
             ints: vec![IntExpr::Int(3), IntExpr::Int(3)]
           }
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_intexpr_max_intcollection() {
-        let parsed: IntExpr = parse_str(
+        let parsed: SIntExpr = parse_str(
           "max(3, 3)"
         ).unwrap();
-        assert_eq!(parsed, IntExpr::MaxIntCollection(
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::MaxIntCollection(
           IntCollection {
             ints: vec![IntExpr::Int(3), IntExpr::Int(3)]
           }
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_intexpr_min_pointmap() {
-        let parsed: IntExpr = parse_str(
+        let parsed: SIntExpr = parse_str(
           "min of Hand using Aces"
         ).unwrap();
-        assert_eq!(parsed, IntExpr::MinOf(
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::MinOf(
           Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::pointmap("Aces"))
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_intexpr_max_pointmap() {
-        let parsed: IntExpr = parse_str(
+        let parsed: SIntExpr = parse_str(
           "max of Hand using Aces"
         ).unwrap();
-        assert_eq!(parsed, IntExpr::MaxOf(
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::MaxOf(
           Box::new(CardSet::Group(Group::Location(th::location("Hand")))), th::pointmap("Aces"))
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_intexpr_stageroundcounter() {
-        let parsed: IntExpr = parse_str(
+        let parsed: SIntExpr = parse_str(
           "stageroundcounter"
         ).unwrap();
-        assert_eq!(parsed, IntExpr::StageRoundCounter);
+        assert_eq!(parsed.lower(&ctx()), Ok( IntExpr::StageRoundCounter));
     }
 
     // =======================================================================
@@ -396,64 +399,64 @@ mod tests {
 
     #[test]
     fn parses_valid_boolexpr_eq() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "A == B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::CardSetEq(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::CardSetEq(
           CardSet::Group(Group::Location(th::location("A"))),
           CardSet::Group(Group::Location(th::location("B"))),
-        ));
+        )));
     }
 
     #[test]
     fn parses_valid_boolexpr_neq() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "A != B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::CardSetNeq(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::CardSetNeq(
           CardSet::Group(Group::Location(th::location("A"))),
           CardSet::Group(Group::Location(th::location("B"))),
-        ));
+        )));
     }
 
     #[test]
     fn parses_valid_boolexpr_player_eq() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "current == A"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::PlayerEq(th::CURRENT, PlayerExpr::PlayerName(th::playername("A"))));
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::PlayerEq(th::CURRENT, PlayerExpr::PlayerName(th::playername("A")))));
     }
 
     #[test]
     fn parses_valid_boolexpr_player_neq() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "A != current"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::PlayerNeq(PlayerExpr::PlayerName(th::playername("A")), th::CURRENT));
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::PlayerNeq(PlayerExpr::PlayerName(th::playername("A")), th::CURRENT)));
     }
     
     #[test]
     fn parses_valid_boolexpr_team_eq() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "team of A == B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::TeamEq(TeamExpr::TeamOf(PlayerExpr::PlayerName(th::playername("A"))), TeamExpr::TeamName(th::teamname("B"))));
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::TeamEq(TeamExpr::TeamOf(PlayerExpr::PlayerName(th::playername("A"))), TeamExpr::TeamName(th::teamname("B")))));
     }
 
     #[test]
     fn parses_valid_boolexpr_team_neq() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "A != team of B"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::TeamNeq(TeamExpr::TeamName(th::teamname("A")), TeamExpr::TeamOf(PlayerExpr::PlayerName(th::playername("B")))));
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::TeamNeq(TeamExpr::TeamName(th::teamname("A")), TeamExpr::TeamOf(PlayerExpr::PlayerName(th::playername("B"))))));
     }
 
     #[test]
     fn parses_valid_boolexpr_or() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "(A != B or A != B)"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::Or(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::Or(
           Box::new(
             BoolExpr::CardSetNeq(
               CardSet::Group(Group::Location(th::location("A"))),
@@ -466,15 +469,15 @@ mod tests {
               CardSet::Group(Group::Location(th::location("B"))),
             )
           )
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_boolexpr_and() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "(A != B and A != B)"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::And(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::And(
           Box::new(
             BoolExpr::CardSetNeq(
               CardSet::Group(Group::Location(th::location("A"))),
@@ -487,114 +490,114 @@ mod tests {
               CardSet::Group(Group::Location(th::location("B"))),
             )
           )
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_boolexpr_intcmp() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "3 == 2"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::IntCmp(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::IntCmp(
           IntExpr::Int(3),
           IntCmpOp::Eq,
           IntExpr::Int(2)
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_boolexpr_cardset_eq() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "Hand of current == Hand"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::CardSetEq(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::CardSetEq(
           CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), th::CURRENT),
           CardSet::Group(Group::Location(th::location("Hand"))),
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_boolexpr_cardset_neq() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "Hand != Hand of current"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::CardSetNeq(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::CardSetNeq(
           CardSet::Group(Group::Location(th::location("Hand"))),
           CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), th::CURRENT),
-        ));
+        )));
     }
 
     #[test]
     fn parses_valid_boolexpr_cardset_empty() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "Hand is empty"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::CardSetIsEmpty(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::CardSetIsEmpty(
           CardSet::Group(Group::Location(th::location("Hand")))
-        ));
+        )));
     }
 
     #[test]
     fn parses_valid_boolexpr_cardset_not_empty() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "Hand is not empty"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::CardSetIsNotEmpty(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::CardSetIsNotEmpty(
           CardSet::Group(Group::Location(th::location("Hand")))
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_boolexpr_not() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "not 3 == 2"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::Not(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::Not(
           Box::new(BoolExpr::IntCmp(
             IntExpr::Int(3),
             IntCmpOp::Eq,
             IntExpr::Int(2)
-        ))));
+        )))));
     }
     
     #[test]
     fn parses_valid_boolexpr_out_of_stage_player() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "current out of stage"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::OutOfStagePlayer(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::OutOfStagePlayer(
           th::CURRENT
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_boolexpr_out_of_game_player() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "current out of game"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::OutOfGamePlayer(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::OutOfGamePlayer(
           th::CURRENT
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_boolexpr_out_of_stage_collection() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "others out of stage"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::OutOfStageCollection(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::OutOfStageCollection(
           PlayerCollection::Others
-        ));
+        )));
     }
     
     #[test]
     fn parses_valid_boolexpr_out_of_game_collection() {
-        let parsed: BoolExpr = parse_str(
+        let parsed: SBoolExpr = parse_str(
           "others out of game"
         ).unwrap();
-        assert_eq!(parsed, BoolExpr::OutOfGameCollection(
+        assert_eq!(parsed.lower(&ctx()), Ok( BoolExpr::OutOfGameCollection(
           PlayerCollection::Others
-        ));
+        )));
     }
     
     // =======================================================================
@@ -603,21 +606,21 @@ mod tests {
     
     #[test]
     fn parses_valid_stringexpr_key_of() {
-        let parsed: StringExpr = parse_str(
+        let parsed: SStringExpr = parse_str(
           "Rank of top(Hand)"
         ).unwrap();
-        assert_eq!(parsed, StringExpr::KeyOf(
+        assert_eq!(parsed.lower(&ctx()), Ok( StringExpr::KeyOf(
           th::key("Rank"),
           CardPosition::Top(th::location("Hand"))
-        ));
+        )));
     }
 
     // #[test]
     // fn parses_valid_stringexpr_collection_at() {
-    //     let parsed: StringExpr = parse_str(
+    //     let parsed: SStringExpr = parse_str(
     //       "(A, B, C)[3]"
     //     ).unwrap();
-    //     assert_eq!(parsed, StringExpr::StringCollectionAt(
+    //     assert_eq!(parsed.lower(&ctx()), Ok( StringExpr::StringCollectionAt(
     //       StringCollection {
     //         strings: vec![
     //           StringExpr::ID(th::id("A")),
@@ -626,7 +629,7 @@ mod tests {
     //         ]
     //       },
     //       IntExpr::Int(3)
-    //     ));
+    //     )));
     // }
 
     // =======================================================================
@@ -635,59 +638,59 @@ mod tests {
    
     #[test]
     fn parses_valid_player_collection_others() {
-        let parsed: PlayerCollection = parse_str(
+        let parsed: SPlayerCollection = parse_str(
           "others"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           PlayerCollection::Others
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_player_collection_playersin() {
-        let parsed: PlayerCollection = parse_str(
+        let parsed: SPlayerCollection = parse_str(
           "playersin"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           PlayerCollection::PlayersIn
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_player_collection_playersout() {
-        let parsed: PlayerCollection = parse_str(
+        let parsed: SPlayerCollection = parse_str(
           "playersout"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           PlayerCollection::PlayersOut
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_player_collection_collection() {
-        let parsed: PlayerCollection = parse_str(
+        let parsed: SPlayerCollection = parse_str(
           "(current, current)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           PlayerCollection::Player(
             vec![
               th::CURRENT,
               th::CURRENT,
             ]
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_player_collection_quantifier() {
-        let parsed: PlayerCollection = parse_str(
+        let parsed: SPlayerCollection = parse_str(
           "all"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           PlayerCollection::Quantifier(
             Quantifier::All
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -696,170 +699,170 @@ mod tests {
 
     #[test]
     fn parses_valid_filter_expr_same_key() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "same Rank"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Same(th::key("Rank"))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_distinct_key() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "distinct Rank"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Distinct(th::key("Rank"))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_adjacent_key() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "adjacent Rank using Aces"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Adjacent(th::key("Rank"), th::precedence("Aces"))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_higher_key() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "higher Rank using Aces"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Higher(th::key("Rank"), th::precedence("Aces"))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_lower_key() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "lower Rank using Aces"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Lower(th::key("Rank"), th::precedence("Aces"))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_size_eq() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "size == 3"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Size(IntCmpOp::Eq, Box::new(IntExpr::Int(3)))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_size_neq() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "size != 3"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Size(IntCmpOp::Neq, Box::new(IntExpr::Int(3)))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_size_lt() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "size < 3"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Size(IntCmpOp::Lt, Box::new(IntExpr::Int(3)))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_size_gt() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "size > 3"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Size(IntCmpOp::Gt, Box::new(IntExpr::Int(3)))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_size_le() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "size <= 3"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Size(IntCmpOp::Le, Box::new(IntExpr::Int(3)))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_size_ge() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "size >= 3"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Size(IntCmpOp::Ge, Box::new(IntExpr::Int(3)))
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_rank_eq() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "Rank == Ace"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::KeyEqValue(
             th::key("Rank"),
             th::value("Ace"),
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_rank_neq() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "Rank != Ace"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::KeyNeqValue(
             th::key("Rank"),
             th::value("Ace"),
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_not_combo() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "not Pair"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::NotCombo(
             th::combo("Pair")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_combo() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "Pair"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Combo(
             th::combo("Pair")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_and() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "(Pair and Triple)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::And(
             Box::new(FilterExpr::Combo(
               th::combo("Pair")
@@ -868,15 +871,15 @@ mod tests {
               th::combo("Triple")
             ))
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_filter_expr_or() {
-        let parsed: FilterExpr = parse_str(
+        let parsed: SFilterExpr = parse_str(
           "(Pair or Triple)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           FilterExpr::Or(
             Box::new(FilterExpr::Combo(
               th::combo("Pair")
@@ -885,7 +888,7 @@ mod tests {
               th::combo("Triple")
             ))
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -893,35 +896,35 @@ mod tests {
     // Group =================================================================
     #[test]
     fn parses_valid_group_location() {
-        let parsed: Group = parse_str(
+        let parsed: SGroup = parse_str(
           "Hand"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           Group::Location(
             th::location("Hand")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_group_location_filter() {
-        let parsed: Group = parse_str(
+        let parsed: SGroup = parse_str(
           "Hand where same Rank"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           Group::LocationWhere(
             th::location("Hand"),
             FilterExpr::Same(th::key("Rank"))
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_group_location_collection() {
-        let parsed: Group = parse_str(
+        let parsed: SGroup = parse_str(
           "(Hand, Stack)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           Group::LocationCollection(
             LocationCollection {
               locations: vec![
@@ -930,15 +933,15 @@ mod tests {
               ]
             }
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_group_location_collection_filter() {
-        let parsed: Group = parse_str(
+        let parsed: SGroup = parse_str(
           "(Hand, Stack) where same Rank"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           Group::LocationCollectionWhere(
             LocationCollection {
               locations: vec![
@@ -948,29 +951,29 @@ mod tests {
             },
             FilterExpr::Same(th::key("Rank"))
           )
-        );
+        ));
     }
 
 
     #[test]
     fn parses_valid_group_combo_in_location() {
-        let parsed: Group = parse_str(
+        let parsed: SGroup = parse_str(
           "Pair in Hand"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           Group::ComboInLocation(
             th::combo("Pair"),
             th::location("Hand")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_group_combo_in_location_collection() {
-        let parsed: Group = parse_str(
+        let parsed: SGroup = parse_str(
           "Pair in (Hand, Stack)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           Group::ComboInLocationCollection(
             th::combo("Pair"),
             LocationCollection {
@@ -980,28 +983,28 @@ mod tests {
               ]
             }
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_group_combo_not_in_location() {
-        let parsed: Group = parse_str(
+        let parsed: SGroup = parse_str(
           "Pair not in Hand"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           Group::NotComboInLocation(
             th::combo("Pair"),
             th::location("Hand")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_group_combo_not_in_location_collection() {
-        let parsed: Group = parse_str(
+        let parsed: SGroup = parse_str(
           "Pair not in (Hand, Stack)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           Group::NotComboInLocationCollection(
             th::combo("Pair"),
             LocationCollection {
@@ -1011,19 +1014,19 @@ mod tests {
               ]
             }
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_group_cardposition() {
-        let parsed: Group = parse_str(
+        let parsed: SGroup = parse_str(
           "top(Hand)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           Group::CardPosition(
             CardPosition::Top(th::location("Hand"))
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -1032,24 +1035,24 @@ mod tests {
 
     #[test]
     fn parses_valid_cardset_group() {
-        let parsed: CardSet = parse_str(
+        let parsed: SCardSet = parse_str(
           "top(Hand)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           CardSet::Group(
             Group::CardPosition(
               CardPosition::Top(th::location("Hand"))
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_cardset_group_of_player() {
-        let parsed: CardSet = parse_str(
+        let parsed: SCardSet = parse_str(
           "Hand where same Rank of current"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           CardSet::GroupOfPlayer(
             Group::LocationWhere(
               th::location("Hand"),
@@ -1057,15 +1060,15 @@ mod tests {
             ),
             th::CURRENT
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_cardset_group_of_player_collection() {
-        let parsed: CardSet = parse_str(
+        let parsed: SCardSet = parse_str(
           "Hand where same Rank of others"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           CardSet::GroupOfPlayerCollection(
             Group::LocationWhere(
               th::location("Hand"),
@@ -1073,7 +1076,7 @@ mod tests {
             ),
             PlayerCollection::Others
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -1082,10 +1085,10 @@ mod tests {
 
     #[test]
     fn parses_valid_intcollection() {
-        let parsed: IntCollection = parse_str(
+        let parsed: SIntCollection = parse_str(
           "(1, 2, 3, 4, 5)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           IntCollection {
             ints: vec![
               IntExpr::Int(1),
@@ -1095,7 +1098,7 @@ mod tests {
               IntExpr::Int(5),
             ]
           }
-        );
+        ));
     }
 
     // =======================================================================
@@ -1104,10 +1107,10 @@ mod tests {
 
     #[test]
     fn parses_valid_locationcollection() {
-        let parsed: LocationCollection = parse_str(
+        let parsed: SLocationCollection = parse_str(
           "(Hand, Deck, Hand)"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           LocationCollection {
             locations: vec![
               th::location("Hand"),
@@ -1115,7 +1118,7 @@ mod tests {
               th::location("Hand"),
             ]
           }
-        );
+        ));
     }
 
     // =======================================================================
@@ -1124,27 +1127,27 @@ mod tests {
 
     #[test]
     fn parses_valid_teamcollection_other_teams() {
-        let parsed: TeamCollection = parse_str(
+        let parsed: STeamCollection = parse_str(
           "other teams"
         ).unwrap();
-        assert_eq!(parsed, 
+        assert_eq!(parsed.lower(&ctx()), Ok( 
           TeamCollection::OtherTeams
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_teamcollection_teams() {
-        let parsed: TeamCollection = parse_str(
+        let parsed: STeamCollection = parse_str(
           "(T1, T2)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           TeamCollection::Team(
             vec![
               TeamExpr::TeamName(th::teamname("T1")),
               TeamExpr::TeamName(th::teamname("T2")),
             ]
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -1153,17 +1156,17 @@ mod tests {
 
     // #[test]
     // fn parses_valid_stringcollection() {
-    //     let parsed: StringCollection = parse_str(
+    //     let parsed: SStringCollection = parse_str(
     //       "(A, B)"
     //     ).unwrap();
-    //     assert_eq!(parsed,
+    //     assert_eq!(parsed.lower(&ctx()), Ok(
     //       StringCollection {
     //         strings: vec![
     //           StringExpr::ID(th::id("A")),
     //           StringExpr::ID(th::id("B")),
     //         ]
     //       }
-    //     );
+    //     ));
     // }
 
     // =======================================================================
@@ -1172,10 +1175,10 @@ mod tests {
 
     #[test]
     fn parses_valid_collection_playercollection() {
-        let parsed: Collection = parse_str(
+        let parsed: SCollection = parse_str(
           "(current, previous)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Collection::PlayerCollection(
             PlayerCollection::Player(
               vec![
@@ -1184,15 +1187,15 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_collection_teamcollection() {
-        let parsed: Collection = parse_str(
+        let parsed: SCollection = parse_str(
           "(T1, team of current)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Collection::TeamCollection(
             TeamCollection::Team(
               vec![
@@ -1201,15 +1204,15 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_collection_intcollection() {
-        let parsed: Collection = parse_str(
+        let parsed: SCollection = parse_str(
           "(1, 2, 3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Collection::IntCollection(
             IntCollection {
               ints: vec![
@@ -1219,43 +1222,43 @@ mod tests {
               ]
             }
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_collection_cardset() {
-        let parsed: Collection = parse_str(
+        let parsed: SCollection = parse_str(
           "Hand of current"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Collection::CardSet(
             Box::new(CardSet::GroupOfPlayer(Group::Location(th::location("Hand")), th::CURRENT))
           )
-        );
+        ));
     }
 
-    #[test]
-    fn parses_valid_collection_cardset_ambiguous() {
-        let parsed: Collection = parse_str(
-          "(Hand, Deck, Hand)"
-        ).unwrap();
-        assert_eq!(parsed,
-          Collection::Ambiguous(
-            vec![
-              ("Hand").to_string(),
-              ("Deck").to_string(),
-              ("Hand").to_string(),
-            ]
-          )
-        );
-    }
+    // #[test]
+    // fn parses_valid_collection_cardset_ambiguous() {
+    //     let parsed: SCollection = parse_str(
+    //       "(Hand, Deck, Hand)"
+    //     ).unwrap();
+    //     assert_eq!(parsed.lower(&ctx()), Ok(
+    //       Collection::CardSet(
+    //         vec![
+    //           th::id("Hand"),
+    //           th::id("Deck"),
+    //           th::id("Hand"),
+    //         ]
+    //       )
+    //     ));
+    // }
 
     #[test]
     fn parses_valid_collection_stringcollection() {
-        let parsed: Collection = parse_str(
+        let parsed: SCollection = parse_str(
           "(Rank of top(Hand), Rank of top(Hand), Rank of top(Hand))"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Collection::StringCollection(
             StringCollection {
             strings: vec![
@@ -1265,7 +1268,7 @@ mod tests {
             ]
           }
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -1274,14 +1277,14 @@ mod tests {
 
     #[test]
     fn parses_valid_repititions() {
-        let parsed: Repititions = parse_str(
+        let parsed: SRepititions = parse_str(
           "3 times"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Repititions {
             times: IntExpr::Int(3)
           }
-        );
+        ));
     }
 
     // =======================================================================
@@ -1290,68 +1293,68 @@ mod tests {
 
     #[test]
     fn parses_valid_endcondition_until_end() {
-        let parsed: EndCondition = parse_str(
+        let parsed: SEndCondition = parse_str(
           "until(end)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           EndCondition::UntilEnd
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_endcondition_until_reps() {
-        let parsed: EndCondition = parse_str(
+        let parsed: SEndCondition = parse_str(
           "until(3 times)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           EndCondition::UntilRep(
             Repititions {
               times: IntExpr::Int(3)
             }
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_endcondition_until_bool() {
-        let parsed: EndCondition = parse_str(
+        let parsed: SEndCondition = parse_str(
           "until(3 == 2)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           EndCondition::UntilBool(
             BoolExpr::IntCmp(IntExpr::Int(3), IntCmpOp::Eq, IntExpr::Int(2))
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_endcondition_until_bool_and_rep() {
-        let parsed: EndCondition = parse_str(
+        let parsed: SEndCondition = parse_str(
           "until(3 == 2 and 3 times)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           EndCondition::UntilBoolAndRep(
             BoolExpr::IntCmp(IntExpr::Int(3), IntCmpOp::Eq, IntExpr::Int(2)),
             Repititions {
               times: IntExpr::Int(3)
             }
           )
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_endcondition_until_bool_or_rep() {
-        let parsed: EndCondition = parse_str(
+        let parsed: SEndCondition = parse_str(
           "until(3 == 2 or 3 times)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           EndCondition::UntilBoolOrRep(
             BoolExpr::IntCmp(IntExpr::Int(3), IntCmpOp::Eq, IntExpr::Int(2)),
             Repititions {
               times: IntExpr::Int(3)
             }
           )
-        );
+        ));
     }
     
     // =======================================================================
@@ -1360,80 +1363,80 @@ mod tests {
 
     #[test]
     fn parses_valid_endcondition_intrange_eq() {
-        let parsed: IntRange = parse_str(
+        let parsed: SIntRange = parse_str(
           "== 2"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           IntRange {
             op: IntCmpOp::Eq,
             int: IntExpr::Int(2)
           }
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_endcondition_intrange_neq() {
-        let parsed: IntRange = parse_str(
+        let parsed: SIntRange = parse_str(
           "!= 2"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           IntRange {
             op: IntCmpOp::Neq,
             int: IntExpr::Int(2)
           }
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_endcondition_intrange_ge() {
-        let parsed: IntRange = parse_str(
+        let parsed: SIntRange = parse_str(
           ">= 2"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           IntRange {
             op: IntCmpOp::Ge,
             int: IntExpr::Int(2)
           }
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_endcondition_intrange_le() {
-        let parsed: IntRange = parse_str(
+        let parsed: SIntRange = parse_str(
           "<= 2"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           IntRange {
             op: IntCmpOp::Le,
             int: IntExpr::Int(2)
           }
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_endcondition_intrange_gt() {
-        let parsed: IntRange = parse_str(
+        let parsed: SIntRange = parse_str(
           "> 2"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           IntRange {
             op: IntCmpOp::Gt,
             int: IntExpr::Int(2)
           }
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_endcondition_intrange_lt() {
-        let parsed: IntRange = parse_str(
+        let parsed: SIntRange = parse_str(
           "< 2"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           IntRange {
             op: IntCmpOp::Lt,
             int: IntExpr::Int(2)
           }
-        );
+        ));
     }
 
     // =======================================================================
@@ -1442,41 +1445,41 @@ mod tests {
 
     #[test]
     fn parses_valid_quantity_int() {
-        let parsed: Quantity = parse_str(
+        let parsed: SQuantity = parse_str(
           "3"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Quantity::Int(
             IntExpr::Int(3)
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_quantity_intrange() {
-        let parsed: Quantity = parse_str(
+        let parsed: SQuantity = parse_str(
           "== 3"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Quantity::IntRange(
             IntRange {
               op: IntCmpOp::Eq,
               int: IntExpr::Int(3)
             }
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_quantity_quantifier() {
-        let parsed: Quantity = parse_str(
+        let parsed: SQuantity = parse_str(
           "all"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Quantity::Quantifier(
             Quantifier::All
           )
-        );
+        ));
     }
     
     // =======================================================================
@@ -1485,31 +1488,31 @@ mod tests {
 
     #[test]
     fn parses_valid_classicmove_move() {
-        let parsed: ClassicMove = parse_str(
+        let parsed: SClassicMove = parse_str(
           "move Hand private to Deck"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           ClassicMove::Move(
             CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
             CardSet::Group(Group::Location(th::location("Deck")))
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_classicmove_move_quantity() {
-        let parsed: ClassicMove = parse_str(
+        let parsed: SClassicMove = parse_str(
           "move all from Hand private to Deck"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           ClassicMove::MoveQuantity(
             Quantity::Quantifier(Quantifier::All),
             CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
             CardSet::Group(Group::Location(th::location("Deck")))
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -1518,31 +1521,31 @@ mod tests {
 
     #[test]
     fn parses_valid_dealmove_deal() {
-        let parsed: DealMove = parse_str(
+        let parsed: SDealMove = parse_str(
           "deal Hand private to Deck"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           DealMove::Deal(
             CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
             CardSet::Group(Group::Location(th::location("Deck")))
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_dealmove_deal_quantity() {
-        let parsed: DealMove = parse_str(
+        let parsed: SDealMove = parse_str(
           "deal 12 from Hand private to Deck of all"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           DealMove::DealQuantity(
             Quantity::Int(IntExpr::Int(12)),
             CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
             CardSet::GroupOfPlayerCollection(Group::Location(th::location("Deck")), PlayerCollection::Quantifier(Quantifier::All))
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -1551,31 +1554,31 @@ mod tests {
 
     #[test]
     fn parses_valid_exchangemove_exchange() {
-        let parsed: ExchangeMove = parse_str(
+        let parsed: SExchangeMove = parse_str(
           "exchange Hand private with Deck"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           ExchangeMove::Exchange(
             CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
             CardSet::Group(Group::Location(th::location("Deck")))
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_exchangemove_exchange_quantity() {
-        let parsed: ExchangeMove = parse_str(
+        let parsed: SExchangeMove = parse_str(
           "exchange all from Hand private with Deck"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           ExchangeMove::ExchangeQuantity(
             Quantity::Quantifier(Quantifier::All),
             CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private,
             CardSet::Group(Group::Location(th::location("Deck")))
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -1584,48 +1587,48 @@ mod tests {
 
     #[test]
     fn parses_valid_tokenloc_expr_location() {
-        let parsed: TokenLocExpr = parse_str(
+        let parsed: STokenLocExpr = parse_str(
           "Hand"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           TokenLocExpr::Location(
             th::location("Hand")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_tokenloc_expr_location_player() {
-        let parsed: TokenLocExpr = parse_str(
+        let parsed: STokenLocExpr = parse_str(
           "Hand of current"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           TokenLocExpr::LocationPlayer(
             th::location("Hand"),
             th::CURRENT
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_tokenloc_expr_location_playercollection() {
-        let parsed: TokenLocExpr = parse_str(
+        let parsed: STokenLocExpr = parse_str(
           "Hand of others"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           TokenLocExpr::LocationPlayerCollection(
             th::location("Hand"),
             PlayerCollection::Others
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_tokenloc_expr_locationcollection() {
-        let parsed: TokenLocExpr = parse_str(
+        let parsed: STokenLocExpr = parse_str(
           "(Hand, Deck)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           TokenLocExpr::LocationCollection(
             LocationCollection {
               locations: vec![
@@ -1634,15 +1637,15 @@ mod tests {
               ]
             }
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_tokenloc_expr_locationcollection_player() {
-        let parsed: TokenLocExpr = parse_str(
+        let parsed: STokenLocExpr = parse_str(
           "(Hand, Deck) of current"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           TokenLocExpr::LocationCollectionPlayer(
             LocationCollection {
               locations: vec![
@@ -1652,15 +1655,15 @@ mod tests {
             },
             th::CURRENT
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_tokenloc_expr_locationcollection_playercollection() {
-        let parsed: TokenLocExpr = parse_str(
+        let parsed: STokenLocExpr = parse_str(
           "(Hand, Deck) of others"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           TokenLocExpr::LocationCollectionPlayerCollection(
             LocationCollection {
               locations: vec![
@@ -1670,7 +1673,7 @@ mod tests {
             },
             PlayerCollection::Others
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -1679,10 +1682,10 @@ mod tests {
 
     #[test]
     fn parses_valid_tokenmove_place() {
-        let parsed: TokenMove = parse_str(
+        let parsed: STokenMove = parse_str(
           "place Token Hand to Deck"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           TokenMove::Place(
             th::token("Token"),
             TokenLocExpr::Location(
@@ -1692,15 +1695,15 @@ mod tests {
               th::location("Deck")
             ),
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_tokenmove_place_quantity() {
-        let parsed: TokenMove = parse_str(
+        let parsed: STokenMove = parse_str(
           "place all Token from Hand to Deck"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           TokenMove::PlaceQuantity(
             Quantity::Quantifier(Quantifier::All),
             th::token("Token"),
@@ -1711,7 +1714,7 @@ mod tests {
               th::location("Deck")
             ),
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -1720,10 +1723,10 @@ mod tests {
 
     #[test]
     fn parses_valid_rule_createplayers() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "players: (P1, P2, P3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreatePlayer(
             vec![
               th::playername("P1"),
@@ -1731,15 +1734,15 @@ mod tests {
               th::playername("P3"),
             ]
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_createteam() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "team T1: (P1, P2, P3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateTeam(
             th::teamname("T1"),
             vec![
@@ -1748,15 +1751,15 @@ mod tests {
               th::playername("P3"),
             ]
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_createturnorder() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "turnorder: (P1, P2, P3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateTurnorder(
             vec![
               th::playername("P1"),
@@ -1764,15 +1767,15 @@ mod tests {
               th::playername("P3"),
             ]
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_createturnorder_random() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "random turnorder: (P1, P2, P3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateTurnorderRandom(
             vec![
               th::playername("P1"),
@@ -1780,15 +1783,15 @@ mod tests {
               th::playername("P3"),
             ]
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_createlocation_playercollection() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "location Hand on (P1, P2, P3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateLocationOnPlayerCollection(
             th::location("Hand"),
             PlayerCollection::Player(
@@ -1799,15 +1802,15 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_createlocation_teamcollection() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "location Hand on teams(T1, T2, T3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateLocationOnTeamCollection(
             th::location("Hand"),
             TeamCollection::Team(
@@ -1818,31 +1821,31 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_createlocation_table() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "location Stack on table"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateLocationOnTable(
             th::location("Stack")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_createcard() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "card on Stack: 
             Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)
               for Suite(Spades, Clubs)
                 for Color(Black)
           "
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateCardOnLocation(
             th::location("Stack"),
             Types {
@@ -1872,29 +1875,29 @@ mod tests {
               ]
             }
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_createtoken() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "token 10 Chip on Stack"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateTokenOnLocation(
             IntExpr::Int(10),
             th::token("Chip"),
             th::location("Stack")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_precedence() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "precedence Rank on Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreatePrecedence(
             th::precedence("Rank"),
             vec![ 
@@ -1913,15 +1916,15 @@ mod tests {
               (th::key("Rank"), th::value("Ace"))
             ]
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_precedence_pair() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "precedence Rank (Rank(Two), Suite(Spades), Color(Red))"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreatePrecedence(
             th::precedence("Rank"),
             vec![
@@ -1930,28 +1933,28 @@ mod tests {
               (th::key("Color"), th::value("Red")),
             ]
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_combo() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "combo SameSuite where same Suite"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateCombo(
             th::combo("SameSuite"),
             FilterExpr::Same(th::key("Suite"))
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_memory_playercollection() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "memory Square on (current, P2, P3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateMemoryPlayerCollection(
             th::memory("Square"),
             PlayerCollection::Player(
@@ -1962,27 +1965,27 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_memory_table() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "memory Square on table"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateMemoryTable(
             th::memory("Square")
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_memory_int_playercollection() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "memory Square 10 on (current, P2, P3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateMemoryIntPlayerCollection(
             th::memory("Square"),
             IntExpr::Int(10),
@@ -1994,28 +1997,28 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_memory_int_table() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "memory Square 10 on table"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateMemoryIntTable(
             th::memory("Square"),
             IntExpr::Int(10),
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_memory_string_playercollection() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "memory Square Rank of top(Hand) on (current, P2, P3)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateMemoryStringPlayerCollection(
             th::memory("Square"),
             StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
@@ -2027,25 +2030,25 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_memory_string_table() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "memory Square Rank of top(Hand) on table"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreateMemoryStringTable(
             th::memory("Square"),
             StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_pointmap() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "pointmap Rank on Rank(
             Two: 1,
             Three: 1,
@@ -2062,7 +2065,7 @@ mod tests {
             Ace: 1
           )"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreatePointMap(
             th::pointmap("Rank"),
             vec![
@@ -2081,15 +2084,15 @@ mod tests {
               (th::key("Rank"), th::value("Ace"), IntExpr::Int(1)),
             ]
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_create_pointmap_pairs() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "pointmap Rank (Rank(Two: 1), Suite(Spades: 1), Color(Red: 1))"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CreatePointMap(
             th::pointmap("Rank"),
             vec![
@@ -2098,76 +2101,76 @@ mod tests {
               (th::key("Color"), th::value("Red"), IntExpr::Int(1)),
             ]
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_flip_action() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "flip Hand to private"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::FlipAction(
             CardSet::Group(Group::Location(th::location("Hand"))),
             Status::Private
           )
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_rule_shuffle_action() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "shuffle Hand"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::ShuffleAction(
             CardSet::Group(Group::Location(th::location("Hand"))),
           )
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_rule_player_out_stage() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "set current out of stage"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::PlayerOutOfStageAction(
             th::CURRENT
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_player_out_game_succ() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "set current out of game successful"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::PlayerOutOfGameSuccAction(
             th::CURRENT
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_player_out_game_fail() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "set current out of game fail"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::PlayerOutOfGameFailAction(
             th::CURRENT
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_player_collection_out_stage() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "set (current) out of stage"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::PlayerCollectionOutOfStageAction(
             PlayerCollection::Player(
               vec![
@@ -2175,15 +2178,15 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_player_collection_out_game_succ() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "set (current) out of game successful"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::PlayerCollectionOutOfGameSuccAction(
             PlayerCollection::Player(
               vec![
@@ -2191,15 +2194,15 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_player_collection_out_game_fail() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "set (current) out of game fail"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::PlayerCollectionOutOfGameFailAction(
             PlayerCollection::Player(
               vec![
@@ -2207,28 +2210,28 @@ mod tests {
               ]
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_set_memory_int() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "Square is 10"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::SetMemoryInt(
             th::memory("Square"),
             IntExpr::Int(10)
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_set_memory_string() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "Square is Rank of top(Hand)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::SetMemoryString(
             th::memory("Square"),
             StringExpr::KeyOf(
@@ -2236,28 +2239,28 @@ mod tests {
               CardPosition::Top(th::location("Hand"))
             )
           )
-        );
+        ));
     }
 
     // #[test]
     // fn parses_valid_rule_set_memory_ambiguous() {
-    //     let parsed: Rule = parse_str(
+    //     let parsed: SRule = parse_str(
     //       "Square is A"
     //     ).unwrap();
-    //     assert_eq!(parsed,
+    //     assert_eq!(parsed.lower(&ctx()), Ok(
     //       Rule::SetMemoryAmbiguous(
     //         th::memory("Square"),
     //         th::id("A")
     //       )
-    //     );
+    //     ));
     // }
 
     #[test]
     fn parses_valid_rule_set_memory_collection() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "Square is (current)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::SetMemoryCollection(
             th::memory("Square"),
             Collection::PlayerCollection(
@@ -2268,114 +2271,114 @@ mod tests {
               )
             )
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_cycle_action() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "cycle to next"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::CycleAction(
             PlayerExpr::Next
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_bid_action() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "bid all"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::BidAction(
             Quantity::Quantifier(Quantifier::All)
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_bid_action_memory() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "bid all on Square"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::BidActionMemory(
             th::memory("Square"),
             Quantity::Quantifier(Quantifier::All)
           )
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_rule_end_turn() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "end turn"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::EndTurn
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_rule_end_stage() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "end stage"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::EndStage
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_end_game_with_winner() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "end game with winner current"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::EndGameWithWinner(
             th::CURRENT
           )
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_rule_demand_card_position() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "demand top(Hand)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::DemandCardPositionAction(
             CardPosition::Top(
               th::location("Hand")
             )
           )
-        );
+        ));
     }
     
     #[test]
     fn parses_valid_rule_demand_string() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "demand Rank of top(Hand)"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::DemandStringAction(
             StringExpr::KeyOf(th::key("Rank"), CardPosition::Top(th::location("Hand"))),
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_rule_demand_int() {
-        let parsed: Rule = parse_str(
+        let parsed: SRule = parse_str(
           "demand 10"
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Rule::DemandIntAction(
             IntExpr::Int(10)
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -2384,14 +2387,14 @@ mod tests {
 
     #[test]
     fn parses_valid_seq_stage() {
-        let parsed: SeqStage = parse_str(
+        let parsed: SSeqStage = parse_str(
           "
             stage Play for current until(1 times) {
               deal 12 from Stock private to Hand of all;
             }
           "
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           SeqStage {
             stage: th::stage("Play"), 
             player: th::CURRENT, 
@@ -2409,7 +2412,7 @@ mod tests {
               )
             ] 
           }
-        );
+        ));
     }
 
     // =======================================================================
@@ -2418,14 +2421,14 @@ mod tests {
 
     #[test]
     fn parses_valid_if_rule() {
-        let parsed: IfRule = parse_str(
+        let parsed: SIfRule = parse_str(
           "
             if (current out of stage) {
               cycle to next;
             }
           "
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           IfRule {
             condition: BoolExpr::OutOfStagePlayer(th::CURRENT),
             flows: vec![
@@ -2436,7 +2439,7 @@ mod tests {
               )
             ]
           }
-        );
+        ));
     }
 
     // =======================================================================
@@ -2445,14 +2448,14 @@ mod tests {
 
     #[test]
     fn parses_valid_optional_rule() {
-        let parsed: OptionalRule = parse_str(
+        let parsed: SOptionalRule = parse_str(
           "
             optional {
               end turn;
             }
           "
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           OptionalRule {
             flows: vec![
               FlowComponent::Rule(
@@ -2460,7 +2463,7 @@ mod tests {
               )
             ]
           }
-        );
+        ));
     }
 
     // =======================================================================
@@ -2469,7 +2472,7 @@ mod tests {
 
     #[test]
     fn parses_valid_choice_rule() {
-        let parsed: ChoiceRule = parse_str(
+        let parsed: SChoiceRule = parse_str(
           "
             choose {
               end turn;
@@ -2480,7 +2483,7 @@ mod tests {
             }
           "
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           ChoiceRule {
             options: vec![
               FlowComponent::Rule(
@@ -2497,7 +2500,7 @@ mod tests {
               ),
             ]
           }
-        );
+        ));
     }
 
     // =======================================================================
@@ -2506,7 +2509,7 @@ mod tests {
 
     #[test]
     fn parses_valid_flow_component_choice_rule() {
-        let parsed: FlowComponent = parse_str(
+        let parsed: SFlowComponent = parse_str(
           "
             choose {
               end turn;
@@ -2517,7 +2520,7 @@ mod tests {
             }
           "
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           FlowComponent::ChoiceRule(
             ChoiceRule {
               options: vec![
@@ -2536,21 +2539,21 @@ mod tests {
               ]
             }
           )
-        );
+        ));
     }
 
     #[test]
     fn parses_valid_flow_component_rule() {
-        let parsed: FlowComponent = parse_str(
+        let parsed: SFlowComponent = parse_str(
           "
             end turn;
           "
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           FlowComponent::Rule(
             Rule::EndTurn
           )
-        );
+        ));
     }
 
     // =======================================================================
@@ -2559,7 +2562,7 @@ mod tests {
 
     #[test]
     fn parses_valid_game() {
-        let parsed: Game = parse_str(
+        let parsed: SGame = parse_str(
           "
             players: (P1, P2, P3);
             turnorder: (P1, P2, P3);
@@ -2618,7 +2621,7 @@ mod tests {
             winner is lowest LeftOver;
           "
         ).unwrap();
-        assert_eq!(parsed,
+        assert_eq!(parsed.lower(&ctx()), Ok(
           Game {
             flows: vec![
               // create players
@@ -3025,7 +3028,7 @@ mod tests {
               ),
             ]
           }
-        );
+        ));
     }
 
     // =======================================================================

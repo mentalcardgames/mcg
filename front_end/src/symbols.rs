@@ -1,36 +1,55 @@
-use crate::{{analysis::AnalyzerError}, {ast::*, typed_ast::GameType}, visitor::Visitor};
+use crate::{analysis::AnalyzerError, typed_ast::GameType, visitor::Visitor};
+use crate::diagnostic::*;
+use crate::spanned_ast::*;
 
-pub type TypedVars = Vec<(String, GameType)>;
+pub type TypedVars = Vec<(Var, GameType)>;
 
-fn id_not_initialized(value: &TypedVars, id: &String) -> Result<(), AnalyzerError> {
-  if value.iter().map(|(s, _)| s.clone()).collect::<Vec<String>>().contains(id) {
+#[derive(Debug, Clone)]
+pub struct Var {
+  pub id: String,
+  pub(crate) span: proc_macro2::Span,
+}
+
+impl PartialEq for Var {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+fn id_not_initialized(value: &TypedVars, id: &SID) -> Result<(), AnalyzerError> {
+  if value.iter().map(|(s, _)| s.id.clone()).collect::<Vec<String>>().contains(&id.node) {
     return Ok(())
   }
 
-  return Err(AnalyzerError::IDNotInitialized { id: id.clone() })
+  return Err(AnalyzerError::IDNotInitialized { id: id.node.clone() })
 }
 
-fn id_used(value: &mut TypedVars, id: &String, ty: GameType) -> Result<(), AnalyzerError> {
-  if !value.iter().map(|(s, _)| s.clone()).collect::<Vec<String>>().contains(id) {
-    value.push((id.clone(), ty));
+fn id_used(value: &mut TypedVars, id: &SID, ty: GameType) -> Result<(), AnalyzerError> {
+  if !value.iter().map(|(s, _)| s.id.clone()).collect::<Vec<String>>().contains(&id.node) {
+    let var = Var {
+      id: id.node.clone(),
+      span: id.span,
+    };
+
+    value.push((var, ty));
 
     return Ok(())
   }
 
-  return Err(AnalyzerError::IdUsed { id: id.clone() })
+  return Err(AnalyzerError::IdUsed { id: id.node.clone() })
 }
 
-impl Visitor<TypedVars> for Game {
+impl Visitor<TypedVars> for SGame {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    self.flows.visit(value)?;
+    self.node.flows.visit(value)?;
 
     Ok(())
   }
 }
 
-impl Visitor<TypedVars> for Vec<FlowComponent> {
+impl Visitor<TypedVars> for Vec<SFlowComponent> {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
@@ -42,11 +61,11 @@ impl Visitor<TypedVars> for Vec<FlowComponent> {
   }
 }
 
-impl Visitor<TypedVars> for FlowComponent {
+impl Visitor<TypedVars> for SFlowComponent {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       FlowComponent::Stage(seq_stage) => seq_stage.visit(value)?,
       FlowComponent::Rule(rule) => rule.visit(value)?,
       FlowComponent::IfRule(if_rule) => if_rule.visit(value)?,
@@ -58,25 +77,49 @@ impl Visitor<TypedVars> for FlowComponent {
   }
 }
 
-impl Visitor<TypedVars> for SeqStage {
+impl Visitor<TypedVars> for SSeqStage {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    self.flows.visit(value)?;
-    self.player.visit(value)?;
-    self.end_condition.visit(value)?;
+    self.node.flows.visit(value)?;
+    self.node.player.visit(value)?;
+    self.node.end_condition.visit(value)?;
 
     Ok(())
   }
 }
 
-impl Visitor<TypedVars> for IfRule {
+impl Visitor<TypedVars> for SIfRule {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    self.condition.visit(value)?;
+    self.node.condition.visit(value)?;
     // There might be some initialization of variables.
-    for flow in self.flows.iter() {
+    for flow in self.node.flows.iter() {
+      let former_value = value.clone();
+      flow.visit(value)?;
+
+      // There has been some initialization been done.
+      // However this initialization is optional!
+      // Not deterministic.
+      if former_value.clone() != value.clone() {
+        // calculate the difference from former value and value afterwards
+        value.retain(|x| !former_value.contains(x));
+
+        return Err(AnalyzerError::NonDeterministicInitialization { created: value.clone() })
+      }
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SChoiceRule {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    // There might be some initialization of variables.
+    for flow in self.node.options.iter() {
       let former_value = value.clone();
       flow.visit(value)?;
 
@@ -94,12 +137,12 @@ impl Visitor<TypedVars> for IfRule {
   }
 }
 
-impl Visitor<TypedVars> for ChoiceRule {
+impl Visitor<TypedVars> for SOptionalRule {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     // There might be some initialization of variables.
-    for flow in self.options.iter() {
+    for flow in self.node.flows.iter() {
       let former_value = value.clone();
       flow.visit(value)?;
 
@@ -117,34 +160,11 @@ impl Visitor<TypedVars> for ChoiceRule {
   }
 }
 
-impl Visitor<TypedVars> for OptionalRule {
+impl Visitor<TypedVars> for SEndCondition {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    // There might be some initialization of variables.
-    for flow in self.flows.iter() {
-      let former_value = value.clone();
-      flow.visit(value)?;
-
-      // There has been some initialization been done.
-      // However this initialization is optional!
-      // Not deterministic.
-      if former_value.clone() != value.clone() {
-        // calculate the difference from former value and value afterwards
-        value.retain(|x| !former_value.contains(x));
-        return Err(AnalyzerError::NonDeterministicInitialization { created: value.clone() })
-      }
-    }
-
-    Ok(())
-  }
-}
-
-impl Visitor<TypedVars> for EndCondition {
-  type Error = AnalyzerError;
-
-  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       EndCondition::UntilBool(bool_expr) => {
         bool_expr.visit(value)?;
       },
@@ -167,20 +187,20 @@ impl Visitor<TypedVars> for EndCondition {
   }
 }
 
-impl Visitor<TypedVars> for Repititions {
+impl Visitor<TypedVars> for SRepititions {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    self.times.visit(value)?;
+    self.node.times.visit(value)?;
     Ok(())
   }
 }
 
-impl Visitor<TypedVars> for BoolExpr {
+impl Visitor<TypedVars> for SBoolExpr {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       BoolExpr::IntCmp(int_expr, _, int_expr1) => {
         int_expr.visit(value)?;
         int_expr1.visit(value)?;
@@ -251,11 +271,11 @@ impl Visitor<TypedVars> for BoolExpr {
   }
 }
 
-impl Visitor<TypedVars> for IntExpr {
+impl Visitor<TypedVars> for SIntExpr {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       IntExpr::IntOp(int_expr, _, int_expr1) => {
         int_expr.visit(value)?;
         int_expr1.visit(value)?;
@@ -293,11 +313,11 @@ impl Visitor<TypedVars> for IntExpr {
   }
 }
 
-impl Visitor<TypedVars> for PlayerExpr {
+impl Visitor<TypedVars> for SPlayerExpr {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       PlayerExpr::PlayerName(player_name) => id_not_initialized(value, player_name)?,
       _ => {},
     }
@@ -305,11 +325,11 @@ impl Visitor<TypedVars> for PlayerExpr {
   }
 }
 
-impl Visitor<TypedVars> for TeamExpr {
+impl Visitor<TypedVars> for STeamExpr {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       TeamExpr::TeamName(team_name) => id_not_initialized(value, team_name)?,
       _ => {},
     }
@@ -317,11 +337,11 @@ impl Visitor<TypedVars> for TeamExpr {
   }
 }
 
-impl Visitor<TypedVars> for StringExpr {
+impl Visitor<TypedVars> for SStringExpr {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       StringExpr::KeyOf(key, card_position) => {
         card_position.visit(value)?;
         id_not_initialized(value, key)?;
@@ -335,11 +355,11 @@ impl Visitor<TypedVars> for StringExpr {
   }
 }
 
-impl Visitor<TypedVars> for CardSet {
+impl Visitor<TypedVars> for SCardSet {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       CardSet::Group(group) => {
         group.visit(value)?;
       },
@@ -356,11 +376,11 @@ impl Visitor<TypedVars> for CardSet {
   }
 }
 
-impl Visitor<TypedVars> for Group {
+impl Visitor<TypedVars> for SGroup {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       Group::Location(location) => {
         id_not_initialized(value, location)?;
       },
@@ -399,11 +419,11 @@ impl Visitor<TypedVars> for Group {
   }
 }
 
-impl Visitor<TypedVars> for CardPosition {
+impl Visitor<TypedVars> for SCardPosition {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       CardPosition::At(location, int_expr) => {
         id_not_initialized(value, location)?;
         int_expr.visit(value)?;
@@ -427,11 +447,11 @@ impl Visitor<TypedVars> for CardPosition {
   }
 }
 
-impl Visitor<TypedVars> for FilterExpr {
+impl Visitor<TypedVars> for SFilterExpr {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       FilterExpr::Same(key) => {
         id_not_initialized(value, key)?;
       },
@@ -488,77 +508,77 @@ impl Visitor<TypedVars> for FilterExpr {
   }
 }
 
-impl Visitor<TypedVars> for Collection {
+impl Visitor<TypedVars> for SCollection {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
-      Collection::IntCollection(int_collection) => {
-        int_collection.visit(value)?;
-      },
-      Collection::StringCollection(string_collection) => {
-        string_collection.visit(value)?;
-      },
-      Collection::LocationCollection(location_collection) => {
-        location_collection.visit(value)?;
-      },
-      Collection::PlayerCollection(player_collection) => {
-        player_collection.visit(value)?;
-      },
-      Collection::TeamCollection(team_collection) => {
-        team_collection.visit(value)?;
-      },
-      Collection::CardSet(card_set) => {
-        card_set.visit(value)?;
-      },
-      Collection::Ambiguous(ids) => {
-        for id in ids.iter() {
-          id_not_initialized(value, id)?;
-        }
-      },
+    match &self.node {
+        Collection::IntCollection(int_collection) => {
+            int_collection.visit(value)?;
+          },
+        Collection::StringCollection(string_collection) => {
+            string_collection.visit(value)?;
+          },
+        Collection::LocationCollection(location_collection) => {
+            location_collection.visit(value)?;
+          },
+        Collection::PlayerCollection(player_collection) => {
+            player_collection.visit(value)?;
+          },
+        Collection::TeamCollection(team_collection) => {
+            team_collection.visit(value)?;
+          },
+        Collection::CardSet(card_set) => {
+            card_set.visit(value)?;
+          },
+        Collection::Ambiguous(spanneds) => {
+          for s in spanneds.iter() {
+            id_not_initialized(value, s)?;
+          }
+        },
     }
     Ok(())
   }
 }
 
-impl Visitor<TypedVars> for IntCollection {
+impl Visitor<TypedVars> for SIntCollection {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    for int_expr in self.ints.iter() {
+    for int_expr in self.node.ints.iter() {
       int_expr.visit(value)?;
     }
     Ok(())
   }
 } 
 
-impl Visitor<TypedVars> for StringCollection {
+impl Visitor<TypedVars> for SStringCollection {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    for string_expr in self.strings.iter() {
+    for string_expr in self.node.strings.iter() {
       string_expr.visit(value)?;
     }
     Ok(())
   }
 }
 
-impl Visitor<TypedVars> for LocationCollection {
+impl Visitor<TypedVars> for SLocationCollection {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    for location in self.locations.iter() {
+    for location in self.node.locations.iter() {
       id_not_initialized(value, location)?;
     }
     Ok(())
   }
 }
 
-impl Visitor<TypedVars> for PlayerCollection {
+impl Visitor<TypedVars> for SPlayerCollection {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       PlayerCollection::Player(player_exprs) => {
         for player_expr in player_exprs.iter() {
           player_expr.visit(value)?;
@@ -570,11 +590,11 @@ impl Visitor<TypedVars> for PlayerCollection {
   }
 }
 
-impl Visitor<TypedVars> for TeamCollection {
+impl Visitor<TypedVars> for STeamCollection {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       TeamCollection::Team(team_exprs) => {
         for team_expr in team_exprs.iter() {
           team_expr.visit(value)?;
@@ -586,11 +606,11 @@ impl Visitor<TypedVars> for TeamCollection {
   }
 }
 
-impl Visitor<TypedVars> for Rule {
+impl Visitor<TypedVars> for SRule {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       Rule::CreatePlayer(player_names) => {
         for player in player_names.iter() {
           id_used(value, player, GameType::Player)?;
@@ -625,21 +645,21 @@ impl Visitor<TypedVars> for Rule {
         id_used(value, location, GameType::Location)?;
       },
       Rule::CreateLocationCollectionOnPlayerCollection(location_collection, player_collection) => {
-        for location in location_collection.locations.iter() {
+        for location in location_collection.node.locations.iter() {
           id_used(value, location, GameType::Location)?;
         } 
 
         player_collection.visit(value)?;
       },
       Rule::CreateLocationCollectionOnTeamCollection(location_collection, team_collection) => {
-        for location in location_collection.locations.iter() {
+        for location in location_collection.node.locations.iter() {
           id_used(value, location, GameType::Location)?;
         } 
         
         team_collection.visit(value)?;
       },
       Rule::CreateLocationCollectionOnTable(location_collection) => {
-        for location in location_collection.locations.iter() {
+        for location in location_collection.node.locations.iter() {
           id_used(value, location, GameType::Location)?;
         }
       },
@@ -776,11 +796,11 @@ impl Visitor<TypedVars> for Rule {
   }
 }
 
-impl Visitor<TypedVars> for Types {
+impl Visitor<TypedVars> for STypes {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    for (k, vs) in self.types.iter() {
+    for (k, vs) in self.node.types.iter() {
       id_used(value, k, GameType::Key)?;
       
       for v in vs.iter() {
@@ -791,11 +811,11 @@ impl Visitor<TypedVars> for Types {
   }
 }
 
-impl Visitor<TypedVars> for Quantity {
+impl Visitor<TypedVars> for SQuantity {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       Quantity::Int(int_expr) => {
         int_expr.visit(value)?;
       },
@@ -810,11 +830,11 @@ impl Visitor<TypedVars> for Quantity {
   }
 }
 
-impl Visitor<TypedVars> for Quantifier {
+impl Visitor<TypedVars> for SQuantifier {
   type Error = AnalyzerError;
 
   fn visit(&self, _: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       Quantifier::All => {},
       Quantifier::Any => {},
     }
@@ -822,20 +842,20 @@ impl Visitor<TypedVars> for Quantifier {
   }
 }
 
-impl Visitor<TypedVars> for IntRange {
+impl Visitor<TypedVars> for SIntRange {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    self.int.visit(value)?;
+    self.node.int.visit(value)?;
     Ok(())
   }
 }
 
-impl Visitor<TypedVars> for ClassicMove {
+impl Visitor<TypedVars> for SClassicMove {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       ClassicMove::Move(card_set, _, card_set1) => {
         card_set.visit(value)?;
         card_set1.visit(value)?;
@@ -850,11 +870,11 @@ impl Visitor<TypedVars> for ClassicMove {
   }
 }
 
-impl Visitor<TypedVars> for DealMove {
+impl Visitor<TypedVars> for SDealMove {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       DealMove::Deal(card_set, _, card_set1) => {
         card_set.visit(value)?;
         card_set1.visit(value)?;
@@ -869,11 +889,11 @@ impl Visitor<TypedVars> for DealMove {
   }
 }
 
-impl Visitor<TypedVars> for ExchangeMove {
+impl Visitor<TypedVars> for SExchangeMove {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       ExchangeMove::Exchange(card_set, _, card_set1) => {
         card_set.visit(value)?;
         card_set1.visit(value)?;
@@ -888,11 +908,11 @@ impl Visitor<TypedVars> for ExchangeMove {
   }
 }
 
-impl Visitor<TypedVars> for TokenMove {
+impl Visitor<TypedVars> for STokenMove {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       TokenMove::Place(token, token_loc_expr, token_loc_expr1) => {
         id_not_initialized(value, token)?;
         token_loc_expr.visit(value)?;
@@ -909,11 +929,11 @@ impl Visitor<TypedVars> for TokenMove {
   }
 } 
 
-impl Visitor<TypedVars> for TokenLocExpr {
+impl Visitor<TypedVars> for STokenLocExpr {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       TokenLocExpr::Location(location) => {
         id_not_initialized(value, location)?;
       },
@@ -941,11 +961,11 @@ impl Visitor<TypedVars> for TokenLocExpr {
   }
 }
 
-impl Visitor<TypedVars> for ScoreRule {
+impl Visitor<TypedVars> for SScoreRule {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       ScoreRule::ScorePlayer(int_expr, player_expr) => {
         int_expr.visit(value)?;
         player_expr.visit(value)?;
@@ -969,11 +989,11 @@ impl Visitor<TypedVars> for ScoreRule {
   }
 }
 
-impl Visitor<TypedVars> for WinnerRule {
+impl Visitor<TypedVars> for SWinnerRule {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    match self {
+    match &self.node {
       WinnerRule::WinnerPlayer(player_expr) => {
         player_expr.visit(value)?;
       },

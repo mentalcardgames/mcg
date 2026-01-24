@@ -1,11 +1,11 @@
 pub mod parse;
 pub mod analysis;
 pub mod transform_to_typed;
-pub mod ast;
+pub mod spanned_ast;
 pub mod ir;
 pub mod keywords;
 pub mod typed_ast;
 pub mod symbols;
 pub mod visitor;
 pub mod helper;
-mod diagnostic;
+pub mod diagnostic;
