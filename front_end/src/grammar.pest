@@ -1,0 +1,893 @@
+WHITESPACE = _{ " "+ | "\t" | "\r\n" | "\n" }
+
+file = { SOI ~ game_flow ~ EOI }
+
+//////////////////////////
+// Character classes
+//////////////////////////
+alpha = { 'a'..'z' | 'A'..'Z' }
+digit = { '0'..'9' }
+int = @{ ("-")? ~ ASCII_DIGIT+ }
+ident = @{ &alpha ~ !(kw) ~ (alpha | digit)* }
+
+//////////////////////////
+// Basic semantic identifiers
+//////////////////////////
+game        = { ident }
+stage       = { ident }
+teamname    = { ident }
+playername    = { ident }
+location    = { ident }
+token       = { ident }
+precedence  = { ident }
+combo       = { ident }
+memory      = { ident }
+pointmap    = { ident }
+key         = { ident }
+value       = { ident }
+
+//////////////////////////
+// Keywords
+//////////////////////////
+kw_adjacent   = { "adjacent" }
+kw_all        = { "all" }
+kw_and        = { "and" }
+kw_any        = { "any" }
+kw_as         = { "as" }
+kw_at         = { "at" }
+kw_bid        = { "bid" }
+kw_bottom     = { "bottom" }
+kw_card       = { "card" }
+kw_case       = { "case" }
+kw_choose     = { "choose" }
+kw_combo      = { "combo" }
+kw_competitor = { "competitor" }
+kw_conditional = { "conditional" }
+kw_create     = { "create" }
+kw_current    = { "current" }
+kw_cycle      = { "cycle" }
+kw_deal       = { "deal" }
+kw_demand     = { "demand" }
+kw_distinct   = { "distinct" }
+kw_down       = { "down" }
+kw_empty      = { "empty" }
+kw_end        = { "end" }
+kw_exchange   = { "exchange" }
+kw_face       = { "face" }
+kw_fail       = { "fail" }
+kw_flip       = { "flip" }
+kw_for        = { "for" }
+kw_from       = { "from" }
+kw_game       = { "game" }
+kw_higher     = { "higher" }
+kw_highest    = { "highest" }
+kw_if         = { "if" }
+kw_in         = { "in" }
+kw_is         = { "is" }
+kw_location   = { "location" }
+kw_lower      = { "lower" }
+kw_lowest     = { "lowest" }
+kw_max        = { "max" }
+kw_memory     = { "memory" }
+kw_min        = { "min" }
+kw_move       = { "move" }
+kw_next       = { "next" }
+kw_not        = { "not" }
+kw_of         = { "of" }
+kw_on         = { "on" }
+kw_optional   = { "optional" }
+kw_or         = { "or" }
+kw_other      = { "other" }
+kw_others     = { "others" }
+kw_out        = { "out" }
+kw_owner      = { "owner" }
+kw_place      = { "place" }
+kw_player     = { "player" }
+kw_playersin  = { "playersin" }
+kw_playersout = { "playersout" }
+kw_playroundcounter = { "playroundcounter" }
+kw_pointmap   = { "pointmap" }
+kw_points   = { "points" }
+kw_position   = { "position" }
+kw_precedence = { "precedence" }
+kw_previous   = { "previous" }
+kw_private    = { "private" }
+kw_random     = { "random" }
+kw_reset      = { "reset" }
+kw_same       = { "same" }
+kw_score      = { "score" }
+kw_set        = { "set" }
+kw_shuffle    = { "shuffle" }
+kw_size       = { "size" }
+kw_stage      = { "stage" }
+kw_stageroundcounter = { "stageroundcounter" }
+kw_successful = { "successful" }
+kw_sum        = { "sum" }
+kw_table      = { "table" }
+kw_team       = { "team" }
+kw_teams      = { "teams" }
+kw_times      = { "times" }
+kw_to         = { "to" }
+kw_token      = { "token" }
+kw_top        = { "top" }
+kw_turn       = { "turn" }
+kw_turnorder  = { "turnorder" }
+kw_until      = { "until" }
+kw_up         = { "up" }
+kw_using      = { "using" }
+kw_where      = { "where" }
+kw_winner     = { "winner" }
+kw_with       = { "with" }
+
+kw = {
+    kw_adjacent
+  | kw_all
+  | kw_and
+  | kw_any
+  | kw_as
+  | kw_at
+  | kw_bid
+  | kw_bottom
+  | kw_card
+  | kw_case
+  | kw_choose
+  | kw_combo
+  | kw_competitor
+  | kw_conditional
+  | kw_create
+  | kw_current
+  | kw_cycle
+  | kw_deal
+  | kw_demand
+  | kw_distinct
+  | kw_down
+  | kw_empty
+  | kw_end
+  | kw_exchange
+  | kw_face
+  | kw_fail
+  | kw_flip
+  | kw_for
+  | kw_from
+  | kw_game
+  | kw_higher
+  | kw_highest
+  | kw_if
+  | kw_in
+  | kw_is
+  | kw_location
+  | kw_lower
+  | kw_lowest
+  | kw_max
+  | kw_memory
+  | kw_min
+  | kw_move
+  | kw_next
+  | kw_not
+  | kw_of
+  | kw_on
+  | kw_optional
+  | kw_or
+  | kw_other
+  | kw_others
+  | kw_out
+  | kw_owner
+  | kw_place
+  | kw_player
+  | kw_playersin
+  | kw_playersout
+  | kw_playroundcounter
+  | kw_pointmap
+  | kw_position
+  | kw_precedence
+  | kw_previous
+  | kw_private
+  | kw_random
+  | kw_reset
+  | kw_same
+  | kw_score
+  | kw_set
+  | kw_shuffle
+  | kw_size
+  | kw_stage
+  | kw_stageroundcounter
+  | kw_successful
+  | kw_sum
+  | kw_table
+  | kw_team
+  | kw_teams
+  | kw_times
+  | kw_to
+  | kw_token
+  | kw_top
+  | kw_turn
+  | kw_turnorder
+  | kw_until
+  | kw_up
+  | kw_using
+  | kw_where
+  | kw_winner
+  | kw_with
+}
+
+//////////////////////////
+// Lists
+//////////////////////////
+location_list = { location ~ ("," ~ location)* }
+player_name_list = { playername ~ ("," ~ playername)* }
+
+//////////////////////////
+// Helper
+//////////////////////////
+
+// Owner
+// =======================
+owner = {
+    player_collection
+  | team_collection
+  | player_expr
+  | team_expr
+  | kw_table
+}
+// =======================
+
+// Players
+// =======================
+players = {
+    player_collection
+  | player_expr
+}
+
+// =======================
+
+// Groupable
+// =======================
+groupable = { location | location_collection }
+// =======================
+
+//////////////////////////
+// Operators
+//////////////////////////
+eq  = { "==" }
+neq = { "!=" }
+lt  = { "<" }
+gt  = { ">" } 
+le  = { "<=" }
+ge  = { ">=" } 
+
+plus = { "+" }
+minus = { "-" }
+mul = { "*" }
+div = { "/" }
+modulo = { "mod" }
+
+bin_compare = {
+  (eq | neq)
+}
+
+logical_compare = {
+  (kw_and | kw_or)
+}
+
+int_op = {
+    plus 
+  | minus 
+  | mul 
+  | div 
+  | modulo
+}
+
+int_cmp_op = {
+    eq 
+  | neq 
+  | lt 
+  | gt 
+  | le 
+  | ge
+}
+
+//////////////////////////
+// Core DSL rules
+//////////////////////////
+
+// PlayerExpr
+// =======================
+turnorder_at = { kw_turnorder ~ int_expr }
+owner_of_card_position  = { kw_owner ~ kw_of ~ card_position }
+owner_of_memory  = { kw_owner ~ kw_of ~ extrema ~ memory }
+
+player_expr = { 
+    kw_current
+  | kw_next
+  | kw_previous
+  | kw_competitor
+  | turnorder_at
+  | owner_of_card_position
+  | owner_of_memory
+  | playername
+}
+// =======================
+
+
+// IntExpr
+// =======================
+bin_int_op = { "(" ~ int_expr ~ int_op ~ int_expr ~ ")" }
+int_collection_at = { int_collection ~ int_expr }
+size_of_collection = { kw_size ~ kw_of ~ collection }
+sum_of_int_collection = { kw_sum ~ kw_of ~ int_collection }
+sum_of_card_set = { kw_sum ~ kw_of ~ card_set ~ kw_using ~ pointmap}
+extrema_of_int_collection = { extrema ~ kw_of ~ int_collection }
+
+int_expr = { 
+    bin_int_op
+  | int_collection_at
+  | size_of_collection
+  | sum_of_int_collection
+  | sum_of_card_set
+  | extrema_of_int_collection
+  | kw_stageroundcounter
+  | kw_playroundcounter
+  | int
+}
+// =======================
+
+// StringExpr
+// =======================
+key_of_card_position = { key ~ kw_of ~ card_position }
+string_collection_at = { string_collection ~ int_expr }
+
+string_expr = { 
+              key_of_card_position
+            | string_collection_at
+            // This needs to be overworked because string_expr is handled as key/value gathering
+            // and ident has a completely other semantic purpose (e.g. managing memory entries)
+            // | ident
+}
+// =======================
+
+// CardPosition
+// =======================
+extrema = { ((kw_min | kw_max) | (kw_lowest | kw_highest)) }
+location_top = { location ~ kw_top }
+location_bottom = { location ~ kw_bottom }
+location_int_expr = { location ~ int_expr }
+extrema_of_card_set = {extrema ~ kw_of ~ card_set ~ kw_using ~ ident }
+
+card_position = {
+    location_top
+  | location_bottom
+  | location_int_expr
+  | extrema_of_card_set
+}
+// =======================
+
+// BoolExpr
+// =======================
+card_set_compare = { (eq | neq) }
+player_expr_compare = { (eq | neq) }
+team_expr_compare = { (eq | neq) }
+string_expr_compare = { (eq | neq) }
+bool_op = { (kw_and | kw_or) }
+unary_op = { (kw_not) }
+int_compare = {
+    eq
+  | neq
+  | ge
+  | le
+  | gt
+  | lt
+}
+
+out_of = { kw_stage | stage | kw_game }
+
+card_set_bool = { card_set ~ card_set_compare ~ card_set }
+string_expr_bool = { string_expr ~ string_expr_compare ~ string_expr }
+player_expr_bool = { player_expr ~ player_expr_compare ~ player_expr }
+team_expr_bool = { team_expr ~ team_expr_compare ~ team_expr }
+int_expr_bool = { int_expr ~ int_compare ~ int_expr }
+card_set_empty = { card_set ~ kw_is ~ (kw_not)? ~ kw_empty }
+bool_expr_binary = { "(" ~ bool_expr ~ bool_op ~ bool_expr ~ ")" }
+bool_expr_unary = { unary_op ~ bool_expr }
+players_out_of = { players ~ kw_out ~ kw_of ~ out_of }
+
+// cardset should be the first to be matched.
+// because "P1" == "P2" has no meaning or
+// String "S" == "S'" also has no meaning
+// if we want to add something then we just add true or false.
+bool_expr = {
+    card_set_bool
+  | string_expr_bool
+  | player_expr_bool
+  | team_expr_bool
+  | int_expr_bool
+  | card_set_empty
+  | bool_expr_binary
+  | bool_expr_unary
+  | players_out_of
+}
+// =======================
+
+// Status
+// =======================
+face_up = { kw_face ~ kw_up }
+face_down = { kw_face ~ kw_down }
+private =  { kw_private }
+
+status = { 
+    face_up
+  | face_down
+  | private
+}
+// =======================
+
+// TeamExpr
+// =======================
+team_of_player = { kw_team ~ kw_of ~ player_expr }
+
+team_expr = { 
+    team_of_player 
+  | teamname
+}
+// =======================
+
+// Collection
+// =======================
+collection = { 
+    ambiguous_collection
+  | int_collection
+  | string_collection
+  | player_collection
+  | team_collection
+  | location_collection
+  | card_set
+}
+// =======================
+
+//////////////////////////
+// Collections
+//////////////////////////
+
+// AmbiguousCollection
+// =======================
+ambiguous_collection = { "(" ~ ident ~ ("," ~ ident)+ ~ ")" }
+// =======================
+
+// IntCollection
+// =======================
+int_collection = { "(" ~ int_expr ~ ("," ~ int_expr)+ ~ ")" }
+// =======================
+
+// StringCollection
+// =======================
+string_collection = { "(" ~ string_expr ~ ("," ~ string_expr)+ ~ ")" }
+// =======================
+
+// Quantifier
+// =======================
+quantifier = { 
+    kw_all 
+  | kw_any 
+}
+// =======================
+
+// PlayerCollection
+player_expr_collection = { "(" ~ player_expr ~ ("," ~ player_expr )+ ~ ")" }
+
+player_collection = {  
+    player_expr_collection
+  | kw_others
+  | quantifier 
+  | kw_playersout 
+  | kw_playersin 
+}
+// =======================
+
+// TeamCollection
+// =======================
+team_expr_collection = { "(" ~ team_expr ~ ("," ~ team_expr)+ ~ ")" }
+other_teams = { kw_other ~ kw_teams }
+
+team_collection = {  
+    team_expr_collection
+  | kw_other ~ kw_teams 
+}
+// =======================
+
+// LocationCollection
+// =======================
+location_collection = { "(" ~ location ~ ("," ~ location)+ ~ ")" }
+// =======================
+
+//////////////////////////
+// Flow & stages
+//////////////////////////
+
+
+// Game
+// =======================
+game_flow = { flow_component+ }
+// =======================
+
+// FlowComponent
+// =======================
+flow_component = { 
+    seq_stage 
+  | rule 
+  | if_rule 
+  | choice_rule 
+  | optional_rule 
+}
+// =======================
+
+// EndCondition
+// =======================
+until_bool = { kw_until ~ bool_expr }
+until_bool_repetitions = { kw_until ~ logical_compare ~ repetitions }
+until_repetitions = { repetitions }
+until_end = { kw_until ~ kw_end }
+
+end_condition = { 
+    until_repetitions
+  | until_end
+  | until_bool_repetitions
+  | until_bool
+}
+// =======================
+
+// Repititions
+// =======================
+repetitions = { int_expr ~ kw_times }
+// =======================
+
+//////////////////////////
+// GameRule
+//////////////////////////
+
+// GameRule
+// =======================
+rule = {
+         setup_rule
+       | action_rule
+       | scoring_rule
+}
+// =======================
+
+// SetUpRule
+// =======================
+setup_rule = {
+         create_player
+       | create_team
+       | create_turnorder
+       | create_location
+       | create_card
+       | create_token
+       | create_precedence
+       | create_pointmap
+       | create_combo
+       | create_memory
+}
+// =======================
+
+// ActionRule
+// =======================
+action_rule = {
+         move_action
+       | flip_action
+       | shuffle_action
+       | out_action
+       | set_memory
+       | reset_memory
+       | cycle_action
+       | bid_action
+       | end_action
+       | demand_action
+}
+// =======================
+
+//////////////////////////
+// Creation rules
+//////////////////////////
+
+// CreatePlayer
+// =======================
+create_player = { kw_player ~ player_name_list }
+// =======================
+
+// CreateTeam
+// =======================
+team_name_with_player_collection = { teamname ~ kw_with ~ player_collection }
+create_team = { kw_team ~ team_name_with_player_collection ~ ("," ~ team_name_with_player_collection)* }
+// =======================
+
+// CreateTurnOrder
+// =======================
+create_turnorder = { kw_turnorder ~ player_collection ~ (kw_random)? }
+// =======================
+
+// CreateLocation
+// =======================
+create_location = { kw_location ~ location_list ~ kw_on ~ owner }
+// =======================
+
+// CreateCardOn
+// =======================
+values = { "(" ~ value ~ ("," ~ value)* ~ ")" }
+for_key_values = { kw_for ~ key ~ values }
+types = { key ~ values ~ (for_key_values)* }
+create_card = { kw_card ~ kw_on ~ location ~ ":" ~ types }
+// =======================
+
+// CreateToken
+// =======================
+create_token = { kw_token ~ int_expr ~ token ~ kw_on ~ location }
+// =======================
+
+// CreatePrecedence
+// =======================
+create_precedence = { kw_precedence  ~ precedence ~ (kw_on ~ key ~ values) }
+// =======================
+
+// CreateCombo
+// =======================
+create_combo = { kw_combo ~ combo ~ kw_where ~ filter_expr }
+// =======================
+
+// CreateMemory
+// =======================
+memory_type = { (int_expr | string_expr | collection | card_set) }
+create_memory = { kw_memory ~ memory ~ memory_type ~ kw_on ~ owner }
+// =======================
+
+// CreatePointMap
+// =======================
+value_int = { value ~ ":" ~ int_expr }
+value_int_list = { "(" ~ value_int ~ ("," ~ value_int)* ~ ")" }
+create_pointmap = { kw_points  ~ pointmap ~ kw_on ~ key ~ value_int_list }
+// =======================
+
+//////////////////////////
+// Stage rules
+//////////////////////////
+
+// Stage
+// =======================
+stage_rule = { 
+    sim_stage 
+  | seq_stage 
+}
+// =======================
+
+// SimStage
+// =======================
+sim_stage = { kw_stage ~ stage ~ kw_for ~ player_collection ~ end_condition ~ ":" ~ (kw_create ~ flow_component)+ }
+// =======================
+
+// SeqStage
+// =======================
+seq_stage = { kw_stage ~ stage ~ kw_for ~ player_expr ~ end_condition ~ "{" ~ flow_component+ ~ "}" }
+// =======================
+
+//////////////////////////
+// Conditional / kw_optional / choice rules
+//////////////////////////
+
+// CondRule
+// =======================
+cond_rule = { kw_conditional ~ ":" ~ (kw_case ~ bool_expr? ~ ":" ~ flow_component+)+ }
+// =======================
+
+// IfRule
+if_rule = { kw_if ~ "(" ~ bool_expr ~ ")" ~ "{" ~ flow_component+ ~ "}" }
+// =======================
+
+// OptionalRule
+// =======================
+optional_rule = { kw_optional ~ "{" ~ flow_component+ ~ "}" }
+// =======================
+
+// ChoiceRule
+// =======================
+choice_rule = { kw_choose ~ "{" ~ flow_component+ ~ ("or" ~ flow_component+)* ~ "}" }
+// =======================
+
+//////////////////////////
+// Actions
+//////////////////////////
+
+// FlipAction
+// =======================
+flip_action = { kw_flip ~ card_set ~ kw_to ~ status }
+// =======================
+
+// ShuffleAction
+// =======================
+shuffle_action = { kw_shuffle ~ card_set }
+// =======================
+
+// OutAction
+// =======================
+out_action = { kw_set ~ players ~ kw_out ~ kw_of ~ (kw_stage | kw_game) ~ (kw_successful | kw_fail)? }
+// =======================
+
+// SetMemory
+// =======================
+set_memory = { memory ~ kw_is ~ memory_type }
+// =======================
+
+// ResetMemory
+// =======================
+reset_memory = { kw_reset ~ memory }
+// =======================
+
+// CycleAction
+// =======================
+cycle_action = { kw_cycle ~ kw_to ~ player_expr }
+// =======================
+
+// BidAction
+// =======================
+bid_action = { kw_bid ~ quantity ~ (kw_on ~ memory)? }
+// =======================
+
+// EndAction
+// =======================
+end_type = { (kw_turn | kw_stage | kw_game ~ kw_with ~ kw_winner ~ players) }
+end_action = { kw_end ~ end_type }
+// =======================
+
+// DemandAction
+// =======================
+demand_type = { (card_position | string_expr | int_expr) }
+demand_action = { kw_demand ~ (kw_as ~ memory)? }
+// =======================
+
+// MoveAction
+// =======================
+move_action = { 
+    classic_move
+  | deal_move
+  | exchange_move
+  | token_move
+}
+// =======================
+
+
+//////////////////////////
+// Utility rules
+//////////////////////////
+
+// Quantity
+// =======================
+quantity = { int_expr | quantifier | int_range }
+// =======================
+
+// IntRange
+// =======================
+int_range_helper = { int_compare ~ int_expr }
+int_range = { int_range_helper ~ (logical_compare ~ int_range_helper)* }
+// =======================
+
+// CardSet
+// =======================
+group_of_owner = { group ~ kw_of ~ owner }
+
+card_set = { group_of_owner | group }
+// =======================
+
+// Group
+// =======================
+groupable_where_filter = { groupable ~ kw_where ~ filter_expr }
+combo_in_groupable = { (kw_not)? ~ combo ~ kw_in ~ groupable }
+
+group = { 
+    card_position
+  | combo_in_groupable
+  | groupable_where_filter
+  | groupable   
+}
+// =======================
+
+// FilterExpr
+// =======================
+filter_op = {
+    kw_and
+  | kw_or
+}
+key_same = { key ~ kw_same }
+key_distinct = { key ~ kw_distinct }
+key_adjacent = { key ~ kw_adjacent ~ kw_using ~ precedence }
+key_higher = { key ~ kw_higher ~ kw_using ~ precedence }
+key_lower = { key ~ kw_lower ~ kw_using ~ precedence }
+size_int = { kw_size ~ int_compare ~ int_expr }
+key_string = { key ~ string_expr_compare ~ string_expr }
+filter_combo = { (kw_not)? ~ combo }
+filter_bin_op = { "(" ~ filter_expr ~ filter_op ~ filter_expr ~ ")" }
+
+filter_expr = { 
+    size_int
+  | filter_bin_op
+  | key_string
+  | key_adjacent
+  | key_higher
+  | key_lower
+  | key_same
+  | key_distinct
+  | filter_combo
+}
+// =======================
+
+//////////////////////////
+// Moves
+//////////////////////////
+
+// Move CardSet specification
+// =======================
+card_set_to_card_set = {
+  (quantity ~ kw_from)? ~ card_set ~ status ~ kw_to ~ card_set
+}
+// =======================
+
+// ClassicMove
+// =======================
+classic_move = { 
+    kw_move ~ card_set_to_card_set
+}
+// =======================
+
+// DealMove
+deal_move = { 
+    kw_deal ~ card_set_to_card_set
+}
+// =======================
+
+// ExchangeMove
+// =======================
+exchange_move = { 
+    kw_exchange ~ card_set_to_card_set
+}
+// =======================
+
+// PlaceToken
+// =======================
+token_move = { 
+    kw_place ~ (quantity)? ~ token ~ kw_from ~ token_loc ~ kw_to ~ token_loc
+}
+// =======================
+
+// TokenLoc
+// =======================
+token_loc = { 
+    groupable ~ kw_of ~ players
+}
+// =======================
+
+//////////////////////////
+// Scoring
+//////////////////////////
+
+// ScoringRule
+// =======================
+scoring_rule = {
+    score_rule
+  | winner_rule
+}
+// =======================
+
+// ScoreRule
+// =======================
+score_rule = { 
+    kw_score ~ int_expr ~ (kw_to ~ memory)? ~ kw_of ~ players
+}
+// =======================
+
+// WinnerRule
+// =======================
+winner_type = {
+  (kw_position | memory | kw_score)
+}
+
+winner_rule = { 
+    kw_winner ~ kw_is ~ players
+  | kw_winner ~ kw_is ~ extrema ~ winner_type
+}
+// =======================

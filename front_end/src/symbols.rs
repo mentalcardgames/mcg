@@ -1,13 +1,18 @@
-use crate::{analysis::AnalyzerError, typed_ast::GameType, visitor::Visitor};
-use crate::diagnostic::*;
+use crate::{typed_ast::GameType, visitor::Visitor};
+use crate::{diagnostic::*};
 use crate::spanned_ast::*;
+
+#[derive(Debug, Clone)]
+pub enum AnalyzerError {
+  Default
+}
 
 pub type TypedVars = Vec<(Var, GameType)>;
 
 #[derive(Debug, Clone)]
 pub struct Var {
   pub id: String,
-  pub(crate) span: proc_macro2::Span,
+  pub(crate) span: OwnedSpan,
 }
 
 impl PartialEq for Var {
@@ -21,14 +26,14 @@ fn id_not_initialized(value: &TypedVars, id: &SID) -> Result<(), AnalyzerError> 
     return Ok(())
   }
 
-  return Err(AnalyzerError::IDNotInitialized { id: id.node.clone() })
+  return Err(AnalyzerError::Default)
 }
 
 fn id_used(value: &mut TypedVars, id: &SID, ty: GameType) -> Result<(), AnalyzerError> {
   if !value.iter().map(|(s, _)| s.id.clone()).collect::<Vec<String>>().contains(&id.node) {
     let var = Var {
       id: id.node.clone(),
-      span: id.span,
+      span: id.span.clone(),
     };
 
     value.push((var, ty));
@@ -36,7 +41,7 @@ fn id_used(value: &mut TypedVars, id: &SID, ty: GameType) -> Result<(), Analyzer
     return Ok(())
   }
 
-  return Err(AnalyzerError::IdUsed { id: id.node.clone() })
+  return Err(AnalyzerError::Default)
 }
 
 impl Visitor<TypedVars> for SGame {
@@ -106,7 +111,7 @@ impl Visitor<TypedVars> for SIfRule {
         // calculate the difference from former value and value afterwards
         value.retain(|x| !former_value.contains(x));
 
-        return Err(AnalyzerError::NonDeterministicInitialization { created: value.clone() })
+        return Err(AnalyzerError::Default)
       }
     }
 
@@ -129,7 +134,7 @@ impl Visitor<TypedVars> for SChoiceRule {
       if former_value.clone() != value.clone() {
         // calculate the difference from former value and value afterwards
         value.retain(|x| !former_value.contains(x));
-        return Err(AnalyzerError::NonDeterministicInitialization { created: value.clone() })
+        return Err(AnalyzerError::Default)
       }
     }
 
@@ -152,7 +157,7 @@ impl Visitor<TypedVars> for SOptionalRule {
       if former_value.clone() != value.clone() {
         // calculate the difference from former value and value afterwards
         value.retain(|x| !former_value.contains(x));
-        return Err(AnalyzerError::NonDeterministicInitialization { created: value.clone() })
+        return Err(AnalyzerError::Default)
       }
     }
 
@@ -168,11 +173,7 @@ impl Visitor<TypedVars> for SEndCondition {
       EndCondition::UntilBool(bool_expr) => {
         bool_expr.visit(value)?;
       },
-      EndCondition::UntilBoolAndRep(bool_expr, repititions) => {
-        bool_expr.visit(value)?;
-        repititions.visit(value)?;
-      },
-      EndCondition::UntilBoolOrRep(bool_expr, repititions) => {
+      EndCondition::UntilBoolRep(bool_expr, _, repititions) => {
         bool_expr.visit(value)?;
         repititions.visit(value)?;
       },
@@ -196,77 +197,137 @@ impl Visitor<TypedVars> for SRepititions {
   }
 }
 
+impl Visitor<TypedVars> for SCompareBool {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        CompareBool::Int(spanned, _, spanned2) => {
+          spanned.visit(value)?;
+          spanned2.visit(value)?;
+        },
+        CompareBool::CardSet(spanned, _, spanned2) => {
+          spanned.visit(value)?;
+          spanned2.visit(value)?;
+        },
+        CompareBool::String(spanned, _, spanned2) => {
+          spanned.visit(value)?;
+          spanned2.visit(value)?;
+        },
+        CompareBool::Player(spanned, _, spanned2) => {
+          spanned.visit(value)?;
+          spanned2.visit(value)?;
+        },
+        CompareBool::Team(spanned, _, spanned2) => {
+          spanned.visit(value)?;
+          spanned2.visit(value)?;
+        },
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SAggregateBool {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        AggregateBool::Compare(spanned) =>{
+          spanned.visit(value)?;
+        },
+        AggregateBool::CardSetEmpty(spanned) => {
+          spanned.visit(value)?;
+        },
+        AggregateBool::CardSetNotEmpty(spanned) => {
+          spanned.visit(value)?;
+        },
+        AggregateBool::OutOfPlayer(spanned, spanned1) => {
+          {
+          spanned.visit(value)?;
+          spanned1.visit(value)?;
+        }
+      },
+    }
+
+    Ok(())
+  }
+}
+
 impl Visitor<TypedVars> for SBoolExpr {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      BoolExpr::IntCmp(int_expr, _, int_expr1) => {
-        int_expr.visit(value)?;
-        int_expr1.visit(value)?;
+      BoolExpr::Aggregate(spanned) => {
+        spanned.visit(value)?;
       },
-      BoolExpr::CardSetIsEmpty(card_set) => {
-        card_set.visit(value)?;
+      BoolExpr::Binary(spanned, _, spanned2) => {
+        spanned.visit(value)?;
+        spanned2.visit(value)?;
       },
-      BoolExpr::CardSetIsNotEmpty(card_set) => {
-        card_set.visit(value)?;
-      },
-      BoolExpr::CardSetEq(card_set, card_set1) => {
-        card_set.visit(value)?;
-        card_set1.visit(value)?;
-      },
-      BoolExpr::CardSetNeq(card_set, card_set1) => {
-        card_set.visit(value)?;
-        card_set1.visit(value)?;
-      },
-      BoolExpr::StringEq(string_expr, string_expr1) => {
-        string_expr.visit(value)?;
-        string_expr1.visit(value)?;
-      },
-      BoolExpr::StringNeq(string_expr, string_expr1) => {
-        string_expr.visit(value)?;
-        string_expr1.visit(value)?;
-      },
-      BoolExpr::PlayerEq(player_expr, player_expr1) => {
-        player_expr.visit(value)?;
-        player_expr1.visit(value)?;
-      },
-      BoolExpr::PlayerNeq(player_expr, player_expr1) => {
-        player_expr.visit(value)?;
-        player_expr1.visit(value)?;
-      },
-      BoolExpr::TeamEq(team_expr, team_expr1) => {
-        team_expr.visit(value)?;
-        team_expr1.visit(value)?;
-      },
-      BoolExpr::TeamNeq(team_expr, team_expr1) => {
-        team_expr.visit(value)?;
-        team_expr1.visit(value)?;
-      },
-      BoolExpr::And(bool_expr, bool_expr1) => {
-        bool_expr.visit(value)?;
-        bool_expr1.visit(value)?;
-      },
-      BoolExpr::Or(bool_expr, bool_expr1) => {
-        bool_expr.visit(value)?;
-        bool_expr1.visit(value)?;
-      },
-      BoolExpr::Not(bool_expr) => {
-        bool_expr.visit(value)?;
-      },
-      BoolExpr::OutOfStagePlayer(player_expr) => {
-        player_expr.visit(value)?;
-      },
-      BoolExpr::OutOfGamePlayer(player_expr) => {
-        player_expr.visit(value)?;
-      },
-      BoolExpr::OutOfStageCollection(player_collection) => {
-        player_collection.visit(value)?;
-      },
-      BoolExpr::OutOfGameCollection(player_collection) => {
-        player_collection.visit(value)?;
+      BoolExpr::Unary(_, spanned) => {
+        spanned.visit(value)?;
       },
     }
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SOutOf {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+      OutOf::CurrentStage => {},
+      OutOf::Game => {},
+      OutOf::Play => {},
+      OutOf::Stage(id) => id_not_initialized(value, id)?
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SAggregateInt {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        AggregateInt::SizeOf(spanned) => {
+          spanned.visit(value)?;
+        },
+        AggregateInt::SumOfIntCollection(spanned) => {
+          spanned.visit(value)?;
+        },
+        AggregateInt::SumOfCardSet(spanned, spanned1) => {
+          spanned.visit(value)?;
+          id_not_initialized(value, spanned1)?;
+        },
+        AggregateInt::ExtremaCardset(_, spanned1, spanned2) => {
+          spanned1.visit(value)?;
+          id_not_initialized(value, spanned2)?;
+        },
+        AggregateInt::ExtremaIntCollection(_, spanned1) => {
+          spanned1.visit(value)?;
+        },
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SQueryInt {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+      QueryInt::IntCollectionAt(spanned, spanned1) => {
+        spanned.visit(value)?;
+        spanned1.visit(value)?;
+      },
+    }
+  
     Ok(())
   }
 }
@@ -276,39 +337,49 @@ impl Visitor<TypedVars> for SIntExpr {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      IntExpr::IntOp(int_expr, _, int_expr1) => {
-        int_expr.visit(value)?;
-        int_expr1.visit(value)?;
+      IntExpr::Aggregate(spanned) => {
+        spanned.visit(value)?
       },
-      IntExpr::IntCollectionAt(int_expr) => {
-        int_expr.visit(value)?;
+      IntExpr::Binary(spanned, _, spanned2) => {
+        spanned.visit(value)?;
+        spanned2.visit(value)?;
       },
-      IntExpr::SizeOf(collection) => {
-        collection.visit(value)?;
-      },
-      IntExpr::SumOfIntCollection(int_collection) => {
-        int_collection.visit(value)?;
-      },
-      IntExpr::SumOfCardSet(card_set, point_map) => {
-        card_set.visit(value)?;
-        id_not_initialized(value, point_map)?;
-      },
-      IntExpr::MinOf(card_set, point_map) => {
-        card_set.visit(value)?;
-        id_not_initialized(value, point_map)?;
-      },
-      IntExpr::MaxOf(card_set, point_map) => {
-        card_set.visit(value)?;
-        id_not_initialized(value, point_map)?;
-      },
-      IntExpr::MinIntCollection(int_collection) => {
-        int_collection.visit(value)?;
-      },
-      IntExpr::MaxIntCollection(int_collection) => {
-        int_collection.visit(value)?;
-      },
+      IntExpr::Query(spanned) => {
+        spanned.visit(value)?;
+      }
       _ => {},
     }
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SAggregatePlayer {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        AggregatePlayer::OwnerOfCardPostion(spanned) => {
+          spanned.visit(value)?;
+        },
+        AggregatePlayer::OwnerOfMemory(_, spanned1) => {
+          id_not_initialized(value, spanned1)?;
+        },
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SQueryPlayer {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        QueryPlayer::Turnorder(spanned) => {
+          spanned.visit(value)?
+        },
+    }
+
     Ok(())
   }
 }
@@ -318,9 +389,47 @@ impl Visitor<TypedVars> for SPlayerExpr {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      PlayerExpr::PlayerName(player_name) => id_not_initialized(value, player_name)?,
+      PlayerExpr::Literal(player_name) => id_not_initialized(value, player_name)?,
+      PlayerExpr::Aggregate(spanned) => {
+        spanned.visit(value)?;
+      },
+      PlayerExpr::Query(spanned) => {
+        spanned.visit(value)?;
+      },
       _ => {},
     }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SPlayers {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        Players::Player(spanned) => {
+          spanned.visit(value)?;
+        },
+        Players::PlayerCollection(spanned) => {
+          spanned.visit(value)?;
+        },
+    }
+  
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SAggregateTeam {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        AggregateTeam::TeamOf(spanned) => {
+          spanned.visit(value)?;
+        },
+    }
+
     Ok(())
   }
 }
@@ -330,9 +439,30 @@ impl Visitor<TypedVars> for STeamExpr {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      TeamExpr::TeamName(team_name) => id_not_initialized(value, team_name)?,
-      _ => {},
+      TeamExpr::Literal(team_name) => id_not_initialized(value, team_name)?,
+      TeamExpr::Aggregate(spanned) => {
+        spanned.visit(value)?;
+      },
     }
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SQueryString {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        QueryString::KeyOf(spanned, spanned1) => {
+          id_not_initialized(value, spanned)?;
+          spanned1.visit(value)?;
+        },
+        QueryString::StringCollectionAt(spanned, spanned1) => {
+          spanned.visit(value)?;
+          spanned1.visit(value)?;
+        },
+    }
+
     Ok(())
   }
 }
@@ -342,15 +472,37 @@ impl Visitor<TypedVars> for SStringExpr {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      StringExpr::KeyOf(key, card_position) => {
-        card_position.visit(value)?;
-        id_not_initialized(value, key)?;
+      StringExpr::Literal(_) => {
+        // No logic at the moment
       },
-      StringExpr::StringCollectionAt(string_collection, int_expr) => {
-        string_collection.visit(value)?;
-        int_expr.visit(value)?;
+      StringExpr::Query(spanned) => {
+        spanned.visit(value)?;
       },
     }
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SOwner {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        Owner::Player(spanned) => {
+          spanned.visit(value)?;
+        },
+        Owner::PlayerCollection(spanned) => {
+          spanned.visit(value)?;
+        },
+        Owner::Team(spanned) => {
+          spanned.visit(value)?;
+        },
+        Owner::TeamCollection(spanned) => {
+          spanned.visit(value)?;
+        },
+        Owner::Table => {},
+    }
+
     Ok(())
   }
 }
@@ -363,17 +515,30 @@ impl Visitor<TypedVars> for SCardSet {
       CardSet::Group(group) => {
         group.visit(value)?;
       },
-      CardSet::GroupOfPlayer(group, player_expr) => {
+      CardSet::GroupOwner(group, owner) => {
         group.visit(value)?;
-        player_expr.visit(value)?;
-      },
-      CardSet::GroupOfPlayerCollection(group, player_collection) => {
-        group.visit(value)?;
-        player_collection.visit(value)?;
+        owner.visit(value)?;
       },
     }
     Ok(())
   }
+}
+
+impl Visitor<TypedVars> for SGroupable {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        Groupable::Location(spanned) => {
+          id_not_initialized(value, spanned)?;
+        },
+        Groupable::LocationCollection(spanned) => {
+          spanned.visit(value)?;
+        },
+    }
+
+    Ok(())
+  }  
 }
 
 impl Visitor<TypedVars> for SGroup {
@@ -381,40 +546,62 @@ impl Visitor<TypedVars> for SGroup {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      Group::Location(location) => {
-        id_not_initialized(value, location)?;
+      Group::Groupable(spanned) => {
+        spanned.visit(value)?;
       },
-      Group::LocationWhere(location, filter_expr) => {
-        id_not_initialized(value, location)?;
-        filter_expr.visit(value)?;
+      Group::Where(spanned, spanned1) => {
+        spanned.visit(value)?;
+        spanned1.visit(value)?;
       },
-      Group::LocationCollection(location_collection) => {
-        location_collection.visit(value)?;
+      Group::Combo(spanned1, spanned2) => {
+        id_not_initialized(value, spanned1)?;
+        spanned2.visit(value)?;
       },
-      Group::LocationCollectionWhere(location_collection, filter_expr) => {
-        location_collection.visit(value)?;
-        filter_expr.visit(value)?;
-      },
-      Group::ComboInLocation(combo, location) => {
-        id_not_initialized(value, combo)?;
-        id_not_initialized(value, location)?;
-      },
-      Group::ComboInLocationCollection(combo, location_collection) => {
-        id_not_initialized(value, combo)?;
-        location_collection.visit(value)?;
-      },
-      Group::NotComboInLocation(combo, location) => {
-        id_not_initialized(value, combo)?;
-        id_not_initialized(value, location)?;
-      },
-      Group::NotComboInLocationCollection(combo, location_collection) => {
-        id_not_initialized(value, combo)?;
-        location_collection.visit(value)?;
+      Group::NotCombo(spanned1, spanned2) => {
+        id_not_initialized(value, spanned1)?;
+        spanned2.visit(value)?;
       },
       Group::CardPosition(card_position) => {
         card_position.visit(value)?;
       },
     }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SAggregateCardPosition {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        AggregateCardPosition::Extrema(_, spanned1, spanned2) => {
+          spanned1.visit(value)?;
+          id_not_initialized(value, spanned2)?;
+        },
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SQueryCardPosition {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        QueryCardPosition::At(spanned, spanned1) => {
+          id_not_initialized(value, spanned)?;
+          spanned1.visit(value)?;
+        },
+        QueryCardPosition::Top(spanned) => {
+          id_not_initialized(value, spanned)?;
+        },
+        QueryCardPosition::Bottom(spanned) => {
+          id_not_initialized(value, spanned)?;
+        },
+    }
+
     Ok(())
   }
 }
@@ -424,25 +611,55 @@ impl Visitor<TypedVars> for SCardPosition {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      CardPosition::At(location, int_expr) => {
-        id_not_initialized(value, location)?;
-        int_expr.visit(value)?;
+      CardPosition::Aggregate(spanned) => {
+        spanned.visit(value)?;
       },
-      CardPosition::Top(location) => {
-        id_not_initialized(value, location)?;
-      },
-      CardPosition::Bottom(location) => {
-        id_not_initialized(value, location)?;
-      },
-      CardPosition::Max(card_set, id) => {
-        card_set.visit(value)?;
-        id_not_initialized(value, id)?;
-      },
-      CardPosition::Min(card_set, id) => {
-        card_set.visit(value)?;
-        id_not_initialized(value, id)?;
+      CardPosition::Query(spanned) => {
+        spanned.visit(value)?;
       },
     }
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SAggregateFilter {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        AggregateFilter::Size(_, spanned1) => {
+          spanned1.visit(value)?;
+        },
+        AggregateFilter::Same(spanned) => {
+          id_not_initialized(value, spanned)?;
+        },
+        AggregateFilter::Distinct(spanned) => {
+          id_not_initialized(value, spanned)?;
+        },
+        AggregateFilter::Higher(spanned, spanned1) => {
+          id_not_initialized(value, spanned)?;
+          id_not_initialized(value, spanned1)?;
+        },
+        AggregateFilter::Adjacent(spanned, spanned1) => {
+          id_not_initialized(value, spanned)?;
+          id_not_initialized(value, spanned1)?;
+        },
+        AggregateFilter::Lower(spanned, spanned1) => {
+          id_not_initialized(value, spanned)?;
+          id_not_initialized(value, spanned1)?;
+        },
+        AggregateFilter::KeyString(spanned, _, spanned2) => {
+          id_not_initialized(value, spanned)?;
+          spanned2.visit(value)?;
+        },
+        AggregateFilter::Combo(spanned) => {
+          id_not_initialized(value, spanned)?;
+        },
+        AggregateFilter::NotCombo(spanned) => {
+          id_not_initialized(value, spanned)?;
+        },
+    }
+
     Ok(())
   }
 }
@@ -452,57 +669,13 @@ impl Visitor<TypedVars> for SFilterExpr {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      FilterExpr::Same(key) => {
-        id_not_initialized(value, key)?;
-      },
-      FilterExpr::Distinct(key) => {
-        id_not_initialized(value, key)?;
-      },
-      FilterExpr::Adjacent(key, precedence) => {
-        id_not_initialized(value, key)?;
-        id_not_initialized(value, precedence)?;
-      },
-      FilterExpr::Higher(key, precedence) => {
-        id_not_initialized(value, key)?;
-        id_not_initialized(value, precedence)?;
-      },
-      FilterExpr::Lower(key, precedence) => {
-        id_not_initialized(value, key)?;
-        id_not_initialized(value, precedence)?;
-      },
-      FilterExpr::Size(_, int_expr) => {
-        int_expr.visit(value)?;
-      },
-      FilterExpr::KeyEqString(key, string_expr) => {
-        id_not_initialized(value, key)?;
-        string_expr.visit(value)?;
-      },
-      FilterExpr::KeyNeqString(key, string_expr) => {
-        id_not_initialized(value, key)?;
-        string_expr.visit(value)?;
-      },
-      FilterExpr::KeyEqValue(key, val) => {
-        id_not_initialized(value, key)?;
-        id_not_initialized(value, val)?;
-      },
-      FilterExpr::KeyNeqValue(key, val) => {
-        id_not_initialized(value, key)?;
-        id_not_initialized(value, val)?;
-      },
-      FilterExpr::NotCombo(combo) => {
-        id_not_initialized(value, combo)?;
-      },
-      FilterExpr::Combo(combo) => {
-        id_not_initialized(value, combo)?;
-      },
-      FilterExpr::And(filter_expr, filter_expr1) => {
-        filter_expr.visit(value)?;
-        filter_expr1.visit(value)?;
-      },
-      FilterExpr::Or(filter_expr, filter_expr1) => {
-        filter_expr.visit(value)?;
-        filter_expr1.visit(value)?;
-      },
+        FilterExpr::Aggregate(spanned) => {
+          spanned.visit(value)?;
+        },
+        FilterExpr::Binary(spanned, _, spanned2) => {
+          spanned.visit(value)?;
+          spanned2.visit(value)?;
+        },
     }
     Ok(())
   }
@@ -579,7 +752,7 @@ impl Visitor<TypedVars> for SPlayerCollection {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      PlayerCollection::Player(player_exprs) => {
+      PlayerCollection::Literal(player_exprs) => {
         for player_expr in player_exprs.iter() {
           player_expr.visit(value)?;
         }
@@ -595,7 +768,7 @@ impl Visitor<TypedVars> for STeamCollection {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      TeamCollection::Team(team_exprs) => {
+      TeamCollection::Literal(team_exprs) => {
         for team_expr in team_exprs.iter() {
           team_expr.visit(value)?;
         }
@@ -606,192 +779,227 @@ impl Visitor<TypedVars> for STeamCollection {
   }
 }
 
-impl Visitor<TypedVars> for SRule {
+impl Visitor<TypedVars> for SSetUpRule {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      Rule::CreatePlayer(player_names) => {
-        for player in player_names.iter() {
-          id_used(value, player, GameType::Player)?;
-        }
-      },
-      Rule::CreateTeam(team_name, player_names) => {
-        id_used(value, team_name, GameType::Team)?;
+        SetUpRule::CreatePlayer(spanneds) => {
+          for player in spanneds.iter() {
+            id_used(value, player, GameType::Player)?;
+          }
+        },
+        SetUpRule::CreateTeams(items) => {
+          for (team_name, player_collection) in items.iter() {
+            id_used(value, team_name, GameType::Team)?;
+            player_collection.visit(value)?;
+          }
+        },
+        SetUpRule::CreateTurnorder(spanned) => {
+          spanned.visit(value)?;
+        },
+        SetUpRule::CreateTurnorderRandom(spanned) => {
+          spanned.visit(value)?;
+        },
+        SetUpRule::CreateLocation(spanneds, spanned) => {
+          for id in spanneds.iter() {
+            id_used(value, id, GameType::Location)?;
+          }
 
-        for player in player_names.iter() {
-          id_not_initialized(value, player)?;
-        }
-      },
-      Rule::CreateTurnorder(player_names) => {
-        for player in player_names.iter() {
-          id_not_initialized(value, player)?;
-        }
-      },
-      Rule::CreateTurnorderRandom(player_names) => {
-        for player in player_names.iter() {
-          id_not_initialized(value, player)?;
-        }
-      },
-      Rule::CreateLocationOnPlayerCollection(location, player_collection) => {
-        id_used(value, location, GameType::Location)?;
-        player_collection.visit(value)?;
-      },
-      Rule::CreateLocationOnTeamCollection(location, team_collection) => {
-        id_used(value, location, GameType::Location)?;
-        team_collection.visit(value)?;
-      },
-      Rule::CreateLocationOnTable(location) => {
-        id_used(value, location, GameType::Location)?;
-      },
-      Rule::CreateLocationCollectionOnPlayerCollection(location_collection, player_collection) => {
-        for location in location_collection.node.locations.iter() {
-          id_used(value, location, GameType::Location)?;
-        } 
+          spanned.visit(value)?;
+        },
+        SetUpRule::CreateCardOnLocation(location, types) => {
+          id_not_initialized(value, location)?;
+          types.visit(value)?;
+        },
+        SetUpRule::CreateTokenOnLocation(spanned, spanned1, spanned2) => {
+          spanned.visit(value)?;
+          id_used(value, spanned1, GameType::Token)?;
+          id_not_initialized(value, spanned2)?;
+        },
+        SetUpRule::CreateCombo(spanned, spanned1) => {
+          id_used(value, spanned, GameType::Combo)?;
+          spanned1.visit(value)?;
+        },
+        SetUpRule::CreateMemory(spanned, _, spanned2) => {
+          id_used(value, spanned, GameType::Memory)?;
+          spanned2.visit(value)?;
+        },
+        SetUpRule::CreatePrecedence(spanned, items) => {
+          id_used(value, spanned, GameType::Precedence)?;
 
-        player_collection.visit(value)?;
-      },
-      Rule::CreateLocationCollectionOnTeamCollection(location_collection, team_collection) => {
-        for location in location_collection.node.locations.iter() {
-          id_used(value, location, GameType::Location)?;
-        } 
-        
-        team_collection.visit(value)?;
-      },
-      Rule::CreateLocationCollectionOnTable(location_collection) => {
-        for location in location_collection.node.locations.iter() {
-          id_used(value, location, GameType::Location)?;
-        }
-      },
-      Rule::CreateCardOnLocation(location, types) => {
-        id_not_initialized(value, location)?;
-        types.visit(value)?;
-      },
-      Rule::CreateTokenOnLocation(int_expr, token, location) => {
-        int_expr.visit(value)?;
-        id_used(value, token, GameType::Token)?;
-        id_not_initialized(value, location)?;
-      },
-      Rule::CreatePrecedence(precedence, items) => {
-        id_used(value, precedence, GameType::Precedence)?;
+          for (k, v) in items.iter() {
+            id_not_initialized(value, k)?;
+            id_not_initialized(value, v)?;
+          }
+        },
+        SetUpRule::CreatePointMap(spanned, items) => {
+          id_used(value, spanned, GameType::PointMap)?;
 
-        for (k, v) in items.iter() {
-          id_not_initialized(value, k)?;
-          id_not_initialized(value, v)?;
-        }
-      },
-      Rule::CreateCombo(combo, filter_expr) => {
-        id_used(value, combo, GameType::Combo)?;
-        filter_expr.visit(value)?;
-      },
-      Rule::CreateMemoryIntPlayerCollection(memory, int_expr, player_collection) => {
-        id_used(value, memory, GameType::Memory)?;
-        int_expr.visit(value)?;
-        player_collection.visit(value)?;
-      },
-      Rule::CreateMemoryStringPlayerCollection(memory, string_expr, player_collection) => {
-        id_used(value, memory, GameType::Memory)?;
-        string_expr.visit(value)?;
-        player_collection.visit(value)?;
-      },
-      Rule::CreateMemoryIntTable(memory, int_expr) => {
-        id_used(value, memory, GameType::Memory)?;
-        int_expr.visit(value)?;
-      },
-      Rule::CreateMemoryStringTable(memory, string_expr) => {
-        id_used(value, memory, GameType::Memory)?;
-        string_expr.visit(value)?;
-      },
-      Rule::CreateMemoryPlayerCollection(memory, player_collection) => {
-        id_used(value, memory, GameType::Memory)?;
-        player_collection.visit(value)?;
-      },
-      Rule::CreateMemoryTable(memory) => {
-        id_used(value, memory, GameType::Memory)?;
-      },
-      Rule::CreatePointMap(point_map, items) => {
-        id_used(value, point_map, GameType::PointMap)?;
-
-        for (k, v, int_expr) in items {
-          id_not_initialized(value, k)?;
-          id_not_initialized(value, v)?;
-          int_expr.visit(value)?;
-        }
-      },
-      Rule::FlipAction(card_set, _) => {
-        card_set.visit(value)?;
-      },
-      Rule::ShuffleAction(card_set) => {
-        card_set.visit(value)?;
-      },
-      Rule::PlayerOutOfStageAction(player_expr) => {
-        player_expr.visit(value)?;
-      },
-      Rule::PlayerOutOfGameSuccAction(player_expr) => {
-        player_expr.visit(value)?;
-      },
-      Rule::PlayerOutOfGameFailAction(player_expr) => {
-        player_expr.visit(value)?;
-      },
-      Rule::PlayerCollectionOutOfStageAction(player_collection) => {
-        player_collection.visit(value)?;
-      },
-      Rule::PlayerCollectionOutOfGameSuccAction(player_collection) => {
-        player_collection.visit(value)?;
-      },
-      Rule::PlayerCollectionOutOfGameFailAction(player_collection) => {
-        player_collection.visit(value)?;
-      },
-      Rule::SetMemoryInt(memory, int_expr) => {
-        id_not_initialized(value, memory)?;
-        int_expr.visit(value)?;
-      },
-      Rule::SetMemoryString(memory, string_expr) => {
-        id_not_initialized(value, memory)?;
-        string_expr.visit(value)?;
-      },
-      Rule::SetMemoryCollection(memory, collection) => {
-        id_not_initialized(value, memory)?;
-        collection.visit(value)?;
-      },
-      Rule::CycleAction(player_expr) => {
-        player_expr.visit(value)?;
-      },
-      Rule::BidActionMemory(memory, _) => {
-        id_not_initialized(value, memory)?;
-      },
-      Rule::EndGameWithWinner(player_expr) => {
-        player_expr.visit(value)?;
-      },
-      Rule::DemandCardPositionAction(card_position) => {
-        card_position.visit(value)?;
-      },
-      Rule::DemandStringAction(string_expr) => {
-        string_expr.visit(value)?;
-      },
-      Rule::DemandIntAction(int_expr) => {
-        int_expr.visit(value)?;
-      },
-      Rule::ClassicMove(classic_move) => {
-        classic_move.visit(value)?;
-      },
-      Rule::DealMove(deal_move) => {
-        deal_move.visit(value)?;
-      },
-      Rule::ExchangeMove(exchange_move) => {
-        exchange_move.visit(value)?;
-      },
-      Rule::TokenMove(token_move) => {
-        token_move.visit(value)?;
-      },
-      Rule::ScoreRule(score_rule) => {
-        score_rule.visit(value)?;
-      },
-      Rule::WinnerRule(winner_rule) => {
-        winner_rule.visit(value)?;
-      },
-      _ => {},
+          for (k, v, int_expr) in items {
+            id_not_initialized(value, k)?;
+            id_not_initialized(value, v)?;
+            int_expr.visit(value)?;
+          }
+        },
     }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SActionRule {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        ActionRule::FlipAction(spanned, _) => {
+          spanned.visit(value)?;
+        },
+        ActionRule::ShuffleAction(spanned) => {
+          spanned.visit(value)?;
+        },
+        ActionRule::PlayerOutOfStageAction(spanned) => {
+          spanned.visit(value)?;
+        },
+        ActionRule::PlayerOutOfGameSuccAction(spanned) => {
+          spanned.visit(value)?;
+        },
+        ActionRule::PlayerOutOfGameFailAction(spanned) => {
+          spanned.visit(value)?;
+        },
+        ActionRule::SetMemory(spanned, spanned1) => {
+          id_not_initialized(value, spanned)?;
+          spanned1.visit(value)?;
+        },
+        ActionRule::ResetMemory(spanned) => {
+          id_not_initialized(value, spanned)?;
+        },
+        ActionRule::CycleAction(spanned) => {
+          spanned.visit(value)?;
+        },
+        ActionRule::BidAction(spanned) => {
+          spanned.visit(value)?;
+        },
+        ActionRule::BidMemoryAction(spanned, spanned1) => {
+          id_not_initialized(value, spanned);
+          spanned1.visit(value)?;
+        },
+        ActionRule::EndAction(spanned) => {
+          match spanned.clone().node {
+            EndType::Turn => {},
+            EndType::Stage => {},
+            EndType::GameWithWinner(spanned) => spanned.visit(value)?,
+          }
+        },
+        ActionRule::DemandAction(spanned) => {
+          spanned.visit(value)?;
+        },
+        ActionRule::DemandMemoryAction(spanned, spanned1) => {
+          spanned.visit(value)?;
+          id_not_initialized(value, spanned1)?;
+        },
+        ActionRule::Move(spanned) => {
+          spanned.visit(value)?;
+        },
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SMemoryType {
+    type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        MemoryType::Int(spanned) => spanned.visit(value)?,
+        MemoryType::String(spanned) => spanned.visit(value)?,
+        MemoryType::CardSet(spanned) => spanned.visit(value)?,
+        MemoryType::Collection(spanned) => spanned.visit(value)?,
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SDemandType {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        DemandType::CardPosition(spanned) => {
+          spanned.visit(value)?;
+        },
+        DemandType::String(spanned) => {
+          spanned.visit(value)?;
+        },
+        DemandType::Int(spanned) => {
+          spanned.visit(value)?;
+        },
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SMoveType {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        MoveType::Deal(spanned) => {
+          spanned.visit(value)?;
+        },
+        MoveType::Exchange(spanned) => {
+          spanned.visit(value)?;
+        },
+        MoveType::Classic(spanned) => {
+          spanned.visit(value)?;
+        },
+        MoveType::Place(spanned) => {
+          spanned.visit(value)?;
+        },
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SScoringRule {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        ScoringRule::ScoreRule(spanned) => {
+          spanned.visit(value)?;
+        },
+        ScoringRule::WinnerRule(spanned) => {
+          spanned.visit(value)?;
+
+        },
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SGameRule {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        GameRule::SetUp(spanned) => {
+          spanned.visit(value)?;
+        },
+        GameRule::Action(spanned) => {
+          spanned.visit(value)?;
+        },
+        GameRule::Scoring(spanned) => {
+          spanned.visit(value)?;
+        },
+    }
+
     Ok(())
   }
 }
@@ -846,7 +1054,30 @@ impl Visitor<TypedVars> for SIntRange {
   type Error = AnalyzerError;
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
-    self.node.int.visit(value)?;
+    for (_, int) in self.node.op_int.iter() {
+      int.visit(value)?;
+    }
+
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SMoveCardSet {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        MoveCardSet::Move(spanned, _, spanned2) => {
+          spanned.visit(value)?;
+          spanned2.visit(value)?;
+        },
+        MoveCardSet::MoveQuantity(spanned, spanned1, _, spanned2) => {
+          spanned.visit(value)?;
+          spanned1.visit(value)?;
+          spanned2.visit(value)?;
+        },
+    }
+
     Ok(())
   }
 }
@@ -856,16 +1087,11 @@ impl Visitor<TypedVars> for SClassicMove {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      ClassicMove::Move(card_set, _, card_set1) => {
-        card_set.visit(value)?;
-        card_set1.visit(value)?;
-      },
-      ClassicMove::MoveQuantity(quantity, card_set, _, card_set1) => {
-        quantity.visit(value)?;
-        card_set.visit(value)?;
-        card_set1.visit(value)?;
-      },
+        ClassicMove::MoveCardSet(spanned) => {
+          spanned.visit(value)?;
+        },
     }
+
     Ok(())
   }
 }
@@ -875,14 +1101,8 @@ impl Visitor<TypedVars> for SDealMove {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      DealMove::Deal(card_set, _, card_set1) => {
-        card_set.visit(value)?;
-        card_set1.visit(value)?;
-      },
-      DealMove::DealQuantity(quantity, card_set, _, card_set1) => {
-        quantity.visit(value)?;
-        card_set.visit(value)?;
-        card_set1.visit(value)?;
+      DealMove::MoveCardSet(spanned) => {
+        spanned.visit(value)?;
       },
     }
     Ok(())
@@ -894,14 +1114,8 @@ impl Visitor<TypedVars> for SExchangeMove {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      ExchangeMove::Exchange(card_set, _, card_set1) => {
-        card_set.visit(value)?;
-        card_set1.visit(value)?;
-      },
-      ExchangeMove::ExchangeQuantity(quantity, card_set, _, card_set1) => {
-        quantity.visit(value)?;
-        card_set.visit(value)?;
-        card_set1.visit(value)?;
+      ExchangeMove::MoveCardSet(spanned) => {
+        spanned.visit(value)?;
       },
     }
     Ok(())
@@ -913,13 +1127,13 @@ impl Visitor<TypedVars> for STokenMove {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      TokenMove::Place(token, token_loc_expr, token_loc_expr1) => {
+      TokenMove::PlaceQuantity(spanned, token, token_loc_expr, token_loc_expr1) => {
+        spanned.visit(value)?;
         id_not_initialized(value, token)?;
         token_loc_expr.visit(value)?;
         token_loc_expr1.visit(value)?;
       },
-      TokenMove::PlaceQuantity(quantity, token, token_loc_expr, token_loc_expr1) => {
-        quantity.visit(value)?;
+      TokenMove::Place(token, token_loc_expr, token_loc_expr1) => {
         id_not_initialized(value, token)?;
         token_loc_expr.visit(value)?;
         token_loc_expr1.visit(value)?;
@@ -934,28 +1148,13 @@ impl Visitor<TypedVars> for STokenLocExpr {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      TokenLocExpr::Location(location) => {
-        id_not_initialized(value, location)?;
-      },
-      TokenLocExpr::LocationCollection(location_collection) => {
-        location_collection.visit(value)?;
-      },
-      TokenLocExpr::LocationPlayer(location, player_expr) => {
-        id_not_initialized(value, location)?;
-        player_expr.visit(value)?;
-      },
-      TokenLocExpr::LocationCollectionPlayer(location_collection, player_expr) => {
-        location_collection.visit(value)?;
-        player_expr.visit(value)?;
-      },
-      TokenLocExpr::LocationPlayerCollection(location, player_collection) => {
-        id_not_initialized(value, location)?;
-        player_collection.visit(value)?;
-      },
-      TokenLocExpr::LocationCollectionPlayerCollection(location_collection, player_collection) => {
-        location_collection.visit(value)?;
-        player_collection.visit(value)?;
-      },
+        TokenLocExpr::Groupable(spanned) => {
+          spanned.visit(value)?;
+        },
+        TokenLocExpr::GroupablePlayers(spanned, spanned1) => {
+          spanned.visit(value)?;
+          spanned1.visit(value)?;
+        },
     }
     Ok(())
   }
@@ -966,25 +1165,32 @@ impl Visitor<TypedVars> for SScoreRule {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      ScoreRule::ScorePlayer(int_expr, player_expr) => {
-        int_expr.visit(value)?;
-        player_expr.visit(value)?;
-      },
-      ScoreRule::ScorePlayerMemory(int_expr, memory, player_expr) => {
-        int_expr.visit(value)?;
-        id_not_initialized(value, memory)?;
-        player_expr.visit(value)?;
-      },
-      ScoreRule::ScorePlayerCollection(int_expr, player_collection) => {
-        int_expr.visit(value)?;
-        player_collection.visit(value)?;
-      },
-      ScoreRule::ScorePlayerCollectionMemory(int_expr, memory, player_collection) => {
-        int_expr.visit(value)?;
-        id_not_initialized(value, memory)?;
-        player_collection.visit(value)?;
-      },
+        ScoreRule::Score(spanned, spanned1) => {
+          spanned.visit(value)?;
+          spanned1.visit(value)?;
+        },
+        ScoreRule::ScoreMemory(spanned, spanned1, spanned2) => {
+          spanned.visit(value)?;
+          id_not_initialized(value, spanned1)?;
+          spanned2.visit(value)?;
+        },
     }
+    Ok(())
+  }
+}
+
+impl Visitor<TypedVars> for SWinnerType {
+  type Error = AnalyzerError;
+
+  fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
+    match &self.node {
+        WinnerType::Score => {},
+        WinnerType::Memory(spanned) => {
+          id_not_initialized(value, spanned)?;
+        },
+        WinnerType::Position => {},
+    }
+
     Ok(())
   }
 }
@@ -994,22 +1200,12 @@ impl Visitor<TypedVars> for SWinnerRule {
 
   fn visit(&self, value: &mut TypedVars) -> Result<(), Self::Error> {
     match &self.node {
-      WinnerRule::WinnerPlayer(player_expr) => {
-        player_expr.visit(value)?;
-      },
-      WinnerRule::WinnerPlayerCollection(player_collection) => {
-        player_collection.visit(value)?;
-      },
-      WinnerRule::WinnerLowestScore => {},
-      WinnerRule::WinnerHighestScore => {},
-      WinnerRule::WinnerLowestMemory(memory) => {
-        id_not_initialized(value, memory)?;
-      },
-      WinnerRule::WinnerHighestMemory(memory) => {
-        id_not_initialized(value, memory)?;
-      },
-      WinnerRule::WinnerLowestPosition => {},
-      WinnerRule::WinnerHighestPosition => {},
+        WinnerRule::Winner(spanned) => {
+          spanned.visit(value)?;
+        },
+        WinnerRule::WinnerWith(_, spanned1) => {
+          spanned1.visit(value)?;
+        },
     }
     Ok(())
   }

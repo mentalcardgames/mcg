@@ -1,6 +1,6 @@
-pub mod parse;
+pub mod parser;
 pub mod analysis;
-pub mod transform_to_typed;
+pub mod lower;
 pub mod spanned_ast;
 pub mod ir;
 pub mod keywords;
@@ -9,3 +9,4 @@ pub mod symbols;
 pub mod visitor;
 pub mod helper;
 pub mod diagnostic;
+pub mod tests;

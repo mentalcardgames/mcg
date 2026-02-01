@@ -1,58 +1,25 @@
 use crate::diagnostic::*;
 
-// IDs
-pub struct ID(pub String);
 
-impl ToString for ID {
-    fn to_string(&self) -> String {
-        self.0.clone()
-    }
-}
+// Operator
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
 
-pub type PlayerName = SID;
-pub type TeamName = SID;
-pub type Location = SID;
-pub type Precedence = SID;
-pub type PointMap = SID;
-pub type Combo = SID;
-pub type Key = SID;
-pub type Value = SID;
-pub type Memory = SID;
-pub type Token = SID;
-pub type Stage = SID;
-
-// Structs + Enums
 #[derive(Debug, Clone)]
-pub enum PlayerExpr {
-    PlayerName(PlayerName),
-    Current,
-    Next,
-    Previous,
-    Competitor,
-    Turnorder(SIntExpr),
-    OwnerOf(Box<SCardPosition>),
-    OwnerOfHighest(Memory),
-    OwnerOfLowest(Memory),
+pub enum BinCompare {
+    Eq,
+    Neq
 }
 
 #[derive(Debug, Clone)]
-pub enum IntExpr {
-    Int(i32),
-    IntOp(Box<SIntExpr>, SOp, Box<SIntExpr>),
-    IntCollectionAt(Box<SIntExpr>),
-    SizeOf(SCollection),
-    SumOfIntCollection(SIntCollection),
-    SumOfCardSet(Box<SCardSet>, PointMap),
-    MinOf(Box<SCardSet>, PointMap),
-    MaxOf(Box<SCardSet>, PointMap),
-    MinIntCollection(SIntCollection),
-    MaxIntCollection(SIntCollection),
-    StageRoundCounter,
-    // PlayRoundCounter,
+pub enum LogicBinOp {
+    And,
+    Or
 }
 
 #[derive(Debug, Clone)]
-pub enum Op {
+pub enum IntOp {
     Plus,
     Minus,
     Mul,
@@ -60,12 +27,326 @@ pub enum Op {
     Mod
 }
 
+#[derive(Debug, Clone)]
+pub enum IntCompare {
+    Eq,
+    Neq,
+    Gt,
+    Lt,
+    Ge,
+    Le
+}
 
-// TODO:
-// Collection is only being used for size of.
-// Maybe building a Collection type that is just used
-// for this specific case.
-// Because Collection is very ambiguous.
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
+
+
+// Utility
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
+
+#[derive(Debug, Clone)]
+pub enum Extrema {
+    Min,
+    Max
+}
+
+
+#[derive(Debug, Clone)]
+pub enum OutOf {
+    CurrentStage,
+    Stage(SID),
+    Game,
+    Play
+}
+
+#[derive(Debug, Clone)]
+pub enum Groupable {
+    Location(SID),
+    LocationCollection(SLocationCollection),
+}
+
+#[derive(Debug, Clone)]
+pub enum Owner {
+    Player(SPlayerExpr),
+    PlayerCollection(SPlayerCollection),
+    Team(STeamExpr),
+    TeamCollection(STeamCollection),
+    Table
+}
+
+#[derive(Debug, Clone)]
+pub enum Quantity {
+    Int(SIntExpr),
+    Quantifier(SQuantifier),
+    IntRange(SIntRange),
+}
+
+#[derive(Debug, Clone)]
+pub struct IntRange { 
+    pub op_int: Vec<(SIntCompare, SIntExpr)>
+}
+
+#[derive(Debug, Clone)]
+pub enum Quantifier {
+    All,
+    Any
+}
+
+#[derive(Debug, Clone)]
+pub enum EndCondition {
+    UntilBool(SBoolExpr),
+    UntilBoolRep(SBoolExpr, SLogicBinOp, SRepititions),
+    UntilRep(SRepititions),
+    UntilEnd
+}   
+
+#[derive(Debug, Clone)]
+pub struct Repititions {
+    pub times: SIntExpr
+}
+
+#[derive(Debug, Clone)]
+pub enum MemoryType {
+    Int(SIntExpr),
+    String(SStringExpr),
+    CardSet(SCardSet),
+    Collection(SCollection)
+}
+
+#[derive(Debug, Clone)]
+pub enum Players {
+    Player(SPlayerExpr),
+    PlayerCollection(SPlayerCollection),
+}
+
+#[derive(Debug, Clone)]
+pub enum EndType {
+    Turn,
+    Stage,
+    GameWithWinner(SPlayers),
+}
+
+#[derive(Debug, Clone)]
+pub enum DemandType {
+    CardPosition(SCardPosition),
+    String(SStringExpr),
+    Int(SIntExpr),
+}
+
+#[derive(Debug, Clone)]
+pub struct Types {
+    pub types: Vec<(SID, Vec<SID>)>
+}
+
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
+
+// Base Types
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
+
+
+// Player
+// ===========================================================================
+#[derive(Debug, Clone)]
+pub enum RuntimePlayer {
+    Current,
+    Next,
+    Previous,
+    Competitor,
+}
+
+#[derive(Debug, Clone)]
+pub enum QueryPlayer {
+    Turnorder(SIntExpr),
+}
+
+#[derive(Debug, Clone)]
+pub enum AggregatePlayer {
+    OwnerOfCardPostion(Box<SCardPosition>),
+    OwnerOfMemory(SExtrema, SID),
+}
+
+#[derive(Debug, Clone)]
+pub enum PlayerExpr {
+    Literal(SID),
+    Runtime(SRuntimePlayer),
+    Aggregate(SAggregatePlayer),
+    Query(SQueryPlayer)
+}
+// ===========================================================================
+
+
+// IntExpr
+// ===========================================================================
+#[derive(Debug, Clone)]
+pub enum QueryInt {
+    IntCollectionAt(Box<SIntCollection>, Box<SIntExpr>),
+}
+
+#[derive(Debug, Clone)]
+pub enum AggregateInt {
+    SizeOf(SCollection),
+    SumOfIntCollection(SIntCollection),
+    SumOfCardSet(Box<SCardSet>, SID),
+    ExtremaCardset(SExtrema, Box<SCardSet>, SID),
+    ExtremaIntCollection(SExtrema, SIntCollection),
+}
+
+#[derive(Debug, Clone)]
+pub enum RuntimeInt {
+    StageRoundCounter,
+    PlayRoundCounter,
+}
+
+#[derive(Debug, Clone)]
+pub enum IntExpr {
+    Literal(i32),
+    Binary(Box<SIntExpr>, SIntOp, Box<SIntExpr>),
+    Query(SQueryInt),
+    Aggregate(SAggregateInt),
+    Runtime(SRuntimeInt),   
+}
+// ===========================================================================
+
+
+// String
+// ===========================================================================
+#[derive(Debug, Clone)]
+pub enum QueryString {
+    KeyOf(SID, SCardPosition),
+    StringCollectionAt(SStringCollection, SIntExpr),
+}
+
+#[derive(Debug, Clone)]
+pub enum StringExpr {
+    Literal(SID),
+    Query(SQueryString),
+}
+// ===========================================================================
+
+// Bool
+// ===========================================================================
+#[derive(Debug, Clone)]
+pub enum CardSetCompare {
+    Eq,
+    Neq
+}
+
+#[derive(Debug, Clone)]
+pub enum StringCompare {
+    Eq,
+    Neq
+}
+
+#[derive(Debug, Clone)]
+pub enum PlayerCompare {
+    Eq,
+    Neq
+}
+
+#[derive(Debug, Clone)]
+pub enum TeamCompare {
+    Eq,
+    Neq
+}
+
+#[derive(Debug, Clone)]
+pub enum BoolOp {
+    And,
+    Or
+}
+
+#[derive(Debug, Clone)]
+pub enum UnaryOp {
+    Not,
+}
+
+#[derive(Debug, Clone)]
+pub enum CompareBool {
+    Int(SIntExpr, SIntCompare, SIntExpr),
+    CardSet(SCardSet, SCardSetCompare, SCardSet),
+    String(SStringExpr, SStringCompare, SStringExpr),
+    Player(SPlayerExpr, SPlayerCompare, SPlayerExpr),
+    Team(STeamExpr, STeamCompare, STeamExpr),
+}
+
+#[derive(Debug, Clone)]
+pub enum AggregateBool {
+    Compare(SCompareBool),
+    CardSetEmpty(SCardSet),
+    CardSetNotEmpty(SCardSet),
+    OutOfPlayer(SPlayers,     SOutOf),
+}
+
+#[derive(Debug, Clone)]
+pub enum BoolExpr {
+    Binary(Box<SBoolExpr>, SBoolOp, Box<SBoolExpr>),
+    Unary(SUnaryOp, Box<SBoolExpr>),
+    Aggregate(SAggregateBool),
+}
+// ===========================================================================
+
+
+// Team
+// ===========================================================================
+#[derive(Debug, Clone)]
+pub enum AggregateTeam {
+    TeamOf(SPlayerExpr)
+}
+
+#[derive(Debug, Clone)]
+pub enum TeamExpr {
+    Literal(SID),
+    Aggregate(SAggregateTeam),
+}
+// ===========================================================================
+
+// CardPosition
+// ===========================================================================
+#[derive(Debug, Clone)]
+pub enum QueryCardPosition {
+    At(SID, SIntExpr),
+    Top(SID),
+    Bottom(SID),
+}
+
+#[derive(Debug, Clone)]
+pub enum AggregateCardPosition {
+    Extrema(SExtrema, Box<SCardSet>, SID),
+}
+
+#[derive(Debug, Clone)]
+pub enum CardPosition {
+    Query(SQueryCardPosition),
+    Aggregate(SAggregateCardPosition)
+}
+
+// Stauts
+// ===========================================================================
+#[derive(Debug, Clone)]
+pub enum Status {
+    FaceUp,
+    FaceDown,
+    Private
+}
+// ===========================================================================
+
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
+
+
+// Collections
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
+
 #[derive(Debug, Clone)]
 pub enum Collection {
     IntCollection(SIntCollection),
@@ -89,147 +370,106 @@ pub struct StringCollection {
 
 #[derive(Debug, Clone)]
 pub struct LocationCollection {
-    pub locations: Vec<Location>
+    pub locations: Vec<SID>
+}
+
+// PlayerCollection
+// ===========================================================================
+#[derive(Debug, Clone)]
+pub enum RuntimePlayerCollection {
+    PlayersOut,
+    PlayersIn,
+    Others,
+}
+
+#[derive(Debug, Clone)]
+pub enum AggregatePlayerCollection {
+    Quantifier(SQuantifier),
 }
 
 #[derive(Debug, Clone)]
 pub enum PlayerCollection {
-    Player(Vec<SPlayerExpr>),
-    Others,
-    Quantifier(SQuantifier),
-    PlayersOut,
-    PlayersIn,
+    Literal(Vec<SPlayerExpr>),
+    Aggregate(SAggregatePlayerCollection),
+    Runtime(SRuntimePlayerCollection),
 }
+// ===========================================================================
 
+// TeamCollection
+// ===========================================================================
 #[derive(Debug, Clone)]
-pub enum TeamCollection {
-    Team(Vec<STeamExpr>),
+pub enum RuntimeTeamCollection {
     OtherTeams,
 }
 
 #[derive(Debug, Clone)]
-pub enum StringExpr {
-    // I think StringExpr ID has no value.
-    // It has no type and therefore
-    // can't be checked or use securely.
-    // ID(ID),
-    KeyOf(Key, SCardPosition),
-    StringCollectionAt(SStringCollection, SIntExpr),
+pub enum TeamCollection {
+    Literal(Vec<STeamExpr>),
+    Runtime(SRuntimeTeamCollection)
 }
 
-#[derive(Debug, Clone)]
-pub enum CardPosition {
-    At(Location, SIntExpr),
-    Top(Location),
-    Bottom(Location),
-    // Analyzer decides afterwards if it is Precedence or PointMap
-    Max (Box<SCardSet>, SID),
-    Min (Box<SCardSet>, SID),
-}
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
 
-#[derive(Debug, Clone)]
-pub enum BoolExpr {
-    IntCmp(SIntExpr, SIntCmpOp, SIntExpr),
-    CardSetIsEmpty(SCardSet),
-    CardSetIsNotEmpty(SCardSet),
-    CardSetEq(SCardSet, SCardSet),
-    CardSetNeq(SCardSet, SCardSet),
-    StringEq (SStringExpr, SStringExpr),
-    StringNeq(SStringExpr, SStringExpr),
-    PlayerEq (SPlayerExpr, SPlayerExpr),
-    PlayerNeq(SPlayerExpr, SPlayerExpr),
-    TeamEq (STeamExpr, STeamExpr),
-    TeamNeq(STeamExpr, STeamExpr),
-    And(Box<SBoolExpr>, Box<SBoolExpr>),
-    Or(Box<SBoolExpr>, Box<SBoolExpr>),
-    Not(Box<SBoolExpr>),
-    OutOfStagePlayer(SPlayerExpr),
-    OutOfGamePlayer(SPlayerExpr),
-    OutOfStageCollection(SPlayerCollection),
-    OutOfGameCollection(SPlayerCollection),
-    // Catch case if we have something like P1 == P2 or T1 == T2
-    // Matching IDs like P1 == P2 should not be done and will not be handled.
-    // This will directly be interpreted as CardSet! 
-    // AmbiguousEq (String, String),
-    // AmbiguousNeq(String, String),
-}
-
-#[derive(Debug, Clone)]
-pub enum IntCmpOp {
-    Eq,
-    Neq,
-    Gt,
-    Lt,
-    Ge,
-    Le
-}
-
-#[derive(Debug, Clone)]
-pub enum Status {
-    FaceUp,
-    FaceDown,
-    Private
-}
-
-#[derive(Debug, Clone)]
-pub enum TeamExpr {
-    TeamName(TeamName),
-    TeamOf(SPlayerExpr)
-}
-
-#[derive(Debug, Clone)]
-pub enum Quantity {
-    Int(SIntExpr),
-    Quantifier(SQuantifier),
-    IntRange(SIntRange),
-}
-
-#[derive(Debug, Clone)]
-pub struct IntRange { pub op: SIntCmpOp, pub int: SIntExpr}
-
-#[derive(Debug, Clone)]
-pub enum Quantifier {
-    All,
-    Any
-}
+// CardSet
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
 
 #[derive(Debug, Clone)]
 pub enum CardSet {
     Group(SGroup),
-    GroupOfPlayer(SGroup, SPlayerExpr),
-    GroupOfPlayerCollection(SGroup, SPlayerCollection),
+    GroupOwner(SGroup, SOwner),
 }
+
 
 #[derive(Debug, Clone)]
 pub enum Group {
-    Location(Location),
-    LocationWhere(Location, SFilterExpr),
-    LocationCollection(SLocationCollection),
-    LocationCollectionWhere(SLocationCollection, SFilterExpr),
-    ComboInLocation(Combo, Location),
-    ComboInLocationCollection(Combo, SLocationCollection),
-    NotComboInLocation(Combo, Location),
-    NotComboInLocationCollection(Combo, SLocationCollection),
+    Groupable(SGroupable),
+    Where(SGroupable, SFilterExpr),
+    NotCombo(SID, SGroupable),
+    Combo(SID, SGroupable),
     CardPosition(SCardPosition),
+}
+
+// FilterExpr
+// ===========================================================================
+#[derive(Debug, Clone)]
+pub enum AggregateFilter {
+    Size(SIntCompare, Box<SIntExpr>),
+    Same(SID),
+    Distinct(SID),
+    Adjacent(SID, SID),
+    Higher(SID, SID),
+    Lower(SID, SID),
+    KeyString(SID, SStringCompare, Box<SStringExpr>),
+    Combo(SID),
+    NotCombo(SID),
+}
+
+#[derive(Debug, Clone)]
+pub enum FilterOp {
+    And,
+    Or
 }
 
 #[derive(Debug, Clone)]
 pub enum FilterExpr {
-    Same(Key),
-    Distinct(Key),
-    Adjacent(Key, Precedence),
-    Higher(Key, Precedence),
-    Lower(Key, Precedence),
-    Size (SIntCmpOp, Box<SIntExpr>),
-    KeyEqString  (Key, Box<SStringExpr>),
-    KeyNeqString (Key, Box<SStringExpr>),
-    KeyEqValue  (Key, Value),
-    KeyNeqValue (Key, Value),
-    NotCombo(Combo),
-    Combo(Combo),
-    And(Box<SFilterExpr>, Box<SFilterExpr>),
-    Or (Box<SFilterExpr>, Box<SFilterExpr>),
+    Aggregate(SAggregateFilter),
+    Binary(Box<SFilterExpr>, SFilterOp, Box<SFilterExpr>),
 }
+// ===========================================================================
+
+
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
+
+// Game + Stage + FlowComponent + Rule
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================
 
 #[derive(Debug, Clone)]
 pub struct Game {
@@ -239,89 +479,64 @@ pub struct Game {
 #[derive(Debug, Clone)]
 pub enum FlowComponent {
     Stage(SSeqStage),
-    Rule(SRule),
+    Rule(SGameRule),
     IfRule(SIfRule),
     ChoiceRule(SChoiceRule),
     OptionalRule(SOptionalRule),
 }
 
 #[derive(Debug, Clone)]
-pub enum EndCondition {
-    UntilBool(SBoolExpr),
-    UntilBoolAndRep(SBoolExpr, SRepititions),
-    UntilBoolOrRep(SBoolExpr, SRepititions),
-    UntilRep(SRepititions),
-    UntilEnd
-}   
-
-#[derive(Debug, Clone)]
-pub struct Repititions {
-    pub times: SIntExpr
+pub enum SetUpRule {
+    // Creations
+    CreatePlayer(Vec<SID>),
+    CreateTeams(Vec<(SID, SPlayerCollection)>),
+    CreateTurnorder(SPlayerCollection),
+    CreateTurnorderRandom(SPlayerCollection),
+    CreateLocation(Vec<SID>, SOwner),
+    CreateCardOnLocation(SID, STypes),
+    CreateTokenOnLocation(SIntExpr, SID, SID),
+    CreateCombo(SID, SFilterExpr),
+    CreateMemory(SID, SMemoryType, SOwner),
+    CreatePrecedence(SID, Vec<(SID, SID)>),
+    CreatePointMap(SID, Vec<(SID, SID, SIntExpr)>),
 }
 
 #[derive(Debug, Clone)]
-pub enum Rule {
-    // Creations
-    CreatePlayer(Vec<PlayerName>),
-    CreateTeam(TeamName, Vec<PlayerName>),
-    CreateTurnorder(Vec<PlayerName>),
-    CreateTurnorderRandom(Vec<PlayerName>),
-    CreateLocationOnPlayerCollection(Location, SPlayerCollection),
-    CreateLocationOnTeamCollection(Location, STeamCollection),
-    CreateLocationOnTable(Location),
-    CreateLocationCollectionOnPlayerCollection(SLocationCollection, SPlayerCollection),
-    CreateLocationCollectionOnTeamCollection(SLocationCollection, STeamCollection),
-    CreateLocationCollectionOnTable(SLocationCollection),
-    CreateCardOnLocation(Location, STypes),
-    CreateTokenOnLocation(SIntExpr, Token, Location),
-    CreatePrecedence(Precedence, Vec<(Key, Value)>),
-    CreateCombo(Combo, SFilterExpr),
-    CreateMemoryIntPlayerCollection(Memory, SIntExpr, SPlayerCollection),
-    CreateMemoryStringPlayerCollection(Memory, SStringExpr, SPlayerCollection),
-    CreateMemoryIntTable(Memory, SIntExpr),
-    CreateMemoryStringTable(Memory, SStringExpr),
-    CreateMemoryPlayerCollection(Memory, SPlayerCollection),
-    CreateMemoryTable(Memory),
-    CreatePointMap(PointMap, Vec<(Key, Value, SIntExpr)>),
+pub enum ActionRule {
     // Actions
-    FlipAction(SCardSet, SStatus),
+    FlipAction (SCardSet, SStatus),
     ShuffleAction(SCardSet),
-    PlayerOutOfStageAction(SPlayerExpr),
-    PlayerOutOfGameSuccAction(SPlayerExpr),
-    PlayerOutOfGameFailAction(SPlayerExpr),
-    PlayerCollectionOutOfStageAction(SPlayerCollection),
-    PlayerCollectionOutOfGameSuccAction(SPlayerCollection),
-    PlayerCollectionOutOfGameFailAction(SPlayerCollection),
-    SetMemoryInt(Memory, SIntExpr),
-    SetMemoryString(Memory, SStringExpr),
-    SetMemoryCollection(Memory, SCollection),
+    PlayerOutOfStageAction(SPlayers),
+    PlayerOutOfGameSuccAction(SPlayers),
+    PlayerOutOfGameFailAction(SPlayers),
+    SetMemory(SID, SMemoryType),
+    ResetMemory(SID),
     CycleAction(SPlayerExpr),
     BidAction(SQuantity),
-    BidActionMemory(Memory, SQuantity),
-    EndTurn,
-    EndStage,
-    EndGameWithWinner(SPlayerExpr),
-    DemandCardPositionAction(SCardPosition),
-    DemandStringAction(SStringExpr),
-    DemandIntAction(SIntExpr),
-    // Move-Actions
-    ClassicMove(SClassicMove),
-    DealMove(SDealMove),
-    ExchangeMove(SExchangeMove),
-    TokenMove(STokenMove),
+    BidMemoryAction(SID, SQuantity),
+    EndAction(SEndType),
+    DemandAction(SDemandType),
+    DemandMemoryAction(SDemandType, SID),
+    Move(SMoveType),
+}
+
+#[derive(Debug, Clone)]
+pub enum ScoringRule {
     // Score + Winner Rule
     ScoreRule(SScoreRule),
     WinnerRule(SWinnerRule)
 }
 
 #[derive(Debug, Clone)]
-pub struct Types {
-    pub types: Vec<(Key, Vec<Value>)>
+pub enum GameRule {
+    SetUp(SSetUpRule),
+    Action(SActionRule),
+    Scoring(SScoringRule)
 }
 
 #[derive(Debug, Clone)]
 pub struct SeqStage {
-    pub stage: Stage,
+    pub stage: SID,
     pub player: SPlayerExpr,
     pub end_condition: SEndCondition,
     pub flows: Vec<SFlowComponent>,
@@ -344,55 +559,65 @@ pub struct ChoiceRule {
 }
 
 #[derive(Debug, Clone)]
-pub enum ClassicMove {
+pub enum MoveType {
+    Deal(SDealMove),
+    Exchange(SExchangeMove),
+    Classic(SClassicMove),
+    Place(STokenMove),
+}
+
+#[derive(Debug, Clone)]
+pub enum MoveCardSet {
     Move(SCardSet, SStatus, SCardSet),
     MoveQuantity(SQuantity, SCardSet, SStatus, SCardSet),
 }
 
 #[derive(Debug, Clone)]
+pub enum ClassicMove {
+    MoveCardSet(SMoveCardSet),
+}
+
+#[derive(Debug, Clone)]
 pub enum DealMove {
-    Deal(SCardSet, SStatus, SCardSet),
-    DealQuantity(SQuantity, SCardSet, SStatus, SCardSet),
+    MoveCardSet(SMoveCardSet),
 }
 
 #[derive(Debug, Clone)]
 pub enum ExchangeMove {
-    Exchange(SCardSet, SStatus, SCardSet),
-    ExchangeQuantity(SQuantity, SCardSet, SStatus, SCardSet),
+    MoveCardSet(SMoveCardSet),
 }
 
 #[derive(Debug, Clone)]
 pub enum TokenMove {
-    Place(Token, STokenLocExpr, STokenLocExpr),
-    PlaceQuantity(SQuantity, Token, STokenLocExpr, STokenLocExpr),
+    Place(SID, STokenLocExpr, STokenLocExpr),
+    PlaceQuantity(SQuantity, SID, STokenLocExpr, STokenLocExpr),
 }
 
 #[derive(Debug, Clone)]
 pub enum TokenLocExpr {
-    Location(Location),
-    LocationCollection(SLocationCollection),
-    LocationPlayer(Location, SPlayerExpr),
-    LocationCollectionPlayer(SLocationCollection, SPlayerExpr),
-    LocationPlayerCollection(Location, SPlayerCollection),
-    LocationCollectionPlayerCollection(SLocationCollection, SPlayerCollection),
+    Groupable(SGroupable),
+    GroupablePlayers(SGroupable, SPlayers),
 }
 
 #[derive(Debug, Clone)]
 pub enum ScoreRule {
-    ScorePlayer(SIntExpr, SPlayerExpr),
-    ScorePlayerMemory(SIntExpr, Memory, SPlayerExpr),
-    ScorePlayerCollection(SIntExpr, SPlayerCollection),
-    ScorePlayerCollectionMemory(SIntExpr, Memory, SPlayerCollection),
+    Score(SIntExpr, SPlayers),
+    ScoreMemory(SIntExpr, SID, SPlayers),
+}
+
+#[derive(Debug, Clone)]
+pub enum WinnerType {
+    Score,
+    Memory(SID),
+    Position
 }
 
 #[derive(Debug, Clone)]
 pub enum WinnerRule {
-    WinnerPlayer(SPlayerExpr),
-    WinnerPlayerCollection(SPlayerCollection),
-    WinnerLowestScore,
-    WinnerHighestScore,
-    WinnerLowestMemory(Memory),
-    WinnerHighestMemory(Memory),
-    WinnerLowestPosition,
-    WinnerHighestPosition,   
+    Winner(SPlayers),
+    WinnerWith(SExtrema, SWinnerType),
 }
+
+// ===========================================================================
+// ===========================================================================
+// ===========================================================================

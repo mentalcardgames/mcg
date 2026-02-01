@@ -1,38 +1,19 @@
-use proc_macro2::Span;
+use crate::{diagnostic::OwnedSpan, symbols::Var, typed_ast::*};
 
-use crate::{symbols::Var, transform_to_typed::LoweringCtx, typed_ast::*};
-
-pub const CURRENT: PlayerExpr = PlayerExpr::Current;
-pub const PREVIOUS: PlayerExpr = PlayerExpr::Previous;
-pub const COMPETITOR: PlayerExpr = PlayerExpr::Competitor;
-
-pub fn ctx() -> LoweringCtx {
-  LoweringCtx::new(vec![])
-}
-
-pub fn ctx_min_cardpos() -> LoweringCtx {
-  LoweringCtx::new(vec![
-    (
-      Var {
-        id: "Aces".to_string(),
-        span: Span::call_site(),
-      },
-      GameType::Precedence
-    )
-  ])
-}
-
-pub fn ctx_max_cardpos() -> LoweringCtx {
-  LoweringCtx::new(vec![
-    (
-      Var {
-        id: "Aces".to_string(),
-        span: Span::call_site(),
-      },
-      GameType::PointMap
-    )
-  ])
-}
+// pub fn ctx_max_cardpos() -> LoweringCtx {
+//   LoweringCtx::new(vec![
+//     (
+//       Var {
+//         id: "Aces".to_string(),
+//         span: OwnedSpan {
+//           start: 0,
+//           end: 0,
+//         },
+//       },
+//       GameType::PointMap
+//     )
+//   ])
+// }
 
 pub fn id(id: &str) -> TypedID {
   TypedID {
