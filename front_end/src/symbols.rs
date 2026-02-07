@@ -8,30 +8,12 @@ use crate::walker::Walker;
 use crate::{ast::GameType};
 
 #[derive(Debug, Clone)]
-pub enum AnalyzerError {
-    SymbolError(SymbolError),
-    Default
-}
-
-#[derive(Debug, Clone)]
 pub enum SymbolError {
     NotInitialized {
         var: Var,
     },
-    SymbolUsed {
+    DefinedMultipleTimes {
         var: Var,
-    },
-    WrongType {
-        var: Var,
-        found: GameType,
-        expected_type: GameType,
-    },
-    InitializationMightNotHappen {
-        span: OwnedSpan,
-    },
-    NoCorrespondingKey {
-        value: Var,
-        key: Var,
     },
 }
 
@@ -51,7 +33,9 @@ impl SymbolVisitor {
         self.symbols.insert(id.clone(), game_type);
     }
 
-    pub fn check_game_type(&self) -> Result<(), SymbolError> {
+    pub fn check_game_type(&self) -> Option<Vec<SymbolError>> {
+        let mut errs = Vec::new();
+
         // 1. Group by the variable name (String)
         // Map: "var_name" -> Vec<(SID, GameType)>
         let mut groups: HashMap<String, Vec<(&SID, &GameType)>> = HashMap::new();
@@ -64,15 +48,16 @@ impl SymbolVisitor {
         }
 
         // Process each group
-        for (name, occurrences) in groups {
+        for (_, occurrences) in groups {
             // 2. Check if a Group only has NoType
             let all_notype = occurrences.iter().all(|(_, t)| **t == GameType::NoType);
             if all_notype {
                 // If the group only has NoType, it was used but never initialized
-                let (first_sid, _) = occurrences[0];
-                return Err(SymbolError::NotInitialized {
-                    var: Var::from(first_sid.clone()),
-                });
+                for (sid, _) in occurrences.clone() {
+                    errs.push(SymbolError::NotInitialized {
+                        var: Var::from(sid.clone()),
+                    });
+                }
             }
 
             // 3. Check if multiple concrete types are assigned to the same name
@@ -82,28 +67,26 @@ impl SymbolVisitor {
                 .filter(|(_, t)| **t != GameType::NoType)
                 .collect();
 
-            if let Some((first_sid, first_type)) = concrete_assignments.first() {
-                for (next_sid, next_type) in concrete_assignments.iter().skip(1) {
-                    if first_type != next_type {
-                        // 4. Return the SID with the conflicting types
-                        return Err(SymbolError::WrongType {
-                            var: Var::from((*next_sid).clone()),
-                            found: (**next_type).clone(),
-                            expected_type: (**first_type).clone(),
-                        });
-                    }
+            if concrete_assignments.len() > 1 {
+                for (sid, _) in concrete_assignments {
+                    // 4. Return the SID with multiple definitions
+                    errs.push(SymbolError::DefinedMultipleTimes { var: Var::from((*sid).clone()) });
                 }
             }
         }
 
+        if errs.is_empty() {
+            return None
+        }
+
         // 5. Else return Ok
-        Ok(())
+        Some(errs)
     }
 
     pub fn into_typed_vars(&mut self) -> TypedVars {
         self.symbols
             .iter()
-            .filter(|(k, v)| **v != GameType::NoType)
+            .filter(|(_, v)| **v != GameType::NoType)
             .map(|(k, v)| (Var::from(k.clone()), v.clone()))
             .collect::<TypedVars>()
     }
@@ -210,16 +193,6 @@ impl AstPass for SymbolVisitor {
                     },
                 }
             },
-            NodeKind::Collection(c) => {
-                match c {
-                    Collection::Ambiguous(spanneds) => {
-                        for s in spanneds.iter() {
-                            self.use_id(s);
-                        }
-                    },
-                    _ => {},
-                }
-            },
             NodeKind::LocationCollection(l) => {
                 for location in l.locations.iter() {
                     self.use_id(location);
@@ -295,7 +268,10 @@ impl AstPass for SymbolVisitor {
                     SetUpRule::CreateCombo(spanned, _) => {
                         self.init_id(spanned, GameType::Combo);
                     },
-                    SetUpRule::CreateMemory(spanned, _, _) => {
+                    SetUpRule::CreateMemory(spanned, _) => {
+                        self.init_id(spanned, GameType::Memory);
+                    },
+                    SetUpRule::CreateMemoryWithMemoryType(spanned, _, _) => {
                         self.init_id(spanned, GameType::Memory);
                     },
                     SetUpRule::CreatePrecedence(spanned, items) => {

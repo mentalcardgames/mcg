@@ -370,7 +370,6 @@ pub enum Collection {
     PlayerCollection(PlayerCollection),
     TeamCollection(TeamCollection),
     CardSet(Box<CardSet>),
-    Ambiguous(Vec<String>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -511,7 +510,8 @@ pub enum SetUpRule {
     CreateCardOnLocation(String, Types),
     CreateTokenOnLocation(IntExpr, String, String),
     CreateCombo(String, FilterExpr),
-    CreateMemory(String, MemoryType, Owner),
+    CreateMemoryWithMemoryType(String, MemoryType, Owner),
+    CreateMemory(String, Owner),
     CreatePrecedence(String, Vec<(String, String)>),
     CreatePointMap(String, Vec<(String, String, IntExpr)>),
 }

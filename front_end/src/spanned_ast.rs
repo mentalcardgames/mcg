@@ -350,7 +350,6 @@ pub enum Collection {
     PlayerCollection(SPlayerCollection),
     TeamCollection(STeamCollection),
     CardSet(Box<SCardSet>),
-    Ambiguous(Vec<SID>),
 }
 
 #[derive(Debug, Clone, Walker, Lower)]
@@ -489,7 +488,8 @@ pub enum SetUpRule {
     CreateCardOnLocation(SID, STypes),
     CreateTokenOnLocation(SIntExpr, SID, SID),
     CreateCombo(SID, SFilterExpr),
-    CreateMemory(SID, SMemoryType, SOwner),
+    CreateMemoryWithMemoryType(SID, SMemoryType, SOwner),
+    CreateMemory(SID, SOwner),
     CreatePrecedence(SID, Vec<(SID, SID)>),
     CreatePointMap(SID, Vec<(SID, SID, SIntExpr)>),
 }

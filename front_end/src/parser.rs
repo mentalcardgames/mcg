@@ -1686,7 +1686,8 @@ impl CGDSLParser {
     pub(crate) fn create_memory(input: Node) -> Result<SSetUpRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_memory(_), memory(memory), memory_type(mt), kw_on(_), owner(o)] => SetUpRule::CreateMemory(memory, mt, o),
+            [kw_memory(_), memory(memory), memory_type(mt), kw_on(_), owner(o)] => SetUpRule::CreateMemoryWithMemoryType(memory, mt, o),
+            [kw_memory(_), memory(memory), kw_on(_), owner(o)] => SetUpRule::CreateMemory(memory, o),
         );
 
         Ok(

@@ -1,97 +1,6 @@
-use front_end::{parser::Rule, spans::{OwnedSpan, SGame}, symbols::{SymbolVisitor, Var}, ast::GameType, visitor::Visitor};
-use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, CompletionResponse, Diagnostic, DiagnosticSeverity, InsertTextFormat, Position, Range};
+use front_end::{ast::GameType, parser::Rule, spans::{SGame}, symbols::{SymbolVisitor, Var}, walker::Walker};
+use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, CompletionResponse, InsertTextFormat, Position};
 use pest_consume::Error;
-use front_end::walker::Walker;
-
-
-pub fn ast_diagnostic(text: &str, last_ast: Option<&SGame>) -> Option<Diagnostic> {
-    let mut symbol = SymbolVisitor::new();
-    let mut ctx = vec![];
-    match last_ast {
-      Some(ast) => {
-        ast.walk(&mut symbol);
-        match symbol.check_game_type() {
-          Ok(_) => { 
-              // Use eprintln! for synchronous "stealth" logging
-              ctx = symbol.into_typed_vars();
-              eprintln!("AST Visit Successful! Context: {:?}", ctx);
-              None
-            },
-          Err(e) => {
-            // match e {
-            //     front_end::symbols::SymbolError::NotInitialized { var } => {
-            //       Diagnostic {
-            //         range: var.span.to_range(text),
-            //         severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-            //         code: None,
-            //         source: Some("my-cool-lsp".to_string()),
-            //         message: "This is where the underline goes!".to_string(),
-            //         related_information: None,
-            //         tags: None,
-            //         data: None,
-            //         code_description: todo!(),
-            //       }
-            //     },
-            //     front_end::symbols::SymbolError::SymbolUsed { var } => {
-            //       Diagnostic {
-            //         range: var.span.to_range(text),
-            //         severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-            //         code: None,
-            //         source: Some("my-cool-lsp".to_string()),
-            //         message: "This is where the underline goes!".to_string(),
-            //         related_information: None,
-            //         tags: None,
-            //         data: None,
-            //         code_description: todo!(),
-            //       }
-            //     },
-            //     front_end::symbols::SymbolError::WrongType { var, found, expected_type } => {
-            //       Diagnostic {
-            //         range: var.span.to_range(text),
-            //         severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-            //         code: None,
-            //         source: Some("my-cool-lsp".to_string()),
-            //         message: "This is where the underline goes!".to_string(),
-            //         related_information: None,
-            //         tags: None,
-            //         data: None,
-            //         code_description: todo!(),
-            //       }
-            //     },
-            //     front_end::symbols::SymbolError::InitializationMightNotHappen { span } => {
-            //       Diagnostic {
-            //         range: span.to_range(text),
-            //         severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-            //         code: None,
-            //         source: Some("my-cool-lsp".to_string()),
-            //         message: "This is where the underline goes!".to_string(),
-            //         related_information: None,
-            //         tags: None,
-            //         data: None,
-            //         code_description: todo!(),
-            //       }
-            //     },
-            //     front_end::symbols::SymbolError::NoCorrespondingKey { value, key } => {
-            //       Diagnostic {
-            //         range: value.span.to_range(text),
-            //         severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-            //         code: None,
-            //         source: Some("my-cool-lsp".to_string()),
-            //         message: "This is where the underline goes!".to_string(),
-            //         related_information: None,
-            //         tags: None,
-            //         data: None,
-            //         code_description: todo!(),
-            //       }
-            //     },
-            // }
-            todo!()
-          },
-        }
-      },
-      _ => {None},
-    }
-}
 
 pub fn try_auto_completion(
     err: Error<Rule>, 
@@ -99,90 +8,17 @@ pub fn try_auto_completion(
     text: &str,
     last_ast: Option<&SGame>
 ) -> Option<CompletionResponse> {
-    let mut symbol = SymbolVisitor::new();
-    let mut ctx = vec![];
-    match last_ast {
-      Some(ast) => {
-        ast.walk(&mut symbol);
-        match symbol.check_game_type() {
-          Ok(_) => { 
-              // Use eprintln! for synchronous "stealth" logging
-              ctx = symbol.into_typed_vars();
-              eprintln!("AST Visit Successful! Context: {:?}", ctx);
-            },
-          Err(e) => {
-            let diagnostic = match e {
-                front_end::symbols::SymbolError::NotInitialized { var } => {
-                  Diagnostic {
-                    range: var.span.to_range(text),
-                    severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-                    code: None,
-                    source: Some("my-cool-lsp".to_string()),
-                    message: "This is where the underline goes!".to_string(),
-                    related_information: None,
-                    tags: None,
-                    data: None,
-                    code_description: todo!(),
-                  }
-                },
-                front_end::symbols::SymbolError::SymbolUsed { var } => {
-                  Diagnostic {
-                    range: var.span.to_range(text),
-                    severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-                    code: None,
-                    source: Some("my-cool-lsp".to_string()),
-                    message: "This is where the underline goes!".to_string(),
-                    related_information: None,
-                    tags: None,
-                    data: None,
-                    code_description: todo!(),
-                  }
-                },
-                front_end::symbols::SymbolError::WrongType { var, found, expected_type } => {
-                  Diagnostic {
-                    range: var.span.to_range(text),
-                    severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-                    code: None,
-                    source: Some("my-cool-lsp".to_string()),
-                    message: "This is where the underline goes!".to_string(),
-                    related_information: None,
-                    tags: None,
-                    data: None,
-                    code_description: todo!(),
-                  }
-                },
-                front_end::symbols::SymbolError::InitializationMightNotHappen { span } => {
-                  Diagnostic {
-                    range: span.to_range(text),
-                    severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-                    code: None,
-                    source: Some("my-cool-lsp".to_string()),
-                    message: "This is where the underline goes!".to_string(),
-                    related_information: None,
-                    tags: None,
-                    data: None,
-                    code_description: todo!(),
-                  }
-                },
-                front_end::symbols::SymbolError::NoCorrespondingKey { value, key } => {
-                  Diagnostic {
-                    range: value.span.to_range(text),
-                    severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
-                    code: None,
-                    source: Some("my-cool-lsp".to_string()),
-                    message: "This is where the underline goes!".to_string(),
-                    related_information: None,
-                    tags: None,
-                    data: None,
-                    code_description: todo!(),
-                  }
-                },
-            };
-          },
-        }
-      },
-      _ => {},
+    let ast;
+    if let Some(a) = last_ast {
+      ast = a;
+    } else {
+      return None
     }
+
+    let mut symbols = SymbolVisitor::new();
+    ast.walk(&mut symbols);
+    
+    let ctx = symbols.into_typed_vars();
 
     match err.variant {
         pest::error::ErrorVariant::ParsingError { positives, .. } => {

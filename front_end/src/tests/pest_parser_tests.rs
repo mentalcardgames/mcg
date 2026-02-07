@@ -35,10 +35,10 @@ mod tests {
 
         // println!("{:?}", symbol.into_typed_vars());
 
-        match symbol.check_game_type() {
-            Ok(_) => println!("Game is fine!"),
-            Err(e) => println!("{:?}", e),
-        }
+        // match symbol.check_game_type() {
+        //     Ok(_) => println!("Game is fine!"),
+        //     Err(e) => println!("{:?}", e),
+        // }
 
         // 4. Lowering: Convert custom logic errors to pest_consume::Error
         // let ctx = LoweringCtx::new(vec![]); 

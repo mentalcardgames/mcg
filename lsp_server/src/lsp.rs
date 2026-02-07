@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use front_end::parser::{CGDSLParser, Rule};
 use front_end::spans::SGame;
+use front_end::validation::validate_document;
 use pest_consume::Parser;
 use tokio::sync::Mutex;
 use arc_swap::ArcSwapOption;
@@ -11,7 +12,6 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
 use crate::rule_completion::{try_auto_completion};
-use crate::error_diagnostics::{pest_error_to_diagnostic};
 
 #[derive(Debug)]
 pub struct Backend {
@@ -78,7 +78,7 @@ impl LanguageServer for Backend {
         match result {
             Err(err) => {
                 // .load() gives you an atomic snapshot. No .await, no blocking.
-                let last_ast_snapshot = self.last_ast.load(); 
+                let last_ast_snapshot = self.last_ast.load();
                 
                 // last_ast_snapshot is a Guard that behaves like Option<Arc<FileAST>>
                 Ok(try_auto_completion(err, position, &text, last_ast_snapshot.as_deref()))
@@ -113,23 +113,12 @@ impl LanguageServer for Backend {
         let docs = self.documents.lock().await;
 
         if let Some(content) = docs.get(&uri) {
-            // 1. Perform the parse and convert to Diagnostic IMMEDIATELY.
-            // The block ensures the Pest-internal Rc types are dropped.
-            let diagnostics: Vec<Diagnostic> = {
-                match CGDSLParser::parse(Rule::file, content) {
-                    Ok(_) => Vec::new(),
-                    Err(err) => {
-                        // Convert the pest_consume::Error into a thread-safe Diagnostic
-                        vec![pest_error_to_diagnostic(err)]
-                    }
-                }
-            }; 
-            // ^ All Pest 'Rc' tokens are dropped here.
-
-            // 2. Now it is safe to await because 'diagnostics' is Send.
-            self.client
-                .publish_diagnostics(uri, diagnostics, None)
-                .await;
+            // Run validation (this should return an empty vec if no errors are found)
+            let diagnostics = validate_document(content).unwrap_or_default();
+            
+            // This single call handles both clearing old errors (if vec is empty)
+            // and showing new ones (if vec has items).
+            self.client.publish_diagnostics(uri, diagnostics, None).await;
         }
     }
 
@@ -147,22 +136,12 @@ impl LanguageServer for Backend {
             }
 
             // 2. Run the diagnostics
-            let diagnostics = validate_document(text);
-
+            // Run validation (this should return an empty vec if no errors are found)
+            let diagnostics = validate_document(&text).unwrap_or_default();
+            
+            // This single call handles both clearing old errors (if vec is empty)
+            // and showing new ones (if vec has items).
             self.client.publish_diagnostics(uri, diagnostics, None).await;
         }
     }
-
-}
-
-// Helper to keep code DRY (Don't Repeat Yourself)
-fn validate_document(text: String) -> Vec<Diagnostic> {
-    let diagnostics = {
-        match CGDSLParser::parse(Rule::file, &text) {
-            Ok(_) => vec![],
-            Err(err) => vec![pest_error_to_diagnostic(err)],
-        }
-    };
-
-    diagnostics
 }

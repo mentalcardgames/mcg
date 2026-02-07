@@ -619,7 +619,7 @@ create_combo = { kw_combo ~ combo ~ kw_where ~ filter_expr }
 // CreateMemory
 // =======================
 memory_type = { (int_expr | string_expr | collection | card_set) }
-create_memory = { kw_memory ~ memory ~ memory_type ~ kw_on ~ owner }
+create_memory = { kw_memory ~ memory ~ (memory_type)? ~ kw_on ~ owner }
 // =======================
 
 // CreatePointMap
