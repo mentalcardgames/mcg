@@ -1,4 +1,4 @@
-use crate::{diagnostic::OwnedSpan, symbols::Var, typed_ast::*};
+use crate::{spans::OwnedSpan, symbols::Var, ast::*};
 
 // pub fn ctx_max_cardpos() -> LoweringCtx {
 //   LoweringCtx::new(vec![
@@ -15,86 +15,50 @@ use crate::{diagnostic::OwnedSpan, symbols::Var, typed_ast::*};
 //   ])
 // }
 
-pub fn id(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::NoType,
-  }
+pub fn id(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn stage(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Stage,
-  }
+pub fn stage(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn playername(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Player,
-  }
+pub fn playername(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn teamname(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Team,
-  }
+pub fn teamname(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn location(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Location,
-  }
+pub fn location(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn token(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Token,
-  }
+pub fn token(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn precedence(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Precedence,
-  }
+pub fn precedence(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn pointmap(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::PointMap,
-  }
+pub fn pointmap(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn combo(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Combo,
-  }
+pub fn combo(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn memory(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Memory,
-  }
+pub fn memory(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn key(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Key,
-  }
+pub fn key(id: &str) -> String {
+  id.to_string()
 }
 
-pub fn value(id: &str) -> TypedID {
-  TypedID {
-    id: id.to_string(),
-    ty: GameType::Value,
-  }
+pub fn value(id: &str) -> String {
+  id.to_string()
 }

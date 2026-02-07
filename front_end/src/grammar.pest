@@ -15,8 +15,9 @@ ident = @{ &alpha ~ !(kw) ~ (alpha | digit)* }
 //////////////////////////
 game        = { ident }
 stage       = { ident }
-teamname    = { ident }
-playername    = { ident }
+teamname    = { &"T" ~ ident }
+playername  = { &"P" ~ ident }
+// Keeping Locations normal because there are the most frequently used!
 location    = { ident }
 token       = { ident }
 precedence  = { ident }
@@ -29,95 +30,96 @@ value       = { ident }
 //////////////////////////
 // Keywords
 //////////////////////////
-kw_adjacent   = { "adjacent" }
-kw_all        = { "all" }
-kw_and        = { "and" }
-kw_any        = { "any" }
-kw_as         = { "as" }
-kw_at         = { "at" }
-kw_bid        = { "bid" }
-kw_bottom     = { "bottom" }
-kw_card       = { "card" }
-kw_case       = { "case" }
-kw_choose     = { "choose" }
-kw_combo      = { "combo" }
-kw_competitor = { "competitor" }
-kw_conditional = { "conditional" }
-kw_create     = { "create" }
-kw_current    = { "current" }
-kw_cycle      = { "cycle" }
-kw_deal       = { "deal" }
-kw_demand     = { "demand" }
-kw_distinct   = { "distinct" }
-kw_down       = { "down" }
-kw_empty      = { "empty" }
-kw_end        = { "end" }
-kw_exchange   = { "exchange" }
-kw_face       = { "face" }
-kw_fail       = { "fail" }
-kw_flip       = { "flip" }
-kw_for        = { "for" }
-kw_from       = { "from" }
-kw_game       = { "game" }
-kw_higher     = { "higher" }
-kw_highest    = { "highest" }
-kw_if         = { "if" }
-kw_in         = { "in" }
-kw_is         = { "is" }
-kw_location   = { "location" }
-kw_lower      = { "lower" }
-kw_lowest     = { "lowest" }
-kw_max        = { "max" }
-kw_memory     = { "memory" }
-kw_min        = { "min" }
-kw_move       = { "move" }
-kw_next       = { "next" }
-kw_not        = { "not" }
-kw_of         = { "of" }
-kw_on         = { "on" }
-kw_optional   = { "optional" }
-kw_or         = { "or" }
-kw_other      = { "other" }
-kw_others     = { "others" }
-kw_out        = { "out" }
-kw_owner      = { "owner" }
-kw_place      = { "place" }
-kw_player     = { "player" }
-kw_playersin  = { "playersin" }
-kw_playersout = { "playersout" }
-kw_playroundcounter = { "playroundcounter" }
-kw_pointmap   = { "pointmap" }
-kw_points   = { "points" }
-kw_position   = { "position" }
-kw_precedence = { "precedence" }
-kw_previous   = { "previous" }
-kw_private    = { "private" }
-kw_random     = { "random" }
-kw_reset      = { "reset" }
-kw_same       = { "same" }
-kw_score      = { "score" }
-kw_set        = { "set" }
-kw_shuffle    = { "shuffle" }
-kw_size       = { "size" }
-kw_stage      = { "stage" }
-kw_stageroundcounter = { "stageroundcounter" }
-kw_successful = { "successful" }
-kw_sum        = { "sum" }
-kw_table      = { "table" }
-kw_team       = { "team" }
-kw_teams      = { "teams" }
-kw_times      = { "times" }
-kw_to         = { "to" }
-kw_token      = { "token" }
-kw_top        = { "top" }
-kw_turn       = { "turn" }
-kw_turnorder  = { "turnorder" }
-kw_until      = { "until" }
-kw_up         = { "up" }
-kw_using      = { "using" }
-kw_where      = { "where" }
-kw_winner     = { "winner" }
-kw_with       = { "with" }
+kw_adjacent   = @{ "adjacent" }
+kw_all        = @{ "all" }
+kw_and        = @{ "and" }
+kw_any        = @{ "any" }
+kw_as         = @{ "as" }
+kw_at         = @{ "at" }
+kw_bid        = @{ "bid" }
+kw_bottom     = @{ "bottom" }
+kw_card       = @{ "card" }
+kw_cards      = @{ "cards" }
+kw_case       = @{ "case" }
+kw_choose     = @{ "choose" }
+kw_combo      = @{ "combo" }
+kw_competitor = @{ "competitor" }
+kw_conditional = @{ "conditional" }
+kw_create     = @{ "create" }
+kw_current    = @{ "current" }
+kw_cycle      = @{ "cycle" }
+kw_deal       = @{ "deal" }
+kw_demand     = @{ "demand" }
+kw_distinct   = @{ "distinct" }
+kw_down       = @{ "down" }
+kw_empty      = @{ "empty" }
+kw_end        = @{ "end" }
+kw_exchange   = @{ "exchange" }
+kw_face       = @{ "face" }
+kw_fail       = @{ "fail" }
+kw_flip       = @{ "flip" }
+kw_for        = @{ "for" }
+kw_from       = @{ "from" }
+kw_game       = @{ "game" }
+kw_higher     = @{ "higher" }
+kw_highest    = @{ "highest" }
+kw_if         = @{ "if" }
+kw_in         = @{ "in" }
+kw_is         = @{ "is" }
+kw_location   = @{ "location" }
+kw_lower      = @{ "lower" }
+kw_lowest     = @{ "lowest" }
+kw_max        = @{ "max" }
+kw_memory     = @{ "memory" }
+kw_min        = @{ "min" }
+kw_move       = @{ "move" }
+kw_next       = @{ "next" }
+kw_not        = @{ "not" }
+kw_of         = @{ "of" }
+kw_on         = @{ "on" }
+kw_optional   = @{ "optional" }
+kw_or         = @{ "or" }
+kw_other      = @{ "other" }
+kw_others     = @{ "others" }
+kw_out        = @{ "out" }
+kw_owner      = @{ "owner" }
+kw_place      = @{ "place" }
+kw_player     = @{ "player" }
+kw_playersin  = @{ "playersin" }
+kw_playersout = @{ "playersout" }
+kw_playroundcounter = @{ "playroundcounter" }
+kw_pointmap   = @{ "pointmap" }
+kw_points     = @{ "points" }
+kw_position   = @{ "position" }
+kw_precedence = @{ "precedence" }
+kw_previous   = @{ "previous" }
+kw_private    = @{ "private" }
+kw_random     = @{ "random" }
+kw_reset      = @{ "reset" }
+kw_same       = @{ "same" }
+kw_score      = @{ "score" }
+kw_set        = @{ "set" }
+kw_shuffle    = @{ "shuffle" }
+kw_size       = @{ "size" }
+kw_stage      = @{ "stage" }
+kw_stageroundcounter = @{ "stageroundcounter" }
+kw_successful = @{ "successful" }
+kw_sum        = @{ "sum" }
+kw_table      = @{ "table" }
+kw_team       = @{ "team" }
+kw_teams      = @{ "teams" }
+kw_times      = @{ "times" }
+kw_to         = @{ "to" }
+kw_token      = @{ "token" }
+kw_top        = @{ "top" }
+kw_turn       = @{ "turn" }
+kw_turnorder  = @{ "turnorder" }
+kw_until      = @{ "until" }
+kw_up         = @{ "up" }
+kw_using      = @{ "using" }
+kw_where      = @{ "where" }
+kw_winner     = @{ "winner" }
+kw_with       = @{ "with" }
 
 kw = {
     kw_adjacent
@@ -248,22 +250,18 @@ groupable = { location | location_collection }
 //////////////////////////
 // Operators
 //////////////////////////
-eq  = { "==" }
-neq = { "!=" }
-lt  = { "<" }
-gt  = { ">" } 
-le  = { "<=" }
-ge  = { ">=" } 
+eq  = @{ "==" }
+neq = @{ "!=" }
+lt  = @{ "<" }
+gt  = @{ ">" } 
+le  = @{ "<=" }
+ge  = @{ ">=" } 
 
-plus = { "+" }
-minus = { "-" }
-mul = { "*" }
-div = { "/" }
-modulo = { "mod" }
-
-bin_compare = {
-  (eq | neq)
-}
+plus = @{ "+" }
+minus = @{ "-" }
+mul = @{ "*" }
+div = @{ "/" }
+modulo = @{ "mod" }
 
 logical_compare = {
   (kw_and | kw_or)
@@ -275,15 +273,6 @@ int_op = {
   | mul 
   | div 
   | modulo
-}
-
-int_cmp_op = {
-    eq 
-  | neq 
-  | lt 
-  | gt 
-  | le 
-  | ge
 }
 
 //////////////////////////
@@ -351,7 +340,7 @@ extrema = { ((kw_min | kw_max) | (kw_lowest | kw_highest)) }
 location_top = { location ~ kw_top }
 location_bottom = { location ~ kw_bottom }
 location_int_expr = { location ~ int_expr }
-extrema_of_card_set = {extrema ~ kw_of ~ card_set ~ kw_using ~ ident }
+extrema_of_card_set = {extrema ~ kw_of ~ card_set ~ kw_using ~ (kw_points ~ pointmap | precedence)  }
 
 card_position = {
     location_top
@@ -379,7 +368,6 @@ int_compare = {
 }
 
 out_of = { kw_stage | stage | kw_game }
-
 card_set_bool = { card_set ~ card_set_compare ~ card_set }
 string_expr_bool = { string_expr ~ string_expr_compare ~ string_expr }
 player_expr_bool = { player_expr ~ player_expr_compare ~ player_expr }
@@ -433,13 +421,13 @@ team_expr = {
 // Collection
 // =======================
 collection = { 
-    ambiguous_collection
-  | int_collection
+    int_collection
   | string_collection
   | player_collection
   | team_collection
   | location_collection
-  | card_set
+  // if not here then ambiguous
+  | kw_cards ~ card_set
 }
 // =======================
 
@@ -447,10 +435,6 @@ collection = {
 // Collections
 //////////////////////////
 
-// AmbiguousCollection
-// =======================
-ambiguous_collection = { "(" ~ ident ~ ("," ~ ident)+ ~ ")" }
-// =======================
 
 // IntCollection
 // =======================
@@ -512,7 +496,7 @@ game_flow = { flow_component+ }
 // =======================
 flow_component = { 
     seq_stage 
-  | rule 
+  | game_rule 
   | if_rule 
   | choice_rule 
   | optional_rule 
@@ -545,7 +529,7 @@ repetitions = { int_expr ~ kw_times }
 
 // GameRule
 // =======================
-rule = {
+game_rule = {
          setup_rule
        | action_rule
        | scoring_rule
@@ -789,10 +773,7 @@ group = {
 
 // FilterExpr
 // =======================
-filter_op = {
-    kw_and
-  | kw_or
-}
+filter_op = { kw_and | kw_or }
 key_same = { key ~ kw_same }
 key_distinct = { key ~ kw_distinct }
 key_adjacent = { key ~ kw_adjacent ~ kw_using ~ precedence }

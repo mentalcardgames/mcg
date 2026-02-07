@@ -1,214 +1,8 @@
-/*
-    TODO:
-    Every big rule needs to add an .into_inner() (see parse for PlayerExpr).
-    Clean your Grammar and the Names of the Rules.
-    Build the lower into the typed ast for Testing.
-    Do the above first and after everything is cleaned up and tested,
-    then continue writing the rest of the rules.
-*/
-
 use pest_consume::{Parser, match_nodes};
 
-use crate::{diagnostic::*};
+use crate::{spans::*};
 use crate::{spanned_ast::*};
 
-
-#[derive(Debug, Clone)]
-pub enum ParsingError {
-    Default,
-    Error(String, OwnedSpan),
-}
-
-impl ParsingError {
-    pub(crate) fn new(err: String, span: OwnedSpan) -> ParsingError {
-        ParsingError::Error(err, span)
-    }
-}
-
-pub(crate) fn saggregate_player(aggr: AggregatePlayer, span: OwnedSpan) -> SPlayerExpr {
-    SPlayerExpr {
-        node: PlayerExpr::Aggregate(        
-            SAggregatePlayer {
-                node: aggr,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn saggregate_filter(aggr: AggregateFilter, span: OwnedSpan) -> SFilterExpr {
-    SFilterExpr {
-        node: FilterExpr::Aggregate(        
-            SAggregateFilter {
-                node: aggr,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn saggregate_player_collection(aggr: AggregatePlayerCollection, span: OwnedSpan) -> SPlayerCollection {
-    SPlayerCollection {
-        node: PlayerCollection::Aggregate(        
-            SAggregatePlayerCollection {
-                node: aggr,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn sruntime_player_collection(runt: RuntimePlayerCollection, span: OwnedSpan) -> SPlayerCollection {
-    SPlayerCollection {
-        node: PlayerCollection::Runtime(        
-            SRuntimePlayerCollection {
-                node: runt,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn sruntime_team_collection(runt: RuntimeTeamCollection, span: OwnedSpan) -> STeamCollection {
-    STeamCollection {
-        node: TeamCollection::Runtime(        
-            SRuntimeTeamCollection {
-                node: runt,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn saggregate_team(aggr: AggregateTeam, span: OwnedSpan) -> STeamExpr {
-    STeamExpr {
-        node: TeamExpr::Aggregate(        
-            SAggregateTeam {
-                node: aggr,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn sruntime_player(runt: RuntimePlayer, span: OwnedSpan) -> SPlayerExpr {
-    SPlayerExpr {
-        node: PlayerExpr::Runtime(        
-            SRuntimePlayer {
-                node: runt,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn squery_card_position(quer: QueryCardPosition, span: OwnedSpan) -> SCardPosition {
-    SCardPosition {
-        node: CardPosition::Query(
-            SQueryCardPosition {
-                node: quer,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn saggregate_card_position(aggr: AggregateCardPosition, span: OwnedSpan) -> SCardPosition {
-    SCardPosition {
-        node: CardPosition::Aggregate(
-            SAggregateCardPosition {
-                node: aggr,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn squery_int(quer: QueryInt, span: OwnedSpan) -> SIntExpr {
-    SIntExpr {
-        node: IntExpr::Query(
-            SQueryInt {
-                node: quer,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn saggregate_int(aggr: AggregateInt, span: OwnedSpan) -> SIntExpr {
-    SIntExpr {
-        node: IntExpr::Aggregate(
-            SAggregateInt {
-                node: aggr,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn sruntime_int(runt: RuntimeInt, span: OwnedSpan) -> SIntExpr {
-    SIntExpr {
-        node: IntExpr::Runtime(        
-            SRuntimeInt {
-                node: runt,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn squery_string(quer: QueryString, span: OwnedSpan) -> SStringExpr {
-    SStringExpr {
-        node: StringExpr::Query(
-            SQueryString {
-                node: quer,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn saggregate_compare_bool(cmp: CompareBool, span: OwnedSpan) -> SBoolExpr {
-    SBoolExpr {
-        node: BoolExpr::Aggregate(
-            SAggregateBool {
-                node: AggregateBool::Compare(
-                    SCompareBool {
-                        node: cmp,
-                        span: span.clone()
-                    }
-                ),
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
-
-pub(crate) fn saggregate_bool(aggr: AggregateBool, span: OwnedSpan) -> SBoolExpr {
-    SBoolExpr {
-        node: BoolExpr::Aggregate(
-            SAggregateBool {
-                node: aggr,
-                span: span.clone()
-            }
-        ),
-        span: span.clone()
-    }
-}
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -229,7 +23,7 @@ impl CGDSLParser {
         )
     }
 
-    pub(crate) fn file(input: Node) -> Result<SGame> {
+    pub fn file(input: Node) -> Result<SGame> {
         Ok(
             match_nodes!(input.into_children();
                 [game_flow(g), _] => g,
@@ -262,7 +56,7 @@ impl CGDSLParser {
                 [if_rule(s)] => FlowComponent::IfRule(s),
                 [choice_rule(t)] => FlowComponent::ChoiceRule(t),
                 [optional_rule(l)] => FlowComponent::OptionalRule(l),
-                [rule(k)] => FlowComponent::Rule(k),
+                [game_rule(k)] => FlowComponent::Rule(k),
         );
 
         Ok(
@@ -651,7 +445,8 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
-                [extrema(n), kw_for(_), card_set(s), kw_using(_), ident(t)] => saggregate_card_position(AggregateCardPosition::Extrema(n, Box::new(s), t), span), 
+                [extrema(n), kw_for(_), card_set(s), kw_using(_), kw_points(_), ident(t)] => saggregate_card_position(AggregateCardPosition::ExtremaPointMap(n, Box::new(s), t), span), 
+                [extrema(n), kw_for(_), card_set(s), kw_using(_), ident(t)] => saggregate_card_position(AggregateCardPosition::ExtremaPrecedence(n, Box::new(s), t), span), 
             )
         )
     }
@@ -1591,7 +1386,6 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
-                [ambiguous_collection(n)] => SCollection {node: Collection::Ambiguous(n), span},
                 [int_collection(n)] => SCollection {node: Collection::IntCollection(n), span},
                 [string_collection(n)] => SCollection {node: Collection::StringCollection(n), span},
                 [player_collection(n)] => SCollection {node: Collection::PlayerCollection(n), span},
@@ -1639,16 +1433,7 @@ impl CGDSLParser {
         )
     }
 
-    pub(crate) fn ambiguous_collection(input: Node) -> Result<Vec<SID>> {     
-        Ok( 
-            match_nodes!(input.into_children();
-                [ident(ids)..] => ids.collect(),
-            )
-        )
-        
-    }
-
-    pub(crate) fn rule(input: Node) -> Result<SGameRule> {
+    pub(crate) fn game_rule(input: Node) -> Result<SGameRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
             [setup_rule(s)] => GameRule::SetUp(s),
@@ -2394,5 +2179,193 @@ impl CGDSLParser {
                 span
             }
         )
+    }
+}
+
+// ===========================================================================
+// Helper
+// ===========================================================================
+pub(crate) fn saggregate_player(aggr: AggregatePlayer, span: OwnedSpan) -> SPlayerExpr {
+    SPlayerExpr {
+        node: PlayerExpr::Aggregate(        
+            SAggregatePlayer {
+                node: aggr,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn saggregate_filter(aggr: AggregateFilter, span: OwnedSpan) -> SFilterExpr {
+    SFilterExpr {
+        node: FilterExpr::Aggregate(        
+            SAggregateFilter {
+                node: aggr,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn saggregate_player_collection(aggr: AggregatePlayerCollection, span: OwnedSpan) -> SPlayerCollection {
+    SPlayerCollection {
+        node: PlayerCollection::Aggregate(        
+            SAggregatePlayerCollection {
+                node: aggr,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn sruntime_player_collection(runt: RuntimePlayerCollection, span: OwnedSpan) -> SPlayerCollection {
+    SPlayerCollection {
+        node: PlayerCollection::Runtime(        
+            SRuntimePlayerCollection {
+                node: runt,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn sruntime_team_collection(runt: RuntimeTeamCollection, span: OwnedSpan) -> STeamCollection {
+    STeamCollection {
+        node: TeamCollection::Runtime(        
+            SRuntimeTeamCollection {
+                node: runt,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn saggregate_team(aggr: AggregateTeam, span: OwnedSpan) -> STeamExpr {
+    STeamExpr {
+        node: TeamExpr::Aggregate(        
+            SAggregateTeam {
+                node: aggr,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn sruntime_player(runt: RuntimePlayer, span: OwnedSpan) -> SPlayerExpr {
+    SPlayerExpr {
+        node: PlayerExpr::Runtime(        
+            SRuntimePlayer {
+                node: runt,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn squery_card_position(quer: QueryCardPosition, span: OwnedSpan) -> SCardPosition {
+    SCardPosition {
+        node: CardPosition::Query(
+            SQueryCardPosition {
+                node: quer,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn saggregate_card_position(aggr: AggregateCardPosition, span: OwnedSpan) -> SCardPosition {
+    SCardPosition {
+        node: CardPosition::Aggregate(
+            SAggregateCardPosition {
+                node: aggr,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn squery_int(quer: QueryInt, span: OwnedSpan) -> SIntExpr {
+    SIntExpr {
+        node: IntExpr::Query(
+            SQueryInt {
+                node: quer,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn saggregate_int(aggr: AggregateInt, span: OwnedSpan) -> SIntExpr {
+    SIntExpr {
+        node: IntExpr::Aggregate(
+            SAggregateInt {
+                node: aggr,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn sruntime_int(runt: RuntimeInt, span: OwnedSpan) -> SIntExpr {
+    SIntExpr {
+        node: IntExpr::Runtime(        
+            SRuntimeInt {
+                node: runt,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn squery_string(quer: QueryString, span: OwnedSpan) -> SStringExpr {
+    SStringExpr {
+        node: StringExpr::Query(
+            SQueryString {
+                node: quer,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn saggregate_compare_bool(cmp: CompareBool, span: OwnedSpan) -> SBoolExpr {
+    SBoolExpr {
+        node: BoolExpr::Aggregate(
+            SAggregateBool {
+                node: AggregateBool::Compare(
+                    SCompareBool {
+                        node: cmp,
+                        span: span.clone()
+                    }
+                ),
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
+    }
+}
+
+pub(crate) fn saggregate_bool(aggr: AggregateBool, span: OwnedSpan) -> SBoolExpr {
+    SBoolExpr {
+        node: BoolExpr::Aggregate(
+            SAggregateBool {
+                node: aggr,
+                span: span.clone()
+            }
+        ),
+        span: span.clone()
     }
 }

@@ -1,10 +1,12 @@
+use tower_lsp::lsp_types;
+
 use crate::spanned_ast::*;
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OwnedSpan {
-    pub(crate) start: usize,
-    pub(crate) end: usize,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl From<pest::Span<'_>> for OwnedSpan {
@@ -16,7 +18,40 @@ impl From<pest::Span<'_>> for OwnedSpan {
     }
 }
 
-#[derive(Debug, Clone)]
+impl OwnedSpan {
+    pub fn to_range(&self, source: &str) -> lsp_types::Range {
+        let start = self.offset_to_position(self.start, source);
+        let end = self.offset_to_position(self.end, source);
+
+        lsp_types::Range { start, end }
+    }
+
+    fn offset_to_position(&self, offset: usize, source: &str) -> lsp_types::Position {
+        let mut line = 0;
+        let mut character = 0;
+
+        for (i, c) in source.char_indices() {
+            if i >= offset {
+                break;
+            }
+
+            if c == '\n' {
+                line += 1;
+                character = 0;
+            } else {
+                // LSP uses UTF-16 code units for the 'character' field
+                character += c.len_utf16();
+            }
+        }
+
+        lsp_types::Position {
+            line: line as u32,
+            character: character as u32,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Spanned<T> {
     pub node: T,
     pub span: OwnedSpan,

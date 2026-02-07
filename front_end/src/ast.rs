@@ -15,25 +15,6 @@ pub enum GameType {
   NoType,
 }
 
-// IDs
-#[derive(Debug, PartialEq, Clone)]
-pub struct TypedID {
-    pub id: String,
-    pub ty: GameType,
-}
-
-impl TypedID {
-    pub fn new(id: String, ty: GameType) -> TypedID {
-        TypedID {
-            id: id,
-            ty: ty
-        }
-    }
-}
-
-use crate::diagnostic::*;
-
-
 // Operator
 // ===========================================================================
 // ===========================================================================
@@ -90,14 +71,14 @@ pub enum Extrema {
 #[derive(Debug, PartialEq, Clone)]
 pub enum OutOf {
     CurrentStage,
-    Stage(TypedID),
+    Stage(String),
     Game,
     Play
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Groupable {
-    Location(TypedID),
+    Location(String),
     LocationCollection(LocationCollection),
 }
 
@@ -171,7 +152,7 @@ pub enum DemandType {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Types {
-    pub types: Vec<(TypedID, Vec<TypedID>)>
+    pub types: Vec<(String, Vec<String>)>
 }
 
 // ===========================================================================
@@ -202,12 +183,12 @@ pub enum QueryPlayer {
 #[derive(Debug, PartialEq, Clone)]
 pub enum AggregatePlayer {
     OwnerOfCardPostion(Box<CardPosition>),
-    OwnerOfMemory(Extrema, TypedID),
+    OwnerOfMemory(Extrema, String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum PlayerExpr {
-    Literal(TypedID),
+    Literal(String),
     Runtime(RuntimePlayer),
     Aggregate(AggregatePlayer),
     Query(QueryPlayer)
@@ -226,8 +207,8 @@ pub enum QueryInt {
 pub enum AggregateInt {
     SizeOf(Collection),
     SumOfIntCollection(IntCollection),
-    SumOfCardSet(Box<CardSet>, TypedID),
-    ExtremaCardset(Extrema, Box<CardSet>, TypedID),
+    SumOfCardSet(Box<CardSet>, String),
+    ExtremaCardset(Extrema, Box<CardSet>, String),
     ExtremaIntCollection(Extrema, IntCollection),
 }
 
@@ -252,13 +233,13 @@ pub enum IntExpr {
 // ===========================================================================
 #[derive(Debug, PartialEq, Clone)]
 pub enum QueryString {
-    KeyOf(TypedID, CardPosition),
+    KeyOf(String, CardPosition),
     StringCollectionAt(StringCollection, IntExpr),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum StringExpr {
-    Literal(TypedID),
+    Literal(String),
     Query(QueryString),
 }
 // ===========================================================================
@@ -335,7 +316,7 @@ pub enum AggregateTeam {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TeamExpr {
-    Literal(TypedID),
+    Literal(String),
     Aggregate(AggregateTeam),
 }
 // ===========================================================================
@@ -344,14 +325,15 @@ pub enum TeamExpr {
 // ===========================================================================
 #[derive(Debug, PartialEq, Clone)]
 pub enum QueryCardPosition {
-    At(TypedID, IntExpr),
-    Top(TypedID),
-    Bottom(TypedID),
+    At(String, IntExpr),
+    Top(String),
+    Bottom(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AggregateCardPosition {
-    Extrema(Extrema, Box<CardSet>, TypedID),
+    ExtremaPrecedence(Extrema, Box<CardSet>, String),
+    ExtremaPointMap(Extrema, Box<CardSet>, String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -388,7 +370,7 @@ pub enum Collection {
     PlayerCollection(PlayerCollection),
     TeamCollection(TeamCollection),
     CardSet(Box<CardSet>),
-    Ambiguous(Vec<TypedID>),
+    Ambiguous(Vec<String>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -403,7 +385,7 @@ pub struct StringCollection {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LocationCollection {
-    pub locations: Vec<TypedID>
+    pub locations: Vec<String>
 }
 
 // PlayerCollection
@@ -461,8 +443,8 @@ pub enum CardSet {
 pub enum Group {
     Groupable(Groupable),
     Where(Groupable, FilterExpr),
-    NotCombo(TypedID, Groupable),
-    Combo(TypedID, Groupable),
+    NotCombo(String, Groupable),
+    Combo(String, Groupable),
     CardPosition(CardPosition),
 }
 
@@ -471,14 +453,14 @@ pub enum Group {
 #[derive(Debug, PartialEq, Clone)]
 pub enum AggregateFilter {
     Size(IntCompare, Box<IntExpr>),
-    Same(TypedID),
-    Distinct(TypedID),
-    Adjacent(TypedID, TypedID),
-    Higher(TypedID, TypedID),
-    Lower(TypedID, TypedID),
-    KeyString(TypedID, StringCompare, Box<StringExpr>),
-    Combo(TypedID),
-    NotCombo(TypedID),
+    Same(String),
+    Distinct(String),
+    Adjacent(String, String),
+    Higher(String, String),
+    Lower(String, String),
+    KeyString(String, StringCompare, Box<StringExpr>),
+    Combo(String),
+    NotCombo(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -521,17 +503,17 @@ pub enum FlowComponent {
 #[derive(Debug, PartialEq, Clone)]
 pub enum SetUpRule {
     // Creations
-    CreatePlayer(Vec<TypedID>),
-    CreateTeams(Vec<(TypedID, PlayerCollection)>),
+    CreatePlayer(Vec<String>),
+    CreateTeams(Vec<(String, PlayerCollection)>),
     CreateTurnorder(PlayerCollection),
     CreateTurnorderRandom(PlayerCollection),
-    CreateLocation(Vec<TypedID>, Owner),
-    CreateCardOnLocation(TypedID, Types),
-    CreateTokenOnLocation(IntExpr, TypedID, TypedID),
-    CreateCombo(TypedID, FilterExpr),
-    CreateMemory(TypedID, MemoryType, Owner),
-    CreatePrecedence(TypedID, Vec<(TypedID, TypedID)>),
-    CreatePointMap(TypedID, Vec<(TypedID, TypedID, IntExpr)>),
+    CreateLocation(Vec<String>, Owner),
+    CreateCardOnLocation(String, Types),
+    CreateTokenOnLocation(IntExpr, String, String),
+    CreateCombo(String, FilterExpr),
+    CreateMemory(String, MemoryType, Owner),
+    CreatePrecedence(String, Vec<(String, String)>),
+    CreatePointMap(String, Vec<(String, String, IntExpr)>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -542,14 +524,14 @@ pub enum ActionRule {
     PlayerOutOfStageAction(Players),
     PlayerOutOfGameSuccAction(Players),
     PlayerOutOfGameFailAction(Players),
-    SetMemory(TypedID, MemoryType),
-    ResetMemory(TypedID),
+    SetMemory(String, MemoryType),
+    ResetMemory(String),
     CycleAction(PlayerExpr),
     BidAction(Quantity),
-    BidMemoryAction(TypedID, Quantity),
+    BidMemoryAction(String, Quantity),
     EndAction(EndType),
     DemandAction(DemandType),
-    DemandMemoryAction(DemandType, TypedID),
+    DemandMemoryAction(DemandType, String),
     Move(MoveType),
 }
 
@@ -569,7 +551,7 @@ pub enum GameRule {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SeqStage {
-    pub stage: TypedID,
+    pub stage: String,
     pub player: PlayerExpr,
     pub end_condition: EndCondition,
     pub flows: Vec<FlowComponent>,
@@ -622,8 +604,8 @@ pub enum ExchangeMove {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenMove {
-    Place(TypedID, TokenLocExpr, TokenLocExpr),
-    PlaceQuantity(Quantity, TypedID, TokenLocExpr, TokenLocExpr),
+    Place(String, TokenLocExpr, TokenLocExpr),
+    PlaceQuantity(Quantity, String, TokenLocExpr, TokenLocExpr),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -635,13 +617,13 @@ pub enum TokenLocExpr {
 #[derive(Debug, PartialEq, Clone)]
 pub enum ScoreRule {
     Score(IntExpr, Players),
-    ScoreMemory(IntExpr, TypedID, Players),
+    ScoreMemory(IntExpr, String, Players),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum WinnerType {
     Score,
-    Memory(TypedID),
+    Memory(String),
     Position
 }
 

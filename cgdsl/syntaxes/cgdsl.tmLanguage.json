@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Card Game DSL",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#helper"
+    },
+    {
+      "include": "#filter"
+    },
+    {
+      "include": "#card"
+    },
+    {
+      "include": "#actions"
+    },
+    {
+      "include": "#strings"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [{
+        "name": "keyword.control.cgdsl",
+        "match": "\\b(stage|if|optional|choose)\\b"
+      }]
+    },
+    "helper": {
+      "patterns": [{
+        "name": "keyword.operator.new.cgdsl",
+        "match": "\\b(for|is|of|in|on|as|to|using|with|where|until|from|at)\\b"
+      }]
+    },
+    "filter": {
+      "patterns": [{
+        "name": "entity.name.function",
+        "match": "\\b(adjacent|distinct|higher|lower|same|size)\\b"
+      }]
+    },
+    "card": {
+      "patterns": [{
+        "name": "keyword.other.cgdsl",
+        "match": "\\b(bottom|top|card|face up|face down|private|empty|max|min|lowest|highest)\\b"
+      }]
+    },
+    "actions": {
+      "patterns": [{
+        "name": "keyword.control.less.cgdsl",
+        "match": "\\b(cycle|move|deal|demand|exchange|palce|flip|reset|set|shuffle)\\b"
+      }]
+    },
+    "strings": {
+      "name": "string.quoted.double.cgdsl",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.cgdsl",
+          "match": "\\\\."
+        }
+      ]
+    }
+  },
+  "scopeName": "source.cgdsl"
+}
