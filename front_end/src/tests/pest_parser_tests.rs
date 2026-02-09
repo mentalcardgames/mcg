@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use crate::symbols::SymbolVisitor;
     use crate::walker::*;
     use crate::{lower::Lower};
@@ -33,15 +33,14 @@ mod tests {
         let mut symbol = SymbolVisitor::new();
         parsed_ast.walk(&mut symbol);
 
-        // println!("{:?}", symbol.into_typed_vars());
+        println!("{:?}", symbol.into_typed_vars());
 
-        // match symbol.check_game_type() {
-        //     Ok(_) => println!("Game is fine!"),
-        //     Err(e) => println!("{:?}", e),
-        // }
+        match symbol.check_game_type() {
+            Some(_) => println!("Game is fine!"),
+            None => {},
+        }
 
         // 4. Lowering: Convert custom logic errors to pest_consume::Error
-        // let ctx = LoweringCtx::new(vec![]); 
         let result = parsed_ast.lower();
 
         Ok(result)
