@@ -1,6 +1,7 @@
 pub mod lsp;
 pub mod error_diagnostics;
 pub mod rule_completion;
+pub mod validation;
 
 use std::{collections::HashMap};
 use arc_swap::ArcSwapAny;

@@ -1,5 +1,5 @@
-use crate::{parser::{CGDSLParser, Rule}, spans::SGame, symbols::{SymbolError, SymbolVisitor}, walker::Walker};
-use crate::parser::Result;
+use front_end::{ast::ast::SGame, parser::{CGDSLParser, Rule}, spans::OwnedSpan, symbols::{SymbolError, SymbolVisitor}, walker::Walker};
+use front_end::parser::Result;
 use pest_consume::Parser;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity};
 
@@ -79,7 +79,7 @@ fn symbol_error_to_diagnostics(symbol_error: SymbolError, text: &str) -> Diagnos
   }
 
   Diagnostic {
-    range: value.span.to_range(text),
+    range: to_range(&value.span, text),
     severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
     code: None,
     source: Some("my-cool-lsp".to_string()),
@@ -91,3 +91,33 @@ fn symbol_error_to_diagnostics(symbol_error: SymbolError, text: &str) -> Diagnos
   }
 }
 
+pub fn to_range(owned_span: &OwnedSpan, source: &str) -> Range {
+    let start = offset_to_position(owned_span.start, source);
+    let end = offset_to_position(owned_span.end, source);
+
+    Range { start, end }
+}
+
+pub fn offset_to_position(offset: usize, source: &str) -> Position {
+    let mut line = 0;
+    let mut character = 0;
+
+    for (i, c) in source.char_indices() {
+        if i >= offset {
+            break;
+        }
+
+        if c == '\n' {
+            line += 1;
+            character = 0;
+        } else {
+            // LSP uses UTF-16 code units for the 'character' field
+            character += c.len_utf16();
+        }
+    }
+
+    Position {
+        line: line as u32,
+        character: character as u32,
+    }
+}

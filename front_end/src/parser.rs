@@ -1,7 +1,7 @@
 use pest_consume::{Parser, match_nodes};
 
 use crate::{spans::*};
-use crate::{spanned_ast::*};
+use crate::{ast::ast::*};
 
 
 #[derive(Parser)]

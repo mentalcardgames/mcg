@@ -1,10 +1,9 @@
 pub mod parser;
 pub mod analysis;
 pub mod lower;
-pub mod spanned_ast;
+pub mod ast;
 pub mod ir;
 pub mod keywords;
-pub mod ast;
 pub mod symbols;
 pub mod visitor;
 pub mod helper;
@@ -13,4 +12,3 @@ pub mod tests;
 pub mod diagnostics;
 pub mod semantic;
 pub mod walker;
-pub mod validation;

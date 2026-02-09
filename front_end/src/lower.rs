@@ -1,4 +1,4 @@
-use crate::spans::*;
+use crate::{ast::ast::SID, spans::*};
 
 pub trait Lower<T> {
     fn lower(&self) -> T;

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use front_end::parser::{CGDSLParser, Rule};
-use front_end::spans::SGame;
-use front_end::validation::validate_document;
+use front_end::ast::ast::SGame;
+use crate::validation::validate_document;
 use pest_consume::Parser;
 use tokio::sync::Mutex;
 use arc_swap::ArcSwapOption;

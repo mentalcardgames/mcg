@@ -3,5 +3,5 @@ resolver = "3"
 members = [
     "front_end",
     "lsp_server", 
-    "proc_generation",
+    "code_gen",
 ]
