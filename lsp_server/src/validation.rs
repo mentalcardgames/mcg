@@ -1,9 +1,10 @@
 use front_end::{parser::Rule, semantic::SemanticError, spans::OwnedSpan, symbols::SymbolError, validation::{parse_document, semantic_validation, symbol_validation}};
+use ropey::Rope;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity};
 
-pub fn validate_document(text: &str) -> Option<Vec<Diagnostic>> {
+pub fn validate_document(doc: &Rope) -> Option<Vec<Diagnostic>> {
   let ast;
-  let result =  parse_document(text);
+  let result = parse_document(&doc.to_string());
   if let Err(err) = result {
     return Some(vec![pest_error_to_diagnostic(err)])
   } else {
@@ -11,11 +12,11 @@ pub fn validate_document(text: &str) -> Option<Vec<Diagnostic>> {
   }
 
   if let Some(errs) = symbol_validation(&ast) {
-    return Some(errs.iter().map(|s| symbol_error_to_diagnostics(s, text)).collect())
+    return Some(errs.iter().map(|s| symbol_error_to_diagnostics(s, &doc)).collect())
   }
 
   if let Some(errs) = semantic_validation(&ast) {
-    return Some(errs.iter().map(|s| semantic_error_to_diagnostics(s, text)).collect())
+    return Some(errs.iter().map(|s| semantic_error_to_diagnostics(s, &doc)).collect())
   }
 
   return None
@@ -49,7 +50,7 @@ pub fn pest_error_to_diagnostic(pest_err: pest::error::Error<Rule>) -> Diagnosti
 }
 
 
-fn symbol_error_to_diagnostics(symbol_error: &SymbolError, text: &str) -> Diagnostic {
+fn symbol_error_to_diagnostics(symbol_error: &SymbolError, doc: &Rope) -> Diagnostic {
   let value;
   let message;
   match symbol_error {
@@ -64,7 +65,7 @@ fn symbol_error_to_diagnostics(symbol_error: &SymbolError, text: &str) -> Diagno
   }
 
   Diagnostic {
-    range: to_range(&value.span, text),
+    range: to_range(&value.span, doc),
     severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
     code: None,
     source: Some("my-cool-lsp".to_string()),
@@ -77,7 +78,7 @@ fn symbol_error_to_diagnostics(symbol_error: &SymbolError, text: &str) -> Diagno
 }
 
 
-fn semantic_error_to_diagnostics(semantic_error: &SemanticError, text: &str) -> Diagnostic {
+fn semantic_error_to_diagnostics(semantic_error: &SemanticError, doc: &Rope) -> Diagnostic {
   let spanned;
   let message;
   match semantic_error {
@@ -112,7 +113,7 @@ fn semantic_error_to_diagnostics(semantic_error: &SemanticError, text: &str) -> 
   }
 
   Diagnostic {
-    range: to_range(&spanned.span, text),
+    range: to_range(&spanned.span, doc),
     severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
     code: None,
     source: Some("my-cool-lsp".to_string()),
@@ -125,33 +126,73 @@ fn semantic_error_to_diagnostics(semantic_error: &SemanticError, text: &str) -> 
 }
 
 
-pub fn to_range(owned_span: &OwnedSpan, source: &str) -> Range {
-    let start = offset_to_position(owned_span.start, source);
-    let end = offset_to_position(owned_span.end, source);
-
-    Range { start, end }
+pub fn to_range(span: &OwnedSpan, rope: &Rope) -> Range {
+    Range {
+        start: byte_offset_to_position(rope, span.start),
+        end: byte_offset_to_position(rope, span.end),
+    }
 }
 
-pub fn offset_to_position(offset: usize, source: &str) -> Position {
-    let mut line = 0;
-    let mut character = 0;
+use tower_lsp::lsp_types::TextDocumentContentChangeEvent;
 
-    for (i, c) in source.char_indices() {
-        if i >= offset {
+pub fn apply_change(rope: &mut Rope, change: &TextDocumentContentChangeEvent) {
+    if let Some(range) = change.range {
+        let start = position_to_char(rope, range.start);
+        let end = position_to_char(rope, range.end);
+
+        rope.remove(start..end);
+        rope.insert(start, &change.text);
+    } else {
+        // Full document replace
+        *rope = Rope::from_str(&change.text);
+    }
+}
+
+pub fn position_to_char(rope: &Rope, position: Position) -> usize {
+    let line = position.line as usize;
+    let utf16_col = position.character as usize;
+
+    // Clamp line to document
+    let line = line.min(rope.len_lines().saturating_sub(1));
+
+    let line_start = rope.line_to_char(line);
+    let line_text = rope.line(line);
+
+    let mut current_utf16 = 0;
+    let mut char_offset = 0;
+
+    for c in line_text.chars() {
+        if current_utf16 >= utf16_col {
             break;
         }
-
-        if c == '\n' {
-            line += 1;
-            character = 0;
-        } else {
-            // LSP uses UTF-16 code units for the 'character' field
-            character += c.len_utf16();
-        }
+        current_utf16 += c.len_utf16();
+        char_offset += 1;
     }
+
+    line_start + char_offset
+}
+
+fn byte_offset_to_position(rope: &Rope, byte_offset: usize) -> Position {
+    // Convert byte → char index
+    let char_idx = rope.byte_to_char(byte_offset);
+
+    // Get line
+    let line = rope.char_to_line(char_idx);
+
+    // Get column in chars
+    let line_start = rope.line_to_char(line);
+    let column_chars = char_idx - line_start;
+
+    // Convert char column → UTF-16 column
+    let line_text = rope.line(line);
+    let utf16_col = line_text
+      .chars()
+      .take(column_chars)
+      .map(|c| c.len_utf16())
+      .sum::<usize>();
 
     Position {
         line: line as u32,
-        character: character as u32,
+        character: utf16_col as u32,
     }
 }

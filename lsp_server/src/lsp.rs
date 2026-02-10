@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use front_end::parser::{CGDSLParser, Rule};
 use front_end::ast::ast::SGame;
-use crate::validation::validate_document;
+use ropey::Rope;
+use crate::rope::Document;
+use crate::validation::{apply_change, validate_document};
 use pest_consume::Parser;
 use tokio::sync::Mutex;
 use arc_swap::ArcSwapOption;
@@ -16,7 +18,7 @@ use crate::rule_completion::{try_auto_completion};
 #[derive(Debug)]
 pub struct Backend {
     pub client: Client,
-    pub documents: Mutex<HashMap<Url, String>>, // stores current document text
+    pub documents: Mutex<HashMap<Url, Document>>, // stores current document text
     // No Mutex needed! ArcSwap handles thread-safety internally.
     pub last_ast: ArcSwapOption<SGame>, 
 }
@@ -73,7 +75,10 @@ impl LanguageServer for Backend {
             docs.get(&uri).cloned().ok_or(jsonrpc::Error::internal_error())?
         };
 
-        let result = CGDSLParser::parse(Rule::file, &text);
+        // Dirty fix right now
+        let text = &text.rope.to_string();
+
+        let result = CGDSLParser::parse(Rule::file, text);
 
         match result {
             Err(err) => {
@@ -105,7 +110,13 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let mut docs = self.documents.lock().await;
-        docs.insert(params.text_document.uri, params.text_document.text);
+        let uri = params.text_document.uri;
+        docs.insert(
+            uri.clone(),
+            Document {
+                rope: Rope::from_str(&params.text_document.text),
+            },
+        );
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
@@ -114,7 +125,7 @@ impl LanguageServer for Backend {
 
         if let Some(content) = docs.get(&uri) {
             // Run validation (this should return an empty vec if no errors are found)
-            let diagnostics = validate_document(content).unwrap_or_default();
+            let diagnostics = validate_document(&content.rope).unwrap_or_default();
             
             // This single call handles both clearing old errors (if vec is empty)
             // and showing new ones (if vec has items).
@@ -122,27 +133,31 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_change(&self, _: DidChangeTextDocumentParams) {
-        // let uri = params.text_document.uri;
-        
-        // Optional: For when it is optimized a lot (also works now but cant handle big files in the future)
-        // // In FULL sync mode, the first item in content_changes is the entire doc
-        // if let Some(change) = params.content_changes.into_iter().next() {
-        //     let text = change.text;
-            
-        //     // 1. Update your internal cache so other features (hover/completions) work
-        //     {
-        //         let mut docs = self.documents.lock().await;
-        //         docs.insert(uri.clone(), text.clone());
-        //     }
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        let uri = params.text_document.uri.clone();
 
-        //     // 2. Run the diagnostics
-        //     // Run validation (this should return an empty vec if no errors are found)
-        //     let diagnostics = validate_document(&text).unwrap_or_default();
-            
-        //     // This single call handles both clearing old errors (if vec is empty)
-        //     // and showing new ones (if vec has items).
-        //     self.client.publish_diagnostics(uri, diagnostics, None).await;
-        // }
+        let doc_rope = {
+            let mut docs = self.documents.lock().await;
+
+            let doc = docs
+                .get_mut(&uri)
+                .expect("didChange before didOpen");
+
+            // Apply *all* changes
+            for change in params.content_changes {
+                apply_change(&mut doc.rope, &change);
+            }
+
+            // Materialize full text ONCE
+            doc.rope.clone()
+        };
+
+        // Run diagnostics on the full updated document
+        let diagnostics = validate_document(&doc_rope)
+            .unwrap_or_default();
+
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
     }
 }
