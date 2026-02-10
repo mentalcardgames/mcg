@@ -18,7 +18,16 @@
       "include": "#actions"
     },
     {
+      "include": "#create"
+    },
+    {
       "include": "#strings"
+    },
+    {
+      "include": "#ints"
+    },
+    {
+      "include": "#idents"
     }
   ],
   "repository": {
@@ -31,7 +40,7 @@
     "helper": {
       "patterns": [{
         "name": "keyword.operator.new.cgdsl",
-        "match": "\\b(for|is|of|in|on|as|to|using|with|where|until|from|at)\\b"
+        "match": "\\b(for|is|of|in|on|as|to|using|with|where|until|from|at|and|or|not)\\b"
       }]
     },
     "filter": {
@@ -62,6 +71,24 @@
           "match": "\\\\."
         }
       ]
+    },
+    "create": {
+      "patterns": [{
+        "name": "keyword.control.cgdsl",
+        "match": "\\b(player|team|turnorder|location|card|token|precedence|points|combo|memory)\\b"
+      }]
+    },
+    "ints": {
+      "patterns": [{
+        "name": "constant.numeric.integer.cgdsl",
+        "match": "\b[0-9]+\b"
+      }]
+    }, 
+    "idents": {
+      "patterns": [{
+        "name": "entity.name.type.class.cgdsl",
+        "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+      }]
     }
   },
   "scopeName": "source.cgdsl"
