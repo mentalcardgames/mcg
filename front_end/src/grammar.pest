@@ -1,4 +1,6 @@
-WHITESPACE = _{ " "+ | "\t" | "\r\n" | "\n" }
+WHITESPACE = _{ " "+ | "\t" | "\r\n" | "\n" | line_comment | block_comment }
+line_comment = _{ "//" ~ (!"\n" ~ ANY)* }
+block_comment = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
 file = { SOI ~ game_flow ~ EOI }
 
@@ -328,9 +330,8 @@ string_collection_at = { string_collection ~ int_expr }
 string_expr = { 
               key_of_card_position
             | string_collection_at
-            // This needs to be overworked because string_expr is handled as key/value gathering
-            // and ident has a completely other semantic purpose (e.g. managing memory entries)
-            // | ident
+            // The Ident in the language most likely refers to a Value
+            | "\"" ~ value ~ "\""
 }
 // =======================
 

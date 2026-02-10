@@ -697,10 +697,12 @@ impl CGDSLParser {
     }
 
     pub(crate) fn string_expr(input: Node) -> Result<SStringExpr> {
+        let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
                 [key_of_card_position(n)] => n,
                 [string_collection_at(n)] => n,
+                [value(v)] => SStringExpr { node: StringExpr::Literal(v), span: span }
             )
         )
     }

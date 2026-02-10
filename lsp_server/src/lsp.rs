@@ -122,26 +122,27 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        let uri = params.text_document.uri;
+    async fn did_change(&self, _: DidChangeTextDocumentParams) {
+        // let uri = params.text_document.uri;
         
-        // In FULL sync mode, the first item in content_changes is the entire doc
-        if let Some(change) = params.content_changes.into_iter().next() {
-            let text = change.text;
+        // Optional: For when it is optimized a lot (also works now but cant handle big files in the future)
+        // // In FULL sync mode, the first item in content_changes is the entire doc
+        // if let Some(change) = params.content_changes.into_iter().next() {
+        //     let text = change.text;
             
-            // 1. Update your internal cache so other features (hover/completions) work
-            {
-                let mut docs = self.documents.lock().await;
-                docs.insert(uri.clone(), text.clone());
-            }
+        //     // 1. Update your internal cache so other features (hover/completions) work
+        //     {
+        //         let mut docs = self.documents.lock().await;
+        //         docs.insert(uri.clone(), text.clone());
+        //     }
 
-            // 2. Run the diagnostics
-            // Run validation (this should return an empty vec if no errors are found)
-            let diagnostics = validate_document(&text).unwrap_or_default();
+        //     // 2. Run the diagnostics
+        //     // Run validation (this should return an empty vec if no errors are found)
+        //     let diagnostics = validate_document(&text).unwrap_or_default();
             
-            // This single call handles both clearing old errors (if vec is empty)
-            // and showing new ones (if vec has items).
-            self.client.publish_diagnostics(uri, diagnostics, None).await;
-        }
+        //     // This single call handles both clearing old errors (if vec is empty)
+        //     // and showing new ones (if vec has items).
+        //     self.client.publish_diagnostics(uri, diagnostics, None).await;
+        // }
     }
 }

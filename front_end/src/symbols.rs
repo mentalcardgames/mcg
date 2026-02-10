@@ -20,7 +20,6 @@ pub enum GameType {
   Memory,
   Token,
   Stage,
-  String,
   NoType,
 }
 

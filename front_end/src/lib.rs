@@ -12,3 +12,4 @@ pub mod tests;
 pub mod diagnostics;
 pub mod semantic;
 pub mod walker;
+pub mod validation;
