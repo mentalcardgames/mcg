@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
+use dashmap::DashMap;
 use front_end::ast::ast::SGame;
+use front_end::diagnostics;
+use front_end::symbols::GameType;
 use front_end::validation::parse_document;
 use ropey::{Rope};
 use crate::rope::Document;
@@ -13,7 +16,7 @@ use tower_lsp::jsonrpc::{self, Error, Result};
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
-use crate::rule_completion::{try_auto_completion};
+use crate::rule_completion::{get_completions};
 
 #[derive(Debug)]
 pub struct Backend {
@@ -23,6 +26,7 @@ pub struct Backend {
     pub last_ast: ArcSwapOption<SGame>, 
     // Debouncer to minimize flickering
     pub analysis_tx: mpsc::UnboundedSender<Url>,
+    pub symbol_table: DashMap<GameType, Vec<String>>,
 }
 
 impl Backend {
@@ -34,18 +38,35 @@ impl Backend {
         };
 
         if let Some(rope) = doc_rope {
-            // 2. Perform the expensive work outside of any locks
-            if let Ok(ast) = validate_parsing(&rope) {
-                let diagnostics = validate_document(&ast, &rope).unwrap_or_default();
+            let mut diagnostics = Vec::new();
 
-                // 3. Update the AST first...
-                self.last_ast.store(Some(Arc::new(ast)));
-
-                // 4. ...then tell the client.
-                // When the client asks for tokens in response to these diagnostics,
-                // the AST is already waiting in the ArcSwap.
-                self.client.publish_diagnostics(uri, diagnostics, None).await;
+            match validate_parsing(&rope) {
+                Ok(ast) => {
+                    // Run semantic validation
+                    match validate_document(&ast, &rope) {
+                        Ok(new_table) => {
+                            // Update the symbol table
+                            self.symbol_table.clear();
+                            for (game_type, names) in new_table {
+                                self.symbol_table.insert(game_type, names);
+                            }
+                        },
+                        Err(v) => {
+                            diagnostics = v;
+                        }
+                    }
+                    self.last_ast.store(Some(Arc::new(ast)));
+                }
+                Err(err_diagnostics) => {
+                    diagnostics = err_diagnostics;
+                }
             }
+
+            // Standard document storage
+            let mut docs = self.documents.lock().await;
+            docs.insert(uri.clone(), Document { rope });
+
+            self.client.publish_diagnostics(uri, diagnostics, None).await;
         }
     }
 }
@@ -131,19 +152,11 @@ impl LanguageServer for Backend {
         let result = parse_document(text);
 
         match result {
-            Err(v) => {
-                // .load() gives you an atomic snapshot. No .await, no blocking.
-                let last_ast_snapshot = self.last_ast.load();
-                
-                // last_ast_snapshot is a Guard that behaves like Option<Arc<FileAST>>
-                return Ok(try_auto_completion(v, position, &text, last_ast_snapshot.as_deref()))
+            Err(err) => {
+                Ok(get_completions(err, &self.symbol_table))
             },
-            Ok(ast) => {
-                self.last_ast.store(Some(Arc::new(ast)));
-            }
+            Ok(_) => {Ok(None)}
         }
-
-        Ok(None)
     }
 
     async fn hover(&self, _: HoverParams) -> Result<Option<Hover>> {
@@ -160,31 +173,34 @@ impl LanguageServer for Backend {
         let text = params.text_document.text;
         let rope = Rope::from_str(&text);
         
-        let diagnostics;
-    
-        // 1. Attempt to parse
+        let mut diagnostics = Vec::new();
+
         match validate_parsing(&rope) {
             Ok(ast) => {
-                // 2. If parsing is successful, run your semantic validation/diagnostics
-                diagnostics = validate_document(&ast, &rope).unwrap_or_default();
+                // Run semantic validation
+                match validate_document(&ast, &rope) {
+                    Ok(new_table) => {
+                        // Update the symbol table
+                        self.symbol_table.clear();
+                        for (game_type, names) in new_table {
+                            self.symbol_table.insert(game_type, names);
+                        }
+                    },
+                    Err(v) => {
+                        diagnostics = v;
+                    }
+                }
                 self.last_ast.store(Some(Arc::new(ast)));
             }
             Err(err_diagnostics) => {
-                // 3. If parsing fails, the diagnostics ARE the parse errors
                 diagnostics = err_diagnostics;
             }
         }
 
-        // 4. Update your document map with BOTH the rope and the AST
+        // Standard document storage
         let mut docs = self.documents.lock().await;
-        docs.insert(
-            uri.clone(),
-            Document {
-                rope
-            },
-        );
+        docs.insert(uri.clone(), Document { rope });
 
-        // 5. Send results to the client
         self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
 
@@ -193,7 +209,7 @@ impl LanguageServer for Backend {
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
 
-        let doc_rope = {
+        let rope = {
             let mut docs = self.documents.lock().await;
 
             let doc = docs
@@ -209,24 +225,35 @@ impl LanguageServer for Backend {
             doc.rope.clone()
         };
 
-        let diagnostics;
+        let mut diagnostics = Vec::new();
 
-        match validate_parsing(&doc_rope) {
+        match validate_parsing(&rope) {
             Ok(ast) => {
-                // Run diagnostics on the full updated document
-                diagnostics = validate_document(&ast, &doc_rope)
-                    .unwrap_or_default();                
-
+                // Run semantic validation
+                match validate_document(&ast, &rope) {
+                    Ok(new_table) => {
+                        // Update the symbol table
+                        self.symbol_table.clear();
+                        for (game_type, names) in new_table {
+                            self.symbol_table.insert(game_type, names);
+                        }
+                    },
+                    Err(v) => {
+                        diagnostics = v;
+                    }
+                }
                 self.last_ast.store(Some(Arc::new(ast)));
-            },
-            Err(v) => {
-                diagnostics = v;
+            }
+            Err(err_diagnostics) => {
+                diagnostics = err_diagnostics;
             }
         }
 
-        self.client
-            .publish_diagnostics(uri, diagnostics, None)
-            .await;
+        // Standard document storage
+        let mut docs = self.documents.lock().await;
+        docs.insert(uri.clone(), Document { rope });
+
+        self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
 
     async fn semantic_tokens_full(

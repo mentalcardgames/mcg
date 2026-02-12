@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use pest_consume::Parser;
 use crate::parser::Result;
 use crate::semantic::{SemanticError, SemanticVisitor};
+use crate::symbols::{GameType, TypedVars};
 use crate::{ast::ast::SGame, parser::{CGDSLParser, Rule}, symbols::{SymbolError, SymbolVisitor}, walker::Walker};
 
 pub fn parse_document(text: &str) -> Result<SGame> {
@@ -16,11 +19,16 @@ pub fn parse_document(text: &str) -> Result<SGame> {
   Ok(parsed_ast)
 }
 
-pub fn symbol_validation(game: &SGame) -> Option<Vec<SymbolError>> {
+pub fn symbol_validation(game: &SGame) -> std::result::Result<HashMap<GameType, Vec<String>>, Vec<SymbolError>> {
   let mut symbols = SymbolVisitor::new();
   game.walk(&mut symbols);
 
-  return symbols.check_game_type()
+  match symbols.check_game_type() {
+    Some(err) => return Err(err),
+    None => {
+      Ok(symbols.type_to_variable())
+    },
+  }
 }
 
 pub fn semantic_validation(game: &SGame) -> Option<Vec<SemanticError>> {

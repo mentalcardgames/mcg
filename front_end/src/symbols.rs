@@ -7,7 +7,7 @@ use crate::walker::AstPass;
 use crate::ast::ast::NodeKind as NodeKind;
 use crate::walker::Walker;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum GameType {
   Player,
   Team,
@@ -126,6 +126,20 @@ impl SymbolVisitor {
                 (Var::from(k.clone()), ty)
             })
             .collect()
+    }
+
+    pub fn type_to_variable(&mut self) -> HashMap<GameType, Vec<String>> {
+        let typed_vars: Vec<(Var, GameType)> = self.into_typed_vars();
+        let mut map: HashMap<GameType, Vec<String>> = HashMap::new();
+
+        for (var, game_type) in typed_vars {
+            // .entry() handles the case where the GameType isn't in the map yet
+            map.entry(game_type)
+                .or_insert_with(Vec::new)
+                .push(var.id); // Assuming var.node is the String name
+        }
+
+        map
     }
 }
 

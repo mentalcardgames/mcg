@@ -1,17 +1,24 @@
-use front_end::{ast::ast::SGame, parser::Rule, semantic::SemanticError, spans::OwnedSpan, symbols::SymbolError, validation::{parse_document, semantic_validation, symbol_validation}};
+use std::collections::HashMap;
+
+use front_end::{ast::ast::SGame, parser::Rule, semantic::SemanticError, spans::OwnedSpan, symbols::{GameType, SymbolError}, validation::{parse_document, semantic_validation, symbol_validation}};
 use ropey::Rope;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity};
 
-pub fn validate_document(ast: &SGame, doc: &Rope) -> Option<Vec<Diagnostic>> {
-  if let Some(errs) = symbol_validation(&ast) {
-    return Some(errs.iter().map(|s| symbol_error_to_diagnostics(s, &doc)).collect())
+pub fn validate_document(ast: &SGame, doc: &Rope) -> Result<HashMap<GameType, Vec<String>>, Vec<Diagnostic>> {
+  let symbol_table;
+  
+  match symbol_validation(&ast) {
+    Err(errs) => return Err(errs.iter().map(|s| symbol_error_to_diagnostics(s, &doc)).collect()),
+    Ok(table) => {
+      symbol_table = table
+    },
   }
 
   if let Some(errs) = semantic_validation(&ast) {
-    return Some(errs.iter().map(|s| semantic_error_to_diagnostics(s, &doc)).collect())
+    return Err(errs.iter().map(|s| semantic_error_to_diagnostics(s, &doc)).collect())
   }
 
-  return None
+  return Ok(symbol_table)
 }
 
 pub fn validate_parsing(doc: &Rope) -> Result<SGame, Vec<Diagnostic>> {

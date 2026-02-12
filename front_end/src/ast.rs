@@ -1,4 +1,4 @@
-use proc_generation::*;
+use code_gen::*;
 
 #[ast]
 pub mod ast {

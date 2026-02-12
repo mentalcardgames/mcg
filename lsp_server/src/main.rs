@@ -8,7 +8,7 @@ pub mod semantic_highlighting;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use arc_swap::ArcSwapAny;
 use tokio::sync::{Mutex, mpsc};
-
+use dashmap::DashMap;
 use tower_lsp::{lsp_types::Url, *};
 use crate::lsp::{Backend};
 
@@ -27,6 +27,7 @@ async fn main() {
             documents: Mutex::new(HashMap::new()),
             last_ast: ArcSwapAny::new(None),
             analysis_tx: tx,
+            symbol_table: DashMap::new()
         });
 
         // 3. Spawn the background worker task
