@@ -1,0 +1,69 @@
+{
+  "name": "CGDSL Dark",
+  "type": "dark",
+  "semanticHighlighting": true,
+
+  "colors": {},
+
+  "tokenColors": [
+    {
+      "scope": "keyword.control.flow.cgdsl",
+      "settings": { "foreground": "#C792EA" }
+    },
+    {
+      "scope": "keyword.control.action.cgdsl",
+      "settings": { "foreground": "#C792EA" }
+    },
+    {
+      "scope": "keyword.control.state.cgdsl",
+      "settings": { "foreground": "#C792EA" }
+    },
+    {
+      "scope": "keyword.control.create.cgdsl",
+      "settings": { "foreground": "#C792EA" }
+    },
+    {
+      "scope": "keyword.other.helper.cgdsl",
+      "settings": { "foreground": "#C792EA" }
+    },
+    {
+      "scope": "entity.name.function.filter.cgdsl",
+      "settings": { "foreground": "#C792EA" }
+    },
+    {
+      "scope": "keyword.operator.quantifier.cgdsl",
+      "settings": { "foreground": "#89DDFF" }
+    },
+    {
+      "scope": "keyword.operator.arithmic.cgdsl",
+      "settings": { "foreground": "#F78C6C" }
+    },
+    {
+      "scope": "support.function.query.cgdsl",
+      "settings": { "foreground": "#F78C6C" }
+    },
+    {
+      "scope": "support.function.query.cgdsl",
+      "settings": { "foreground": "#F78C6C" }
+    },
+    {
+      "scope": "support.type.runtime.cgdsl",
+      "settings": { "foreground": "#F78C6C" }
+    }
+  ],
+
+  "semanticTokenColors": {
+    "player": "#388828",
+    "team": "#0a869c",
+    "location": "#7a0a9c",
+    "precedence": "#9c8d0a",
+    "pointmap": "#b9830e",
+    "combo": "#410eb9",
+    "key": "#0d5f0a",
+    "value": "#0a5f5b",
+    "memory": "#db8d17",
+    "token": "#171ad1",
+    "stage": "#d11746",
+    "notype": "#FB7185"
+  }
+}

@@ -1,16 +1,8 @@
-use front_end::{parser::Rule, semantic::SemanticError, spans::OwnedSpan, symbols::SymbolError, validation::{parse_document, semantic_validation, symbol_validation}};
+use front_end::{ast::ast::SGame, parser::Rule, semantic::SemanticError, spans::OwnedSpan, symbols::SymbolError, validation::{parse_document, semantic_validation, symbol_validation}};
 use ropey::Rope;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity};
 
-pub fn validate_document(doc: &Rope) -> Option<Vec<Diagnostic>> {
-  let ast;
-  let result = parse_document(&doc.to_string());
-  if let Err(err) = result {
-    return Some(vec![pest_error_to_diagnostic(err)])
-  } else {
-    ast = result.unwrap();
-  }
-
+pub fn validate_document(ast: &SGame, doc: &Rope) -> Option<Vec<Diagnostic>> {
   if let Some(errs) = symbol_validation(&ast) {
     return Some(errs.iter().map(|s| symbol_error_to_diagnostics(s, &doc)).collect())
   }
@@ -20,6 +12,15 @@ pub fn validate_document(doc: &Rope) -> Option<Vec<Diagnostic>> {
   }
 
   return None
+}
+
+pub fn validate_parsing(doc: &Rope) -> Result<SGame, Vec<Diagnostic>> {
+  let result = parse_document(&doc.to_string());
+  if let Err(err) = result {
+    return Err(vec![pest_error_to_diagnostic(err)])
+  } 
+
+  return Ok(result.unwrap())
 }
 
 

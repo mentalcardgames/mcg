@@ -1,5 +1,4 @@
 pub mod parser;
-pub mod analysis;
 pub mod lower;
 pub mod ast;
 pub mod ir;

@@ -106,6 +106,27 @@ impl SymbolVisitor {
             .map(|(k, v)| (Var::from(k.clone()), v.clone()))
             .collect::<TypedVars>()
     }
+
+    pub fn name_resolution(&self) -> TypedVars {
+        // Build lookup: String -> GameType
+        let string_to_type: HashMap<String, GameType> = self.symbols
+            .iter()
+            .filter(|(_, v)| **v != GameType::NoType)
+            .map(|(s, t)| (s.node.clone(), t.clone()))
+            .collect();
+
+        self.symbols
+            .iter()
+            .map(|(k, _)| {
+                let ty = string_to_type
+                    .get(&k.node)
+                    .cloned()
+                    .unwrap_or(GameType::NoType);
+
+                (Var::from(k.clone()), ty)
+            })
+            .collect()
+    }
 }
 
 impl AstPass for SymbolVisitor {

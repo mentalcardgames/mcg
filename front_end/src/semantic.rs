@@ -141,7 +141,6 @@ impl AstPass for SemanticVisitor {
                     StringExpr::Literal(value) => {
                       self.used_corr.push(UsedCorrespondence::Value { name: value.clone(), key: key.clone() });
                     },
-                    _ => {},
                   }
                 },
                 _ => {}

@@ -1,9 +1,16 @@
 {
-  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "Card Game DSL",
+  "$schema": "https://json.schemastore.org/tmlanguage.json",
+  "name": "cgdsl",
+  "scopeName": "source.cgdsl",
   "patterns": [
     {
-      "include": "#keywords"
+      "include": "#punctuation"
+    },
+    {
+      "include": "#control"
+    },
+    {
+      "include": "#actions"
     },
     {
       "include": "#helper"
@@ -12,54 +19,129 @@
       "include": "#filter"
     },
     {
-      "include": "#card"
+      "include": "#quantifier"
     },
     {
-      "include": "#actions"
+      "include": "#operation"
     },
     {
-      "include": "#create"
+      "include": "#positional"
     },
     {
-      "include": "#strings"
+      "include": "#extrema"
+    },
+    {
+      "include": "#status"
+    },
+    {
+      "include": "#creation"
+    },
+    {
+      "include": "#runtime"
     },
     {
       "include": "#ints"
     },
     {
-      "include": "#idents"
+      "include": "#strings"
     }
   ],
   "repository": {
-    "keywords": {
-      "patterns": [{
-        "name": "keyword.control.cgdsl",
-        "match": "\\b(stage|if|optional|choose)\\b"
-      }]
-    },
-    "helper": {
-      "patterns": [{
-        "name": "keyword.operator.new.cgdsl",
-        "match": "\\b(for|is|of|in|on|as|to|using|with|where|until|from|at|and|or|not)\\b"
-      }]
-    },
-    "filter": {
-      "patterns": [{
-        "name": "entity.name.function",
-        "match": "\\b(adjacent|distinct|higher|lower|same|size)\\b"
-      }]
-    },
-    "card": {
-      "patterns": [{
-        "name": "keyword.other.cgdsl",
-        "match": "\\b(bottom|top|card|face up|face down|private|empty|max|min|lowest|highest)\\b"
-      }]
+    "control": {
+      "patterns": [
+        {
+          "name": "keyword.control.flow.cgdsl",
+          "match": "\\b(stage|if|optional|choose|case)\\b"
+        }
+      ]
     },
     "actions": {
-      "patterns": [{
-        "name": "keyword.control.less.cgdsl",
-        "match": "\\b(cycle|move|deal|demand|exchange|palce|flip|reset|set|shuffle)\\b"
-      }]
+      "patterns": [
+        {
+          "name": "keyword.control.action.cgdsl",
+          "match": "\\b(cycle|move|deal|demand|exchange|place|flip|token|reset|set|shuffle|bid|end stage|end game|end turn|score|winner)\\b"
+        }
+      ]
+    },
+    "status": {
+      "patterns": [
+        {
+          "name": "keyword.control.state.cgdsl",
+          "match": "\\b(face down|face up|private)\\b"
+        }
+      ]
+    },
+    "creation": {
+      "patterns": [
+        {
+          "name": "keyword.control.create.cgdsl",
+          "match": "\\b(card|combo|create|location|memory|player|points|precedence|team|turnorder)\\b"
+        }
+      ]
+    },
+    "helper": {
+      "patterns": [
+        {
+          "name": "keyword.other.helper.cgdsl",
+          "match": "\\b(for|is|of|in|on|as|to|using|with|where|until|from|at|cards|out|owner|size|fail|successful|table|times)\\b"
+        }
+      ]
+    },
+    "filter": {
+      "patterns": [
+        {
+          "name": "entity.name.function.filter.cgdsl",
+          "match": "\\b(adjacent|distinct|empty|higher|lower|same)\\b"
+        }
+      ]
+    },
+    "quantifier": {
+      "patterns": [
+        {
+          "name": "keyword.operator.quantifier.cgdsl",
+          "match": "\\b(all|any)\\b"
+        }
+      ]
+    },
+    "operation": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.cgdsl",
+          "match": "\\b(and|or|not|random|sum)\\b"
+        }
+      ]
+    },
+    "positional": {
+      "patterns": [
+        {
+          "name": "support.function.query.cgdsl",
+          "match": "\\b(bottom|top)\\b"
+        }
+      ]
+    },
+    "extrema": {
+      "patterns": [
+        {
+          "name": "support.function.query.cgdsl",
+          "match": "\\b(highest|lowest|max|min)\\b"
+        }
+      ]
+    },
+    "runtime": {
+      "patterns": [
+        {
+          "name": "support.type.runtime.cgdsl",
+          "match": "\\b(competitor|current|next|other|others|playersin|playersout|playroundcounter|position|previous|stageroundcounter|teams)\\b"
+        }
+      ]
+    },
+    "ints": {
+      "patterns": [
+        {
+          "name": "constant.numeric.integer.cgdsl",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
     },
     "strings": {
       "name": "string.quoted.double.cgdsl",
@@ -71,25 +153,6 @@
           "match": "\\\\."
         }
       ]
-    },
-    "create": {
-      "patterns": [{
-        "name": "keyword.control.cgdsl",
-        "match": "\\b(player|team|turnorder|location|card|token|precedence|points|combo|memory)\\b"
-      }]
-    },
-    "ints": {
-      "patterns": [{
-        "name": "constant.numeric.integer.cgdsl",
-        "match": "\b[0-9]+\b"
-      }]
-    }, 
-    "idents": {
-      "patterns": [{
-        "name": "entity.name.type.class.cgdsl",
-        "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
-      }]
     }
-  },
-  "scopeName": "source.cgdsl"
+  }
 }

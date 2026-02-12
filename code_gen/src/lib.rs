@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Data, DeriveInput, Fields, Item, ItemMod, Lit, Meta, Path, Visibility, parse_macro_input, punctuated::Punctuated, Token};
+use syn::{Data, DeriveInput, Fields, Item, ItemMod, Visibility, parse_macro_input};
 
 #[proc_macro_derive(Walker)]
 pub fn derive_walker(input: TokenStream) -> TokenStream {

@@ -24,9 +24,6 @@ pub mod tests {
         // 2. Extract Single Node: .single() returns Result<Node, Error<Rule>>
         let node = nodes.single()?;
 
-        // Capture the span of the root node for error reporting later
-        let root_span = node.as_span();
-
         // 3. Mapping: mapper returns Result<T, Error<Rule>>
         let parsed_ast = mapper(node)?;
 

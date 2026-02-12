@@ -9,6 +9,11 @@
   "categories": [
     "Other"
   ],
+  "configurationDefaults": {
+    "[cgdsl]": {
+      "editor.semanticHighlighting.enabled": true
+    }
+  },
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
@@ -18,16 +23,38 @@
       "extensions": [".cgdsl"],
       "configuration": "./language-configuration.json"
     }],
+    "themes": [
+      {
+        "label": "CGDSL Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/cgdsl-dark.json"
+      }
+    ],
     "grammars": [{
       "language": "cgdsl",
       "scopeName": "source.cgdsl",
       "path": "./syntaxes/cgdsl.tmLanguage.json"
-    }]
+    }],
+    "semanticTokenTypes": [
+      { "id": "player", "description": "Game player entity" },
+      { "id": "team", "description": "Team identifier" },
+      { "id": "location", "description": "Map coordinate" },
+      { "id": "precedence", "description": "Priority level" },
+      { "id": "pointmap", "description": "Point mapping" },
+      { "id": "combo", "description": "Combo sequence" },
+      { "id": "key", "description": "Map key" },
+      { "id": "value", "description": "Map value" },
+      { "id": "memory", "description": "Memory address" },
+      { "id": "token", "description": "Generic token" },
+      { "id": "stage", "description": "Game stage" },
+      { "id": "notype", "description": "Fallback type" }
+    ]
   },
   "scripts": {
+    "generate-grammar": "npx ts-node ./src/generate-grammar.ts",
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "npm run generate-grammar && tsc -p ./",
+    "watch": "npm run generate-grammar && tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test"

@@ -3,6 +3,7 @@ pub mod error_diagnostics;
 pub mod rule_completion;
 pub mod validation;
 pub mod rope;
+pub mod semantic_highlighting;
 
 use std::{collections::HashMap};
 use arc_swap::ArcSwapAny;
