@@ -6,7 +6,7 @@ use ropey::{Rope};
 use crate::rope::Document;
 use crate::semantic_highlighting::{calculate_deltas, tokenize_ast};
 use crate::validation::{apply_change, validate_document, validate_parsing};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, mpsc};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 use tower_lsp::jsonrpc::{self, Error, Result};
@@ -21,8 +21,34 @@ pub struct Backend {
     pub documents: Mutex<HashMap<Url, Document>>, // stores current document text
     // No Mutex needed! ArcSwap handles thread-safety internally.
     pub last_ast: ArcSwapOption<SGame>, 
+    // Debouncer to minimize flickering
+    pub analysis_tx: mpsc::UnboundedSender<Url>,
 }
 
+impl Backend {
+    pub async fn run_analysis(&self, uri: Url) {
+        // 1. Get a snapshot of the text
+        let doc_rope = {
+            let docs = self.documents.lock().await;
+            docs.get(&uri).map(|d| d.rope.clone())
+        };
+
+        if let Some(rope) = doc_rope {
+            // 2. Perform the expensive work outside of any locks
+            if let Ok(ast) = validate_parsing(&rope) {
+                let diagnostics = validate_document(&ast, &rope).unwrap_or_default();
+
+                // 3. Update the AST first...
+                self.last_ast.store(Some(Arc::new(ast)));
+
+                // 4. ...then tell the client.
+                // When the client asks for tokens in response to these diagnostics,
+                // the AST is already waiting in the ArcSwap.
+                self.client.publish_diagnostics(uri, diagnostics, None).await;
+            }
+        }
+    }
+}
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
@@ -162,19 +188,7 @@ impl LanguageServer for Backend {
         self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
 
-    async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        // let uri = params.text_document.uri.clone();
-        // let docs = self.documents.lock().await;
-
-        // if let Some(content) = docs.get(&uri) {
-        //     // Run validation (this should return an empty vec if no errors are found)
-        //     let diagnostics = validate_document(&content.rope).unwrap_or_default();
-            
-        //     // This single call handles both clearing old errors (if vec is empty)
-        //     // and showing new ones (if vec has items).
-        //     self.client.publish_diagnostics(uri, diagnostics, None).await;
-        // }
-    }
+    async fn did_save(&self, _: DidSaveTextDocumentParams) {}
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();

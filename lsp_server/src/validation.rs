@@ -57,11 +57,11 @@ fn symbol_error_to_diagnostics(symbol_error: &SymbolError, doc: &Rope) -> Diagno
   match symbol_error {
     SymbolError::NotInitialized { var } => {
       value = var;
-      message = format!("ID: {} not initialized!", &value.id);
+      message = format!("'{}' not initialized", &value.id);
     },
     SymbolError::DefinedMultipleTimes { var } => {
       value = var;
-      message = format!("ID: {} is defined multiple times!", &value.id);
+      message = format!("'{}' is defined multiple times", &value.id);
     },
   }
 
@@ -84,31 +84,31 @@ fn semantic_error_to_diagnostics(semantic_error: &SemanticError, doc: &Rope) -> 
   let message;
   match semantic_error {
     SemanticError::KeyNotInPrecedence { key, precedence } => {
-      message = format!("{} not in {}!", &key.id, &precedence.id);
+      message = format!("'{}' not in '{}'", &key.id, &precedence.id);
       spanned = key;
     },
     SemanticError::KeyNoCorrToPrecedence { key, precedence} => {
-      message = format!("{} does not correspond to {}!", &key.id, &precedence.id);
+      message = format!("'{}' does not correspond to '{}'", &key.id, &precedence.id);
       spanned = key;
     },
     SemanticError::KeyNotInPointMap { key, pointmap} => {
-      message = format!("{} not in {}!", &key.id, &pointmap.id);
+      message = format!("'{}' not in '{}'", &key.id, &pointmap.id);
       spanned = key;
     },
     SemanticError::KeyNoCorrToPointMap { key, pointmap} => {
-      message = format!("{} does not correspond to {}!", &key.id, &pointmap.id);
+      message = format!("'{}' does not correspond to '{}'", &key.id, &pointmap.id);
       spanned = key;
     },
     SemanticError::ValueNotInKey { key, value } => {
-      message = format!(" {} not in {}!", &value.id, &key.id);
+      message = format!("'{}' not in '{}'", &value.id, &key.id);
       spanned = key;
     },
     SemanticError::ValueNoCorrToKey { key, value } => {
-      message = format!("{} does not correspond to {}!", &value.id, &key.id);
+      message = format!("'{}' does not correspond to '{}'", &value.id, &key.id);
       spanned = key;
     },
     SemanticError::KeyAndStringDontAllign { key, string_key } => {
-      message = format!("{} and {} dont allign!", &key.id, &string_key.id);
+      message = format!("'{}' and '{}' dont allign", &key.id, &string_key.id);
       spanned = key;
     },
   }
