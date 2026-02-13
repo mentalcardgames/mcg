@@ -19,6 +19,6 @@ include!(concat!(env!("OUT_DIR"), "/generated_snippets.rs"));
 
 // Now the function `get_snippet_map()` exists in this module.
 // We make it public so the server crate can see it.
-pub fn get_all_snippets() -> std::collections::HashMap<&'static str, &'static str> {
+pub fn get_all_snippets() -> std::collections::HashMap<&'static str, Vec<&'static str>> {
     get_snippet_map()
 }

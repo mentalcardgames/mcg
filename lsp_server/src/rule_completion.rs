@@ -7,7 +7,7 @@ use pest::error;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-static SNIPPET_LOOKUP: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
+static SNIPPET_LOOKUP: LazyLock<HashMap<&'static str, Vec<&'static str>>> = LazyLock::new(|| {
     get_all_snippets()
 });
 
@@ -23,19 +23,27 @@ pub fn get_completions(err: Error<Rule>, symbol_table: &DashMap<GameType, Vec<St
 
               let rule_name = format!("{:?}", rule);
               
-              let item = SNIPPET_LOOKUP.get(rule_name.as_str()).map(|body| {
-                  CompletionItem {
-                      label: rule_name.replace("kw_", "").replace("_", " "),
-                      insert_text: Some(body.to_string()),
-                      insert_text_format: Some(InsertTextFormat::SNIPPET),
-                      kind: Some(CompletionItemKind::SNIPPET),
-                      ..Default::default()
+              let items = SNIPPET_LOOKUP.get(rule_name.as_str()).map(|body| {
+                  let mut vec = Vec::new();
+
+                  for s in body.iter() {
+                    vec.push(
+                      CompletionItem {
+                          label: rule_name.replace("kw_", "").replace("_", " "),
+                          insert_text: Some(s.to_string()),
+                          insert_text_format: Some(InsertTextFormat::SNIPPET),
+                          kind: Some(CompletionItemKind::SNIPPET),
+                          ..Default::default()
+                      }
+                    )
                   }
+
+                  vec
               });
 
-              match item {
+              match items {
                 Some(completion) => {
-                  completion_response.push(completion);
+                  completion_response.extend(completion);
                 },
                 None => {},
               }

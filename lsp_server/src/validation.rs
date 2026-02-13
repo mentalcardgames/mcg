@@ -145,62 +145,84 @@ use tower_lsp::lsp_types::TextDocumentContentChangeEvent;
 
 pub fn apply_change(rope: &mut Rope, change: &TextDocumentContentChangeEvent) {
     if let Some(range) = change.range {
-        let start = position_to_char(rope, range.start);
-        let end = position_to_char(rope, range.end);
+        // 1. Convert positions to char indices safely
+        let start_char = position_to_char(rope, range.start);
+        let end_char = position_to_char(rope, range.end);
 
-        rope.remove(start..end);
-        rope.insert(start, &change.text);
+        // 2. Clamp indices to the current rope length to prevent panics
+        let len = rope.len_chars();
+        let safe_start = start_char.min(len);
+        let safe_end = end_char.min(len).max(safe_start);
+
+        // 3. Perform the edit
+        if safe_start < safe_end {
+            rope.remove(safe_start..safe_end);
+        }
+        
+        if !change.text.is_empty() {
+            rope.insert(safe_start, &change.text);
+        }
     } else {
-        // Full document replace
         *rope = Rope::from_str(&change.text);
     }
 }
 
 pub fn position_to_char(rope: &Rope, position: Position) -> usize {
-    let line = position.line as usize;
+    let line_idx = position.line as usize;
     let utf16_col = position.character as usize;
 
-    // Clamp line to document
-    let line = line.min(rope.len_lines().saturating_sub(1));
+    // If the line index is beyond the rope, return the very end of the document
+    if line_idx >= rope.len_lines() {
+        return rope.len_chars();
+    }
 
-    let line_start = rope.line_to_char(line);
-    let line_text = rope.line(line);
+    let line_start_char = rope.line_to_char(line_idx);
+    let line_slice = rope.line(line_idx);
 
     let mut current_utf16 = 0;
     let mut char_offset = 0;
 
-    for c in line_text.chars() {
+    for c in line_slice.chars() {
+        // If we've reached the target UTF-16 column, stop.
         if current_utf16 >= utf16_col {
             break;
         }
+        
+        // Stop if we hit a newline character—LSP positions for a line
+        // shouldn't technically include the newline itself.
+        if c == '\n' || c == '\r' {
+            break;
+        }
+
         current_utf16 += c.len_utf16();
         char_offset += 1;
     }
 
-    line_start + char_offset
+    line_start_char + char_offset
 }
 
 fn byte_offset_to_position(rope: &Rope, byte_offset: usize) -> Position {
-    // Convert byte → char index
-    let char_idx = rope.byte_to_char(byte_offset);
+    // Clamp to ensure we don't panic on a trailing byte index
+    let safe_byte = byte_offset.min(rope.len_bytes());
+    let char_idx = rope.byte_to_char(safe_byte);
 
-    // Get line
-    let line = rope.char_to_line(char_idx);
+    let line_idx = rope.char_to_line(char_idx);
+    let line_start_char = rope.line_to_char(line_idx);
+    
+    // The number of characters from the start of the line to our target
+    let column_chars = char_idx.saturating_sub(line_start_char);
 
-    // Get column in chars
-    let line_start = rope.line_to_char(line);
-    let column_chars = char_idx - line_start;
-
-    // Convert char column → UTF-16 column
-    let line_text = rope.line(line);
-    let utf16_col = line_text
-      .chars()
-      .take(column_chars)
-      .map(|c| c.len_utf16())
-      .sum::<usize>();
+    let line_slice = rope.line(line_idx);
+    
+    // Sum UTF-16 units for the characters on this line up to our char_idx
+    let utf16_col: usize = line_slice
+        .chars()
+        .take(column_chars)
+        .map(|c| c.len_utf16())
+        .sum();
 
     Position {
-        line: line as u32,
+        line: line_idx as u32,
         character: utf16_col as u32,
     }
 }
