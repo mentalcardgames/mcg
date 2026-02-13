@@ -310,7 +310,7 @@ sum_of_card_set = { kw_sum ~ kw_of ~ card_set ~ kw_using ~ pointmap}
 extrema_of_int_collection = { extrema ~ kw_of ~ int_collection }
 
 int_expr = { 
-    bin_int_op
+    int
   | int_collection_at
   | size_of_collection
   | sum_of_int_collection
@@ -318,7 +318,7 @@ int_expr = {
   | extrema_of_int_collection
   | kw_stageroundcounter
   | kw_playroundcounter
-  | int
+  | bin_int_op
 }
 // =======================
 

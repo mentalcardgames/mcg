@@ -991,6 +991,10 @@ impl CGDSLParser {
         )
     }
 
+    pub(crate) fn kw_playroundcounter(input: Node) -> Result<()> {
+        Ok(())
+    }
+
     pub(crate) fn kw_others(input: Node) -> Result<()> {
         Ok(())
     }

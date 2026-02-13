@@ -1,40 +1,47 @@
 use std::{collections::HashMap};
 
-use crate::{ast::ast::{NodeKind, SID, *}, symbols::Var, walker::AstPass};
+use crate::{ast::ast::{NodeKind, *}, spans::OwnedSpan, symbols::Var, walker::AstPass};
 
 pub enum SemanticError {
-  KeyNotInPrecedence { key: Var, precedence: Var },
-  KeyNoCorrToPrecedence { key: Var, precedence: Var },
-  KeyNotInPointMap { key: Var, pointmap: Var },
-  KeyNoCorrToPointMap { key: Var, pointmap: Var },
-  ValueNotInKey { key: Var, value: Var },
-  ValueNoCorrToKey { key: Var, value: Var },
-  KeyAndStringDontAllign { key: Var, string_key: Var },
+  KeyNotFoundForType { ty: String, key: Var },
+  NoCorrToType { ty: Var, key: Var },
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum UsedCorrespondence {
-  Precedence { name: SID, key: SID },
-  PointMap { name: SID, key: SID },
-  Value { name: SID, key: SID },
-  String { name: SID, key: SID },
+pub struct UsedCorrespondence {
+  pub ty: CorrespondanceType,
+  pub key: String,
+  pub span: OwnedSpan,
+}
+
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub enum CorrespondanceType {
+  Precedence { node: String },
+  PointMap   { node: String },
+  Value      { node: String },
+  Key        { node: String },
+}
+
+impl CorrespondanceType {
+  pub fn get_node(&self) -> String {
+    match self {
+        CorrespondanceType::Precedence { node } => node.clone(),
+        CorrespondanceType::PointMap { node } => node.clone(),
+        CorrespondanceType::Value { node } => node.clone(),
+        CorrespondanceType::Key { node } => node.clone(),
+    }
+  }
 }
 
 pub struct SemanticVisitor {
-  precedences: HashMap<String, String>,
-  pointmaps: HashMap<String, String>,
-  values: HashMap<String, String>,
-
+  init_corr: HashMap<CorrespondanceType, (String, OwnedSpan)>,
   used_corr: Vec<UsedCorrespondence>
 }
 
 impl SemanticVisitor {
   pub fn new() -> Self {
     SemanticVisitor {
-      precedences: HashMap::new(),
-      pointmaps: HashMap::new(),
-      values: HashMap::new(),
-
+      init_corr: HashMap::new(),
       used_corr: Vec::new(),
     }
   }
@@ -43,38 +50,20 @@ impl SemanticVisitor {
     let mut err = Vec::new();
 
     for corr in self.used_corr.iter() {
-      match corr {
-        UsedCorrespondence::Precedence { name, key } => {
-          if let Some(corr_key) = self.precedences.get(&name.node) {
-            if key.node != *corr_key {
-              err.push(SemanticError::KeyNoCorrToPrecedence { key: Var::from(key.clone()), precedence: Var::from(name.clone()) });
-            }
-          } else {
-            err.push(SemanticError::KeyNotInPrecedence { key: Var::from(key.clone()), precedence: Var::from(name.clone()) });
+      match self.init_corr.get(&corr.ty) {
+        Some((key, span)) => {
+          if corr.key != *key {
+            err.push(SemanticError::NoCorrToType { 
+              ty: Var { id: corr.ty.get_node(), span: span.clone() },
+              key: Var { id: corr.key.clone(), span: corr.span.clone() } 
+            });
           }
         },
-        UsedCorrespondence::PointMap { name, key } => {
-          if let Some(corr_key) = self.pointmaps.get(&name.node) {
-            if key.node != *corr_key {
-              err.push(SemanticError::KeyNoCorrToPointMap { key: Var::from(key.clone()), pointmap: Var::from(name.clone()) });
-            }
-          } else {
-            err.push(SemanticError::KeyNotInPointMap { key: Var::from(key.clone()), pointmap: Var::from(name.clone()) });
-          }
-        },
-        UsedCorrespondence::Value { name, key } => {
-          if let Some(corr_key) = self.values.get(&name.node) {
-            if key.node != *corr_key {
-              err.push(SemanticError::ValueNoCorrToKey { key: Var::from(key.clone()), value: Var::from(name.clone()) });
-            }
-          } else {
-            err.push(SemanticError::ValueNotInKey { key: Var::from(key.clone()), value: Var::from(name.clone()) });
-          }
-        },
-        UsedCorrespondence::String { name, key } => {
-          if name.node != key.node {
-            err.push(SemanticError::KeyAndStringDontAllign { key: Var::from(key.clone()), string_key: Var::from(name.clone()) });
-          }
+        None => {
+          err.push(SemanticError::KeyNotFoundForType { 
+            ty: corr.ty.get_node(), 
+            key: Var { id: corr.key.clone(), span: corr.span.clone() } 
+          });
         },
       }
     }
@@ -97,20 +86,47 @@ impl AstPass for SemanticVisitor {
             match s {
               SetUpRule::CreatePrecedence(precedence, key_value_pairs) => {
                 for (k, v) in key_value_pairs.iter() {
-                  self.precedences.insert(precedence.node.clone(), k.node.clone());
-                  self.used_corr.push(UsedCorrespondence::Value { name: v.clone(), key: k.clone() });
+                  self.init_corr.insert( 
+                    CorrespondanceType::Precedence { 
+                      node: precedence.node.clone() 
+                    }, 
+                    (k.node.clone(), precedence.span.clone())
+                  );
+                  self.used_corr.push(
+                    UsedCorrespondence { 
+                      ty: CorrespondanceType::Value { node: v.node.clone() }, 
+                      key: k.node.clone(), 
+                      span: v.span.clone() 
+                    }
+                  );
                 }
               },
               SetUpRule::CreatePointMap(pointmap, key_value_int_triples) => {
                 for (k, v, _) in key_value_int_triples.iter() {
-                  self.pointmaps.insert(pointmap.node.clone(), k.node.clone());
-                  self.used_corr.push(UsedCorrespondence::Value { name: v.clone(), key: k.clone() });
+                  self.init_corr.insert( 
+                    CorrespondanceType::PointMap { 
+                      node: pointmap.node.clone() 
+                    }, 
+                    (k.node.clone(), pointmap.span.clone())
+                  );
+                  self.used_corr.push(
+                    UsedCorrespondence { 
+                      ty: CorrespondanceType::Value { node: v.node.clone() }, 
+                      key: k.node.clone(), 
+                      span: v.span.clone() 
+                    }
+                  );
                 }
               },
               SetUpRule::CreateCardOnLocation(_, types) => {
                 for (k, vs) in types.node.types.iter() {
                   for v in vs.iter() {
-                    self.values.insert(v.node.clone(), k.node.clone());
+                    self.init_corr.insert( 
+                        CorrespondanceType::Value { 
+                          node: v.node.clone() 
+                        }, 
+                      (k.node.clone(), v.span.clone())
+                    );
                   }
                 }
               },
@@ -120,26 +136,62 @@ impl AstPass for SemanticVisitor {
           NodeKind::AggregateFilter(a) => {
             match a {
                 AggregateFilter::Adjacent(key, precedence) => {
-                  self.used_corr.push(UsedCorrespondence::Precedence { name: precedence.clone(), key: key.clone() });
+                  self.used_corr.push(
+                    UsedCorrespondence { 
+                      ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
+                      key: key.node.clone(), 
+                      span: precedence.span.clone() 
+                    }
+                  );
                 },
                 AggregateFilter::Higher(key, precedence) => {
-                  self.used_corr.push(UsedCorrespondence::Precedence { name: precedence.clone(), key: key.clone() });
+                  self.used_corr.push(
+                    UsedCorrespondence { 
+                      ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
+                      key: key.node.clone(), 
+                      span: precedence.span.clone() 
+                    }
+                  );
                 },
                 AggregateFilter::Lower(key, precedence) => {
-                  self.used_corr.push(UsedCorrespondence::Precedence { name: precedence.clone(), key: key.clone() });
+                  self.used_corr.push(
+                    UsedCorrespondence { 
+                      ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
+                      key: key.node.clone(), 
+                      span: precedence.span.clone() 
+                    }
+                  );
                 },
                 AggregateFilter::KeyString(key, _, string) => {
                   match &string.node {
                     StringExpr::Query(q) => {
                       match &q.node {
-                        QueryString::KeyOf(key_string, _) => {
-                          self.used_corr.push(UsedCorrespondence::String { name: key_string.clone(), key: key.clone() });
+                        QueryString::KeyOf(k, _) => {
+                          self.init_corr.insert( 
+                              CorrespondanceType::Key { 
+                                node: k.node.clone() 
+                              }, 
+                            (k.node.clone(), k.span.clone())
+                          );
+                          self.used_corr.push(
+                            UsedCorrespondence { 
+                              ty: CorrespondanceType::Key { node: k.node.clone() }, 
+                              key: key.node.clone(), 
+                              span: k.span.clone() 
+                            }
+                          );
                         },
                         _ => {}
                       }
                     },
                     StringExpr::Literal(value) => {
-                      self.used_corr.push(UsedCorrespondence::Value { name: value.clone(), key: key.clone() });
+                      self.used_corr.push(
+                        UsedCorrespondence { 
+                          ty: CorrespondanceType::Value { node: value.node.clone() }, 
+                          key: key.node.clone(), 
+                          span: value.span.clone() 
+                        }
+                      );
                     },
                   }
                 },

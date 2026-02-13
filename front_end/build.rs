@@ -29,8 +29,13 @@ fn main() {
             continue;
         }
 
-        let variants = flatten_expression(&rule.expr, 1, &rule_map);
-        
+        let mut variants = flatten_expression(&rule.expr, 1, &rule_map, &mut Vec::new(), 4);
+
+        // Safety: only take the first 50 variants so the LSP doesn't lag
+        if variants.len() > 15 {
+            variants.truncate(15);
+        }
+
         for (body, _) in variants {
             let trimmed = body.trim();
             if trimmed.is_empty() { continue; }
@@ -63,10 +68,19 @@ fn is_infrastructure(name: &str) -> bool {
       | "int" 
       | "ident" 
       | "SOI" 
-      | "EOI" 
+      | "EOI"
       | "kw" 
       | "block_comment" 
-      | "line_comment" 
+      | "line_comment"
+      | "game"
+      | "flow_component"
+      | "file"
+      | "game_flow"
+    )
+}
+
+fn is_ident(name: &str) -> bool {
+    matches!(name,
       | "playername" 
       | "teamname"
       | "location"
@@ -78,49 +92,45 @@ fn is_infrastructure(name: &str) -> bool {
       | "memory"
       | "token"
       | "stage"
-      | "game"
-      | "flow_component"
-      | "file"
-      | "game_flow"
     )
 }
 
 // 4. The "Pass Down" Logic
-fn flatten_expression(expr: &Expr, t: usize, rule_map: &HashMap<String, &Expr>) -> Vec<(String, usize)> {
+fn flatten_expression(
+    expr: &Expr, 
+    t: usize, 
+    rule_map: &HashMap<String, &Expr>,
+    visited: &mut Vec<String>,
+    depth: usize, // <--- Add this
+) -> Vec<(String, usize)> {
     match expr {
-        Expr::Str(s) => vec![(s.clone(), t)],
-        
         Expr::Ident(name) => {
             if name.starts_with("kw_") {
-                // It's a keyword, stop and return the text
                 vec![(name.replace("kw_", ""), t)]
-            } else if let Some(sub_expr) = rule_map.get(name)
-                   && (
-                       name == "int_expr"
-                    || name == "string_expr"
-                    || name == "player_expr"
-                    || name == "team_expr"
-                    || name == "bool_expr"
-                    || name == "filter_expr"
-                    || name == "card_set"
-                    || name == "card_position"
-                   ) {
-                // It's a sub-rule (e.g., 'player_expr'), flatten its definition
-                flatten_expression(sub_expr, t, rule_map)
+            } else if depth > 0 && !visited.contains(name) && !is_ident(name) {
+                if let Some(sub_expr) = rule_map.get(name) {
+                    visited.push(name.clone());
+                    // Recurse with depth - 1
+                    let res = flatten_expression(sub_expr, t, rule_map, visited, depth - 1);
+                    visited.pop();
+                    return res;
+                }
+                // Fallback if rule not found
+                vec![(format!("${{{}:{}}}", t, name), t + 1)]
             } else {
-                // Fallback for built-ins or rules not in map: return as placeholder
+                // We reached max depth or a cycle: stop and show the rule name
                 vec![(format!("${{{}:{}}}", t, name), t + 1)]
             }
-        }
-
-        // SEQUENCE: Combine every left variation with every right variation
+        },
+        // For Seq, Choice, and Opt, just pass the SAME depth down.
+        // Only Ident "consumes" a level of depth.
         Expr::Seq(lhs, rhs) => {
-            let left_variations = flatten_expression(lhs, t, rule_map);
+            let lefts = flatten_expression(lhs, t, rule_map, visited, depth);
             let mut results = Vec::new();
-            for (l_str, next_t) in left_variations {
-                let right_variations = flatten_expression(rhs, next_t, rule_map);
-                for (r_str, final_t) in right_variations {
-                    results.push((format!("{} {}", l_str, r_str), final_t));
+            for (l, next_t) in lefts {
+                let rights = flatten_expression(rhs, next_t, rule_map, visited, depth);
+                for (r, final_t) in rights {
+                    results.push((format!("{} {}", l, r), final_t));
                 }
             }
             results
@@ -128,14 +138,14 @@ fn flatten_expression(expr: &Expr, t: usize, rule_map: &HashMap<String, &Expr>) 
 
         // CHOICE: Flatten both sides and collect them all
         Expr::Choice(lhs, rhs) => {
-            let mut variants = flatten_expression(lhs, t, rule_map);
-            variants.extend(flatten_expression(rhs, t, rule_map));
+            let mut variants = flatten_expression(lhs, t, rule_map, visited, depth);
+            variants.extend(flatten_expression(rhs, t, rule_map, visited, depth));
             variants
         }
 
         // OPTIONAL: Return a version with the content AND a version with nothing
         Expr::Opt(inner) => {
-            let mut variants = flatten_expression(inner, t, rule_map); // Version with
+            let mut variants = flatten_expression(inner, t, rule_map, visited, depth); // Version with
             variants.push(("".to_string(), t));            // Version without
             variants
         }

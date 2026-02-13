@@ -90,32 +90,12 @@ fn semantic_error_to_diagnostics(semantic_error: &SemanticError, doc: &Rope) -> 
   let spanned;
   let message;
   match semantic_error {
-    SemanticError::KeyNotInPrecedence { key, precedence } => {
-      message = format!("'{}' not in '{}'", &key.id, &precedence.id);
+    SemanticError::KeyNotFoundForType { ty, key } => {
+      message = format!("'{}' not found for '{}'", &key.id, ty);
       spanned = key;
     },
-    SemanticError::KeyNoCorrToPrecedence { key, precedence} => {
-      message = format!("'{}' does not correspond to '{}'", &key.id, &precedence.id);
-      spanned = key;
-    },
-    SemanticError::KeyNotInPointMap { key, pointmap} => {
-      message = format!("'{}' not in '{}'", &key.id, &pointmap.id);
-      spanned = key;
-    },
-    SemanticError::KeyNoCorrToPointMap { key, pointmap} => {
-      message = format!("'{}' does not correspond to '{}'", &key.id, &pointmap.id);
-      spanned = key;
-    },
-    SemanticError::ValueNotInKey { key, value } => {
-      message = format!("'{}' not in '{}'", &value.id, &key.id);
-      spanned = key;
-    },
-    SemanticError::ValueNoCorrToKey { key, value } => {
-      message = format!("'{}' does not correspond to '{}'", &value.id, &key.id);
-      spanned = key;
-    },
-    SemanticError::KeyAndStringDontAllign { key, string_key } => {
-      message = format!("'{}' and '{}' dont allign", &key.id, &string_key.id);
+    SemanticError::NoCorrToType { ty, key } => {
+      message = format!("'{}' does not correspond to '{}'", &key.id, &ty.id);
       spanned = key;
     },
   }
