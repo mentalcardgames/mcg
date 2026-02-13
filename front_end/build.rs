@@ -29,7 +29,7 @@ fn main() {
             continue;
         }
 
-        let mut variants = flatten_expression(&rule.expr, 1, &rule_map, &mut Vec::new(), 4);
+        let mut variants = flatten_expression(&rule.expr, 1, &rule_map, &mut Vec::new(), 2);
 
         // Safety: only take the first 50 variants so the LSP doesn't lag
         if variants.len() > 15 {
