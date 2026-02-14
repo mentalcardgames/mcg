@@ -2,6 +2,8 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Data, DeriveInput, Fields, Item, ItemMod, Visibility, parse_macro_input};
 
+// Optional: If you want to derive a Walker for a certain lowered AST or anything then use this
+// Walker will be automatically generated with the proc-macro #[ast]
 #[proc_macro_derive(Walker)]
 pub fn derive_walker(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -85,79 +87,6 @@ pub fn derive_walker(input: TokenStream) -> TokenStream {
         }
     }.into()
 }
-
-#[proc_macro_derive(Lower)] // Register the helper attribute
-pub fn derive_lower(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let name = &input.ident;
-
-    let crate_path: syn::Path = syn::parse_str("crate::ast").expect("Failed to parse path");
-
-    let walk_body = match &input.data {
-        Data::Enum(data) => {
-            let variants = data.variants.iter().map(|v| {
-                let v_ident = &v.ident;
-                match &v.fields {
-                    Fields::Unnamed(fields) => {
-                        let vars: Vec<_> = (0..fields.unnamed.len())
-                            .map(|i| quote::format_ident!("_f{}", i))
-                            .collect();
-
-                        quote! {
-                            Self::#v_ident( #( #vars ),* ) => {
-                                // Tuple variants use ()
-                                #crate_path::#name::#v_ident( #( #vars.lower() ),* )
-                            }
-                        }
-                    }
-                    Fields::Named(fields) => {
-                        let names: Vec<_> = fields.named.iter().map(|f| &f.ident).collect();
-                        quote! {
-                            Self::#v_ident { #( #names ),* } => {
-                                // Struct variants use { }
-                                #crate_path::#name::#v_ident { #( #names: #names.lower() ),* }
-                            }
-                        }
-                    },
-                    Fields::Unit => quote! {
-                        Self::#v_ident => #crate_path::#name::#v_ident,
-                    },
-                }
-            });
-            quote! { match self { #( #variants )* } }
-        }
-        Data::Struct(data) => {
-            match &data.fields {
-                syn::Fields::Named(fields) => {
-                    let f_names: Vec<_> = fields.named.iter().map(|f| &f.ident).collect();
-                    quote! {
-                        #crate_path::#name { #( #f_names: self.#f_names.lower() ),* }
-                    }
-                }
-                syn::Fields::Unnamed(fields) => {
-                    let indices = (0..fields.unnamed.len()).map(syn::Index::from);
-                    quote! {
-                        // Tuple structs use ()
-                        #crate_path::#name( #( self.#indices.lower() ),* )
-                    }
-                }
-                syn::Fields::Unit => quote! {
-                    #crate_path::#name
-                },
-            }
-        }
-        _ => panic!("Only Structs and Enums are supported"),
-    };
-
-    quote! {
-        impl Lower<#crate_path::#name> for #name {
-            fn lower(&self) -> #crate_path::#name {
-                #walk_body
-            }
-        }
-    }.into()
-}
-
 
 #[proc_macro_attribute]
 pub fn ast(_: TokenStream, item: TokenStream) -> TokenStream {
@@ -276,8 +205,6 @@ pub fn ast(_: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    println!("Total added to enum in module: {}", variants.len());
-
     // 2. Build the output explicitly
     // This ensures the module structure is exactly what the compiler expects
     let output = quote! {
@@ -299,9 +226,6 @@ pub fn ast(_: TokenStream, item: TokenStream) -> TokenStream {
     // DEBUG: This will show you exactly what is happening in your terminal
     // during 'cargo check' or 'cargo build'
     // println!("--- MACRO OUTPUT ---\n{}\n-------------------", output.to_string());
-
-    let out_str = output.to_string();
-    println!("Compiler output: {}", out_str);
 
     output.into()
 }

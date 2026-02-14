@@ -7,11 +7,13 @@ pub mod symbols;
 pub mod visitor;
 pub mod helper;
 pub mod spans;
-pub mod tests;
+// pub mod tests;
 pub mod diagnostics;
 pub mod semantic;
 pub mod walker;
 pub mod validation;
+#[cfg(test)]
+pub mod tests;
 
 // The include! macro looks specifically into the OUT_DIR of THIS crate.
 // This is why the code must be included here in the lib first.
