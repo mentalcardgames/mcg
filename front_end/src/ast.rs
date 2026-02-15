@@ -5,6 +5,8 @@ pub mod ast {
     use crate::spans::*;
     use crate::walker::*;
     use crate::lower::*;
+    
+    use serde::{Serialize, Deserialize};
 
     pub type SID = Spanned<String>;
 
@@ -15,7 +17,7 @@ pub mod ast {
 
     pub type SBinCompare = Spanned<BinCompare>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum BinCompare {
         Eq,
         Neq,
@@ -24,7 +26,7 @@ pub mod ast {
 
     pub type SLogicBinOp = Spanned<LogicBinOp>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum LogicBinOp {
         And,
         Or,
@@ -33,7 +35,7 @@ pub mod ast {
 
     pub type SIntOp = Spanned<IntOp>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum IntOp {
         Plus,
         Minus,
@@ -45,7 +47,7 @@ pub mod ast {
 
     pub type SIntCompare = Spanned<IntCompare>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum IntCompare {
         Eq,
         Neq,
@@ -66,7 +68,7 @@ pub mod ast {
 
     pub type SExtrema = Spanned<Extrema>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Extrema {
         Min,
         Max,
@@ -75,7 +77,7 @@ pub mod ast {
 
     pub type SOutOf = Spanned<OutOf>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum OutOf {
         CurrentStage,
         Stage(SID),
@@ -86,7 +88,7 @@ pub mod ast {
 
     pub type SGroupable = Spanned<Groupable>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Groupable {
         Location(SID),
         LocationCollection(SLocationCollection),
@@ -95,7 +97,7 @@ pub mod ast {
 
     pub type SOwner = Spanned<Owner>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Owner {
         Player(SPlayerExpr),
         PlayerCollection(SPlayerCollection),
@@ -107,7 +109,7 @@ pub mod ast {
 
     pub type SQuantity = Spanned<Quantity>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Quantity {
         Int(SIntExpr),
         Quantifier(SQuantifier),
@@ -117,7 +119,7 @@ pub mod ast {
 
     pub type SIntRange = Spanned<IntRange>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct IntRange {
         pub op_int: Vec<(SIntCompare, SIntExpr)>,
     }
@@ -125,7 +127,7 @@ pub mod ast {
 
     pub type SQuantifier = Spanned<Quantifier>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Quantifier {
         All,
         Any,
@@ -134,7 +136,7 @@ pub mod ast {
 
     pub type SEndCondition = Spanned<EndCondition>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum EndCondition {
         UntilBool(SBoolExpr),
         UntilBoolRep(SBoolExpr, SLogicBinOp, SRepititions),
@@ -145,7 +147,7 @@ pub mod ast {
 
     pub type SRepititions = Spanned<Repititions>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Repititions {
         pub times: SIntExpr,
     }
@@ -153,7 +155,7 @@ pub mod ast {
 
     pub type SMemoryType = Spanned<MemoryType>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum MemoryType {
         Int(SIntExpr),
         String(SStringExpr),
@@ -164,7 +166,7 @@ pub mod ast {
 
     pub type SPlayers = Spanned<Players>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Players {
         Player(SPlayerExpr),
         PlayerCollection(SPlayerCollection),
@@ -173,7 +175,7 @@ pub mod ast {
 
     pub type SEndType = Spanned<EndType>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum EndType {
         Turn,
         Stage,
@@ -183,7 +185,7 @@ pub mod ast {
 
     pub type SDemandType = Spanned<DemandType>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum DemandType {
         CardPosition(SCardPosition),
         String(SStringExpr),
@@ -193,7 +195,7 @@ pub mod ast {
 
     pub type STypes = Spanned<Types>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Types {
         pub types: Vec<(SID, Vec<SID>)>,
     }
@@ -212,7 +214,7 @@ pub mod ast {
 
     pub type SRuntimePlayer = Spanned<RuntimePlayer>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum RuntimePlayer {
         Current,
         Next,
@@ -223,7 +225,7 @@ pub mod ast {
 
     pub type SQueryPlayer = Spanned<QueryPlayer>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum QueryPlayer {
         Turnorder(SIntExpr),
     }
@@ -231,7 +233,7 @@ pub mod ast {
 
     pub type SAggregatePlayer = Spanned<AggregatePlayer>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum AggregatePlayer {
         OwnerOfCardPostion(Box<SCardPosition>),
         OwnerOfMemory(SExtrema, SID),
@@ -240,7 +242,7 @@ pub mod ast {
 
     pub type SPlayerExpr = Spanned<PlayerExpr>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum PlayerExpr {
         Literal(SID),
         Runtime(SRuntimePlayer),
@@ -254,7 +256,7 @@ pub mod ast {
 
     pub type SQueryInt = Spanned<QueryInt>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum QueryInt {
         IntCollectionAt(Box<SIntCollection>, Box<SIntExpr>),
     }
@@ -262,7 +264,7 @@ pub mod ast {
 
     pub type SAggregateInt = Spanned<AggregateInt>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum AggregateInt {
         SizeOf(SCollection),
         SumOfIntCollection(SIntCollection),
@@ -274,7 +276,7 @@ pub mod ast {
 
     pub type SRuntimeInt = Spanned<RuntimeInt>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum RuntimeInt {
         StageRoundCounter,
         PlayRoundCounter,
@@ -283,7 +285,7 @@ pub mod ast {
 
     pub type SIntExpr = Spanned<IntExpr>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum IntExpr {
         Literal(i32),
         Binary(Box<SIntExpr>, SIntOp, Box<SIntExpr>),
@@ -298,7 +300,7 @@ pub mod ast {
 
     pub type SQueryString = Spanned<QueryString>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum QueryString {
         KeyOf(SID, SCardPosition),
         StringCollectionAt(SStringCollection, SIntExpr),
@@ -307,7 +309,7 @@ pub mod ast {
 
     pub type SStringExpr = Spanned<StringExpr>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum StringExpr {
         Literal(SID),
         Query(SQueryString),
@@ -319,7 +321,7 @@ pub mod ast {
 
     pub type SCardSetCompare = Spanned<CardSetCompare>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum CardSetCompare {
         Eq,
         Neq,
@@ -328,7 +330,7 @@ pub mod ast {
 
     pub type SStringCompare = Spanned<StringCompare>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum StringCompare {
         Eq,
         Neq,
@@ -337,7 +339,7 @@ pub mod ast {
 
     pub type SPlayerCompare = Spanned<PlayerCompare>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum PlayerCompare {
         Eq,
         Neq,
@@ -346,7 +348,7 @@ pub mod ast {
 
     pub type STeamCompare = Spanned<TeamCompare>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum TeamCompare {
         Eq,
         Neq,
@@ -355,7 +357,7 @@ pub mod ast {
 
     pub type SBoolOp = Spanned<BoolOp>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum BoolOp {
         And,
         Or,
@@ -364,7 +366,7 @@ pub mod ast {
 
     pub type SUnaryOp = Spanned<UnaryOp>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum UnaryOp {
         Not,
     }
@@ -372,7 +374,7 @@ pub mod ast {
 
     pub type SCompareBool = Spanned<CompareBool>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum CompareBool {
         Int(SIntExpr, SIntCompare, SIntExpr),
         CardSet(SCardSet, SCardSetCompare, SCardSet),
@@ -384,7 +386,7 @@ pub mod ast {
 
     pub type SAggregateBool = Spanned<AggregateBool>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum AggregateBool {
         Compare(SCompareBool),
         CardSetEmpty(SCardSet),
@@ -395,7 +397,7 @@ pub mod ast {
 
     pub type SBoolExpr = Spanned<BoolExpr>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum BoolExpr {
         Binary(Box<SBoolExpr>, SBoolOp, Box<SBoolExpr>),
         Unary(SUnaryOp, Box<SBoolExpr>),
@@ -408,7 +410,7 @@ pub mod ast {
 
     pub type SAggregateTeam = Spanned<AggregateTeam>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum AggregateTeam {
         TeamOf(SPlayerExpr),
     }
@@ -416,7 +418,7 @@ pub mod ast {
 
     pub type STeamExpr = Spanned<TeamExpr>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum TeamExpr {
         Literal(SID),
         Aggregate(SAggregateTeam),
@@ -428,7 +430,7 @@ pub mod ast {
 
     pub type SQueryCardPosition = Spanned<QueryCardPosition>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum QueryCardPosition {
         At(SID, SIntExpr),
         Top(SID),
@@ -438,7 +440,7 @@ pub mod ast {
 
     pub type SAggregateCardPosition = Spanned<AggregateCardPosition>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum AggregateCardPosition {
         ExtremaPointMap(SExtrema, Box<SCardSet>, SID),
         ExtremaPrecedence(SExtrema, Box<SCardSet>, SID),
@@ -447,7 +449,7 @@ pub mod ast {
 
     pub type SCardPosition = Spanned<CardPosition>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum CardPosition {
         Query(SQueryCardPosition),
         Aggregate(SAggregateCardPosition),
@@ -458,7 +460,7 @@ pub mod ast {
 
     pub type SStatus = Spanned<Status>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Status {
         FaceUp,
         FaceDown,
@@ -478,7 +480,7 @@ pub mod ast {
 
     pub type SCollection = Spanned<Collection>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Collection {
         IntCollection(SIntCollection),
         StringCollection(SStringCollection),
@@ -491,7 +493,7 @@ pub mod ast {
 
     pub type SIntCollection = Spanned<IntCollection>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct IntCollection {
         pub ints: Vec<SIntExpr>,
     }
@@ -499,7 +501,7 @@ pub mod ast {
 
     pub type SStringCollection = Spanned<StringCollection>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct StringCollection {
         pub strings: Vec<SStringExpr>,
     }
@@ -507,7 +509,7 @@ pub mod ast {
 
     pub type SLocationCollection = Spanned<LocationCollection>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct LocationCollection {
         pub locations: Vec<SID>,
     }
@@ -517,7 +519,7 @@ pub mod ast {
 
     pub type SRuntimePlayerCollection = Spanned<RuntimePlayerCollection>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum RuntimePlayerCollection {
         PlayersOut,
         PlayersIn,
@@ -527,7 +529,7 @@ pub mod ast {
 
     pub type SAggregatePlayerCollection = Spanned<AggregatePlayerCollection>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum AggregatePlayerCollection {
         Quantifier(SQuantifier),
     }
@@ -535,7 +537,7 @@ pub mod ast {
 
     pub type SPlayerCollection = Spanned<PlayerCollection>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum PlayerCollection {
         Literal(Vec<SPlayerExpr>),
         Aggregate(SAggregatePlayerCollection),
@@ -548,7 +550,7 @@ pub mod ast {
 
     pub type SRuntimeTeamCollection = Spanned<RuntimeTeamCollection>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum RuntimeTeamCollection {
         OtherTeams,
     }
@@ -556,7 +558,7 @@ pub mod ast {
 
     pub type STeamCollection = Spanned<TeamCollection>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum TeamCollection {
         Literal(Vec<STeamExpr>),
         Runtime(SRuntimeTeamCollection),
@@ -574,7 +576,7 @@ pub mod ast {
 
     pub type SCardSet = Spanned<CardSet>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum CardSet {
         Group(SGroup),
         GroupOwner(SGroup, SOwner),
@@ -583,7 +585,7 @@ pub mod ast {
 
     pub type SGroup = Spanned<Group>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Group {
         Groupable(SGroupable),
         Where(SGroupable, SFilterExpr),
@@ -597,7 +599,7 @@ pub mod ast {
 
     pub type SAggregateFilter = Spanned<AggregateFilter>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum AggregateFilter {
         Size(SIntCompare, Box<SIntExpr>),
         Same(SID),
@@ -613,7 +615,7 @@ pub mod ast {
 
     pub type SFilterOp = Spanned<FilterOp>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum FilterOp {
         And,
         Or,
@@ -622,7 +624,7 @@ pub mod ast {
 
     pub type SFilterExpr = Spanned<FilterExpr>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum FilterExpr {
         Aggregate(SAggregateFilter),
         Binary(Box<SFilterExpr>, SFilterOp, Box<SFilterExpr>),
@@ -641,7 +643,7 @@ pub mod ast {
 
     pub type SGame = Spanned<Game>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Game {
         pub flows: Vec<SFlowComponent>,
     }
@@ -649,7 +651,7 @@ pub mod ast {
 
     pub type SFlowComponent = Spanned<FlowComponent>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum FlowComponent {
         Stage(SSeqStage),
         Rule(SGameRule),
@@ -662,7 +664,7 @@ pub mod ast {
 
     pub type SSetUpRule = Spanned<SetUpRule>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum SetUpRule {
         // Creations
         CreatePlayer(Vec<SID>),
@@ -682,7 +684,7 @@ pub mod ast {
 
     pub type SActionRule = Spanned<ActionRule>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum ActionRule {
         // Actions
         FlipAction(SCardSet, SStatus),
@@ -704,7 +706,7 @@ pub mod ast {
 
     pub type SScoringRule = Spanned<ScoringRule>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum ScoringRule {
         // Score + Winner Rule
         ScoreRule(SScoreRule),
@@ -714,7 +716,7 @@ pub mod ast {
 
     pub type SGameRule = Spanned<GameRule>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum GameRule {
         SetUp(SSetUpRule),
         Action(SActionRule),
@@ -724,7 +726,7 @@ pub mod ast {
 
     pub type SSeqStage = Spanned<SeqStage>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct SeqStage {
         pub stage: SID,
         pub player: SPlayerExpr,
@@ -735,7 +737,7 @@ pub mod ast {
 
     pub type SCase = Spanned<Case>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum Case {
         Else(Vec<SFlowComponent>),
         NoBool(Vec<SFlowComponent>),
@@ -745,14 +747,14 @@ pub mod ast {
 
     pub type SConditional = Spanned<Conditional>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Conditional {
         pub cases: Vec<SCase>,
     }
 
     pub type SIfRule = Spanned<IfRule>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct IfRule {
         pub condition: SBoolExpr,
         pub flows: Vec<SFlowComponent>,
@@ -761,7 +763,7 @@ pub mod ast {
 
     pub type SOptionalRule = Spanned<OptionalRule>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct OptionalRule {
         pub flows: Vec<SFlowComponent>,
     }
@@ -769,7 +771,7 @@ pub mod ast {
 
     pub type SChoiceRule = Spanned<ChoiceRule>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ChoiceRule {
         pub options: Vec<SFlowComponent>,
     }
@@ -777,7 +779,7 @@ pub mod ast {
 
     pub type SMoveType = Spanned<MoveType>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum MoveType {
         Deal(SDealMove),
         Exchange(SExchangeMove),
@@ -788,7 +790,7 @@ pub mod ast {
 
     pub type SMoveCardSet = Spanned<MoveCardSet>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum MoveCardSet {
         Move(SCardSet, SStatus, SCardSet),
         MoveQuantity(SQuantity, SCardSet, SStatus, SCardSet),
@@ -797,7 +799,7 @@ pub mod ast {
 
     pub type SClassicMove = Spanned<ClassicMove>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum ClassicMove {
         MoveCardSet(SMoveCardSet),
     }
@@ -805,7 +807,7 @@ pub mod ast {
 
     pub type SDealMove = Spanned<DealMove>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum DealMove {
         MoveCardSet(SMoveCardSet),
     }
@@ -813,7 +815,7 @@ pub mod ast {
 
     pub type SExchangeMove = Spanned<ExchangeMove>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum ExchangeMove {
         MoveCardSet(SMoveCardSet),
     }
@@ -821,7 +823,7 @@ pub mod ast {
 
     pub type STokenMove = Spanned<TokenMove>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum TokenMove {
         Place(SID, STokenLocExpr, STokenLocExpr),
         PlaceQuantity(SQuantity, SID, STokenLocExpr, STokenLocExpr),
@@ -830,7 +832,7 @@ pub mod ast {
 
     pub type STokenLocExpr = Spanned<TokenLocExpr>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum TokenLocExpr {
         Groupable(SGroupable),
         GroupablePlayers(SGroupable, SPlayers),
@@ -839,7 +841,7 @@ pub mod ast {
 
     pub type SScoreRule = Spanned<ScoreRule>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum ScoreRule {
         Score(SIntExpr, SPlayers),
         ScoreMemory(SIntExpr, SID, SPlayers),
@@ -848,7 +850,7 @@ pub mod ast {
 
     pub type SWinnerType = Spanned<WinnerType>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum WinnerType {
         Score,
         Memory(SID),
@@ -858,7 +860,7 @@ pub mod ast {
 
     pub type SWinnerRule = Spanned<WinnerRule>;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub enum WinnerRule {
         Winner(SPlayers),
         WinnerWith(SExtrema, SWinnerType),

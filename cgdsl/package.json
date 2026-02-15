@@ -30,6 +30,22 @@
         "path": "./themes/cgdsl-dark.json"
       }
     ],
+    "commands": [
+      {
+        "command": "cgdsl.runFile",
+        "title": "Run CGDSL File",
+        "icon": "$(play)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "cgdsl.runFile",
+          "when": "editorLangId == cgdsl",
+          "group": "navigation@1"
+        }
+      ]
+    },
     "grammars": [{
       "language": "cgdsl",
       "scopeName": "source.cgdsl",

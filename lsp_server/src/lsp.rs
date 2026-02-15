@@ -7,7 +7,7 @@ use front_end::validation::parse_document;
 use ropey::{Rope};
 use crate::rope::Document;
 use crate::semantic_highlighting::{calculate_deltas, tokenize_ast};
-use crate::validation::{apply_change, validate_document, validate_parsing};
+use crate::validation::{apply_change, validate_document, validate_game, validate_parsing};
 use tokio::sync::{Mutex, mpsc};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
@@ -203,7 +203,44 @@ impl LanguageServer for Backend {
         self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
 
-    async fn did_save(&self, _: DidSaveTextDocumentParams) {}
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        let uri = params.text_document.uri;
+
+        let rope = {
+            let mut docs = self.documents.lock().await;
+
+            let doc = docs
+                .get_mut(&uri)
+                .expect("didSave before didOpen");
+
+            // Materialize full text ONCE
+            doc.rope.clone()
+        };
+        
+        let mut diagnostics = Vec::new();
+
+        match validate_parsing(&rope) {
+            Ok(ast) => {
+                // Run semantic validation
+                match validate_game(&ast, &rope) {
+                    None => {},
+                    Some(v) => {
+                        diagnostics = v;
+                    }
+                }
+                self.last_ast.store(Some(Arc::new(ast)));
+            }
+            Err(err_diagnostics) => {
+                diagnostics = err_diagnostics;
+            }
+        }
+
+        // Standard document storage
+        let mut docs = self.documents.lock().await;
+        docs.insert(uri.clone(), Document { rope });
+
+        self.client.publish_diagnostics(uri, diagnostics, None).await;
+    }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
@@ -260,7 +297,6 @@ impl LanguageServer for Backend {
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
         let uri = params.text_document.uri;
-
         let map = self.documents.lock().await;
         let doc = map.get(&uri).ok_or_else(|| Error::invalid_params(""))?;
         let tokens;
@@ -288,5 +324,35 @@ impl LanguageServer for Backend {
             result_id: None,
             data: semantic_tokens,
         })))
+    }
+
+    // async fn execute_command(&self, params: ExecuteCommandParams) -> jsonrpc::Result<Option<serde_json::Value>> {
+        // let uri = params.text_document.uri;
+        // let map = self.documents.lock().await;
+        // let doc = map.get(&uri).ok_or_else(|| Error::invalid_params(""))?;
+        // let tokens;
+        // if let Some(safe_ast) = &*self.last_ast.load() {
+        //     if params.command == "cgdsl.generateGraph" {
+        //         // Get your graph data
+        //         let graph = safe_ast.to_graph(); 
+                
+        //         // Return it as a JSON value
+        //         let json_value = serde_json::to_value(&graph)
+        //             .map_err(|_| jsonrpc::Error::internal_error())?;
+                    
+        //         return Ok(Some(json_value));
+        //     }
+        // } else {
+        //     return Ok(None);
+        // }
+
+        // Err(jsonrpc::Error::method_not_found())
+
+    // }
+
+    // Use this for REQUESTS (expects a response)
+    async fn symbol(&self, _params: WorkspaceSymbolParams) -> jsonrpc::Result<Option<Vec<SymbolInformation>>> {
+        // Standard LSP method
+        Ok(None)
     }
 }

@@ -1,5 +1,6 @@
 import path from 'path';
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 // Import the language client classes
 import {
     LanguageClient,
@@ -13,6 +14,7 @@ let client: LanguageClient;
 export function activate(context: vscode.ExtensionContext) {
     const serverBinary = process.platform === 'win32' ? 'lsp_server.exe' : 'lsp_server';
     const serverPath = path.join(context.extensionPath, 'bin', serverBinary);
+
 
     const serverOptions: ServerOptions = {
         run: { command: serverPath, transport: TransportKind.stdio },
@@ -39,6 +41,25 @@ export function activate(context: vscode.ExtensionContext) {
 
     client.start();
     console.log('CGDSL Language Server is starting...');
+
+     if (!vscode.workspace.workspaceFolders) {
+        vscode.window.showErrorMessage('No workspace folder open');
+        return;
+    }
+
+    const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const outDir = path.join(workspaceRoot, 'cgdsl-output');
+
+    if (!fs.existsSync(outDir)) {
+        fs.mkdirSync(outDir);
+    }
+
+    vscode.commands.registerCommand('cgdsl.runFile', () => {
+        vscode.window.showInformationMessage('Run pressed');
+    });
+
+    // const graphData: string = await client.sendRequest('cgdsl/exportGraph');
+    // fs.writeFileSync(path.join(outDir, 'graph.json'), graphData);
 }
 
 export function deactivate(): Thenable<void> | undefined {

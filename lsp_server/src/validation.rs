@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
-use front_end::{ast::ast::SGame, parser::Rule, semantic::SemanticError, spans::OwnedSpan, symbols::{GameType, SymbolError}, validation::{parse_document, semantic_validation, symbol_validation}};
+use front_end::{ast::ast::SGame, ir::GameFlowError, parser::Rule, semantic::SemanticError, spans::OwnedSpan, symbols::{GameType, SymbolError}, validation::{parse_document, program_validation, semantic_validation, symbol_validation}};
 use ropey::Rope;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity};
+use tower_lsp::lsp_types::{Position, Range};
+use pest::error::LineColLocation;
 
 pub fn validate_document(ast: &SGame, doc: &Rope) -> Result<HashMap<GameType, Vec<String>>, Vec<Diagnostic>> {
   let symbol_table;
@@ -21,18 +23,22 @@ pub fn validate_document(ast: &SGame, doc: &Rope) -> Result<HashMap<GameType, Ve
   return Ok(symbol_table)
 }
 
+pub fn validate_game(ast: &SGame, doc: &Rope) -> Option<Vec<Diagnostic>> {
+  if let Some(errs) = program_validation(&ast) {
+    return Some(errs.iter().map(|g| program_error_to_diagnostics(g, &doc)).collect())
+  }
+
+  return None
+}
+
 pub fn validate_parsing(doc: &Rope) -> Result<SGame, Vec<Diagnostic>> {
   let result = parse_document(&doc.to_string());
   if let Err(err) = result {
     return Err(vec![pest_error_to_diagnostic(err)])
-  } 
+  }
 
   return Ok(result.unwrap())
 }
-
-
-use tower_lsp::lsp_types::{Position, Range};
-use pest::error::LineColLocation;
 
 pub fn pest_error_to_diagnostic(pest_err: pest::error::Error<Rule>) -> Diagnostic {
     let range = match pest_err.line_col {
@@ -76,7 +82,7 @@ fn symbol_error_to_diagnostics(symbol_error: &SymbolError, doc: &Rope) -> Diagno
     range: to_range(&value.span, doc),
     severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
     code: None,
-    source: Some("my-cool-lsp".to_string()),
+    source: Some("cgdsl-lsp".to_string()),
     message: message,
     related_information: None,
     tags: None,
@@ -104,7 +110,7 @@ fn semantic_error_to_diagnostics(semantic_error: &SemanticError, doc: &Rope) -> 
     range: to_range(&spanned.span, doc),
     severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
     code: None,
-    source: Some("my-cool-lsp".to_string()),
+    source: Some("cgdsl-lsp".to_string()),
     message: message,
     related_information: None,
     tags: None,
@@ -112,6 +118,52 @@ fn semantic_error_to_diagnostics(semantic_error: &SemanticError, doc: &Rope) -> 
     code_description: None,
   }
 }
+
+fn program_error_to_diagnostics(program_error: &GameFlowError, doc: &Rope) -> Diagnostic {
+  let spanned;
+  let message;
+  match program_error {
+    GameFlowError::Unreachable { span } => {
+      message = format!("Code is unreachable");
+      spanned = span;
+    },
+    GameFlowError::NoStageToEnd { span } => {
+      message = format!("There is no stage to end");
+      spanned = span;
+    },
+    GameFlowError::FlowNotConnected { span } => {
+      message = format!("The Game is not connected");
+      spanned = span;
+    },
+    GameFlowError::FlowNotConnectedWithControl => {
+      message = format!("The Game is heavily not connected");
+      return Diagnostic {
+          severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
+          code: None,
+          source: Some("cgdsl-lsp".to_string()),
+          message: message,
+          related_information: None,
+          tags: None,
+          data: None,
+          code_description: None,
+          ..Default::default()
+        }
+    },
+  }
+
+  Diagnostic {
+    range: to_range(&spanned, doc),
+    severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
+    code: None,
+    source: Some("cgdsl-lsp".to_string()),
+    message: message,
+    related_information: None,
+    tags: None,
+    data: None,
+    code_description: None,
+  }
+}
+
 
 
 pub fn to_range(span: &OwnedSpan, rope: &Rope) -> Range {

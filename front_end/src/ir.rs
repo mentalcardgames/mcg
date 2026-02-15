@@ -1,9 +1,21 @@
-use std::{collections::HashMap, fmt::Debug};
-use crate::{ast::ast::*, ast::ast::GameRule};
+use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Debug};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+use crate::{ast::ast::{GameRule, *}, spans::OwnedSpan};
+
+
+impl SGame {
+  pub fn to_graph(&self) -> Ir<PayloadT> {
+    let mut builder: IrBuilder<PayloadT> = IrBuilder::default();
+    builder.build_ir(self);
+
+    return builder.fsm
+  }
+}
 
 pub type Stage = String;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct StateID(u32);
 
 impl StateID {
@@ -12,27 +24,32 @@ impl StateID {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct StageExit(u32);
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ChoiceExit(u32);
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct TransitionID(u32);
 
-pub struct Edge<T> {
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(bound = "T: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
+pub struct Edge<T>
+  where T: serde::Serialize
+{
   pub to: StateID,
   pub payload: T,
 }
 
-pub struct Ir<T> {
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "T: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
+pub struct Ir<T: serde::Serialize>
+{
   pub states: HashMap<StateID, Vec<Edge<T>>>,
   pub entry: StateID,
   pub goal: StateID,
 }
 
-impl<T> Default for Ir<T> {
+impl<T: Serialize + DeserializeOwned> Default for Ir<T> {
   fn default() -> Self {
       Ir {
         states: HashMap::new(),
@@ -42,7 +59,7 @@ impl<T> Default for Ir<T> {
   }
 }
 
-impl<T> Ir<T> {
+impl<T: Serialize + DeserializeOwned> Ir<T> {
   /// Both States need to be added before the edge can be added.
   pub fn add_edge(&mut self, from: StateID, to: StateID, payload: T) {
     let edge = Edge { to: to, payload: payload };
@@ -62,34 +79,116 @@ impl<T> Ir<T> {
   pub fn remove_state(&mut self, state: StateID) {
     self.states.remove(&state);
   }
+
+  pub fn reachable_from_entry(&self) -> HashSet<StateID>
+    where
+        StateID: Eq + std::hash::Hash + Copy,
+    {
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
+
+        queue.push_back(self.entry);
+        visited.insert(self.entry);
+
+        while let Some(current) = queue.pop_front() {
+            if let Some(edges) = self.states.get(&current) {
+                for edge in edges {
+                    let target = edge.to;
+                    if visited.insert(target) {
+                        queue.push_back(target);
+                    }
+                }
+            }
+        }
+
+        visited
+    }
+
+    pub fn is_connected(&self) -> bool
+    where
+        StateID: Eq + std::hash::Hash + Copy,
+    {
+        let reachable = self.reachable_from_entry();
+        reachable.len() == self.states.len()
+    }
+
+    pub fn edges_to_highest_state_sub_graph(&self) -> Vec<&Edge<T>>
+    where
+        StateID: Ord + Copy,
+    {
+        let Some(max_state) = self.reachable_from_entry().into_iter().max() else {
+            return Vec::new();
+        };
+
+        self.states
+            .values()
+            .flat_map(|edges| edges.iter())
+            .filter(|edge| edge.to == max_state)
+            .collect()
+    }
 }
 
+impl Ir<PayloadT> {
+  pub fn diagnostics(&self) -> Option<Vec<GameFlowError>> {
+    if !self.is_connected() {
+      let mut errs: Vec<GameFlowError> = Vec::new();
+      for edge in self.edges_to_highest_state_sub_graph().iter() {
+        match &edge.payload{
+          Payload::Instruction(instr) => {
+            let span = match instr {
+              Semantic::Condition { expr, negated: _ } => expr.span.clone(),
+              Semantic::EndCondition { expr, negated: _ } => expr.span.clone(),
+              Semantic::Action(a) => a.span.clone(),
+              Semantic::StageRoundCounter(stage) => stage.span.clone(),
+              Semantic::EndStage(stage) => stage.span.clone(),
+              Semantic::StageExit(stage) => stage.span.clone(),
+              Semantic::StageEntry(stage) => stage.span.clone(),
+            };
+
+            errs.push(
+              GameFlowError::FlowNotConnected {
+                span: span    
+              }
+            )
+          },
+          Payload::Control(_) => {},
+        }
+      }
+
+      if errs.is_empty() {
+        return Some(vec![GameFlowError::FlowNotConnectedWithControl])
+      }
+
+      return Some(errs)
+    }
+
+    return None
+  }
+}
 
 /// There are certain Rules that alter the flow of the game:
 /// - End Stage
 /// - End Game
 /// There might be added more rules that alter the flow of the game.
 /// These rules need careful handling for constructing the IR.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum GameFlowChange {
   EndCurrentStage(u32),
   EndGame(u32),
   None(u32),
 }
 
-
-
 /// Each Transition/Edge needs to have some guard/payload.
 /// E.g. If we have a condition then the edge's payload is proving the condition.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "T: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
 pub enum Payload<T>
-  where T: Debug,
 {
   Instruction(T),
   Control(Control)
 }
 
-impl<C: Debug, E: Debug, S: Debug> Payload<Semantic<C, E, GameRule, S>> {
+impl<C: Debug, E: Debug, S: Debug> Payload<Semantic<C, E, SGameRule, S>> {
   pub fn raw(&self) -> &str {
     match self {
         Payload::Instruction(i) => i.raw(),
@@ -100,7 +199,8 @@ impl<C: Debug, E: Debug, S: Debug> Payload<Semantic<C, E, GameRule, S>> {
 
 
 /// A set of Payload-Instructions.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "C: Serialize + DeserializeOwned, E: Serialize + DeserializeOwned, A: Serialize + DeserializeOwned, S: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
 pub enum Semantic<C, E, A, S> {
   Condition { expr: C, negated: bool },
   EndCondition { expr: E, negated: bool },
@@ -111,7 +211,7 @@ pub enum Semantic<C, E, A, S> {
   StageEntry(S),
 }
 
-impl<C, E, S> Semantic<C, E, GameRule, S> {
+impl<C, E, S> Semantic<C, E, SGameRule, S> {
   pub fn raw(&self) -> &str {
     match self {
       Semantic::Condition { expr: _, negated } => {
@@ -129,7 +229,7 @@ impl<C, E, S> Semantic<C, E, GameRule, S> {
         return "EndCondition"
       },
       Semantic::Action(rule) => {
-        if matches!(rule, GameRule::Action(SActionRule { node: ActionRule::EndAction(SEndType { node: EndType::Stage, span: _ } ), span: _ } )) {
+        if matches!(rule.node, GameRule::Action(SActionRule { node: ActionRule::EndAction(SEndType { node: EndType::Stage, span: _ } ), span: _ } )) {
           return "EndStage"
         }
         return "Action"
@@ -151,7 +251,7 @@ impl<C, E, S> Semantic<C, E, GameRule, S> {
 }
 
 /// Set of control payload. 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Control {
   Choice,
   Optional,
@@ -200,26 +300,39 @@ impl Control {
 //   }
 // }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub enum GameFlowError {
+  Unreachable { span: OwnedSpan },
+  NoStageToEnd { span: OwnedSpan },
+  FlowNotConnected { span: OwnedSpan },
+  FlowNotConnectedWithControl
+}
+
+
 /// fsm: The current IR being constructed.
 /// stage_exits: Keeping track of stage_exits
-pub struct IrBuilder<T> {
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "T: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
+pub struct IrBuilder<T: serde::Serialize> {
   pub fsm: Ir<T>,
   state_counter: u32,
   stage_exits: Vec<u32>,
+  pub diagnostics: Vec<GameFlowError>, 
 }
 
-impl<T> Default for IrBuilder<T> {
+impl<T: Serialize + DeserializeOwned> Default for IrBuilder<T> {
   fn default() -> Self {
     IrBuilder {
       fsm: Ir::default(),
       state_counter: 0,
       stage_exits: Vec::new(),
+      diagnostics: Vec::new()
     }
   }
 }
 
 
-pub type PayloadT = Payload<Semantic<SBoolExpr, SEndCondition, GameRule, SID>>;
+pub type PayloadT = Payload<Semantic<SBoolExpr, SEndCondition, SGameRule, SID>>;
 
 impl IrBuilder<PayloadT> {
   /// Increments the state_counter.
@@ -249,9 +362,19 @@ impl IrBuilder<PayloadT> {
     );
   }
 
+  fn unreachable(&mut self, flows: &[SFlowComponent]) {
+    if !flows.is_empty() {
+      for f in flows.iter() {
+        self.diagnostics.push(
+          GameFlowError::Unreachable { span: f.span.clone() }
+        );
+      }
+    }
+  }
+
   /// Builds FSM.
   /// Initializes the first state and then continues with the building of the FlowComponent's
-  pub fn build_ir(&mut self, game: SGame) {
+  pub fn build_ir(&mut self, game: &SGame) {
     // Initialize entry
     let entry = 0;
     self.fsm.add_state(StateID(entry));
@@ -281,12 +404,18 @@ impl IrBuilder<PayloadT> {
           // The flow_exit was not used, so remove it
           self.remove_state(flow_exit);
 
+          // Check for unreachable code
+          self.unreachable(&flows[(i+1)..]);
+
           // Every FlowComponent after this will not be evaluated 
           return GameFlowChange::EndCurrentStage(stage)
         },
         GameFlowChange::EndGame(game) => {
           // The flow_exit was not used, so remove it
           self.remove_state(flow_exit);
+
+          // Check for unreachable code
+          self.unreachable(&flows[(i+1)..]);
 
           // Every FlowComponent after this will not be evaluated 
           return GameFlowChange::EndGame(game)
@@ -312,7 +441,7 @@ impl IrBuilder<PayloadT> {
         },
         FlowComponent::Rule(rule) => {
             // Can have GameFlowChanges! So return here.
-            return self.build_rule(&rule.node, entry, exit)
+            return self.build_rule(rule, entry, exit)
         },
         FlowComponent::IfRule(if_rule) => {
             self.build_if_rule(&if_rule.node, entry, exit)
@@ -356,8 +485,7 @@ impl IrBuilder<PayloadT> {
     let end_condition = stage.end_condition.clone();
 
     // Creating a new stage_exit
-    let stage_exit = exit;
-    self.stage_exits.push(stage_exit);
+    self.stage_exits.push(exit);
 
     // Check End-Condition Type
     match end_condition.node {
@@ -378,13 +506,13 @@ impl IrBuilder<PayloadT> {
           // Remove current Stage
           self.stage_exits.pop();
 
-          return stage_exit
+          return exit
         },
         _ => {
           // Do a split with EndCondition and NotEndCondition
           self.new_edge(
             entry,
-            stage_exit,
+            exit,
             Payload::Instruction(Semantic::EndCondition { expr: end_condition.clone(), negated: true })
           );
 
@@ -408,65 +536,82 @@ impl IrBuilder<PayloadT> {
               _ => {}
           }
 
-          let flows_exit = self.new_state();
-          match self.build_flows(&stage.flows, else_state, flows_exit) {
-              GameFlowChange::None(_) => {
-                self.new_edge(
-                  flows_exit,
-                  entry,
-                  Payload::Instruction(Semantic::StageRoundCounter(stage_id.clone()))
-                );
-              },
-              _ => {}
-          }
-
           // Remove current Stage
           self.stage_exits.pop();
 
-          return stage_exit
+          return exit
         },
     }
   }
   
   /// Needs to take care of GameFlowChange. Only Source that emits this.
   /// Takes care of EndStage and EndGame
-  fn build_rule(&mut self, rule: &GameRule, entry: u32, exit: u32) -> GameFlowChange {
+  fn build_rule(&mut self, rule: &SGameRule, entry: u32, exit: u32) -> GameFlowChange {
     // Take care of EndStage
-    if matches!(rule, GameRule::Action(SActionRule { node: ActionRule::EndAction(SEndType { node: EndType::Stage, span: _ } ), span: _ } )) {
-      let last_stage_exit = self.stage_exits.last().expect("No Stage found to end!").clone();
+    match &rule.node {
+        GameRule::Action(spanned) => {
+            if matches!(spanned, SActionRule { node: ActionRule::EndAction(SEndType { node: EndType::Stage, span: _ } ), span: _ } ) {
+              if let Some(last_stage_exit) = self.stage_exits.last().cloned() {
+                self.new_edge(
+                  entry,
+                  last_stage_exit,
+                  Payload::Instruction(Semantic::Action(rule.clone()))
+                );
 
-      self.new_edge(
-        entry,
-        last_stage_exit,
-        Payload::Instruction(Semantic::Action(rule.clone()))
-      );
+                // Nothing after end stage will be evaluated!
+                return GameFlowChange::EndCurrentStage(last_stage_exit);
+              } else {
+                // No stage found to end
+                self.diagnostics.push(
+                  GameFlowError::NoStageToEnd { span: spanned.span.clone() }
+                );
+              }
+            }
 
-      // Nothing after end stage will be evaluated!
-      return GameFlowChange::EndCurrentStage(last_stage_exit);
+            // Take care of EndGame
+            if matches!(spanned, SActionRule { node: ActionRule::EndAction(SEndType { node: EndType::GameWithWinner(_), span: _ } ), span: _ } ) {
+              let goal = self.fsm.goal.0;
+
+              self.new_edge(
+                entry,
+                goal,
+                Payload::Instruction(Semantic::Action(rule.clone()))
+              );
+
+              // Nothing after end game will be evaluated!
+              return GameFlowChange::EndGame(goal);
+            } 
+
+            // Normal action with no GameFlowChange
+            self.new_edge(
+              entry,
+              exit,
+              Payload::Instruction(Semantic::Action(rule.clone()))
+            );
+
+            return GameFlowChange::None(exit)
+        },
+        GameRule::SetUp(_) => {
+          // Normal action with no GameFlowChange
+          self.new_edge(
+            entry,
+            exit,
+            Payload::Instruction(Semantic::Action(rule.clone()))
+          );
+
+          return GameFlowChange::None(exit)
+        },
+        GameRule::Scoring(_) => {
+          // Normal action with no GameFlowChange
+          self.new_edge(
+            entry,
+            exit,
+            Payload::Instruction(Semantic::Action(rule.clone()))
+          );
+
+          return GameFlowChange::None(exit)
+        },
     }
-
-    // Take care of EndGame
-    if matches!(rule, GameRule::Action(SActionRule { node: ActionRule::EndAction(SEndType { node: EndType::GameWithWinner(_), span: _ } ), span: _ } )) {
-      let goal = self.fsm.goal.0;
-
-      self.new_edge(
-        entry,
-        goal,
-        Payload::Instruction(Semantic::Action(rule.clone()))
-      );
-
-      // Nothing after end game will be evaluated!
-      return GameFlowChange::EndGame(goal);
-    }
-    
-    // Normal action with no GameFlowChange
-    self.new_edge(
-      entry,
-      exit,
-      Payload::Instruction(Semantic::Action(rule.clone()))
-    );
-
-    return GameFlowChange::None(exit)
   }  
 
   /// GameFlowChanges are handled separately. build_if_rule does not need to worry!

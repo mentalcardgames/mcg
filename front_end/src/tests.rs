@@ -139,80 +139,65 @@ fn test_game_ir() {
 
   let input = 
         "
-        player P1, P2, P3
-        turnorder (P1, P2, P3)
-        location Hand, LayDown, Trash on all
-        location Stock, Discard on table
-        card on Stock:
-          Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)
-            for Suite(Diamonds, Hearts, Spades, Clubs)
-        precedence RankOrder on Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King)
-        points Values on Rank(Ace: 1, Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7, Eight: 8, Nine: 9 , Ten: 10, Jack: 10, Queen: 10, King: 10)
-        combo Sequence where ((size >= 3 and Suite same) and Rank adjacent using RankOrder)
-        combo Set where ((size >= 3 and Suite distinct) and Rank same)
-        combo Deadwood where (not Sequence and not Set)
+          player P1, P2, P3
+          turnorder (P1, P2, P3)
+          location Hand, LayDown, Trash on all
+          location Stock, Discard on table
+          card on Stock:
+            Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)
+              for Suite(Diamonds, Hearts, Spades, Clubs)
+          precedence RankOrder on Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King)
+          points Values on Rank(Ace: 1, Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7, Eight: 8, Nine: 9 , Ten: 10, Jack: 10, Queen: 10, King: 10)
+          combo Sequence where ((size >= 3 and Suite same) and Rank adjacent using RankOrder)
+          combo Set where ((size >= 3 and Suite distinct) and Rank == \"Ace\")
+          combo Deadwood where (not Sequence and not Set)
 
-        stage Preparation for current until end {
-          deal 12 from Stock top private to Hand of all
-          if (Hand is empty) {
-            end stage
-          }
-        }
-
-        stage Collect for current until previous out of stage  {
-          choose {
-            move Discard top private to Hand
-            or
-            move Stock top private to Hand
+          stage Preparation for current 1 times {
+            deal 12 from Stock top private to Hand of all
           }
 
-          move any from Hand face up to Discard top
+          stage Collect for current until previous out of stage  {
+            choose {
+              move Discard top private to Hand
+              or
+              move Stock top private to Hand
+            }
 
-          if (sum of Deadwood in Hand using Values <= 10) {
-            optional {
-              move all from Set in Hand face up to LayDown top
-              move all from Sequence in Hand face up to LayDown top
+            move any from Hand face up to Discard top
 
-              if (Hand is empty) {
-                move all from Set in Hand of next face up to LayDown top of next
-                move all from Sequence in Hand of next face up to LayDown top of next
-                move Hand of next face up to Trash of next
+            if (sum of Deadwood in Hand using Values <= 10) {
+              optional {
+                move all from Set in Hand face up to LayDown top
+                move all from Sequence in Hand face up to LayDown top
 
-                move Hand face up to Trash
-                set current out of stage
+                if (Hand is empty) {
+                  move all from Set in Hand of next face up to LayDown top of next
+                  move all from Sequence in Hand of next face up to LayDown top of next
+                  move Hand of next face up to Trash of next
 
-                end game with winner current
+                  move Hand face up to Trash
+                  set current out of stage
+                }
               }
             }
+
+            cycle to next
           }
 
-          cycle to next
-        }
+          stage FinalLayDown for current 1 times {
+            move LayDown of previous face up to Hand of current
+            move all from Set in Hand face up to LayDown top
+            move all from Sequence in Hand face up to LayDown top
 
-        stage FinalLayDown for current 1 times {
-          move LayDown of previous face up to Hand of current
-          move all from Set in Hand face up to LayDown top
-          move all from Sequence in Hand face up to LayDown top
+            move Hand face up to Trash
+          }
 
-          move Hand face up to Trash
-          end stage
-        }
+          memory LeftOver on all
 
-        conditional {
-          case Hand is empty:
-            end game with winner current
-          case Hand is empty:
-            end turn
-          case Hand is empty:
-            end turn
-          case else:
-            end turn
-        }
-
-        score sum of Trash using Values to LeftOver of all
-        winner is lowest LeftOver
-    "
-    ;
+          score sum of Trash using Values to LeftOver of all
+          winner is lowest LeftOver
+      "
+      ;
   
     
   // We pass CGDSLParser::extrema_of_card_set as the mapper
@@ -228,7 +213,7 @@ fn test_game_ir() {
 
   if let Ok(game) = result {
     builder.build_ir(
-      game
+      &game
     );
 
     let fsm = &builder.fsm;

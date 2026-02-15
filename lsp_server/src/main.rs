@@ -49,6 +49,11 @@ async fn main() {
             }
         });
 
+        // register a handler for your custom request
+        // backend.client.register_request("cgdsl/exportGraph", move |params| {
+        //     Box::pin(async move { backend.handle_custom_request(params).await })
+        // });
+
         backend
     })
     .finish();

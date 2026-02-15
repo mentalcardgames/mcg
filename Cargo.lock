@@ -490,6 +490,7 @@ dependencies = [
  "pest_consume",
  "pest_derive",
  "ropey",
+ "serde_json",
  "tokio",
  "tower-lsp",
 ]

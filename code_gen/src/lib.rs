@@ -150,6 +150,8 @@ pub fn ast(_: TokenStream, item: TokenStream) -> TokenStream {
         #(#lower_impls)*
 
         pub mod #module_lowered {
+            use serde::{Serialize, Deserialize};
+
             pub type ID = String;
 
             #(#unspanned_items)*
