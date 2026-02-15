@@ -57,6 +57,7 @@ impl CGDSLParser {
                 [choice_rule(t)] => FlowComponent::ChoiceRule(t),
                 [optional_rule(l)] => FlowComponent::OptionalRule(l),
                 [game_rule(k)] => FlowComponent::Rule(k),
+                [cond_rule(k)] => FlowComponent::Conditional(k),
         );
 
         Ok(
@@ -86,6 +87,66 @@ impl CGDSLParser {
         )
     }
 
+    pub(crate) fn kw_case(input: Node) -> Result<()> {
+        Ok(())
+    }
+
+    pub(crate) fn kw_conditional(input: Node) -> Result<()> {
+        Ok(())
+    }
+    
+    pub(crate) fn case(input: Node) -> Result<SCase> {
+        let span = OwnedSpan::from(input.as_span());
+        let node = match_nodes!(input.into_children();
+            [kw_case(_), bool_expr(n), flow_component(f)..] => Case::Bool(n, f.collect()),
+            [kw_case(_), flow_component(f)..] => Case::NoBool(f.collect()),
+        );
+
+        Ok(
+            SCase {
+                node: node,
+                span
+            }
+        )
+    }
+
+    pub(crate) fn kw_else(input: Node) -> Result<()> {
+        Ok(())
+    }
+
+    pub(crate) fn else_case(input: Node) -> Result<SCase> {
+        let span = OwnedSpan::from(input.as_span());
+        let node = match_nodes!(input.into_children();
+            [kw_case(_), kw_else(_), flow_component(f)..] => Case::Else(f.collect()),
+        );
+
+        Ok(
+            SCase {
+                node: node,
+                span
+            }
+        )
+    }
+
+    pub(crate) fn cond_rule(input: Node) -> Result<SConditional> {
+        let span = OwnedSpan::from(input.as_span());
+        let node = match_nodes!(input.into_children();
+            [kw_conditional(_), case(c).., else_case(e)] => {
+                let mut result: Vec<SCase> = c.collect();
+                result.push(e);
+                Conditional { cases: result }
+            },
+            [kw_conditional(_), case(c)..] => Conditional { cases: c.collect() },
+        );
+
+        Ok(
+            SConditional {
+                node: node,
+                span
+            }
+        )
+    }
+    
     pub(crate) fn if_rule(input: Node) -> Result<SIfRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
@@ -101,7 +162,6 @@ impl CGDSLParser {
                 span
             }
         )
-
     }
 
     pub(crate) fn choice_rule(input: Node) -> Result<SChoiceRule> {

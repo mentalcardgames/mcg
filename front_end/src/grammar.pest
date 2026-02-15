@@ -54,6 +54,7 @@ kw_deal       = @{ "deal" }
 kw_demand     = @{ "demand" }
 kw_distinct   = @{ "distinct" }
 kw_down       = @{ "down" }
+kw_else       = @{ "else" }
 kw_empty      = @{ "empty" }
 kw_end        = @{ "end" }
 kw_exchange   = @{ "exchange" }
@@ -145,6 +146,7 @@ kw = {
   | kw_demand
   | kw_distinct
   | kw_down
+  | kw_else
   | kw_empty
   | kw_end
   | kw_exchange
@@ -500,6 +502,7 @@ flow_component = {
   | game_rule 
   | if_rule 
   | choice_rule 
+  | cond_rule
   | optional_rule 
 }
 // =======================
@@ -658,7 +661,10 @@ seq_stage = { kw_stage ~ stage ~ kw_for ~ player_expr ~ end_condition ~ "{" ~ fl
 
 // CondRule
 // =======================
-cond_rule = { kw_conditional ~ ":" ~ (kw_case ~ bool_expr? ~ ":" ~ flow_component+)+ }
+case = { (kw_case ~ bool_expr? ~ ":" ~ flow_component+) }
+else_case = { (kw_case ~ kw_else ~ ":" ~ flow_component+) }
+
+cond_rule = { kw_conditional ~ "{" ~ case+ ~ else_case? ~ "}" }
 // =======================
 
 // IfRule

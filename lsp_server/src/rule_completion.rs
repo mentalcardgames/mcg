@@ -1,6 +1,6 @@
 use dashmap::DashMap;
-use front_end::{ast::ast::{Game, SGame}, get_all_snippets, parser::Rule, symbols::{GameType, SymbolVisitor, Var}, walker::Walker};
-use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, CompletionResponse, InsertTextFormat, Position};
+use front_end::{get_all_snippets, parser::Rule, symbols::GameType};
+use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind, CompletionResponse, InsertTextFormat};
 use pest_consume::Error;
 use pest::error;
 // use get_snippet_map;
@@ -14,7 +14,7 @@ static SNIPPET_LOOKUP: LazyLock<HashMap<&'static str, Vec<&'static str>>> = Lazy
 // Inside your completion function
 pub fn get_completions(err: Error<Rule>, symbol_table: &DashMap<GameType, Vec<String>>) -> Option<CompletionResponse> {
     match err.variant {
-        error::ErrorVariant::ParsingError { positives, negatives } => {
+        error::ErrorVariant::ParsingError { positives, negatives: _ } => {
           let mut completion_response = vec![];
             for rule in positives.iter() {
               if let Some(v) = variable_completion(rule, symbol_table) {

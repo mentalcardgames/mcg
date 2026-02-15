@@ -1,39 +1,6 @@
 use front_end::{ast::ast::SGame, symbols::{GameType, SymbolVisitor}, walker::Walker};
 use ropey::Rope;
-use tower_lsp::lsp_types::*;
-
 use crate::validation::to_range;
-
-fn server_capabilities() -> ServerCapabilities {
-    ServerCapabilities {
-        text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
-        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
-            SemanticTokensOptions {
-                legend: SemanticTokensLegend {
-                    token_types: vec![
-                        SemanticTokenType::from("player"),
-                        SemanticTokenType::from("team"),
-                        SemanticTokenType::from("location"),
-                        SemanticTokenType::from("precedence"),
-                        SemanticTokenType::from("pointmap"),
-                        SemanticTokenType::from("combo"),
-                        SemanticTokenType::from("key"),
-                        SemanticTokenType::from("value"),
-                        SemanticTokenType::from("memory"),
-                        SemanticTokenType::from("token"),
-                        SemanticTokenType::from("stage"),
-                        SemanticTokenType::from("notype"),
-                    ],
-                    token_modifiers: vec![],
-                },
-                full: Some(SemanticTokensFullOptions::Bool(true)),
-                range: None,
-                work_done_progress_options: Default::default(),
-            }
-        )),
-        ..Default::default()
-    }
-}
 
 pub struct AbsoluteToken {
     line: u32,

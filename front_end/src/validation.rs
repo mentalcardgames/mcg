@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use pest_consume::Parser;
 use crate::parser::Result;
 use crate::semantic::{SemanticError, SemanticVisitor};
-use crate::symbols::{GameType, TypedVars};
+use crate::symbols::GameType;
 use crate::{ast::ast::SGame, parser::{CGDSLParser, Rule}, symbols::{SymbolError, SymbolVisitor}, walker::Walker};
 
 pub fn parse_document(text: &str) -> Result<SGame> {

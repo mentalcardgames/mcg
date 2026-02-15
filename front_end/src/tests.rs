@@ -152,8 +152,11 @@ fn test_game_ir() {
         combo Set where ((size >= 3 and Suite distinct) and Rank same)
         combo Deadwood where (not Sequence and not Set)
 
-        stage Preparation for current 1 times {
+        stage Preparation for current until end {
           deal 12 from Stock top private to Hand of all
+          if (Hand is empty) {
+            end stage
+          }
         }
 
         stage Collect for current until previous out of stage  {
@@ -177,6 +180,8 @@ fn test_game_ir() {
 
                 move Hand face up to Trash
                 set current out of stage
+
+                end game with winner current
               }
             }
           }
@@ -191,6 +196,17 @@ fn test_game_ir() {
 
           move Hand face up to Trash
           end stage
+        }
+
+        conditional {
+          case Hand is empty:
+            end game with winner current
+          case Hand is empty:
+            end turn
+          case Hand is empty:
+            end turn
+          case else:
+            end turn
         }
 
         score sum of Trash using Values to LeftOver of all

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use dashmap::DashMap;
 use front_end::ast::ast::SGame;
-use front_end::diagnostics;
 use front_end::symbols::GameType;
 use front_end::validation::parse_document;
 use ropey::{Rope};
@@ -139,7 +138,7 @@ impl LanguageServer for Backend {
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
-        let position = params.text_document_position.position;
+        // let position = params.text_document_position.position;
 
         let text = {
             let docs = self.documents.lock().await;

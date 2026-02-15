@@ -656,6 +656,7 @@ pub mod ast {
         IfRule(SIfRule),
         ChoiceRule(SChoiceRule),
         OptionalRule(SOptionalRule),
+        Conditional(SConditional),
     }
 
 
@@ -731,6 +732,23 @@ pub mod ast {
         pub flows: Vec<SFlowComponent>,
     }
 
+
+    pub type SCase = Spanned<Case>;
+
+    #[derive(Debug, Clone)]
+    pub enum Case {
+        Else(Vec<SFlowComponent>),
+        NoBool(Vec<SFlowComponent>),
+        Bool(SBoolExpr, Vec<SFlowComponent>),
+    }
+
+
+    pub type SConditional = Spanned<Conditional>;
+
+    #[derive(Debug, Clone)]
+    pub struct Conditional {
+        pub cases: Vec<SCase>,
+    }
 
     pub type SIfRule = Spanned<IfRule>;
 
