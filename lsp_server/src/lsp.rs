@@ -120,6 +120,11 @@ impl LanguageServer for Backend {
                     }),
                 ),
 
+                execute_command_provider: Some(ExecuteCommandOptions {
+                    commands: vec!["cgdsl.generateGraph".to_string()],
+                    ..Default::default()
+                }),
+
                 ..Default::default()
             },
             ..Default::default()
@@ -326,29 +331,36 @@ impl LanguageServer for Backend {
         })))
     }
 
-    // async fn execute_command(&self, params: ExecuteCommandParams) -> jsonrpc::Result<Option<serde_json::Value>> {
-        // let uri = params.text_document.uri;
-        // let map = self.documents.lock().await;
-        // let doc = map.get(&uri).ok_or_else(|| Error::invalid_params(""))?;
-        // let tokens;
-        // if let Some(safe_ast) = &*self.last_ast.load() {
-        //     if params.command == "cgdsl.generateGraph" {
-        //         // Get your graph data
-        //         let graph = safe_ast.to_graph(); 
+    async fn execute_command(&self, params: ExecuteCommandParams) -> jsonrpc::Result<Option<serde_json::Value>> {
+        if let Some(safe_ast) = &*self.last_ast.load() {
+            if params.command == "cgdsl.generateGraph" {
+                // Get your graph data
+                let graph = safe_ast.to_graph(); 
                 
-        //         // Return it as a JSON value
-        //         let json_value = serde_json::to_value(&graph)
-        //             .map_err(|_| jsonrpc::Error::internal_error())?;
+                // 1. Get the path from TS arguments
+                let path_str = params.arguments.get(0)
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| jsonrpc::Error::invalid_params("Missing path"))?;
+                
+                let dot_path = std::path::Path::new(path_str);
+
+                // 3. Write the DOT file (The "Game View")
+                front_end::fsm_to_dot::fsm_to_dot(&graph, dot_path).map_err(|_| {
+                    jsonrpc::Error::internal_error()
+                })?;
+                
+                // Return it as a JSON value
+                let json_value = serde_json::to_value(&graph)
+                    .map_err(|_| jsonrpc::Error::internal_error())?;
                     
-        //         return Ok(Some(json_value));
-        //     }
-        // } else {
-        //     return Ok(None);
-        // }
+                return Ok(Some(json_value));
+            }
+        } else {
+            return Ok(None);
+        }
 
-        // Err(jsonrpc::Error::method_not_found())
-
-    // }
+        Err(jsonrpc::Error::method_not_found())
+    }
 
     // Use this for REQUESTS (expects a response)
     async fn symbol(&self, _params: WorkspaceSymbolParams) -> jsonrpc::Result<Option<Vec<SymbolInformation>>> {

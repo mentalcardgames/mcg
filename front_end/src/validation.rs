@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use pest_consume::Parser;
-use crate::ir::{GameFlowError, Ir, IrBuilder, PayloadT};
+use crate::ir::{GameFlowError, IrBuilder, PayloadT};
 use crate::parser::Result;
 use crate::semantic::{SemanticError, SemanticVisitor};
 use crate::symbols::GameType;

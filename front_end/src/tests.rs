@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::helper::fsm_to_dot::fsm_to_dot;
+use crate::fsm_to_dot::fsm_to_dot;
 use crate::ir::{Ir, IrBuilder, PayloadT};
 use crate::walker::*;
 // use crate::{lower::Lower};

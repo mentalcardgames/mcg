@@ -14,14 +14,21 @@
       "editor.semanticHighlighting.enabled": true
     }
   },
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:cgdsl",
+    "onCommand:cgdsl.runFile"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [{
       "id": "cgdsl",
       "aliases": ["CGDSL", "cgdsl"],
       "extensions": [".cgdsl"],
-      "configuration": "./language-configuration.json"
+      "configuration": "./language-configuration.json",
+      "icon": {
+        "light": "./icons/cgdsl-light-icon.svg",
+        "dark": "./icons/cgdsl-dark-icon.svg"
+      }
     }],
     "themes": [
       {
