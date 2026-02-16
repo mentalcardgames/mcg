@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
-use crate::ast::ast::SID;
-use crate::ast::ast::*;
+use crate::ast::ast_spanned::*;
 use crate::spans::*;
 use crate::walker::AstPass;
-use crate::ast::ast::NodeKind as NodeKind;
+use crate::ast::ast_spanned::NodeKind as NodeKind;
 use crate::walker::Walker;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]

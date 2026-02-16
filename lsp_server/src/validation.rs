@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::error_to_diagnostics::*;
-use front_end::{ast::ast::SGame, symbols::GameType, validation::{parse_document, program_validation, semantic_validation, symbol_validation}};
+use front_end::{ast::ast_spanned::SGame, symbols::GameType, validation::{parse_document, program_validation, semantic_validation, symbol_validation}};
 use ropey::Rope;
 use tower_lsp::lsp_types::Diagnostic;
 

@@ -1,6 +1,6 @@
 use crate::spans::*;
 
-use crate::ast::ast::NodeKind as NodeKind;
+use crate::ast::ast_spanned::NodeKind as NodeKind;
 
 pub trait AstPass {
     fn enter_node<T: Walker>(&mut self, node: &T)
@@ -97,6 +97,19 @@ where
 
     fn kind(&self) -> Option<NodeKind<'_>> {
         self.node.kind()
+    }
+}
+
+impl<T> Walker for Box<T>
+where
+    T: Walker,
+{
+    fn walk<V: AstPass>(&self, visitor: &mut V) {
+        self.as_ref().walk(visitor);
+    }
+
+    fn kind(&self) -> Option<NodeKind<'_>> {
+        self.as_ref().kind()
     }
 }
 

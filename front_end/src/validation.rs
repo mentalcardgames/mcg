@@ -5,7 +5,7 @@ use crate::ir::{GameFlowError, IrBuilder, SpannedPayload};
 use crate::parser::Result;
 use crate::semantic::{SemanticError, SemanticVisitor};
 use crate::symbols::GameType;
-use crate::{ast::ast::SGame, parser::{CGDSLParser, Rule}, symbols::{SymbolError, SymbolVisitor}, walker::Walker};
+use crate::{ast::ast_spanned::SGame, parser::{CGDSLParser, Rule}, symbols::{SymbolError, SymbolVisitor}, walker::Walker};
 
 pub fn parse_document(text: &str) -> Result<SGame> {
   // 1. Parsing: pest_consume::parse already returns Result<Nodes, Error<Rule>>

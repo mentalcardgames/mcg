@@ -1,4 +1,4 @@
-use front_end::{ast::ast::SGame, symbols::{GameType, SymbolVisitor}, walker::Walker};
+use front_end::{ast::ast_spanned::SGame, symbols::{GameType, SymbolVisitor}, walker::Walker};
 use crate::error_to_diagnostics::to_range;
 
 pub struct AbsoluteToken {

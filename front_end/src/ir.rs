@@ -1,8 +1,9 @@
 use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Debug};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-use crate::ast::ast::ast_lowered as L;
-use crate::{ast::ast::{GameRule, *}, lower::Lower, spans::OwnedSpan};
+use crate::ast as L;
+use crate::ast::ast_spanned::*;
+use crate::{lower::Lower, spans::*};
 
 // ===========================================================================
 // Implement transform to Ir from AST
@@ -262,7 +263,7 @@ impl AstContext for LoweredCtx {
     type Condition = L::BoolExpr;
     type EndCondition = L::EndCondition;
     type GameRule = L::GameRule;
-    type Id = L::ID;
+    type Id = String;
 }
 
 // ===========================================================================

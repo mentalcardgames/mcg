@@ -1,6 +1,6 @@
 use std::{collections::HashMap};
 
-use crate::{ast::ast::{NodeKind, *}, spans::OwnedSpan, symbols::Var, walker::AstPass};
+use crate::{ast::ast_spanned::{NodeKind, *}, spans::OwnedSpan, symbols::Var, walker::AstPass};
 
 pub enum SemanticError {
   KeyNotFoundForType { ty: String, key: Var },

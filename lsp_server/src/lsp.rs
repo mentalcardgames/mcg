@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dashmap::DashMap;
-use front_end::ast::ast::SGame;
+use front_end::ast::ast_spanned::SGame;
 use front_end::symbols::GameType;
 use front_end::validation::parse_document;
 use ropey::{Rope};
@@ -81,16 +81,29 @@ impl Backend {
         match validate_parsing(&rope) {
             Ok(ast) => {
                 // Run semantic validation
+                match validate_document(&ast) {
+                    Ok(new_table) => {
+                        // Update the symbol table
+                        self.symbol_table.clear();
+                        for (game_type, names) in new_table {
+                            self.symbol_table.insert(game_type, names);
+                        }
+                    },
+                    Err(v) => {
+                        diagnostics.extend(v);
+                    }
+                }
+                // Run game validation
                 match validate_game(&ast) {
                     None => {},
                     Some(v) => {
-                        diagnostics = v;
+                        diagnostics.extend(v);
                     }
                 }
                 self.last_ast.store(Some(Arc::new(ast)));
             }
             Err(err_diagnostics) => {
-                diagnostics = err_diagnostics;
+                diagnostics.extend(err_diagnostics);
             }
         }
 

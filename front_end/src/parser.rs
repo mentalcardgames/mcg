@@ -1,7 +1,7 @@
 use pest_consume::{Parser, match_nodes};
 
 use crate::{spans::*};
-use crate::{ast::ast::*};
+use crate::ast::ast_spanned::*;
 
 
 #[derive(Parser)]
@@ -718,7 +718,12 @@ impl CGDSLParser {
 
         Ok(
             SIntExpr {
-                node: IntExpr::Literal(int?),
+                node: IntExpr::Literal(
+                    SInt {
+                        node: int?,
+                        span: span.clone()
+                    }
+                ),
                 span
             }
         )

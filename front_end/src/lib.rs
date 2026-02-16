@@ -1,6 +1,6 @@
 pub mod parser;
 pub mod lower;
-pub mod ast;
+include!("ast.rs");
 pub mod ir;
 pub mod symbols;
 pub mod visitor;

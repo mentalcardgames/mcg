@@ -1,206 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Fields, Item, ItemMod, Visibility, parse_macro_input};
-
-#[proc_macro_attribute]
-pub fn ast(_: TokenStream, item: TokenStream) -> TokenStream {
-    let mut module = parse_macro_input!(item as ItemMod);
-    let enum_name = format_ident!("NodeKind");
-
-    let attrs = &module.attrs;
-    let vis = &module.vis;
-    let ident = &module.ident;
-
-    let items = match &mut module.content {
-        Some((_, items)) => items,
-        None => {
-            return syn::Error::new_spanned(&module, "node_kinds requires an inline module { ... }")
-                .to_compile_error()
-                .into();
-        }
-    };
-
-    let module_lowered = format_ident!("{}_lowered", ident);
-
-    // Unspan and lowering logic
-    let mut unspanned_items = Vec::new();
-    let mut lower_impls = Vec::new();
-
-    for item in items.iter() {
-        match item {
-            Item::Struct(s) => {
-                let mut unspanned_s = s.clone();
-                unspan_fields(&mut unspanned_s.fields);
-                
-                let name = &s.ident;
-                let lower_logic = generate_struct_lower(name, &s.fields, &module_lowered);
-                
-                unspanned_items.push(Item::Struct(unspanned_s));
-                lower_impls.push(quote! {
-                    impl Lower<#module_lowered::#name> for #name {
-                        fn lower(&self) -> #module_lowered::#name { #lower_logic }
-                    }
-                });
-            }
-            Item::Enum(e) => {
-                let mut unspanned_e = e.clone();
-                for v in &mut unspanned_e.variants { unspan_fields(&mut v.fields); }
-                
-                let name = &e.ident;
-                let lower_logic = generate_enum_lower(name, &e.variants, &module_lowered);
-                
-                unspanned_items.push(Item::Enum(unspanned_e));
-                lower_impls.push(quote! {
-                    impl Lower<#module_lowered::#name> for #name {
-                        fn lower(&self) -> #module_lowered::#name { #lower_logic }
-                    }
-                });
-            }
-            _ => {}
-        }
-    }
-
-    let unspan_and_lower = quote! {
-        #(#lower_impls)*
-
-        pub mod #module_lowered {
-            use serde::{Serialize, Deserialize};
-
-            pub type ID = String;
-
-            #(#unspanned_items)*
-        }
-    };
-
-    // 1. Generate the variants
-    let mut variants = Vec::new();
-    let mut walker_impls = Vec::new();
-    println!("Total items found in module: {}", items.len());
-
-    for item in items.iter() {
-        // Use a simpler visibility check to ensure we aren't skipping everything
-        let item_vis = match item {
-            Item::Struct(s) => &s.vis,
-            Item::Enum(e) => &e.vis,
-            Item::Type(t) => &t.vis,
-            _ => continue,
-        };
-
-        // If it's not private, add it to the enum
-        if matches!(item_vis, Visibility::Public(_)) {
-            // Extract Ident and generate the specific walking logic for this item
-            let (ident, walk_body) = match item {
-                Item::Struct(s) => (&s.ident, generate_struct_walk(&s.fields)),
-                Item::Enum(e) => (&e.ident, generate_enum_walk(&e.variants)),
-                // Type aliases don't get Walker impls directly (usually the underlying type has it)
-                // But we add them to the Enum so they can be "wrapped"
-                Item::Type(t) => {
-                    let id = &t.ident;
-                    variants.push(quote!(#id(&'a #id)));
-                    continue; 
-                },
-                _ => continue,
-            };
-
-            // Add to the Enum: VariantName(&'a TypeName)
-            variants.push(quote!(#ident(&'a #ident)));
-
-            // Add the Walker Implementation for this specific struct/enum
-            walker_impls.push(quote! {
-                impl Walker for #ident {
-                    fn walk<V: AstPass>(&self, visitor: &mut V) {
-                        visitor.enter_node(self);
-                        #walk_body
-                        visitor.exit_node(self);
-                    }
-                    fn kind(&self) -> Option<NodeKind> {
-                        Some(NodeKind::#ident(self))
-                    }
-                }
-            }); 
-        }
-    }
-
-    // 2. Build the output explicitly
-    // This ensures the module structure is exactly what the compiler expects
-    let output = quote! {
-        #(#attrs)*
-        #vis mod #ident {
-            #(#items)*
-
-            #[derive(Debug, Clone)] // Removed Copy as types inside might not be Copy
-            pub enum #enum_name<'a> {
-                #(#variants),*
-            }
-
-            #(#walker_impls)*
-
-            #unspan_and_lower
-        }
-    };
-
-    // DEBUG: This will show you exactly what is happening in your terminal
-    // during 'cargo check' or 'cargo build'
-    // println!("--- MACRO OUTPUT ---\n{}\n-------------------", output.to_string());
-
-    output.into()
-}
-
-fn unspan_fields(fields: &mut syn::Fields) {
-    for field in fields.iter_mut() {
-        field.ty = transform_type(&field.ty);
-    }
-}
-
-fn transform_type(ty: &syn::Type) -> syn::Type {
-    match ty {
-        // Handle Paths: SID, Spanned<T>, Vec<T>, Box<T>
-        syn::Type::Path(type_path) => {
-            let mut new_path = type_path.clone();
-            for segment in &mut new_path.path.segments {
-                let ident_str = segment.ident.to_string();
-
-                // 1. Peel the Spanned layer
-                if ident_str == "Spanned" {
-                    if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                        if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
-                            return transform_type(inner_ty);
-                        }
-                    }
-                } 
-                // 2. Handle S-prefix Aliases (SIntExpr -> IntExpr)
-                else if ident_str.starts_with('S') && ident_str.chars().nth(1).map_or(false, |c| c.is_uppercase()) {
-                    segment.ident = syn::Ident::new(&ident_str[1..], segment.ident.span());
-                }
-
-                // 3. Recurse into Generics (Vec<SIntExpr> -> Vec<IntExpr>)
-                if let syn::PathArguments::AngleBracketed(args) = &mut segment.arguments {
-                    for arg in &mut args.args {
-                        if let syn::GenericArgument::Type(inner_ty) = arg {
-                            *inner_ty = transform_type(inner_ty);
-                        }
-                    }
-                }
-            }
-            syn::Type::Path(new_path)
-        }
-        // Handle Tuples: (SIntExpr, SIntExpr) -> (IntExpr, IntExpr)
-        syn::Type::Tuple(type_tuple) => {
-            let mut new_tuple = type_tuple.clone();
-            for elem in &mut new_tuple.elems {
-                *elem = transform_type(elem);
-            }
-            syn::Type::Tuple(new_tuple)
-        }
-        // Handle Pointers/Boxes: &SIntExpr or Box<SIntExpr>
-        syn::Type::Reference(type_ref) => {
-            let mut new_ref = type_ref.clone();
-            *new_ref.elem = transform_type(&new_ref.elem);
-            syn::Type::Reference(new_ref)
-        }
-        _ => ty.clone(),
-    }
-}
+use syn::{Fields, Ident, Item, ItemMod, Token, Variant, Visibility, parse_macro_input, punctuated::Punctuated};
 
 fn generate_struct_walk(fields: &syn::Fields) -> proc_macro2::TokenStream {
     match fields {
@@ -234,67 +34,322 @@ fn generate_enum_walk(variants: &syn::punctuated::Punctuated<syn::Variant, syn::
     quote! { match self { #(#arms)* } }
 }
 
-fn generate_struct_lower(
-    name: &syn::Ident, 
-    fields: &syn::Fields,
-    target_mod: &syn::Ident
-) -> proc_macro2::TokenStream {
-    match fields {
-        syn::Fields::Named(fields) => {
-            let f_names: Vec<_> = fields.named.iter().map(|f| &f.ident).collect();
-            quote! {
-                #target_mod::#name { 
-                    #( #f_names: self.#f_names.lower() ),* }
+#[proc_macro_attribute]
+pub fn spanned_ast(_: TokenStream, item: TokenStream) -> TokenStream {
+    let module = parse_macro_input!(item as ItemMod);
+
+    let attrs = &module.attrs;
+    let vis = &module.vis;
+    let ident = &module.ident;
+
+    let items = match &module.content {
+        Some((_, items)) => items,
+        None => {
+            return syn::Error::new_spanned(
+                &module,
+                "spanned_ast requires an inline module { ... }",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
+
+    let spanned_mod = format_ident!("{}_spanned", ident);
+
+    let mut spanned_items = Vec::new();
+    let mut lower_impls = Vec::new();
+    let mut type_items: Vec<Item> = Vec::new();
+
+    for item in items {
+        match item {
+            Item::Struct(s) if matches!(s.vis, Visibility::Public(_)) => {
+                let name = &s.ident;
+
+                // Clone and rewrite fields
+                let mut spanned_struct = s.clone();
+                span_fields(&mut spanned_struct.fields);
+
+                spanned_items.push(Item::Struct(spanned_struct));
+
+                // type SType = Spanned<Type>
+                let alias = format_ident!("S{}", name);
+                let type_item: Item = syn::parse_quote! {
+                    pub type #alias = Spanned<#name>;
+                };
+
+                type_items.push(type_item);
+
+                // Lower impl
+                let lower_body =
+                    generate_struct_lower_spanned(name, &s.fields);
+
+                lower_impls.push(quote! {
+                    impl Lower<super::#name> for Spanned<#name> {
+                        fn lower(&self) -> super::#name {
+                            #lower_body
+                        }
+                    }
+                });
+            }
+
+            Item::Enum(e) if matches!(e.vis, Visibility::Public(_)) => {
+                let name = &e.ident;
+
+                let mut spanned_enum = e.clone();
+                for variant in &mut spanned_enum.variants {
+                    span_fields(&mut variant.fields);
+                }
+
+                spanned_items.push(Item::Enum(spanned_enum));
+
+                let alias = format_ident!("S{}", name);
+                let type_item: Item = syn::parse_quote! {
+                    pub type #alias = Spanned<#name>;
+                };
+
+                type_items.push(type_item);
+
+                let lower_body =
+                    generate_enum_lower_spanned(name, &e.variants);
+
+                lower_impls.push(quote! {
+                    impl Lower<super::#name> for Spanned<#name> {
+                        fn lower(&self) -> super::#name {
+                            #lower_body
+                        }
+                    }
+                });
+            }
+
+            _ => {}
+        }
+    }
+
+    // 1. Generate the variants
+    let mut node_kinds = Vec::new();
+    let mut walker_impls = Vec::new();
+    // all items and adding the types
+    let all_items = vec![spanned_items.clone(), type_items.clone()].concat();
+    println!("Total items found in module: {}", items.len());
+
+    for item in all_items.iter() {
+        // Use a simpler visibility check to ensure we aren't skipping everything
+        let item_vis = match item {
+            Item::Struct(s) => &s.vis,
+            Item::Enum(e) => &e.vis,
+            Item::Type(t) => &t.vis,
+            _ => continue,
+        };
+
+        // If it's not private, add it to the enum
+        if matches!(item_vis, Visibility::Public(_)) {
+            // Extract Ident and generate the specific walking logic for this item
+            let (ident, walk_body) = match item {
+                Item::Struct(s) => (&s.ident, generate_struct_walk(&s.fields)),
+                Item::Enum(e) => (&e.ident, generate_enum_walk(&e.variants)),
+                // Type aliases don't get Walker impls directly (usually the underlying type has it)
+                // But we add them to the Enum so they can be "wrapped"
+                Item::Type(t) => {
+                    let id = &t.ident;
+                    node_kinds.push(quote!(#id(&'a #id)));
+                    continue; 
+                },
+                _ => continue,
+            };
+
+            // Add to the Enum: VariantName(&'a TypeName)
+            node_kinds.push(quote!(#ident(&'a #ident)));
+
+            // Add the Walker Implementation for this specific struct/enum
+            walker_impls.push(quote! {
+                impl Walker for #ident {
+                    fn walk<V: AstPass>(&self, visitor: &mut V) {
+                        visitor.enter_node(self);
+                        #walk_body
+                        visitor.exit_node(self);
+                    }
+                    fn kind(&self) -> Option<NodeKind> {
+                        Some(NodeKind::#ident(self))
+                    }
+                }
+            }); 
+        }
+    }
+
+    let output = quote! {
+        #(#attrs)*
+        #vis mod #ident {
+
+            #(#items)*
+
+            pub mod #spanned_mod {
+                use super::*;
+                use crate::{spans::*, lower::*, walker::*};
+
+                #(#spanned_items)*
+
+                #(#type_items)*
+
+                #(#lower_impls)*
+
+                #(#walker_impls)*
+
+                pub enum NodeKind<'a> {
+                    #(#node_kinds),*
+                }
             }
         }
-        syn::Fields::Unnamed(fields) => {
-            let indices = (0..fields.unnamed.len()).map(syn::Index::from);
-            quote! {
-                #target_mod::#name( #( self.#indices.lower() ),* )
-            }
-        }
-        syn::Fields::Unit => quote! {
-            #target_mod::#name
-        },
+    };
+
+    println!("{}", output.to_string());
+
+    output.into()
+}
+
+fn span_fields(fields: &mut syn::Fields) {
+    for field in fields.iter_mut() {
+        field.ty = transform_type_spanned(&field.ty);
     }
 }
-fn generate_enum_lower(
-    name: &syn::Ident, 
-    variants: &syn::punctuated::Punctuated<syn::Variant, syn::Token![,]>,
-    target_mod: &syn::Ident
+
+fn is_spanned(type_path: &syn::TypePath) -> bool {
+    type_path
+        .path
+        .segments
+        .last()
+        .map(|seg| seg.ident == "Spanned")
+        .unwrap_or(false)
+}
+
+fn transform_type_spanned(ty: &syn::Type) -> syn::Type {
+    match ty {
+        syn::Type::Path(type_path) => {
+            // If already Spanned<...>, leave it alone
+            if is_spanned(type_path) {
+                return ty.clone();
+            }
+
+            let mut new_path = type_path.clone();
+            let last_segment = new_path.path.segments.last_mut().unwrap();
+
+            match &mut last_segment.arguments {
+                syn::PathArguments::AngleBracketed(args) => {
+                    // ✅ This is a container/wrapper
+                    for arg in &mut args.args {
+                        if let syn::GenericArgument::Type(inner_ty) = arg {
+                            *inner_ty = transform_type_spanned(inner_ty);
+                        }
+                    }
+
+                    // 🚨 DO NOT WRAP OUTER TYPE
+                    syn::Type::Path(new_path)
+                }
+
+                _ => {
+                    // ✅ No generics → this is a leaf AST node
+                    syn::parse_quote!(Spanned<#ty>)
+                }
+            }
+        }
+
+        syn::Type::Reference(reference) => {
+            let mut new_ref = reference.clone();
+            *new_ref.elem = *Box::new(transform_type_spanned(&reference.elem));
+            syn::Type::Reference(new_ref)
+        }
+
+        syn::Type::Tuple(tuple) => {
+            let mut new_tuple = tuple.clone();
+            for elem in &mut new_tuple.elems {
+                *elem = transform_type_spanned(elem);
+            }
+            syn::Type::Tuple(new_tuple)
+        }
+
+        _ => ty.clone(),
+    }
+}
+
+fn generate_struct_lower_spanned(
+    name: &Ident,
+    fields: &Fields,
+) -> proc_macro2::TokenStream {
+    match fields {
+        Fields::Named(fields) => {
+            let names: Vec<_> =
+                fields.named.iter().map(|f| &f.ident).collect();
+
+            quote! {
+                super::#name {
+                    #( #names: self.node.#names.lower() ),*
+                }
+            }
+        }
+
+        Fields::Unnamed(fields) => {
+            let indices =
+                (0..fields.unnamed.len()).map(syn::Index::from);
+
+            quote! {
+                super::#name(
+                    #( self.node.#indices.lower() ),*
+                )
+            }
+        }
+
+        Fields::Unit => {
+            quote! { super::#name }
+        }
+    }
+}
+
+fn generate_enum_lower_spanned(
+    name: &Ident,
+    variants: &Punctuated<Variant, Token![,]>,
 ) -> proc_macro2::TokenStream {
     let arms = variants.iter().map(|v| {
         let v_ident = &v.ident;
-        // We must access the fields of the specific variant 'v'
+
         match &v.fields {
-            syn::Fields::Unnamed(fields) => {
-                let vars: Vec<_> = (0..fields.unnamed.len())
-                    .map(|i| quote::format_ident!("_f{}", i))
-                    .collect();
+            Fields::Unnamed(fields) => {
+                let vars: Vec<_> =
+                    (0..fields.unnamed.len())
+                        .map(|i| format_ident!("f{}", i))
+                        .collect();
 
                 quote! {
-                    Self::#v_ident( #( #vars ),* ) => {
-                        #target_mod::#name::#v_ident( #( #vars.lower() ),* )
+                    #name::#v_ident( #( #vars ),* ) => {
+                        super::#name::#v_ident(
+                            #( #vars.lower() ),*
+                        )
                     }
                 }
             }
-            syn::Fields::Named(fields) => {
-                let names: Vec<_> = fields.named.iter().map(|f| &f.ident).collect();
+
+            Fields::Named(fields) => {
+                let names: Vec<_> =
+                    fields.named.iter().map(|f| &f.ident).collect();
+
                 quote! {
-                    Self::#v_ident { #( #names ),* } => {
-                        #target_mod::#name::#v_ident { 
-                            #( #names: #names.lower() ),* }
+                    #name::#v_ident { #( #names ),* } => {
+                        super::#name::#v_ident {
+                            #( #names: #names.lower() ),*
+                        }
                     }
                 }
-            },
-            syn::Fields::Unit => quote! {
-                Self::#v_ident => #target_mod::#name::#v_ident,
-            },
+            }
+
+            Fields::Unit => {
+                quote! {
+                    #name::#v_ident => super::#name::#v_ident
+                }
+            }
         }
     });
-            
-    quote! { 
-        match self { 
-            #(#arms)* } 
+
+    quote! {
+        match &self.node {
+            #(#arms),*
+        }
     }
 }

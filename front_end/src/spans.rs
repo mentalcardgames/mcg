@@ -1,5 +1,8 @@
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
+pub type SID = Spanned<String>;
+pub type SInt = Spanned<i32>;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct OwnedSpan {
     pub start: usize,
