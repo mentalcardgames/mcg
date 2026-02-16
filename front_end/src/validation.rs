@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use pest_consume::Parser;
-use crate::ir::{GameFlowError, IrBuilder, PayloadT};
+use crate::ir::{GameFlowError, IrBuilder, SpannedPayload};
 use crate::parser::Result;
 use crate::semantic::{SemanticError, SemanticVisitor};
 use crate::symbols::GameType;
@@ -40,7 +40,7 @@ pub fn semantic_validation(game: &SGame) -> Option<Vec<SemanticError>> {
 }
 
 pub fn program_validation(game: &SGame) -> Option<Vec<GameFlowError>> {
-  let mut builder: IrBuilder<PayloadT> = IrBuilder::default();
+  let mut builder: IrBuilder<SpannedPayload> = IrBuilder::default();
 
   builder.build_ir(game);
 

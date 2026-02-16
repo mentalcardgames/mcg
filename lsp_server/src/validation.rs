@@ -37,30 +37,3 @@ pub fn validate_parsing(doc: &Rope) -> Result<SGame, Vec<Diagnostic>> {
 
   return Ok(result.unwrap())
 }
-
-
-// fn byte_offset_to_position(rope: &Rope, byte_offset: usize) -> Position {
-//     // Clamp to ensure we don't panic on a trailing byte index
-//     let safe_byte = byte_offset.min(rope.len_bytes());
-//     let char_idx = rope.byte_to_char(safe_byte);
-
-//     let line_idx = rope.char_to_line(char_idx);
-//     let line_start_char = rope.line_to_char(line_idx);
-    
-//     // The number of characters from the start of the line to our target
-//     let column_chars = char_idx.saturating_sub(line_start_char);
-
-//     let line_slice = rope.line(line_idx);
-    
-//     // Sum UTF-16 units for the characters on this line up to our char_idx
-//     let utf16_col: usize = line_slice
-//         .chars()
-//         .take(column_chars)
-//         .map(|c| c.len_utf16())
-//         .sum();
-
-//     Position {
-//         line: line_idx as u32,
-//         character: utf16_col as u32,
-//     }
-// }

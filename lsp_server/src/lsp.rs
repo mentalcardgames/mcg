@@ -300,7 +300,7 @@ impl LanguageServer for Backend {
         if let Some(safe_ast) = &*self.last_ast.load() {
             if params.command == "cgdsl.generateGraph" {
                 // Get your graph data
-                let graph = safe_ast.to_graph(); 
+                let graph = safe_ast.to_lowered_graph(); 
                 
                 // 1. Get the path from TS arguments
                 let path_str = params.arguments.get(0)

@@ -1,18 +1,28 @@
 use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Debug};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-use crate::{ast::ast::{GameRule, *}, spans::OwnedSpan};
+use crate::ast::ast::ast_lowered as L;
+use crate::{ast::ast::{GameRule, *}, lower::Lower, spans::OwnedSpan};
 
-
+// ===========================================================================
+// Implement transform to Ir from AST
+// ===========================================================================
 impl SGame {
-  pub fn to_graph(&self) -> Ir<PayloadT> {
-    let mut builder: IrBuilder<PayloadT> = IrBuilder::default();
+  pub fn to_graph(&self) -> Ir<SpannedPayload> {
+    let mut builder: IrBuilder<SpannedPayload> = IrBuilder::default();
     builder.build_ir(self);
 
     return builder.fsm
   }
+
+  pub fn to_lowered_graph(&self) -> Ir<LoweredPayLoad> {
+    Ir::from(self.to_graph())
+  }
 }
 
+// ===========================================================================
+// Ir-Definition
+// ===========================================================================
 pub type Stage = String;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -25,13 +35,6 @@ impl StateID {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct StageExit(u32);
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ChoiceExit(u32);
-
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(bound = "T: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
 pub struct Edge<T>
   where T: serde::Serialize
@@ -40,6 +43,9 @@ pub struct Edge<T>
   pub payload: T,
 }
 
+// ===========================================================================
+// Ir-Logic
+// ===========================================================================
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "T: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
 pub struct Ir<T: serde::Serialize>
@@ -128,30 +134,31 @@ impl<T: Serialize + DeserializeOwned> Ir<T> {
     }
 }
 
-impl Ir<PayloadT> {
+// ===========================================================================
+// Diagnositics
+// ===========================================================================
+impl Ir<SpannedPayload> {
   pub fn diagnostics(&self) -> Option<Vec<GameFlowError>> {
     if !self.is_connected() {
       let mut errs: Vec<GameFlowError> = Vec::new();
       for edge in self.edges_to_highest_state_sub_graph().iter() {
-        match &edge.payload{
-          Payload::Instruction(instr) => {
-            let span = match instr {
-              Semantic::Condition { expr, negated: _ } => expr.span.clone(),
-              Semantic::EndCondition { expr, negated: _ } => expr.span.clone(),
-              Semantic::Action(a) => a.span.clone(),
-              Semantic::StageRoundCounter(stage) => stage.span.clone(),
-              Semantic::EndStage(stage) => stage.span.clone(),
-              Semantic::StageExit(stage) => stage.span.clone(),
-              Semantic::StageEntry(stage) => stage.span.clone(),
-            };
-
-            errs.push(
-              GameFlowError::FlowNotConnected {
-                span: span    
-              }
-            )
-          },
-          Payload::Control(_) => {},
+        match &edge.payload {
+            Payload::Condition { expr, negated: _ } => {
+              errs.push(GameFlowError::FlowNotConnected { span: expr.span.clone() });
+            },
+            Payload::EndCondition { expr, negated: _ } => {
+              errs.push(GameFlowError::FlowNotConnected { span: expr.span.clone() });
+            },
+            Payload::Action(a) => {
+              errs.push(GameFlowError::FlowNotConnected { span: a.span.clone() });
+            },
+            Payload::StageRoundCounter(stage) => {
+              errs.push(GameFlowError::FlowNotConnected { span: stage.span.clone() });
+            },
+            Payload::EndStage(stage) => {
+              errs.push(GameFlowError::FlowNotConnected { span: stage.span.clone() });
+            },
+            _ => {},
         }
       }
 
@@ -166,6 +173,9 @@ impl Ir<PayloadT> {
   }
 }
 
+// ===========================================================================
+// Return-Type
+// ===========================================================================
 /// There are certain Rules that alter the flow of the game:
 /// - End Stage
 /// - End Game
@@ -178,128 +188,86 @@ pub enum GameFlowChange {
   None(u32),
 }
 
+// ===========================================================================
+// Payload
+// ===========================================================================
+pub trait AstContext {
+    type Condition: Serialize + DeserializeOwned + Debug + Clone;
+    type EndCondition: Serialize + DeserializeOwned + Debug + Clone;
+    type GameRule: Serialize + DeserializeOwned + Debug + Clone;
+    type Id: Serialize + DeserializeOwned + Debug + Clone;
+}
+
 /// Each Transition/Edge needs to have some guard/payload.
 /// E.g. If we have a condition then the edge's payload is proving the condition.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(bound = "T: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
-pub enum Payload<T>
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "Ctx: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
+pub enum Payload<Ctx: AstContext>
 {
-  Instruction(T),
-  Control(Control)
-}
-
-impl<C: Debug, E: Debug, S: Debug> Payload<Semantic<C, E, SGameRule, S>> {
-  pub fn raw(&self) -> &str {
-    match self {
-        Payload::Instruction(i) => i.raw(),
-        Payload::Control(control) => control.raw(),
-    }
-  }
-}
-
-
-/// A set of Payload-Instructions.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(bound = "C: Serialize + DeserializeOwned, E: Serialize + DeserializeOwned, A: Serialize + DeserializeOwned, S: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
-pub enum Semantic<C, E, A, S> {
-  Condition { expr: C, negated: bool },
-  EndCondition { expr: E, negated: bool },
-  Action(A),
-  StageRoundCounter(S),
-  EndStage(S),
-  StageExit(S),
-  StageEntry(S),
-}
-
-impl<C, E, S> Semantic<C, E, SGameRule, S> {
-  pub fn raw(&self) -> &str {
-    match self {
-      Semantic::Condition { expr: _, negated } => {
-        if *negated {
-          return "Not Condition"
-        }
-
-        return "Condition"
-      },
-      Semantic::EndCondition { expr: _, negated } => {
-        if *negated {
-          return "Not EndCondition"
-        }
-
-        return "EndCondition"
-      },
-      Semantic::Action(rule) => {
-        if matches!(rule.node, GameRule::Action(SActionRule { node: ActionRule::EndAction(SEndType { node: EndType::Stage, span: _ } ), span: _ } )) {
-          return "EndStage"
-        }
-        return "Action"
-      },
-      Semantic::StageRoundCounter(_) => {
-        return "StageRoundCounter"
-      },
-      Semantic::EndStage(_) => {
-        return "EndStage"
-      },
-      Semantic::StageExit(_) => {
-        return "StageExit"
-      },
-      Semantic::StageEntry(_) => {
-        return "StageEntry"
-      },
-    }
-  } 
-}
-
-/// Set of control payload. 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Control {
+  Condition { expr: Ctx::Condition, negated: bool },
+  EndCondition { expr: Ctx::EndCondition, negated: bool },
+  Action(Ctx::GameRule),
+  StageRoundCounter(Ctx::Id),
+  EndStage(Ctx::Id),
   Choice,
   Optional,
 }
 
-impl Control {
-  pub fn raw(&self) -> &str {
-    match self {
-        Control::Choice => "Choice",
-        Control::Optional => "Optional",
+impl<Ctx: AstContext> Payload<Ctx> {
+    pub fn to_string(&self) -> String {
+        let result = match &self {
+            Payload::Condition { expr: _, negated } => {
+              if *negated {"Not Condition"} else {"Condition"}
+            },
+            Payload::EndCondition { expr: _, negated } => {
+              if *negated {"Not EndCondition"} else {"EndCondition"}
+            },
+            Payload::Action(_) => "Action",
+            Payload::StageRoundCounter(stage) => {
+              &format!("Stage Round Counter {:?}", stage)
+            },
+            Payload::EndStage(stage) => {
+              &format!("Stage Round Counter {:?}", stage)
+            },
+            Payload::Choice => {
+              "Choice"
+            },
+            Payload::Optional => {
+              "Optional"
+            },
+        };
+
+        result.to_string()
     }
-  }
 }
 
-// /// E.g. when constructing the stage-round-counter,
-// /// we need to go back to the entry of the current Stage.
-// #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-// pub enum Entry {
-//   Stage(u32),
-//   Choice(u32),
-// }
 
-// impl Entry {
-//   fn get_id(&self) -> u32 {
-//     match self {
-//         Entry::Stage(u) => *u,
-//         Entry::Choice(u) => *u,
-//     }
-//   }
-// }
+pub type SpannedPayload = Payload<SpannedCtx>;
 
-// /// E.g. GameRule EndStage needs this information,
-// /// we need to go to the exit of the current Stage.
-// #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-// pub enum Exit {
-//   Stage(u32),
-//   Choice(u32),
-// }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpannedCtx;
+impl AstContext for SpannedCtx {
+    type Condition = SBoolExpr;
+    type EndCondition = SEndCondition;
+    type GameRule = SGameRule;
+    type Id = SID;
+}
 
-// impl Exit {
-//   fn get_id(&self) -> u32 {
-//     match self {
-//         Exit::Stage(u) => *u,
-//         Exit::Choice(u) => *u,
-//     }
-//   }
-// }
 
+pub type LoweredPayLoad = Payload<LoweredCtx>;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoweredCtx;
+impl AstContext for LoweredCtx {
+    type Condition = L::BoolExpr;
+    type EndCondition = L::EndCondition;
+    type GameRule = L::GameRule;
+    type Id = L::ID;
+}
+
+// ===========================================================================
+// Error
+// ===========================================================================
 #[derive(Debug, Serialize, Deserialize)]
 pub enum GameFlowError {
   Unreachable { span: OwnedSpan },
@@ -308,11 +276,57 @@ pub enum GameFlowError {
   FlowNotConnectedWithControl
 }
 
+// ===========================================================================
+// Lower
+// ===========================================================================
+impl From<Ir<SpannedPayload>> for Ir<LoweredPayLoad> {
+    fn from(value: Ir<SpannedPayload>) -> Self {
+        let mut lowered_ir: Ir<LoweredPayLoad> = Ir::default();
+        lowered_ir.entry = value.entry;
+        lowered_ir.goal = value.goal;
+        lowered_ir.states = value.states.into_iter().map(|(s, es)| 
+        {
+          let mut edges = Vec::new();
+          for e in es.iter() {
+            let lowered_payload: LoweredPayLoad = match &e.payload {
+              Payload::Condition { expr, negated } => {
+                Payload::Condition { expr: expr.lower(), negated: *negated }
+              },
+              Payload::EndCondition { expr, negated } => {
+                Payload::EndCondition { expr: expr.lower(), negated: *negated }
+              },
+              Payload::Action(a) => {
+                Payload::Action(a.lower())
+              },
+              Payload::StageRoundCounter(s) => {
+                Payload::StageRoundCounter(s.lower())
+              },
+              Payload::EndStage(s) => {
+                Payload::EndStage(s.lower())
+              },
+              Payload::Choice => Payload::Choice,
+              Payload::Optional => Payload::Optional,
+            };
+          
+            edges.push(Edge { to: e.to,  payload: lowered_payload});
+          }
 
+          (s, edges)
+        }
+      ).collect();
+
+      return lowered_ir;
+    }
+}
+
+
+// ===========================================================================
+// Builder
+// ===========================================================================
 /// fsm: The current IR being constructed.
 /// stage_exits: Keeping track of stage_exits
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(bound = "T: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
+#[serde(bound = "T: Serialize + DeserializeOwned")]
 pub struct IrBuilder<T: serde::Serialize> {
   pub fsm: Ir<T>,
   state_counter: u32,
@@ -331,10 +345,7 @@ impl<T: Serialize + DeserializeOwned> Default for IrBuilder<T> {
   }
 }
 
-
-pub type PayloadT = Payload<Semantic<SBoolExpr, SEndCondition, SGameRule, SID>>;
-
-impl IrBuilder<PayloadT> {
+impl IrBuilder<SpannedPayload> {
   /// Increments the state_counter.
   /// Adds the the new state (id of state == state_counter) to the FSM.
   fn new_state(&mut self) -> u32 {
@@ -354,7 +365,7 @@ impl IrBuilder<PayloadT> {
   }
 
   /// Adds edge to the FSM.
-  fn new_edge(&mut self, from: u32, to: u32, payload: PayloadT) {
+  fn new_edge(&mut self, from: u32, to: u32, payload: SpannedPayload) {
     self.fsm.add_edge(
       StateID(from),
       StateID(to),
@@ -467,7 +478,7 @@ impl IrBuilder<PayloadT> {
       self.new_edge(
         entry,
         choice,
-        Payload::Control(Control::Choice)
+        Payload::Choice
       );
 
       self.build_flow(option, choice, choice_exit);
@@ -497,7 +508,7 @@ impl IrBuilder<PayloadT> {
                 self.new_edge(
                   flows_exit,
                   entry,
-                  Payload::Instruction(Semantic::StageRoundCounter(stage_id.clone()))
+                  Payload::StageRoundCounter(stage_id.clone())
                 );
               },
               _ => {}
@@ -513,7 +524,7 @@ impl IrBuilder<PayloadT> {
           self.new_edge(
             entry,
             exit,
-            Payload::Instruction(Semantic::EndCondition { expr: end_condition.clone(), negated: true })
+            Payload::EndCondition { expr: end_condition.clone(), negated: true }
           );
 
           let else_state = self.new_state();
@@ -521,7 +532,7 @@ impl IrBuilder<PayloadT> {
           self.new_edge(
             entry, 
           else_state,
-              Payload::Instruction(Semantic::EndCondition { expr: end_condition.clone(), negated: false })
+              Payload::EndCondition { expr: end_condition.clone(), negated: false }
           );
 
           let flows_exit = self.new_state();
@@ -530,7 +541,7 @@ impl IrBuilder<PayloadT> {
                 self.new_edge(
                   flows_exit,
                   entry,
-                  Payload::Instruction(Semantic::StageRoundCounter(stage_id.clone()))
+                  Payload::StageRoundCounter(stage_id.clone())
                 );
               },
               _ => {}
@@ -555,7 +566,7 @@ impl IrBuilder<PayloadT> {
                 self.new_edge(
                   entry,
                   last_stage_exit,
-                  Payload::Instruction(Semantic::Action(rule.clone()))
+                  Payload::Action(rule.clone())
                 );
 
                 // Nothing after end stage will be evaluated!
@@ -575,7 +586,7 @@ impl IrBuilder<PayloadT> {
               self.new_edge(
                 entry,
                 goal,
-                Payload::Instruction(Semantic::Action(rule.clone()))
+                Payload::Action(rule.clone())
               );
 
               // Nothing after end game will be evaluated!
@@ -586,7 +597,7 @@ impl IrBuilder<PayloadT> {
             self.new_edge(
               entry,
               exit,
-              Payload::Instruction(Semantic::Action(rule.clone()))
+              Payload::Action(rule.clone())
             );
 
             return GameFlowChange::None(exit)
@@ -596,7 +607,7 @@ impl IrBuilder<PayloadT> {
           self.new_edge(
             entry,
             exit,
-            Payload::Instruction(Semantic::Action(rule.clone()))
+            Payload::Action(rule.clone())
           );
 
           return GameFlowChange::None(exit)
@@ -606,7 +617,7 @@ impl IrBuilder<PayloadT> {
           self.new_edge(
             entry,
             exit,
-            Payload::Instruction(Semantic::Action(rule.clone()))
+            Payload::Action(rule.clone())
           );
 
           return GameFlowChange::None(exit)
@@ -622,13 +633,13 @@ impl IrBuilder<PayloadT> {
     self.new_edge(
       entry,
       if_body,
-      Payload::Instruction(Semantic::Condition { expr: condition.clone(), negated: false })
+      Payload::Condition { expr: condition.clone(), negated: false }
     );
 
     self.new_edge(
       entry,
       exit,
-      Payload::Instruction(Semantic::Condition { expr: condition.clone(), negated: true })
+      Payload::Condition { expr: condition.clone(), negated: true }
     );
 
     self.build_flows(&if_rule.flows, if_body, exit);
@@ -657,13 +668,13 @@ impl IrBuilder<PayloadT> {
           self.new_edge(
             next_entry,
             body,
-            Payload::Instruction(Semantic::Condition { expr: condition.clone(), negated: false })
+            Payload::Condition { expr: condition.clone(), negated: false }
           );
 
           self.new_edge(
             next_entry,
             case_exit,
-            Payload::Instruction(Semantic::Condition { expr: condition.clone(), negated: true })
+            Payload::Condition { expr: condition.clone(), negated: true }
           );
 
           self.build_flows(&spanneds, body, case_exit);          
@@ -679,9 +690,9 @@ impl IrBuilder<PayloadT> {
   /// GameFlowChanges are handled separately. build_optional_rule does not need to worry!
   fn build_optional_rule(&mut self, optional_rule: &OptionalRule, entry: u32, exit: u32) -> u32 {
     let optional_body = self.new_state();
-    self.new_edge(entry, optional_body, Payload::Control(Control::Optional));
+    self.new_edge(entry, optional_body, Payload::Optional);
     self.build_flows(&optional_rule.flows, optional_body, exit);
-    self.new_edge(entry, exit, Payload::Control(Control::Optional));
+    self.new_edge(entry, exit, Payload::Optional);
 
     return exit
   }

@@ -2252,6 +2252,7 @@ impl CGDSLParser {
 // ===========================================================================
 // Helper
 // ===========================================================================
+#[allow(dead_code)]
 pub(crate) fn saggregate_player(aggr: AggregatePlayer, span: OwnedSpan) -> SPlayerExpr {
     SPlayerExpr {
         node: PlayerExpr::Aggregate(        
@@ -2264,6 +2265,7 @@ pub(crate) fn saggregate_player(aggr: AggregatePlayer, span: OwnedSpan) -> SPlay
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn saggregate_filter(aggr: AggregateFilter, span: OwnedSpan) -> SFilterExpr {
     SFilterExpr {
         node: FilterExpr::Aggregate(        
@@ -2276,6 +2278,7 @@ pub(crate) fn saggregate_filter(aggr: AggregateFilter, span: OwnedSpan) -> SFilt
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn saggregate_player_collection(aggr: AggregatePlayerCollection, span: OwnedSpan) -> SPlayerCollection {
     SPlayerCollection {
         node: PlayerCollection::Aggregate(        
@@ -2288,6 +2291,7 @@ pub(crate) fn saggregate_player_collection(aggr: AggregatePlayerCollection, span
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn sruntime_player_collection(runt: RuntimePlayerCollection, span: OwnedSpan) -> SPlayerCollection {
     SPlayerCollection {
         node: PlayerCollection::Runtime(        
@@ -2300,6 +2304,7 @@ pub(crate) fn sruntime_player_collection(runt: RuntimePlayerCollection, span: Ow
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn sruntime_team_collection(runt: RuntimeTeamCollection, span: OwnedSpan) -> STeamCollection {
     STeamCollection {
         node: TeamCollection::Runtime(        
@@ -2312,6 +2317,7 @@ pub(crate) fn sruntime_team_collection(runt: RuntimeTeamCollection, span: OwnedS
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn saggregate_team(aggr: AggregateTeam, span: OwnedSpan) -> STeamExpr {
     STeamExpr {
         node: TeamExpr::Aggregate(        
@@ -2324,6 +2330,7 @@ pub(crate) fn saggregate_team(aggr: AggregateTeam, span: OwnedSpan) -> STeamExpr
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn sruntime_player(runt: RuntimePlayer, span: OwnedSpan) -> SPlayerExpr {
     SPlayerExpr {
         node: PlayerExpr::Runtime(        
@@ -2336,6 +2343,7 @@ pub(crate) fn sruntime_player(runt: RuntimePlayer, span: OwnedSpan) -> SPlayerEx
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn squery_card_position(quer: QueryCardPosition, span: OwnedSpan) -> SCardPosition {
     SCardPosition {
         node: CardPosition::Query(
@@ -2348,6 +2356,7 @@ pub(crate) fn squery_card_position(quer: QueryCardPosition, span: OwnedSpan) -> 
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn saggregate_card_position(aggr: AggregateCardPosition, span: OwnedSpan) -> SCardPosition {
     SCardPosition {
         node: CardPosition::Aggregate(
@@ -2360,6 +2369,7 @@ pub(crate) fn saggregate_card_position(aggr: AggregateCardPosition, span: OwnedS
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn squery_int(quer: QueryInt, span: OwnedSpan) -> SIntExpr {
     SIntExpr {
         node: IntExpr::Query(
@@ -2372,6 +2382,7 @@ pub(crate) fn squery_int(quer: QueryInt, span: OwnedSpan) -> SIntExpr {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn saggregate_int(aggr: AggregateInt, span: OwnedSpan) -> SIntExpr {
     SIntExpr {
         node: IntExpr::Aggregate(
@@ -2384,6 +2395,7 @@ pub(crate) fn saggregate_int(aggr: AggregateInt, span: OwnedSpan) -> SIntExpr {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn sruntime_int(runt: RuntimeInt, span: OwnedSpan) -> SIntExpr {
     SIntExpr {
         node: IntExpr::Runtime(        
@@ -2396,6 +2408,7 @@ pub(crate) fn sruntime_int(runt: RuntimeInt, span: OwnedSpan) -> SIntExpr {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn squery_string(quer: QueryString, span: OwnedSpan) -> SStringExpr {
     SStringExpr {
         node: StringExpr::Query(
@@ -2408,6 +2421,7 @@ pub(crate) fn squery_string(quer: QueryString, span: OwnedSpan) -> SStringExpr {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn saggregate_compare_bool(cmp: CompareBool, span: OwnedSpan) -> SBoolExpr {
     SBoolExpr {
         node: BoolExpr::Aggregate(
@@ -2425,6 +2439,7 @@ pub(crate) fn saggregate_compare_bool(cmp: CompareBool, span: OwnedSpan) -> SBoo
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn saggregate_bool(aggr: AggregateBool, span: OwnedSpan) -> SBoolExpr {
     SBoolExpr {
         node: BoolExpr::Aggregate(

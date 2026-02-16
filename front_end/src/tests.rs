@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::fsm_to_dot::fsm_to_dot;
-use crate::ir::{Ir, IrBuilder, PayloadT};
+use crate::ir::{Ir, IrBuilder, SpannedPayload};
 use crate::walker::*;
 // use crate::{lower::Lower};
 use pest_consume::*;
@@ -109,7 +109,7 @@ fn test_game() {
 }
 
 // Test IR builder
-fn show_graph(fsm: &Ir<PayloadT>, name: &str) {
+fn show_graph(fsm: &Ir<SpannedPayload>, name: &str) {
   let dot_path_name: &str = &format!("tests_out/{}.dot", name);
   let png_path_name: &str = &format!("tests_out/{}.png", name);
 
@@ -135,7 +135,7 @@ fn show_graph(fsm: &Ir<PayloadT>, name: &str) {
 
 #[test]
 fn test_game_ir() {
-  let mut builder: IrBuilder<PayloadT> = IrBuilder::default();
+  let mut builder: IrBuilder<SpannedPayload> = IrBuilder::default();
 
   let input = 
         "

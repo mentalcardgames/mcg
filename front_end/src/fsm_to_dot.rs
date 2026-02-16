@@ -1,9 +1,15 @@
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
 use crate::ir::*;
 
-pub fn fsm_to_dot(fsm: &Ir<PayloadT>, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub fn fsm_to_dot<Ctx: AstContext>(fsm: &Ir<Payload<Ctx>>, path: &Path) -> Result<(), Box<dyn std::error::Error>>
+    where
+        Ctx: Serialize + DeserializeOwned
+{
     let mut file = File::create(path)?;
     
     writeln!(file, "digraph CFG {{")?;
@@ -21,7 +27,7 @@ pub fn fsm_to_dot(fsm: &Ir<PayloadT>, path: &Path) -> Result<(), Box<dyn std::er
         writeln!(file, "  {:?} [label=\"Block: {:?}\"];", state_id.raw(), state_id.raw())?;
         
         for edge in edges.iter() {
-            let label = edge.payload.raw().replace('"', "\\\"");
+            let label = String::from(edge.payload.to_string()).replace('"', "\\\"");
             writeln!(
                 file, 
                 "  {:?} -> {:?} [label=\" {} \"];", 
