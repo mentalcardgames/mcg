@@ -4,13 +4,21 @@ use serde::{Serialize, Deserialize, de::DeserializeOwned};
 pub struct OwnedSpan {
     pub start: usize,
     pub end: usize,
+    pub start_pos: (usize, usize),
+    pub end_pos: (usize, usize),
+}
+
+pub struct OwnedPosition {
+
 }
 
 impl From<pest::Span<'_>> for OwnedSpan {
-    fn from(span: pest::Span) -> Self {
+    fn from(input: pest::Span) -> Self {
         Self {
-            start: span.start(),
-            end: span.end(),
+            start: input.start(),
+            end: input.end(),
+            start_pos: input.start_pos().line_col(),
+            end_pos: input.end_pos().line_col()
         }
     }
 }

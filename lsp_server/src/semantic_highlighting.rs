@@ -1,6 +1,5 @@
 use front_end::{ast::ast::SGame, symbols::{GameType, SymbolVisitor}, walker::Walker};
-use ropey::Rope;
-use crate::validation::to_range;
+use crate::error_to_diagnostics::to_range;
 
 pub struct AbsoluteToken {
     line: u32,
@@ -38,7 +37,7 @@ pub fn calculate_deltas(mut tokens: Vec<AbsoluteToken>) -> Vec<u32> {
     output
 }
 
-pub fn tokenize_ast(ast: &SGame, rope: &Rope) -> Vec<AbsoluteToken> {
+pub fn tokenize_ast(ast: &SGame) -> Vec<AbsoluteToken> {
     let mut symbols = SymbolVisitor::new();
     ast.walk(&mut symbols);
 
@@ -47,7 +46,7 @@ pub fn tokenize_ast(ast: &SGame, rope: &Rope) -> Vec<AbsoluteToken> {
     var_type
         .iter()
         .map(|(v, g_type)| {
-            let range = to_range(&v.span, rope);
+            let range = to_range(&v.span);
             
             AbsoluteToken {
                 line: range.start.line,

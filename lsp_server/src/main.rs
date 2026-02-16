@@ -1,6 +1,6 @@
 pub mod lsp;
-pub mod error_diagnostics;
-pub mod rule_completion;
+pub mod error_to_diagnostics;
+pub mod completion;
 pub mod validation;
 pub mod rope;
 pub mod semantic_highlighting;

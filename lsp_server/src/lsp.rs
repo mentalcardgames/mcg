@@ -5,17 +5,17 @@ use front_end::ast::ast::SGame;
 use front_end::symbols::GameType;
 use front_end::validation::parse_document;
 use ropey::{Rope};
-use crate::rope::Document;
+use crate::rope::{Document, apply_change};
 use crate::semantic_highlighting::{calculate_deltas, tokenize_ast};
-use crate::validation::{apply_change, validate_document, validate_game, validate_parsing};
+use crate::validation::{validate_document, validate_game, validate_parsing};
 use tokio::sync::{Mutex, mpsc};
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
-use tower_lsp::jsonrpc::{self, Error, Result};
+use tower_lsp::jsonrpc::{self, Result};
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
-use crate::rule_completion::{get_completions};
+use crate::completion::{get_completions};
 
 #[derive(Debug)]
 pub struct Backend {
@@ -37,29 +37,7 @@ impl Backend {
         };
 
         if let Some(rope) = doc_rope {
-            let mut diagnostics = Vec::new();
-
-            match validate_parsing(&rope) {
-                Ok(ast) => {
-                    // Run semantic validation
-                    match validate_document(&ast, &rope) {
-                        Ok(new_table) => {
-                            // Update the symbol table
-                            self.symbol_table.clear();
-                            for (game_type, names) in new_table {
-                                self.symbol_table.insert(game_type, names);
-                            }
-                        },
-                        Err(v) => {
-                            diagnostics = v;
-                        }
-                    }
-                    self.last_ast.store(Some(Arc::new(ast)));
-                }
-                Err(err_diagnostics) => {
-                    diagnostics = err_diagnostics;
-                }
-            }
+            let diagnostics = self.get_diagnostics(&rope);
 
             // Standard document storage
             let mut docs = self.documents.lock().await;
@@ -67,6 +45,109 @@ impl Backend {
 
             self.client.publish_diagnostics(uri, diagnostics, None).await;
         }
+    }
+
+    pub fn get_diagnostics(&self, rope: &Rope) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+
+        match validate_parsing(&rope) {
+            Ok(ast) => {
+                // Run semantic validation
+                match validate_document(&ast) {
+                    Ok(new_table) => {
+                        // Update the symbol table
+                        self.symbol_table.clear();
+                        for (game_type, names) in new_table {
+                            self.symbol_table.insert(game_type, names);
+                        }
+                    },
+                    Err(v) => {
+                        diagnostics = v;
+                    }
+                }
+                self.last_ast.store(Some(Arc::new(ast)));
+            }
+            Err(err_diagnostics) => {
+                diagnostics = err_diagnostics;
+            }
+        }
+
+        diagnostics
+    }
+
+    pub fn get_did_save_diagnostics(&self, rope: &Rope) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+
+        match validate_parsing(&rope) {
+            Ok(ast) => {
+                // Run semantic validation
+                match validate_game(&ast) {
+                    None => {},
+                    Some(v) => {
+                        diagnostics = v;
+                    }
+                }
+                self.last_ast.store(Some(Arc::new(ast)));
+            }
+            Err(err_diagnostics) => {
+                diagnostics = err_diagnostics;
+            }
+        }
+
+        diagnostics
+    }
+
+    pub async fn get_rope(&self, uri: &Url) -> Rope {
+        let mut docs = self.documents.lock().await;
+
+        let doc = docs
+            .get_mut(&uri)
+            .expect("didSave before didOpen");
+
+        // Materialize full text ONCE
+        doc.rope.clone()
+    }
+
+    pub async fn get_rope_and_apply_change(&self, uri: &Url, params: &DidChangeTextDocumentParams) -> Rope {
+        let mut docs = self.documents.lock().await;
+
+        let doc = docs
+            .get_mut(&uri)
+            .expect("didChange before didOpen");
+
+        // Apply *all* changes
+        for change in params.content_changes.iter() {
+            apply_change(&mut doc.rope, &change);
+        }
+
+        // Materialize full text ONCE
+        doc.rope.clone()
+    }
+
+
+    pub fn get_semantic_tokens(&self) -> Option<Vec<SemanticToken>> {
+        let tokens;
+        if let Some(safe_ast) = &*self.last_ast.load() {
+            tokens = tokenize_ast(safe_ast)
+        } else {
+            return None;
+        }
+        // Convert absolute tokens to LSP Relative (Delta) format
+        let delta_u32s = calculate_deltas(tokens);
+
+        // Wrap the u32s into the SemanticToken struct required by the library
+        let semantic_tokens: Vec<SemanticToken> = delta_u32s
+            .chunks_exact(5)
+            .map(|c| SemanticToken {
+                delta_line: c[0],
+                delta_start: c[1],
+                length: c[2],
+                token_type: c[3],
+                token_modifiers_bitset: c[4],
+            })
+            .collect();
+
+        Some(semantic_tokens)
     }
 }
 
@@ -143,17 +224,8 @@ impl LanguageServer for Backend {
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
-        // let position = params.text_document_position.position;
-
-        let text = {
-            let docs = self.documents.lock().await;
-            docs.get(&uri).cloned().ok_or(jsonrpc::Error::internal_error())?
-        };
-
-        // Dirty fix right now
-        let text = &text.rope.to_string();
-
-        let result = parse_document(text);
+        let rope = self.get_rope(&uri).await;
+        let result = parse_document(&rope.to_string());
 
         match result {
             Err(err) => {
@@ -177,29 +249,7 @@ impl LanguageServer for Backend {
         let text = params.text_document.text;
         let rope = Rope::from_str(&text);
         
-        let mut diagnostics = Vec::new();
-
-        match validate_parsing(&rope) {
-            Ok(ast) => {
-                // Run semantic validation
-                match validate_document(&ast, &rope) {
-                    Ok(new_table) => {
-                        // Update the symbol table
-                        self.symbol_table.clear();
-                        for (game_type, names) in new_table {
-                            self.symbol_table.insert(game_type, names);
-                        }
-                    },
-                    Err(v) => {
-                        diagnostics = v;
-                    }
-                }
-                self.last_ast.store(Some(Arc::new(ast)));
-            }
-            Err(err_diagnostics) => {
-                diagnostics = err_diagnostics;
-            }
-        }
+        let diagnostics = self.get_diagnostics(&rope);
 
         // Standard document storage
         let mut docs = self.documents.lock().await;
@@ -210,35 +260,8 @@ impl LanguageServer for Backend {
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         let uri = params.text_document.uri;
-
-        let rope = {
-            let mut docs = self.documents.lock().await;
-
-            let doc = docs
-                .get_mut(&uri)
-                .expect("didSave before didOpen");
-
-            // Materialize full text ONCE
-            doc.rope.clone()
-        };
-        
-        let mut diagnostics = Vec::new();
-
-        match validate_parsing(&rope) {
-            Ok(ast) => {
-                // Run semantic validation
-                match validate_game(&ast, &rope) {
-                    None => {},
-                    Some(v) => {
-                        diagnostics = v;
-                    }
-                }
-                self.last_ast.store(Some(Arc::new(ast)));
-            }
-            Err(err_diagnostics) => {
-                diagnostics = err_diagnostics;
-            }
-        }
+        let rope = self.get_rope(&uri).await;
+        let diagnostics = self.get_did_save_diagnostics(&rope);
 
         // Standard document storage
         let mut docs = self.documents.lock().await;
@@ -249,46 +272,8 @@ impl LanguageServer for Backend {
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-
-        let rope = {
-            let mut docs = self.documents.lock().await;
-
-            let doc = docs
-                .get_mut(&uri)
-                .expect("didChange before didOpen");
-
-            // Apply *all* changes
-            for change in params.content_changes {
-                apply_change(&mut doc.rope, &change);
-            }
-
-            // Materialize full text ONCE
-            doc.rope.clone()
-        };
-
-        let mut diagnostics = Vec::new();
-
-        match validate_parsing(&rope) {
-            Ok(ast) => {
-                // Run semantic validation
-                match validate_document(&ast, &rope) {
-                    Ok(new_table) => {
-                        // Update the symbol table
-                        self.symbol_table.clear();
-                        for (game_type, names) in new_table {
-                            self.symbol_table.insert(game_type, names);
-                        }
-                    },
-                    Err(v) => {
-                        diagnostics = v;
-                    }
-                }
-                self.last_ast.store(Some(Arc::new(ast)));
-            }
-            Err(err_diagnostics) => {
-                diagnostics = err_diagnostics;
-            }
-        }
+        let rope = self.get_rope_and_apply_change(&uri, &params).await;
+        let diagnostics = self.get_diagnostics(&rope);
 
         // Standard document storage
         let mut docs = self.documents.lock().await;
@@ -299,36 +284,16 @@ impl LanguageServer for Backend {
 
     async fn semantic_tokens_full(
         &self,
-        params: SemanticTokensParams,
+        _: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
-        let uri = params.text_document.uri;
-        let map = self.documents.lock().await;
-        let doc = map.get(&uri).ok_or_else(|| Error::invalid_params(""))?;
-        let tokens;
-        if let Some(safe_ast) = &*self.last_ast.load() {
-            tokens = tokenize_ast(safe_ast, &doc.rope)
-        } else {
-            return Ok(None);
+        if let Some(semantic_tokens) = self.get_semantic_tokens() {
+            return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: None,
+                data: semantic_tokens,
+            })))
         }
-        // Convert absolute tokens to LSP Relative (Delta) format
-        let delta_u32s = calculate_deltas(tokens);
 
-        // Wrap the u32s into the SemanticToken struct required by the library
-        let semantic_tokens: Vec<SemanticToken> = delta_u32s
-            .chunks_exact(5)
-            .map(|c| SemanticToken {
-                delta_line: c[0],
-                delta_start: c[1],
-                length: c[2],
-                token_type: c[3],
-                token_modifiers_bitset: c[4],
-            })
-            .collect();
-
-        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-            result_id: None,
-            data: semantic_tokens,
-        })))
+        return Ok(None)
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> jsonrpc::Result<Option<serde_json::Value>> {
