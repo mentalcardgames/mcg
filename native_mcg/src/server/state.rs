@@ -28,6 +28,8 @@ pub struct AppState {
     /// Optional path to the TOML config file used by the running server.
     /// If present, transports (e.g. iroh) may persist changes to this path.
     pub config_path: Option<PathBuf>,
+    pub ticket: Arc<RwLock<Option<String>>>,
+    pub remote_ticket: Arc<RwLock<Option<String>>>,
 }
 
 impl AppState {
@@ -40,6 +42,8 @@ impl AppState {
             broadcaster: tx,
             config: std::sync::Arc::new(RwLock::new(config)),
             config_path,
+            ticket: Arc::new(RwLock::new(None)),
+            remote_ticket: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -75,6 +79,8 @@ impl Default for AppState {
             broadcaster: tx,
             config: std::sync::Arc::new(RwLock::new(crate::config::Config::default())),
             config_path: None,
+            ticket: Arc::new(RwLock::new(None)),
+            remote_ticket: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -334,6 +340,19 @@ async fn handle_push_state(
     }
 }
 
+///Handle a GetTicket message from a client
+async fn handle_get_ticket(state: &AppState) -> mcg_shared::ServerMsg {
+    let guard = state.ticket.read().await;
+    match guard.as_ref() {
+        Some(ticket) => mcg_shared::ServerMsg::TicketValue(ticket.clone()),
+        None => mcg_shared::ServerMsg::Error("Iroh not initialized".into()),
+    }
+}
+
+async fn handle_get_ip() -> Option<String>{
+    local_ipaddress::get()
+    }
+
 /// Unified handler for ClientMsg coming from any transport.
 ///
 /// Centralizes validation, state mutation, and side-effects (broadcasting and
@@ -358,6 +377,19 @@ pub async fn handle_client_msg(
         mcg_shared::ClientMsg::NewGame { players } => handle_new_game(state, players).await,
         mcg_shared::ClientMsg::PushState { state: game_state } => {
             handle_push_state(state, game_state).await
+        }
+        mcg_shared::ClientMsg::QrValue(value) => {
+            tracing::info!("received QR value from client: {}", value);
+            state.remote_ticket.write().await.replace(value);
+            mcg_shared::ServerMsg::Error("filler response".into())
+        }
+        mcg_shared::ClientMsg::GetTicket => handle_get_ticket(state).await,
+        mcg_shared::ClientMsg::GetIP => {
+            let ip = match handle_get_ip().await {
+                Some(ip_addr) => ip_addr,
+                None => return mcg_shared::ServerMsg::Error("Unable to determine local IP".into()),
+            };
+            mcg_shared::ServerMsg::IPValue(ip)
         }
     }
 }

@@ -132,6 +132,8 @@ impl AppState {
                 self.last_error = Some(e.clone());
             }
             ServerMsg::Pong => {}
+            ServerMsg::TicketValue(_string) => {}
+            ServerMsg::IPValue(_string) => {}
         }
     }
 }

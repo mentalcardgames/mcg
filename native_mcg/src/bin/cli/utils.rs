@@ -38,6 +38,8 @@ impl MessagePrinter {
             }
             ServerMsg::Error(e) => eprintln!("Server error: {}", e),
             ServerMsg::Pong => println!("Received pong"),
+            ServerMsg::TicketValue(ticket) => println!("Received ticket value:{}", ticket),
+            ServerMsg::IPValue(ip) => println!("Received IP value: {}", ip),
         }
     }
 

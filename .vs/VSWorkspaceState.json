@@ -1,0 +1,18 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\frontend",
+    "\\frontend\\src",
+    "\\frontend\\src\\game",
+    "\\frontend\\src\\game\\screens",
+    "\\frontend\\src\\game\\screens\\poker",
+    "\\native_mcg",
+    "\\native_mcg\\src",
+    "\\native_mcg\\src\\bin",
+    "\\native_mcg\\src\\bin\\cli",
+    "\\native_mcg\\src\\server",
+    "\\native_mcg\\tests"
+  ],
+  "SelectedNode": "\\native_mcg\\src\\server\\iroh.rs",
+  "PreviewInSolutionExplorer": false
+}

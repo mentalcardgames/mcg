@@ -36,6 +36,7 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // not require iroh at compile time when the feature is disabled.
     // `getrandom` will be imported in `load_or_generate_iroh_secret` where it's used.
     use iroh::SecretKey;
+    use iroh_tickets::{Ticket, endpoint::EndpointTicket};
 
     // Application ALPN identifier (must match client)
     const ALPN: &[u8] = b"mcg/iroh/1";
@@ -68,7 +69,17 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     // Keep structured info for debug mode
     let addr = endpoint.addr();
     let relay_urls: Vec<_> = addr.relay_urls().collect();
-    tracing::debug!(iroh_node_id = %pk, iroh_addr = ?addr, relay_urls = ?relay_urls);
+    tracing::info!(iroh_node_id = %pk, iroh_addr = ?addr, relay_urls = ?relay_urls);
+
+    //Use the addr to make a ticket to use for generating a QR code later
+    let ticket = EndpointTicket::new(addr);
+    println!("{ticket}");
+    tracing::info!(ticket = %ticket);
+    let ticket_str = ticket.serialize();
+    {
+        let mut guard = state.ticket.write().await;
+        *guard = Some(ticket_str);
+    }
 
     let public_path = path_for_config(state.config_path.as_deref());
     match PublicInfo::write_iroh_node_id(&public_path, pk.to_string()) {

@@ -50,6 +50,9 @@ pub enum ClientMsg {
     PushState {
         state: serde_json::Value,
     },
+    QrValue(String),
+    GetTicket,
+    GetIP,
 }
 
 /// Messages that the server can send to clients
@@ -59,4 +62,6 @@ pub enum ServerMsg {
     State(GameStatePublic),
     Error(String),
     Pong,
+    TicketValue(String),
+    IPValue(String),
 }

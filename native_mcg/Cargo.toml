@@ -29,6 +29,8 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 # Upgraded to 0.95 to match sendme example - includes online() and improved relay support.
 iroh = "0.95"
 getrandom = "0.2"
+iroh-tickets = "0.2.0"
+local_ipaddress = "0.1.0"
 
 # Required helper for async trait usage in iroh handler
 async-trait = "0.1"
