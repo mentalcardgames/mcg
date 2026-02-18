@@ -3,7 +3,10 @@ use crate::{
     CODING_FACTORS_PER_FRAME, FRAGMENTS_PER_EPOCH, FRAGMENTS_PER_PARTICIPANT_PER_EPOCH,
     MAX_PARTICIPANTS,
 };
+use std::io::Write;
 use std::ops::{Deref, DerefMut};
+
+mod ops;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FrameFactor {
@@ -59,6 +62,98 @@ impl FrameFactor {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Factor {
+    Sparse(SparseFactor),
+    Wide(WideFactor),
+}
+
+impl Factor {
+    pub fn get(&self, idx: usize) -> Option<GaloisField2p4> {
+        match self {
+            Factor::Sparse(this) => {
+                if let Ok(idx) = this.inner.binary_search_by_key(&idx, |(idx_f, _)| *idx_f) {
+                    Some(this.inner[idx].1)
+                } else {
+                    None
+                }
+            }
+            Factor::Wide(this) => Some(this.inner[idx]),
+        }
+    }
+    pub fn utilized_fragments(&self) -> Box<[bool; FRAGMENTS_PER_EPOCH]> {
+        match self {
+            Factor::Sparse(this) => this.utilized_fragments(),
+            Factor::Wide(this) => this.utilized_fragments(),
+        }
+    }
+    pub fn first_factor(&self) -> (usize, GaloisField2p4) {
+        match self {
+            Factor::Sparse(lhs) => *lhs
+                .inner
+                .first()
+                .expect("It's impossible to have equations without factors"),
+            Factor::Wide(rhs) => rhs
+                .inner
+                .iter()
+                .enumerate()
+                .find_map(|(idx, f)| {
+                    if *f == GaloisField2p4::ZERO {
+                        None
+                    } else {
+                        Some((idx, *f))
+                    }
+                })
+                .expect("It's impossible to have equations without factors"),
+        }
+    }
+    pub fn is_plain(&self) -> bool {
+        match self {
+            Factor::Sparse(this) => this.inner.len() == 1,
+            Factor::Wide(this) => this.is_plain(),
+        }
+    }
+    pub fn is_zero(&self) -> bool {
+        match self {
+            Factor::Sparse(this) => this.inner.is_empty(),
+            Factor::Wide(_) => {
+                todo!()
+            }
+        }
+    }
+    pub fn is_wide(&self) -> bool {
+        matches!(self, Factor::Wide(_))
+    }
+    pub fn is_sparse(&self) -> bool {
+        matches!(self, Factor::Sparse(_))
+    }
+    pub(crate) fn print_matrix_row(&self, idx: impl IntoIterator<Item = usize>) -> String {
+        let mut matrix = Vec::new();
+        for i in idx {
+            if let Some(f) = self.get(i) {
+                // let char = if f == 0 { " " } else { &*format!("{:x}", f) };
+                let char = format!("{:x}", f.inner);
+                write!(&mut matrix, "{char} ").unwrap();
+            } else {
+                write!(&mut matrix, "  ").unwrap();
+            }
+        }
+        writeln!(&mut matrix).unwrap();
+        String::try_from(matrix.to_vec()).unwrap()
+    }
+}
+
+impl From<SparseFactor> for Factor {
+    fn from(value: SparseFactor) -> Self {
+        Factor::Sparse(value)
+    }
+}
+impl From<WideFactor> for Factor {
+    fn from(value: WideFactor) -> Self {
+        Factor::Wide(value)
+    }
+}
+
 #[derive(PartialEq, Clone, Debug)]
 pub struct WideFactor {
     pub inner: Box<[GaloisField2p4; FRAGMENTS_PER_EPOCH]>,
@@ -95,16 +190,8 @@ impl WideFactor {
         (width, offsets)
     }
     pub fn utilized_fragments(&self) -> Box<[bool; FRAGMENTS_PER_EPOCH]> {
-        let mut utilization: Box<[bool; FRAGMENTS_PER_EPOCH]> = vec![false; FRAGMENTS_PER_EPOCH]
-            .try_into()
-            .expect("Error allocating memory!");
-        let util: Vec<bool> = self
-            .inner
-            .iter()
-            .map(|f| *f != GaloisField2p4::ZERO)
-            .collect();
-        utilization.copy_from_slice(util.as_slice());
-        utilization
+        // TODO change into sparse layout
+        self.inner.clone().map(|f| f != GaloisField2p4::ZERO).into()
     }
     pub fn is_plain(&self) -> bool {
         self.inner
@@ -152,17 +239,68 @@ impl From<FrameFactor> for WideFactor {
         wide
     }
 }
+impl From<FrameFactor> for SparseFactor {
+    fn from(value: FrameFactor) -> Self {
+        let mut inner = Vec::new();
+        let FrameFactor {
+            widths,
+            offsets,
+            factors,
+        } = value;
+        let mut factors = factors.iter();
+        for (participant, (width_u8, offset)) in widths.iter().zip(offsets.iter()).enumerate() {
+            let width = (*width_u8 as usize) * 2;
+            let idx = participant * FRAGMENTS_PER_PARTICIPANT_PER_EPOCH + (*offset as usize);
+            for w in 0..width {
+                let factor = factors.next().unwrap();
+                if *factor != GaloisField2p4::ZERO {
+                    inner.push((idx + w, *factor));
+                }
+            }
+        }
+        SparseFactor { inner }
+    }
+}
+impl From<WideFactor> for SparseFactor {
+    fn from(value: WideFactor) -> Self {
+        let sparse: Vec<(usize, GaloisField2p4)> = value
+            .inner
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, f)| {
+                if *f != GaloisField2p4::ZERO {
+                    Some((idx, *f))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        SparseFactor { inner: sparse }
+    }
+}
 
 #[allow(dead_code)]
 #[derive(PartialEq, Clone, Debug)]
-pub struct CompactFactor {
+pub struct SparseFactor {
     pub inner: Vec<(usize, GaloisField2p4)>,
 }
 
-impl Default for CompactFactor {
+impl SparseFactor {
+    pub fn utilized_fragments(&self) -> Box<[bool; FRAGMENTS_PER_EPOCH]> {
+        let mut util: Box<[bool; FRAGMENTS_PER_EPOCH]> = vec![false; FRAGMENTS_PER_EPOCH]
+            .try_into()
+            .expect("Error allocating memory!");
+        for (idx, f) in self.inner.iter() {
+            util[*idx] = *f != GaloisField2p4::ZERO;
+        }
+        util
+    }
+}
+
+impl Default for SparseFactor {
     fn default() -> Self {
         let inner = Vec::new();
-        CompactFactor { inner }
+        SparseFactor { inner }
     }
 }
 

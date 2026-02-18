@@ -210,6 +210,45 @@ Troubleshooting
 - Port conflicts:
   - If 3000 is busy, the server picks the next free port (3001, …). Use the printed URL or update the Server field accordingly.
 
+## Test on different devices
+
+Your desktop or laptop, where the backend runs,
+may or may not be the device where the frontend runs.
+It's planned to use a smartphone as the frontend to also guarantee having a camera,
+e.g. for scanning QR-Codes.
+This device configuration comes with some technical hurdles,
+or at least I encountered them.
+
+#### How to set up your playground on windows/wsl:
+
+1. On my device I need the windows-firewall to allow incoming tcp requests.
+Let's go for port `8000` in this example.
+Search in windows for `wf.msc` to open the firewall configuration interface.
+Click on incoming rules, add a new one, select and insert your port.
+2. The next step for me was to map my outgoing ip address to my localhost ip.
+Let's say eduroam assigned for my laptop the address `10.126.86.241`.
+Then I will map this address with our previously opened port to localhost at port 3000.
+`netsh interface portproxy add v4tov4 listenaddress=10.126.86.241 listenport=8000 connectaddress=127.0.0.1 connectport=3000`.
+Be aware that you have to run this command as administrator.
+To remove this rule just type: `netsh interface portproxy delete v4tov4 listenaddress=10.126.86.241 listenport=8000`.
+3. As a last step you need to tinker on your phone.
+Your browser will freak out if some random insecure website demands access to the camera.
+It won't even show a message for you to accept the access request.
+For this behaviour we either have to use a https connection on tell the browser our website is not so insecure after all.
+I don't know how or even if this works on firefox, so I will tell you about chrome.
+Got to `chrome://flags` or `edge://flags` and search for `#unsafely-treat-insecure-origin-as-secure`.
+We want to activate this flag and also enter the ip address inside the textbox e.g. `http://10.126.86.241:8000`.
+Finally, you have to restart your browser.
+
+Some more information about eduroam: Even though eduroam gives us a global IPv6 address,
+it will block IPv6 requests from outside eduroam.
+So be sure to both connect your laptop and phone with eduroam.
+
+#### Setup for linux/macos
+
+My device don't run any of those.
+Please share your solution if you find out how to get it running.
+
 ## Development workflow
 
 1) `just start dev` to build and run
