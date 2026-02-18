@@ -8,17 +8,19 @@ file = { SOI ~ game_flow ~ EOI }
 // Character classes
 //////////////////////////
 alpha = { 'a'..'z' | 'A'..'Z' }
+capital = { 'A'..'Z' }
 digit = { '0'..'9' }
+ident_char = { ASCII_ALPHANUMERIC }
 int = @{ ("-")? ~ ASCII_DIGIT+ }
-ident = @{ &alpha ~ !(kw) ~ (alpha | digit)* }
+ident = @{ !(kw) ~ &capital ~ (alpha | digit)* }
 
 //////////////////////////
 // Basic semantic identifiers
 //////////////////////////
-game        = { ident }
+gamename    = { ident }
 stage       = { ident }
-teamname    = { &"T" ~ ident }
-playername  = { &"P" ~ ident }
+teamname    = { ident }
+playername  = { ident }
 // Keeping Locations normal because there are the most frequently used!
 location    = { ident }
 token       = { ident }
@@ -88,6 +90,7 @@ kw_out        = @{ "out" }
 kw_owner      = @{ "owner" }
 kw_place      = @{ "place" }
 kw_player     = @{ "player" }
+kw_players     = @{ "players" }
 kw_playersin  = @{ "playersin" }
 kw_playersout = @{ "playersout" }
 kw_playroundcounter = @{ "playroundcounter" }
@@ -124,7 +127,8 @@ kw_where      = @{ "where" }
 kw_winner     = @{ "winner" }
 kw_with       = @{ "with" }
 
-kw = {
+kw = @{
+  (
     kw_adjacent
   | kw_all
   | kw_and
@@ -180,6 +184,7 @@ kw = {
   | kw_owner
   | kw_place
   | kw_player
+  | kw_players
   | kw_playersin
   | kw_playersout
   | kw_playroundcounter
@@ -214,6 +219,10 @@ kw = {
   | kw_where
   | kw_winner
   | kw_with
+  )
+  // Prefix is allowed to use
+  // Still cause errors when using kw_all or other key_words
+  ~ !ident_char
 }
 
 //////////////////////////
@@ -286,8 +295,7 @@ int_op = {
 // PlayerExpr
 // =======================
 turnorder_at = { kw_turnorder ~ int_expr }
-owner_of_card_position  = { kw_owner ~ kw_of ~ card_position }
-owner_of_memory  = { kw_owner ~ kw_of ~ extrema ~ memory }
+owner_of_player  = { kw_owner ~ kw_of ~ (card_position | extrema ~ memory) }
 
 player_expr = { 
     kw_current
@@ -295,8 +303,7 @@ player_expr = {
   | kw_previous
   | kw_competitor
   | turnorder_at
-  | owner_of_card_position
-  | owner_of_memory
+  | owner_of_player
   | playername
 }
 // =======================
@@ -309,7 +316,9 @@ int_collection_at = { int_collection ~ int_expr }
 size_of_collection = { kw_size ~ kw_of ~ collection }
 sum_of_int_collection = { kw_sum ~ kw_of ~ int_collection }
 sum_of_card_set = { kw_sum ~ kw_of ~ card_set ~ kw_using ~ pointmap}
+int_extrema_of_card_set = { extrema ~ kw_of ~ card_set ~ kw_using ~ pointmap}
 extrema_of_int_collection = { extrema ~ kw_of ~ int_collection }
+runtime_int = { kw_stageroundcounter | kw_playroundcounter }
 
 int_expr = { 
     int
@@ -317,9 +326,9 @@ int_expr = {
   | size_of_collection
   | sum_of_int_collection
   | sum_of_card_set
+  | int_extrema_of_card_set
   | extrema_of_int_collection
-  | kw_stageroundcounter
-  | kw_playroundcounter
+  | runtime_int
   | bin_int_op
 }
 // =======================
@@ -339,11 +348,11 @@ string_expr = {
 
 // CardPosition
 // =======================
-extrema = { ((kw_min | kw_max) | (kw_lowest | kw_highest)) }
+extrema = { (kw_min | kw_max | kw_lowest | kw_highest) }
 location_top = { location ~ kw_top }
 location_bottom = { location ~ kw_bottom }
 location_int_expr = { location ~ int_expr }
-extrema_of_card_set = {extrema ~ kw_of ~ card_set ~ kw_using ~ (kw_points ~ pointmap | precedence)  }
+extrema_of_card_set = { extrema ~ kw_of ~ card_set ~ kw_using ~ (kw_points ~ pointmap | precedence)  }
 
 card_position = {
     location_top
@@ -356,8 +365,8 @@ card_position = {
 // BoolExpr
 // =======================
 card_set_compare = { (eq | neq) }
-player_expr_compare = { (eq | neq) }
-team_expr_compare = { (eq | neq) }
+player_expr_compare = { "p" ~ (eq | neq) }
+team_expr_compare = { "t" ~ (eq | neq) }
 string_expr_compare = { (eq | neq) }
 bool_op = { (kw_and | kw_or) }
 unary_op = { (kw_not) }
@@ -376,7 +385,8 @@ string_expr_bool = { string_expr ~ string_expr_compare ~ string_expr }
 player_expr_bool = { player_expr ~ player_expr_compare ~ player_expr }
 team_expr_bool = { team_expr ~ team_expr_compare ~ team_expr }
 int_expr_bool = { int_expr ~ int_compare ~ int_expr }
-card_set_empty = { card_set ~ kw_is ~ (kw_not)? ~ kw_empty }
+card_set_not_empty = { card_set ~ kw_is ~ kw_not ~ kw_empty }
+card_set_empty = { card_set ~ kw_is ~ kw_empty }
 bool_expr_binary = { "(" ~ bool_expr ~ bool_op ~ bool_expr ~ ")" }
 bool_expr_unary = { unary_op ~ bool_expr }
 players_out_of = { players ~ kw_out ~ kw_of ~ out_of }
@@ -391,6 +401,7 @@ bool_expr = {
   | player_expr_bool
   | team_expr_bool
   | int_expr_bool
+  | card_set_not_empty
   | card_set_empty
   | bool_expr_binary
   | bool_expr_unary
@@ -426,8 +437,8 @@ team_expr = {
 collection = { 
     int_collection
   | string_collection
-  | player_collection
-  | team_collection
+  | kw_players ~ player_collection
+  | kw_teams ~ team_collection
   | location_collection
   // if not here then ambiguous
   | kw_cards ~ card_set
@@ -441,12 +452,12 @@ collection = {
 
 // IntCollection
 // =======================
-int_collection = { "(" ~ int_expr ~ ("," ~ int_expr)+ ~ ")" }
+int_collection = { "(" ~ int_expr ~ ("," ~ int_expr)* ~ ")" }
 // =======================
 
 // StringCollection
 // =======================
-string_collection = { "(" ~ string_expr ~ ("," ~ string_expr)+ ~ ")" }
+string_collection = { "(" ~ string_expr ~ ("," ~ string_expr)* ~ ")" }
 // =======================
 
 // Quantifier
@@ -458,7 +469,7 @@ quantifier = {
 // =======================
 
 // PlayerCollection
-player_expr_collection = { "(" ~ player_expr ~ ("," ~ player_expr )+ ~ ")" }
+player_expr_collection = { "(" ~ player_expr ~ ("," ~ player_expr )* ~ ")" }
 
 player_collection = {  
     player_expr_collection
@@ -471,18 +482,18 @@ player_collection = {
 
 // TeamCollection
 // =======================
-team_expr_collection = { "(" ~ team_expr ~ ("," ~ team_expr)+ ~ ")" }
+team_expr_collection = { "(" ~ team_expr ~ ("," ~ team_expr)* ~ ")" }
 other_teams = { kw_other ~ kw_teams }
 
 team_collection = {  
     team_expr_collection
-  | kw_other ~ kw_teams 
+  | other_teams
 }
 // =======================
 
 // LocationCollection
 // =======================
-location_collection = { "(" ~ location ~ ("," ~ location)+ ~ ")" }
+location_collection = { "(" ~ location ~ ("," ~ location)* ~ ")" }
 // =======================
 
 //////////////////////////
@@ -510,7 +521,7 @@ flow_component = {
 // EndCondition
 // =======================
 until_bool = { kw_until ~ bool_expr }
-until_bool_repetitions = { kw_until ~ logical_compare ~ repetitions }
+until_bool_repetitions = { kw_until ~ bool_expr ~ logical_compare ~ repetitions }
 until_repetitions = { repetitions }
 until_end = { kw_until ~ kw_end }
 
@@ -612,7 +623,9 @@ create_token = { kw_token ~ int_expr ~ token ~ kw_on ~ location }
 
 // CreatePrecedence
 // =======================
-create_precedence = { kw_precedence  ~ precedence ~ (kw_on ~ key ~ values) }
+key_value = { key ~ value }
+key_value_list = { "(" ~ key_value ~ ("," ~ key_value)* ~ ")" }
+create_precedence = { kw_precedence  ~ precedence ~ (kw_on ~ key ~ values | key_value_list) }
 // =======================
 
 // CreateCombo
@@ -622,15 +635,17 @@ create_combo = { kw_combo ~ combo ~ kw_where ~ filter_expr }
 
 // CreateMemory
 // =======================
-memory_type = { (int_expr | string_expr | collection | card_set) }
+memory_type = { (int_expr | string_expr | collection) }
 create_memory = { kw_memory ~ memory ~ (memory_type)? ~ kw_on ~ owner }
 // =======================
 
 // CreatePointMap
 // =======================
+key_value_int = { key ~ value ~ ":" ~ int_expr }
+key_value_int_list = { "(" ~ key_value_int ~ ("," ~ key_value_int)* ~ ")" }
 value_int = { value ~ ":" ~ int_expr }
 value_int_list = { "(" ~ value_int ~ ("," ~ value_int)* ~ ")" }
-create_pointmap = { kw_points  ~ pointmap ~ kw_on ~ key ~ value_int_list }
+create_pointmap = { kw_points  ~ pointmap ~ (kw_on ~ key ~ value_int_list | key_value_int_list) }
 // =======================
 
 //////////////////////////
@@ -697,7 +712,7 @@ shuffle_action = { kw_shuffle ~ card_set }
 
 // OutAction
 // =======================
-out_action = { kw_set ~ players ~ kw_out ~ kw_of ~ (kw_stage | kw_game) ~ (kw_successful | kw_fail)? }
+out_action = { kw_set ~ players ~ kw_out ~ kw_of ~ (kw_stage | kw_game ~ kw_successful | kw_game ~ kw_fail) }
 // =======================
 
 // SetMemory
@@ -729,7 +744,7 @@ end_action = { kw_end ~ end_type }
 // DemandAction
 // =======================
 demand_type = { (card_position | string_expr | int_expr) }
-demand_action = { kw_demand ~ (kw_as ~ memory)? }
+demand_action = { kw_demand ~ demand_type ~ (kw_as ~ memory)? }
 // =======================
 
 // MoveAction
@@ -754,15 +769,19 @@ quantity = { int_expr | quantifier | int_range }
 
 // IntRange
 // =======================
-int_range_helper = { int_compare ~ int_expr }
-int_range = { int_range_helper ~ (logical_compare ~ int_range_helper)* }
+int_range_logic = { kw_and | kw_or }
+int_range_helper = { int_range_logic ~ int_compare ~ int_expr }
+int_range = { int_compare ~ int_expr ~ int_range_helper* }
 // =======================
 
 // CardSet
 // =======================
 group_of_owner = { group ~ kw_of ~ owner }
 
-card_set = { group_of_owner | group }
+card_set = { 
+    group_of_owner 
+  | group 
+}
 // =======================
 
 // Group
@@ -845,7 +864,7 @@ token_move = {
 // TokenLoc
 // =======================
 token_loc = { 
-    groupable ~ kw_of ~ players
+  groupable ~ (kw_of ~ players)?
 }
 // =======================
 
@@ -864,7 +883,8 @@ scoring_rule = {
 // ScoreRule
 // =======================
 score_rule = { 
-    kw_score ~ int_expr ~ (kw_to ~ memory)? ~ kw_of ~ players
+      kw_score ~ int_expr ~ kw_to ~ memory ~ kw_of ~ players
+    | kw_score ~ int_expr ~ kw_to ~ players
 }
 // =======================
 

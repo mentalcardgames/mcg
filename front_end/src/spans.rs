@@ -11,10 +11,6 @@ pub struct OwnedSpan {
     pub end_pos: (usize, usize),
 }
 
-pub struct OwnedPosition {
-
-}
-
 impl From<pest::Span<'_>> for OwnedSpan {
     fn from(input: pest::Span) -> Self {
         Self {
@@ -32,3 +28,4 @@ pub struct Spanned<T> {
     pub node: T,
     pub span: OwnedSpan,
 }
+

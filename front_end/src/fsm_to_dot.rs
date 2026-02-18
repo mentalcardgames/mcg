@@ -24,13 +24,13 @@ pub fn fsm_to_dot<Ctx: AstContext>(fsm: &Ir<Payload<Ctx>>, path: &Path) -> Resul
 
     for (state_id, edges) in &fsm.states {
         // Render each state as a clean rectangle
-        writeln!(file, "  {:?} [label=\"Block: {:?}\"];", state_id.raw(), state_id.raw())?;
+        // writeln!(file, "  {:?} [xlabel=\"Block: {:?}\"];", state_id.raw(), state_id.raw())?;
         
         for edge in edges.iter() {
             let label = String::from(edge.payload.to_string()).replace('"', "\\\"");
             writeln!(
                 file, 
-                "  {:?} -> {:?} [label=\" {} \"];", 
+                "  {:?} -> {:?} [xlabel=\" {} \"];", 
                 state_id.raw(), 
                 edge.to.raw(), 
                 label

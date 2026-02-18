@@ -84,7 +84,7 @@ impl AstPass for SemanticVisitor {
         match unwrapped_node {
           NodeKind::SetUpRule(s) => {
             match s {
-              SetUpRule::CreatePrecedence(precedence, key_value_pairs) => {
+              SetUpRule::CreatePrecedence { precedence: precedence, kvs: key_value_pairs } => {
                 for (k, v) in key_value_pairs.iter() {
                   self.init_corr.insert( 
                     CorrespondanceType::Precedence { 
@@ -101,7 +101,7 @@ impl AstPass for SemanticVisitor {
                   );
                 }
               },
-              SetUpRule::CreatePointMap(pointmap, key_value_int_triples) => {
+              SetUpRule::CreatePointMap { pointmap: pointmap, kvis: key_value_int_triples} => {
                 for (k, v, _) in key_value_int_triples.iter() {
                   self.init_corr.insert( 
                     CorrespondanceType::PointMap { 
@@ -118,7 +118,7 @@ impl AstPass for SemanticVisitor {
                   );
                 }
               },
-              SetUpRule::CreateCardOnLocation(_, types) => {
+              SetUpRule::CreateCardOnLocation { location: _, types: types} => {
                 for (k, vs) in types.node.types.iter() {
                   for v in vs.iter() {
                     self.init_corr.insert( 
@@ -135,7 +135,7 @@ impl AstPass for SemanticVisitor {
           },
           NodeKind::AggregateFilter(a) => {
             match a {
-                AggregateFilter::Adjacent(key, precedence) => {
+                AggregateFilter::Adjacent { key: key, precedence: precedence} => {
                   self.used_corr.push(
                     UsedCorrespondence { 
                       ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
@@ -144,7 +144,7 @@ impl AstPass for SemanticVisitor {
                     }
                   );
                 },
-                AggregateFilter::Higher(key, precedence) => {
+                AggregateFilter::Higher { key: key, precedence: precedence} => {
                   self.used_corr.push(
                     UsedCorrespondence { 
                       ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
@@ -153,7 +153,7 @@ impl AstPass for SemanticVisitor {
                     }
                   );
                 },
-                AggregateFilter::Lower(key, precedence) => {
+                AggregateFilter::Lower { key: key, precedence: precedence} => {
                   self.used_corr.push(
                     UsedCorrespondence { 
                       ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
@@ -162,11 +162,11 @@ impl AstPass for SemanticVisitor {
                     }
                   );
                 },
-                AggregateFilter::KeyString(key, _, string) => {
+                AggregateFilter::KeyString { key: key, cmp: _, string: string} => {
                   match &string.node {
-                    StringExpr::Query(q) => {
+                    StringExpr::Query { query: q} => {
                       match &q.node {
-                        QueryString::KeyOf(k, _) => {
+                        QueryString::KeyOf { key: k, card_position: _} => {
                           self.init_corr.insert( 
                               CorrespondanceType::Key { 
                                 node: k.node.clone() 
@@ -184,7 +184,7 @@ impl AstPass for SemanticVisitor {
                         _ => {}
                       }
                     },
-                    StringExpr::Literal(value) => {
+                    StringExpr::Literal { value: value} => {
                       self.used_corr.push(
                         UsedCorrespondence { 
                           ty: CorrespondanceType::Value { node: value.node.clone() }, 

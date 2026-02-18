@@ -135,7 +135,7 @@ impl SymbolVisitor {
             // .entry() handles the case where the GameType isn't in the map yet
             map.entry(game_type)
                 .or_insert_with(Vec::new)
-                .push(var.id); // Assuming var.node is the String name
+                .push(var.id); // Assuming var is the String name
         }
 
         map
@@ -150,28 +150,28 @@ impl AstPass for SymbolVisitor {
       if let Some(unwrapped) = node.kind() {
         match unwrapped {
             NodeKind::OutOf(o) => match o {
-                OutOf::Stage(spanned) => {
+                OutOf::Stage { name: spanned } => {
                     self.use_id(&spanned);
                 },
                 _ => {},
             },
             NodeKind::Groupable(g) => match g {
-                Groupable::Location(spanned) => {
+                Groupable::Location { name: spanned } => {
                     self.use_id(&spanned);
                 },
                 _ => {}
             },
             NodeKind::Types(t) => {
                 for (k, vs) in t.types.iter() {
-                    self.init_id(k, GameType::Key);
+                    self.init_id(&k, GameType::Key);
                     for v in vs.iter() {
-                        self.init_id(v, GameType::Value);
+                        self.init_id(&v, GameType::Value);
                     }
                 }
             },
             NodeKind::AggregatePlayer(a) => {
                 match a {
-                    AggregatePlayer::OwnerOfMemory(_, spanned1) => {
+                    AggregatePlayer::OwnerOfMemory { extrema: _, memory: spanned1} => {
                         self.use_id(&spanned1);
                     },
                     _ => {},
@@ -179,7 +179,7 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::PlayerExpr(p) => {
                 match p {
-                    PlayerExpr::Literal(spanned) => {
+                    PlayerExpr::Literal { name: spanned } => {
                         self.use_id(&spanned);
     
                     },
@@ -188,10 +188,10 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::AggregateInt(a) => {
                 match a {
-                    AggregateInt::SumOfCardSet(_, spanned1) => {
+                    AggregateInt::SumOfCardSet{ card_set: _, pointmap: spanned1} => {
                         self.use_id(&spanned1);
                     },
-                    AggregateInt::ExtremaCardset(_, _, spanned2) => {
+                    AggregateInt::ExtremaCardset { extrema: _, card_set: _, pointmap: spanned2} => {
                         self.use_id(&spanned2);
                     },
                     _ => {},
@@ -199,7 +199,7 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::QueryString(q) => {
                 match q {
-                    QueryString::KeyOf(spanned, _) => {
+                    QueryString::KeyOf { key: spanned, card_position: _} => {
                         self.use_id(&spanned);
                     },
                     _ => {}
@@ -207,7 +207,7 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::StringExpr(s) => {
                 match s {
-                    StringExpr::Literal(spanned) => {
+                    StringExpr::Literal { value: spanned} => {
                         self.use_id(&spanned);
                     },
                     _ => {},
@@ -215,7 +215,7 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::TeamExpr(t) => {
                 match t {
-                    TeamExpr::Literal(spanned) => {
+                    TeamExpr::Literal { name: spanned } => {
                         self.use_id(&spanned);
                     },
                     _ => {},
@@ -223,38 +223,38 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::QueryCardPosition(q) => {
                 match q {
-                    QueryCardPosition::At(spanned, _) => {
+                    QueryCardPosition::At { location: spanned, int_expr: _} => {
                         self.use_id(&spanned);
                     },
-                    QueryCardPosition::Top(spanned) => {
+                    QueryCardPosition::Top { location: spanned} => {
                         self.use_id(&spanned);
                     },
-                    QueryCardPosition::Bottom(spanned) => {
+                    QueryCardPosition::Bottom { location: spanned} => {
                         self.use_id(&spanned);
                     },
                 }
             },
             NodeKind::AggregateCardPosition(a) => {
                 match a {
-                    AggregateCardPosition::ExtremaPointMap(_, _, spanned2) => {
+                    AggregateCardPosition::ExtremaPointMap{extrema: _, card_set: _, pointmap: spanned2} => {
                         self.use_id(&spanned2);
                     },
-                    AggregateCardPosition::ExtremaPrecedence(_, _, spanned2) => {
+                    AggregateCardPosition::ExtremaPrecedence{extrema: _, card_set: _, precedence: spanned2} => {
                         self.use_id(&spanned2);
                     },
                 }
             },
             NodeKind::LocationCollection(l) => {
                 for location in l.locations.iter() {
-                    self.use_id(location);
+                    self.use_id(&location);
                 }
             },
             NodeKind::Group(g) => {
                 match g {
-                    Group::NotCombo(spanned, _) => {
+                    Group::NotCombo{combo: spanned, groupable: _} => {
                         self.use_id(&spanned);
                     },
-                    Group::Combo(spanned, _) => {
+                    Group::Combo{combo: spanned, groupable: _} => {
                         self.use_id(&spanned);
                     },
                     _ => {},
@@ -262,31 +262,31 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::AggregateFilter(a) => {
                 match a {
-                    AggregateFilter::Same(spanned) => {
+                    AggregateFilter::Same{key:spanned} => {
                         self.use_id(&spanned);
                     },
-                    AggregateFilter::Distinct(spanned) => {
+                    AggregateFilter::Distinct{key:spanned} => {
                         self.use_id(&spanned);
                     },
-                    AggregateFilter::Adjacent(spanned, spanned1) => {
-                        self.use_id(&spanned);
-                        self.use_id(&spanned1);
-                    },
-                    AggregateFilter::Higher(spanned, spanned1) => {
+                    AggregateFilter::Adjacent{key: spanned, precedence: spanned1} => {
                         self.use_id(&spanned);
                         self.use_id(&spanned1);
                     },
-                    AggregateFilter::Lower(spanned, spanned1) => {
+                    AggregateFilter::Higher{key: spanned, precedence: spanned1} => {
                         self.use_id(&spanned);
                         self.use_id(&spanned1);
                     },
-                    AggregateFilter::KeyString(spanned, _, _)=> {
+                    AggregateFilter::Lower{key: spanned, precedence: spanned1} => {
+                        self.use_id(&spanned);
+                        self.use_id(&spanned1);
+                    },
+                    AggregateFilter::KeyString{key: spanned, cmp: _, string: _} => {
                         self.use_id(&spanned);
                     },
-                    AggregateFilter::Combo(spanned) => {
+                    AggregateFilter::Combo{combo: spanned} => {
                         self.use_id(&spanned);
                     },
-                    AggregateFilter::NotCombo(spanned) => {
+                    AggregateFilter::NotCombo{combo: spanned} => {
                         self.use_id(&spanned);
                     },
                     _ => {}
@@ -294,49 +294,49 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::SetUpRule(s) => {
                 match s {
-                    SetUpRule::CreatePlayer(spanneds) => {
+                    SetUpRule::CreatePlayer{players: spanneds} => {
                         for s in spanneds.iter() {
-                            self.init_id(s, GameType::Player);
+                            self.init_id(&s, GameType::Player);
                         } 
                     },
-                    SetUpRule::CreateTeams(items) => {
+                    SetUpRule::CreateTeams{teams: items} => {
                         for (t, _) in items.iter() {
-                            self.init_id(t, GameType::Team);
+                            self.init_id(&t, GameType::Team);
                         }
                     },
-                    SetUpRule::CreateLocation(spanneds, _) => {
+                    SetUpRule::CreateLocation{locations: spanneds, owner: _} => {
                         for s in spanneds.iter() {
-                            self.init_id(s, GameType::Location);
+                            self.init_id(&s, GameType::Location);
                         }
                     },
-                    SetUpRule::CreateCardOnLocation(spanned, _) => {
+                    SetUpRule::CreateCardOnLocation{location: spanned, types: _} => {
                         self.use_id(&spanned);
                     },
-                    SetUpRule::CreateTokenOnLocation(_, spanned1, spanned2) => {
+                    SetUpRule::CreateTokenOnLocation{int: _, token: spanned1, location: spanned2} => {
                         self.init_id(&spanned1, GameType::Token);
                         self.use_id(&spanned2);
                     },
-                    SetUpRule::CreateCombo(spanned, _) => {
+                    SetUpRule::CreateCombo{combo: spanned, filter: _} => {
                         self.init_id(&spanned, GameType::Combo);
                     },
-                    SetUpRule::CreateMemory(spanned, _) => {
+                    SetUpRule::CreateMemory{memory: spanned, owner: _} => {
                         self.init_id(&spanned, GameType::Memory);
                     },
-                    SetUpRule::CreateMemoryWithMemoryType(spanned, _, _) => {
+                    SetUpRule::CreateMemoryWithMemoryType{memory: spanned, memory_type: _, owner: _} => {
                         self.init_id(&spanned, GameType::Memory);
                     },
-                    SetUpRule::CreatePrecedence(spanned, items) => {
+                    SetUpRule::CreatePrecedence{precedence: spanned, kvs: items} => {
                         self.init_id(&spanned, GameType::Precedence);
                         for (k, v) in items.iter() {
-                            self.use_id(k);
-                            self.use_id(v);
+                            self.use_id(&k);
+                            self.use_id(&v);
                         }
                     },
-                    SetUpRule::CreatePointMap(spanned, items) => {
+                    SetUpRule::CreatePointMap{pointmap: spanned, kvis: items} => {
                         self.init_id(&spanned, GameType::PointMap);
                         for (k, v, _) in items.iter() {
-                            self.use_id(k);
-                            self.use_id(v);
+                            self.use_id(&k);
+                            self.use_id(&v);
                         }
                     },
                     _ => {}
@@ -344,13 +344,13 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::ActionRule(a) => {
                 match a {
-                    ActionRule::SetMemory(spanned, _) => {
+                    ActionRule::SetMemory{memory: spanned, memory_type: _} => {
                         self.use_id(&spanned);
                     },
-                    ActionRule::ResetMemory(spanned) => {
+                    ActionRule::ResetMemory{memory: spanned} => {
                         self.use_id(&spanned);
                     },
-                    ActionRule::BidMemoryAction(spanned, _) => {
+                    ActionRule::BidMemoryAction{ memory: spanned, quantity: _} => {
                         self.use_id(&spanned);
                     },
                     _ => {}
@@ -361,17 +361,17 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::TokenMove(t) => {
                 match t {
-                    TokenMove::Place(spanned, _, _) => {
+                    TokenMove::Place { token: spanned, from_loc:  _, to_loc:  _} => {
                         self.use_id(&spanned);
                     },
-                    TokenMove::PlaceQuantity(_, spanned1, _, _) => {
+                    TokenMove::PlaceQuantity{quantity: _, token: spanned1, from_loc: _, to_loc: _} => {
                         self.use_id(&spanned1);
                     },
                 }
             },
             NodeKind::ScoreRule(s) => {
                 match s {
-                    ScoreRule::ScoreMemory(_, spanned1, _) => {
+                    ScoreRule::ScoreMemory{int: _, memory: spanned1, players: _} => {
                         self.use_id(&spanned1);
                     },
                     _ => {}
@@ -379,7 +379,7 @@ impl AstPass for SymbolVisitor {
             },
             NodeKind::WinnerType(w) => {
                 match w {
-                    WinnerType::Memory(spanned) => {
+                    WinnerType::Memory { memory: spanned} => {
                         self.use_id(&spanned);
                     },
                     _ => {},

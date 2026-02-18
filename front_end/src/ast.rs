@@ -2,25 +2,40 @@ use code_gen::*;
 
 #[spanned_ast]
 pub mod ast {
+    use arbitrary::Arbitrary;
     use serde::{Serialize, Deserialize};
+    use crate::arbitrary::{
+        gen_vec_min_1,
+        gen_player_name, 
+        gen_team_name, 
+        gen_vec_strings, 
+        gen_vec_players_prefixed, 
+        gen_ident, 
+        gen_vec_teams_with_players,
+        gen_types_and_subtypes,
+        gen_vec_min_1_kvs,
+        gen_vec_min_1_kvis,
+        gen_vec_min_1_ints,
+        gen_flows_safe
+    };
 
     // Operator
     // ===========================================================================
     // ===========================================================================
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum BinCompare {
         Eq,
         Neq,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum LogicBinOp {
         And,
         Or,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum IntOp {
         Plus,
         Minus,
@@ -29,7 +44,7 @@ pub mod ast {
         Mod,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum IntCompare {
         Eq,
         Neq,
@@ -47,96 +62,109 @@ pub mod ast {
     // ===========================================================================
     // ===========================================================================
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Extrema {
         Min,
         Max,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum OutOf {
         CurrentStage,
-        Stage(String),
+        Stage { 
+            #[arbitrary(with = gen_ident)]
+            name: String 
+        },
         Game,
-        Play,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Groupable {
-        Location(String),
-        LocationCollection(LocationCollection),
+        Location { 
+            #[arbitrary(with = gen_ident)]
+            name: String
+        },
+        LocationCollection { location_collection: LocationCollection },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Owner {
-        Player(PlayerExpr),
-        PlayerCollection(PlayerCollection),
-        Team(TeamExpr),
-        TeamCollection(TeamCollection),
+        Player { player: PlayerExpr },
+        PlayerCollection { player_collection: PlayerCollection},
+        Team{ team: TeamExpr},
+        TeamCollection {team_collection: TeamCollection},
         Table,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Quantity {
-        Int(IntExpr),
-        Quantifier(Quantifier),
-        IntRange(IntRange),
+        Int {int: IntExpr},
+        Quantifier {qunatifier: Quantifier},
+        IntRange {int_range: IntRange},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
+    pub enum IntRangeOperator {
+        And,
+        Or
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct IntRange {
-        pub op_int: Vec<(IntCompare, IntExpr)>,
+        pub start: (IntCompare, IntExpr),
+        #[arbitrary(with = gen_vec_min_1)]
+        pub op_int: Vec<(IntRangeOperator, IntCompare, IntExpr)>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Quantifier {
         All,
         Any,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum EndCondition {
-        UntilBool(BoolExpr),
-        UntilBoolRep(BoolExpr, LogicBinOp, Repititions),
-        UntilRep(Repititions),
+        UntilBool {bool_expr: BoolExpr},
+        UntilBoolRep {bool_expr: BoolExpr, logic: LogicBinOp, reps: Repititions},
+        UntilRep {reps: Repititions},
         UntilEnd,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct Repititions {
         pub times: IntExpr,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum MemoryType {
-        Int(IntExpr),
-        String(StringExpr),
-        CardSet(CardSet),
-        Collection(Collection),
+        Int {int: IntExpr},
+        String {string: StringExpr },
+        Collection {collection: Collection},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Players {
-        Player(PlayerExpr),
-        PlayerCollection(PlayerCollection),
+        Player { player: PlayerExpr},
+        PlayerCollection {player_collection: PlayerCollection},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum EndType {
         Turn,
         Stage,
-        GameWithWinner(Players),
+        GameWithWinner {players: Players},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum DemandType {
-        CardPosition(CardPosition),
-        String(StringExpr),
-        Int(IntExpr),
+        CardPosition {card_position: CardPosition},
+        String {string: StringExpr},
+        Int{ int: IntExpr},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct Types {
+        #[arbitrary(with = gen_types_and_subtypes)]
         pub types: Vec<(String, Vec<String>)>,
     }
 
@@ -151,7 +179,7 @@ pub mod ast {
 
     // Player
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum RuntimePlayer {
         Current,
         Next,
@@ -159,174 +187,216 @@ pub mod ast {
         Competitor,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum QueryPlayer {
-        Turnorder(IntExpr),
+        Turnorder {int: IntExpr},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum AggregatePlayer {
-        OwnerOfCardPostion(Box<CardPosition>),
-        OwnerOfMemory(Extrema, String),
+        OwnerOfCardPostion {card_position: Box<CardPosition>},
+        OwnerOfMemory {
+            extrema: Extrema, 
+            #[arbitrary(with = gen_ident)]
+            memory: String 
+        },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum PlayerExpr {
-        Literal(String),
-        Runtime(RuntimePlayer),
-        Aggregate(AggregatePlayer),
-        Query(QueryPlayer),
+        Literal { 
+            // #[arbitrary(with = gen_player_name)]
+            name: String 
+        },
+        Runtime {runtime: RuntimePlayer},
+        Aggregate {aggregate: AggregatePlayer},
+        Query {query: QueryPlayer},
     }
     // ===========================================================================
 
     // IntExpr
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum QueryInt {
-        IntCollectionAt(Box<IntCollection>, Box<IntExpr>),
+        IntCollectionAt { int_collection: Box<IntCollection>, int_expr: Box<IntExpr> },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum AggregateInt {
-        SizeOf(Collection),
-        SumOfIntCollection(IntCollection),
-        SumOfCardSet(Box<CardSet>, String),
-        ExtremaCardset(Extrema, Box<CardSet>, String),
-        ExtremaIntCollection(Extrema, IntCollection),
+        SizeOf {collection: Collection},
+        SumOfIntCollection {int_collection: IntCollection},
+        SumOfCardSet{ 
+            card_set:Box<CardSet>, 
+            #[arbitrary(with = gen_ident)]
+            pointmap: String 
+        },
+        ExtremaCardset {
+            extrema: Extrema, 
+            card_set: Box<CardSet>, 
+            #[arbitrary(with = gen_ident)]
+            pointmap: String 
+        },
+        ExtremaIntCollection {extrema: Extrema, int_collection: IntCollection},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum RuntimeInt {
         StageRoundCounter,
         PlayRoundCounter,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum IntExpr {
-        Literal(i32),
-        Binary(Box<IntExpr>, IntOp, Box<IntExpr>),
-        Query(QueryInt),
-        Aggregate(AggregateInt),
-        Runtime(RuntimeInt),
+        Literal { int: i32},
+        Binary {int: Box<IntExpr>, op: IntOp, int1: Box<IntExpr>},
+        Query {query: QueryInt},
+        Aggregate {aggregate: AggregateInt},
+        Runtime {runtime: RuntimeInt },
     }
     // ===========================================================================
 
     // String
     // ===========================================================================
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum QueryString {
-        KeyOf(String, CardPosition),
-        StringCollectionAt(StringCollection, IntExpr),
+        KeyOf{ 
+            #[arbitrary(with = gen_ident)]
+            key: String, 
+            card_position:CardPosition
+        },
+        StringCollectionAt { string_collection: StringCollection, int_expr: IntExpr },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum StringExpr {
-        Literal(String),
-        Query(QueryString),
+        Literal {
+            // #[arbitrary(with = gen_ident)]
+            value: String
+        },
+        Query {query: QueryString},
     }
     // ===========================================================================
 
     // Bool
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum CardSetCompare {
         Eq,
         Neq,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum StringCompare {
         Eq,
         Neq,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum PlayerCompare {
         Eq,
         Neq,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum TeamCompare {
         Eq,
         Neq,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum BoolOp {
         And,
         Or,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum UnaryOp {
         Not,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum CompareBool {
-        Int(IntExpr, IntCompare, IntExpr),
-        CardSet(CardSet, CardSetCompare, CardSet),
-        String(StringExpr, StringCompare, StringExpr),
-        Player(PlayerExpr, PlayerCompare, PlayerExpr),
-        Team(TeamExpr, TeamCompare, TeamExpr),
+        Int { int: IntExpr, cmp: IntCompare, int1: IntExpr },
+        CardSet{card_set: CardSet, cmp: CardSetCompare, card_set1: CardSet},
+        String{string: StringExpr, cmp: StringCompare, string1: StringExpr},
+        Player{player: PlayerExpr, cmp: PlayerCompare, player1: PlayerExpr},
+        Team{team: TeamExpr, cmp: TeamCompare, team1: TeamExpr},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum AggregateBool {
-        Compare(CompareBool),
-        CardSetEmpty(CardSet),
-        CardSetNotEmpty(CardSet),
-        OutOfPlayer(Players, OutOf),
+        Compare { cmp_bool: CompareBool},
+        CardSetEmpty{card_set: CardSet},
+        CardSetNotEmpty{card_set: CardSet},
+        OutOfPlayer{players: Players, out_of: OutOf},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum BoolExpr {
-        Binary(Box<BoolExpr>, BoolOp, Box<BoolExpr>),
-        Unary(UnaryOp, Box<BoolExpr>),
-        Aggregate(AggregateBool),
+        Binary{ bool_expr: Box<BoolExpr>, op: BoolOp, bool_expr1: Box<BoolExpr>},
+        Unary { op: UnaryOp, bool_expr: Box<BoolExpr> },
+        Aggregate{aggregate: AggregateBool},
     }
     // ===========================================================================
 
     // Team
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum AggregateTeam {
-        TeamOf(PlayerExpr),
+        TeamOf { player: PlayerExpr },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum TeamExpr {
-        Literal(String),
-        Aggregate(AggregateTeam),
+        Literal {
+            #[arbitrary(with = gen_team_name)]
+            name: String
+        },
+        Aggregate{ aggregate: AggregateTeam},
     }
     // ===========================================================================
 
     // CardPosition
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum QueryCardPosition {
-        At(String, IntExpr),
-        Top(String),
-        Bottom(String),
+        At {
+            #[arbitrary(with = gen_ident)]
+            location: String, 
+            int_expr:IntExpr
+        },
+        Top{ 
+            #[arbitrary(with = gen_ident)]
+            location: String
+        },
+        Bottom {
+            #[arbitrary(with = gen_ident)]
+            location: String
+        },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum AggregateCardPosition {
-        ExtremaPointMap(Extrema, Box<CardSet>, String),
-        ExtremaPrecedence(Extrema, Box<CardSet>, String),
+        ExtremaPointMap { extrema: Extrema, card_set: Box<CardSet>, 
+            #[arbitrary(with = gen_ident)]
+            pointmap: String 
+        },
+        ExtremaPrecedence { extrema: Extrema, card_set: Box<CardSet>, 
+            #[arbitrary(with = gen_ident)]
+            precedence: String 
+        },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum CardPosition {
-        Query(QueryCardPosition),
-        Aggregate(AggregateCardPosition),
+        Query { query: QueryCardPosition },
+        Aggregate { aggregate: AggregateCardPosition },
     }
 
     // Stauts
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Status {
         FaceUp,
         FaceDown,
@@ -342,65 +412,72 @@ pub mod ast {
     // ===========================================================================
     // ===========================================================================
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Collection {
-        IntCollection(IntCollection),
-        StringCollection(StringCollection),
-        LocationCollection(LocationCollection),
-        PlayerCollection(PlayerCollection),
-        TeamCollection(TeamCollection),
-        CardSet(Box<CardSet>),
+        IntCollection { int: IntCollection },
+        StringCollection { string: StringCollection },
+        LocationCollection { location: LocationCollection},
+        PlayerCollection {player: PlayerCollection },
+        TeamCollection { team: TeamCollection },
+        CardSet { card_set: Box<CardSet> },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct IntCollection {
+        #[arbitrary(with = gen_vec_min_1_ints)]
         pub ints: Vec<IntExpr>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct StringCollection {
+        #[arbitrary(with = gen_vec_min_1)]
         pub strings: Vec<StringExpr>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct LocationCollection {
+        #[arbitrary(with = gen_vec_strings)]
         pub locations: Vec<String>,
     }
 
     // PlayerCollection
     // ===========================================================================
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum RuntimePlayerCollection {
         PlayersOut,
         PlayersIn,
         Others,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum AggregatePlayerCollection {
-        Quantifier(Quantifier),
+        Quantifier { quantifier: Quantifier },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum PlayerCollection {
-        Literal(Vec<PlayerExpr>),
-        Aggregate(AggregatePlayerCollection),
-        Runtime(RuntimePlayerCollection),
+        Literal {
+            players: Vec<PlayerExpr> 
+        },
+        Aggregate { aggregate: AggregatePlayerCollection },
+        Runtime { runtime: RuntimePlayerCollection },
     }
     // ===========================================================================
 
     // TeamCollection
     // ===========================================================================
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum RuntimeTeamCollection {
         OtherTeams,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum TeamCollection {
-        Literal(Vec<TeamExpr>),
-        Runtime(RuntimeTeamCollection),
+        Literal { 
+            teams: Vec<TeamExpr> 
+        },
+        Runtime {runtime: RuntimeTeamCollection },
     }
 
     // ===========================================================================
@@ -412,47 +489,74 @@ pub mod ast {
     // ===========================================================================
     // ===========================================================================
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum CardSet {
-        Group(Group),
-        GroupOwner(Group, Owner),
+        Group { group: Group },
+        GroupOwner { group: Group, owner: Owner},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum Group {
-        Groupable(Groupable),
-        Where(Groupable, FilterExpr),
-        NotCombo(String, Groupable),
-        Combo(String, Groupable),
-        CardPosition(CardPosition),
+        Groupable { groupable: Groupable },
+        Where { groupable: Groupable, filter: FilterExpr},
+        NotCombo { combo: String, groupable: Groupable },
+        Combo{ combo: String, groupable: Groupable },
+        CardPosition{ card_position: CardPosition},
     }
 
     // FilterExpr
     // ===========================================================================
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum AggregateFilter {
-        Size(IntCompare, Box<IntExpr>),
-        Same(String),
-        Distinct(String),
-        Adjacent(String, String),
-        Higher(String, String),
-        Lower(String, String),
-        KeyString(String, StringCompare, Box<StringExpr>),
-        Combo(String),
-        NotCombo(String),
+        Size { cmp: IntCompare, int_expr: Box<IntExpr> },
+        Same {
+            #[arbitrary(with = gen_ident)]
+            key: String
+        },
+        Distinct{ 
+            #[arbitrary(with = gen_ident)]
+            key: String
+        },
+        Adjacent {
+            #[arbitrary(with = gen_ident)]
+            key: String, 
+            #[arbitrary(with = gen_ident)]
+            precedence: String },
+        Higher{ 
+            #[arbitrary(with = gen_ident)]
+            key: String, 
+            #[arbitrary(with = gen_ident)]
+            precedence: String },
+        Lower{
+            #[arbitrary(with = gen_ident)]
+            key: String, 
+            #[arbitrary(with = gen_ident)]
+            precedence: String},
+        KeyString{ 
+            #[arbitrary(with = gen_ident)]
+            key: String, 
+            cmp: StringCompare, string: Box<StringExpr>},
+        Combo {
+            #[arbitrary(with = gen_ident)]
+            combo: String
+        },
+        NotCombo {
+            #[arbitrary(with = gen_ident)]
+            combo: String
+        },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum FilterOp {
         And,
         Or,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum FilterExpr {
-        Aggregate(AggregateFilter),
-        Binary(Box<FilterExpr>, FilterOp, Box<FilterExpr>),
+        Aggregate {aggregate: AggregateFilter},
+        Binary { filter: Box<FilterExpr>, op: FilterOp, filter1: Box<FilterExpr>},
     }
     // ===========================================================================
 
@@ -464,166 +568,249 @@ pub mod ast {
     // ===========================================================================
     // ===========================================================================
     // ===========================================================================
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct Game {
+        #[arbitrary(with = gen_flows_safe)]
         pub flows: Vec<FlowComponent>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum FlowComponent {
-        Stage(SeqStage),
-        Rule(GameRule),
-        IfRule(IfRule),
-        ChoiceRule(ChoiceRule),
-        OptionalRule(OptionalRule),
-        Conditional(Conditional),
+        Stage {stage: SeqStage},
+        Rule{game_rule: GameRule},
+        IfRule{if_rule: IfRule},
+        ChoiceRule {choice_rule: ChoiceRule},
+        OptionalRule{ optional_rule: OptionalRule},
+        Conditional {conditional: Conditional},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum SetUpRule {
         // Creations
-        CreatePlayer(Vec<String>),
-        CreateTeams(Vec<(String, PlayerCollection)>),
-        CreateTurnorder(PlayerCollection),
-        CreateTurnorderRandom(PlayerCollection),
-        CreateLocation(Vec<String>, Owner),
-        CreateCardOnLocation(String, Types),
-        CreateTokenOnLocation(IntExpr, String, String),
-        CreateCombo(String, FilterExpr),
-        CreateMemoryWithMemoryType(String, MemoryType, Owner),
-        CreateMemory(String, Owner),
-        CreatePrecedence(String, Vec<(String, String)>),
-        CreatePointMap(String, Vec<(String, String, IntExpr)>),
+        CreatePlayer { 
+            #[arbitrary(with = gen_vec_players_prefixed)]
+            players: Vec<String> 
+        },
+        CreateTeams {
+            #[arbitrary(with = gen_vec_teams_with_players)]
+            teams: Vec<(String, PlayerCollection)>
+        },
+        CreateTurnorder {player_collection: PlayerCollection},
+        CreateTurnorderRandom { player_collection: PlayerCollection},
+        CreateLocation { 
+            #[arbitrary(with = gen_vec_strings)]
+            locations: Vec<String>, 
+            owner: Owner 
+        },
+        CreateCardOnLocation { 
+            #[arbitrary(with = gen_ident)]
+            location: String, 
+            types: Types 
+        },
+        CreateTokenOnLocation { int: IntExpr, 
+            #[arbitrary(with = gen_ident)]
+            token: String,
+            #[arbitrary(with = gen_ident)]
+            location: String 
+        },
+        CreateCombo {
+            #[arbitrary(with = gen_ident)]
+            combo: String, 
+            filter: FilterExpr
+        },
+        CreateMemoryWithMemoryType {
+            #[arbitrary(with = gen_ident)]
+            memory: String,
+            memory_type: MemoryType, 
+            owner: Owner
+        },
+        CreateMemory { 
+            #[arbitrary(with = gen_ident)]
+            memory: String,
+            owner: Owner 
+        },
+        CreatePrecedence {
+            #[arbitrary(with = gen_ident)]
+            precedence: String, 
+            #[arbitrary(with = gen_vec_min_1_kvs)]
+            kvs: Vec<(String, String)>
+        },
+        CreatePointMap { 
+            #[arbitrary(with = gen_ident)]
+            pointmap: String, 
+            #[arbitrary(with = gen_vec_min_1_kvis)]
+            kvis: Vec<(String, String, IntExpr)> 
+        },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum ActionRule {
         // Actions
-        FlipAction(CardSet, Status),
-        ShuffleAction(CardSet),
-        PlayerOutOfStageAction(Players),
-        PlayerOutOfGameSuccAction(Players),
-        PlayerOutOfGameFailAction(Players),
-        SetMemory(String, MemoryType),
-        ResetMemory(String),
-        CycleAction(PlayerExpr),
-        BidAction(Quantity),
-        BidMemoryAction(String, Quantity),
-        EndAction(EndType),
-        DemandAction(DemandType),
-        DemandMemoryAction(DemandType, String),
-        Move(MoveType),
+        FlipAction { card_set: CardSet, status: Status },
+        ShuffleAction {card_set: CardSet},
+        PlayerOutOfStageAction {players: Players},
+        PlayerOutOfGameSuccAction {players: Players},
+        PlayerOutOfGameFailAction{players: Players},
+        SetMemory{
+            #[arbitrary(with = gen_ident)]
+            memory: String,
+            memory_type: MemoryType},
+        ResetMemory {
+            #[arbitrary(with = gen_ident)]
+            memory: String
+        },
+        CycleAction {player:PlayerExpr},
+        BidAction{quantitiy: Quantity},
+        BidMemoryAction{ 
+            #[arbitrary(with = gen_ident)]
+            memory: String,
+            quantity: Quantity
+        },
+        EndAction{end_type: EndType},
+        DemandAction{demand_type: DemandType},
+        DemandMemoryAction{demand_type: DemandType, 
+            #[arbitrary(with = gen_ident)]
+            memory: String
+        },
+        Move{move_type: MoveType},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum ScoringRule {
         // Score + Winner Rule
-        ScoreRule(ScoreRule),
-        WinnerRule(WinnerRule),
+        ScoreRule{score_rule: ScoreRule},
+        WinnerRule{ winner_rule: WinnerRule},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum GameRule {
-        SetUp(SetUpRule),
-        Action(ActionRule),
-        Scoring(ScoringRule),
+        SetUp { setup: SetUpRule},
+        Action{ action: ActionRule},
+        Scoring{scoring: ScoringRule},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct SeqStage {
+        #[arbitrary(with = gen_ident)]
         pub stage: String,
         pub player: PlayerExpr,
         pub end_condition: EndCondition,
+        #[arbitrary(with = gen_flows_safe)]
         pub flows: Vec<FlowComponent>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Case {
-        Else(Vec<FlowComponent>),
-        NoBool(Vec<FlowComponent>),
-        Bool(BoolExpr, Vec<FlowComponent>),
+        // Else {
+        //     #[arbitrary(with = gen_vec_min_1)]
+        //     flows: Vec<FlowComponent>
+        // },
+        NoBool{
+            #[arbitrary(with = gen_flows_safe)]
+            flows: Vec<FlowComponent>
+        },
+        Bool{
+            bool_expr: BoolExpr, 
+            #[arbitrary(with = gen_flows_safe)]
+            flows: Vec<FlowComponent>
+        },
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct Conditional {
+        #[arbitrary(with = gen_vec_min_1)]
         pub cases: Vec<Case>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct IfRule {
         pub condition: BoolExpr,
+        #[arbitrary(with = gen_flows_safe)]
         pub flows: Vec<FlowComponent>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct OptionalRule {
+        #[arbitrary(with = gen_flows_safe)]
         pub flows: Vec<FlowComponent>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct ChoiceRule {
+        #[arbitrary(with = gen_flows_safe)]
         pub options: Vec<FlowComponent>,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum MoveType {
-        Deal(DealMove),
-        Exchange(ExchangeMove),
-        Classic(ClassicMove),
-        Place(TokenMove),
+        Deal { deal: DealMove },
+        Exchange { exchange: ExchangeMove},
+        Classic{ classic: ClassicMove},
+        Place{ token: TokenMove},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum MoveCardSet {
-        Move(CardSet, Status, CardSet),
-        MoveQuantity(Quantity, CardSet, Status, CardSet),
+        Move { from: CardSet, status: Status, to: CardSet },
+        MoveQuantity { quantity: Quantity, from: CardSet, status: Status, to: CardSet},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum ClassicMove {
-        MoveCardSet(MoveCardSet),
+        MoveCardSet {move_cs: MoveCardSet},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum DealMove {
-        MoveCardSet(MoveCardSet),
+        MoveCardSet {deal_cs: MoveCardSet},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum ExchangeMove {
-        MoveCardSet(MoveCardSet),
+        MoveCardSet {exchange_cs: MoveCardSet},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum TokenMove {
-        Place(String, TokenLocExpr, TokenLocExpr),
-        PlaceQuantity(Quantity, String, TokenLocExpr, TokenLocExpr),
+        Place {
+            #[arbitrary(with = gen_ident)]
+            token: String,
+            from_loc: TokenLocExpr, to_loc: TokenLocExpr},
+        PlaceQuantity {quantity: Quantity, 
+            #[arbitrary(with = gen_ident)]
+            token: String,
+            from_loc: TokenLocExpr, to_loc: TokenLocExpr},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum TokenLocExpr {
-        Groupable(Groupable),
-        GroupablePlayers(Groupable, Players),
+        Groupable{ groupable: Groupable},
+        GroupablePlayers { groupable: Groupable, players: Players},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum ScoreRule {
-        Score(IntExpr, Players),
-        ScoreMemory(IntExpr, String, Players),
+        Score {int: IntExpr, players: Players},
+        ScoreMemory {int: IntExpr, 
+            #[arbitrary(with = gen_ident)]
+            memory: String,
+            players: Players},
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum WinnerType {
         Score,
-        Memory(String),
+        Memory{ 
+            #[arbitrary(with = gen_ident)]
+            memory: String
+        },
         Position,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum WinnerRule {
-        Winner(Players),
-        WinnerWith(Extrema, WinnerType),
+        Winner {players: Players},
+        WinnerWith {extrema: Extrema, winner_type: WinnerType},
     }
 
     // ===========================================================================

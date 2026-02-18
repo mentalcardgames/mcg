@@ -224,11 +224,11 @@ impl<Ctx: AstContext> Payload<Ctx> {
               if *negated {"Not EndCondition"} else {"EndCondition"}
             },
             Payload::Action(_) => "Action",
-            Payload::StageRoundCounter(stage) => {
-              &format!("Stage Round Counter {:?}", stage)
+            Payload::StageRoundCounter(_) => {
+              &format!("Stage Round Counter")
             },
-            Payload::EndStage(stage) => {
-              &format!("Stage Round Counter {:?}", stage)
+            Payload::EndStage(_) => {
+              &format!("End Counter")
             },
             Payload::Choice => {
               "Choice"
@@ -445,24 +445,24 @@ impl IrBuilder<SpannedPayload> {
   /// Builds a singular FlowComponent.
   fn build_flow(&mut self, flow: &SFlowComponent, entry: u32, exit: u32) -> GameFlowChange {
     let exit = match &flow.node {
-        FlowComponent::ChoiceRule(choice_rule) => {
+        FlowComponent::ChoiceRule { choice_rule } => {
             self.build_choice_rule(&choice_rule.node, entry, exit)
         },
-        FlowComponent::Stage(seq_stage) => {
-            self.build_seq_stage(&seq_stage.node, entry, exit)
+        FlowComponent::Stage { stage } => {
+            self.build_seq_stage(&stage.node, entry, exit)
         },
-        FlowComponent::Rule(rule) => {
+        FlowComponent::Rule {game_rule} => {
             // Can have GameFlowChanges! So return here.
-            return self.build_rule(rule, entry, exit)
+            return self.build_rule(game_rule, entry, exit)
         },
-        FlowComponent::IfRule(if_rule) => {
+        FlowComponent::IfRule {if_rule} => {
             self.build_if_rule(&if_rule.node, entry, exit)
         },
-        FlowComponent::OptionalRule(optional_rule) => {
+        FlowComponent::OptionalRule { optional_rule} => {
             self.build_optional_rule(&optional_rule.node, entry, exit)
         },
-        FlowComponent::Conditional(cond_rule) => {
-            self.build_cond_rule(&cond_rule.node, entry, exit)
+        FlowComponent::Conditional {conditional} => {
+            self.build_cond_rule(&conditional.node, entry, exit)
         },
     };
 
@@ -561,8 +561,8 @@ impl IrBuilder<SpannedPayload> {
   fn build_rule(&mut self, rule: &SGameRule, entry: u32, exit: u32) -> GameFlowChange {
     // Take care of EndStage
     match &rule.node {
-        GameRule::Action(spanned) => {
-            if matches!(spanned, SActionRule { node: ActionRule::EndAction(SEndType { node: EndType::Stage, span: _ } ), span: _ } ) {
+        GameRule::Action { action: spanned } => {
+            if matches!(spanned, SActionRule { node: ActionRule::EndAction { end_type: SEndType { node: EndType::Stage, span: _ } }, span: _ } ) {
               if let Some(last_stage_exit) = self.stage_exits.last().cloned() {
                 self.new_edge(
                   entry,
@@ -581,7 +581,7 @@ impl IrBuilder<SpannedPayload> {
             }
 
             // Take care of EndGame
-            if matches!(spanned, SActionRule { node: ActionRule::EndAction(SEndType { node: EndType::GameWithWinner(_), span: _ } ), span: _ } ) {
+            if matches!(spanned, SActionRule { node: ActionRule::EndAction { end_type: SEndType { node: EndType::GameWithWinner { players: _}, span: _ } }, span: _ } ) {
               let goal = self.fsm.goal.0;
 
               self.new_edge(
@@ -603,7 +603,7 @@ impl IrBuilder<SpannedPayload> {
 
             return GameFlowChange::None(exit)
         },
-        GameRule::SetUp(_) => {
+        GameRule::SetUp {setup: _} => {
           // Normal action with no GameFlowChange
           self.new_edge(
             entry,
@@ -613,7 +613,7 @@ impl IrBuilder<SpannedPayload> {
 
           return GameFlowChange::None(exit)
         },
-        GameRule::Scoring(_) => {
+        GameRule::Scoring { scoring: _ } => {
           // Normal action with no GameFlowChange
           self.new_edge(
             entry,
@@ -657,13 +657,13 @@ impl IrBuilder<SpannedPayload> {
     for i in 0..cond_rule.cases.len() {
       case_exit = if i == _len { exit } else { self.new_state() };
       match &cond_rule.cases[i].node {
-        Case::Else(spanneds) => {
+        // Case::Else { flows: spanneds } => {
+        //   self.build_flows(&spanneds, next_entry, case_exit);
+        // },
+        Case::NoBool { flows: spanneds } => {
           self.build_flows(&spanneds, next_entry, case_exit);
         },
-        Case::NoBool(spanneds) => {
-          self.build_flows(&spanneds, next_entry, case_exit);
-        },
-        Case::Bool(spanned, spanneds) => {
+        Case::Bool { bool_expr: spanned, flows: spanneds } => {
           let body = self.new_state();
           let condition = spanned.clone();
           self.new_edge(

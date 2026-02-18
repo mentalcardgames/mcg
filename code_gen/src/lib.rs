@@ -67,8 +67,10 @@ pub fn spanned_ast(_: TokenStream, item: TokenStream) -> TokenStream {
 
                 // Clone and rewrite fields
                 let mut spanned_struct = s.clone();
+                // 1. Scrub the Arbitrary derive
+                scrub_arbitrary_derive(&mut spanned_struct.attrs);
+                // 2. Span the fields
                 span_fields(&mut spanned_struct.fields);
-
                 spanned_items.push(Item::Struct(spanned_struct));
 
                 // type SType = Spanned<Type>
@@ -96,6 +98,7 @@ pub fn spanned_ast(_: TokenStream, item: TokenStream) -> TokenStream {
                 let name = &e.ident;
 
                 let mut spanned_enum = e.clone();
+                scrub_arbitrary_derive(&mut spanned_enum.attrs);
                 for variant in &mut spanned_enum.variants {
                     span_fields(&mut variant.fields);
                 }
@@ -201,7 +204,8 @@ pub fn spanned_ast(_: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    println!("{}", output.to_string());
+    // Debug
+    // println!("{}", output.to_string());
 
     output.into()
 }
@@ -209,6 +213,12 @@ pub fn spanned_ast(_: TokenStream, item: TokenStream) -> TokenStream {
 fn span_fields(fields: &mut syn::Fields) {
     for field in fields.iter_mut() {
         field.ty = transform_type_spanned(&field.ty);
+        
+        // 2. Filter out attributes that shouldn't be in the spanned AST
+        field.attrs.retain(|attr| {
+            // Keep the attribute only if it's NOT 'arbitrary'
+            !attr.path().is_ident("arbitrary") && !attr.path().is_ident("proptest")
+        });
     }
 }
 
@@ -352,4 +362,28 @@ fn generate_enum_lower_spanned(
             #(#arms),*
         }
     }
+}
+
+fn scrub_arbitrary_derive(attrs: &mut Vec<syn::Attribute>) {
+    attrs.retain_mut(|attr| {
+        if attr.path().is_ident("derive") {
+            if let Ok(nested) = attr.parse_args_with(syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated) {
+                let filtered: Vec<_> = nested.into_iter()
+                    .filter(|path| !path.is_ident("Arbitrary"))
+                    .collect();
+                
+                if filtered.is_empty() {
+                    return false; // Drop the whole attribute
+                }
+
+                // Rewrite the attribute without Arbitrary
+                let new_path = &attr.path();
+                *attr = syn::parse_quote! { #[#new_path(#(#filtered),*)] };
+                return true;
+            }
+        }
+        
+        // Drop any other arbitrary-specific helper attributes
+        !attr.path().is_ident("arbitrary") && !attr.path().is_ident("proptest")
+    });
 }

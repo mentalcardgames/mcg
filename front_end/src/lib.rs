@@ -1,5 +1,7 @@
 pub mod parser;
 pub mod lower;
+pub mod fmt_ast;
+pub mod arbitrary;
 include!("ast.rs");
 pub mod ir;
 pub mod symbols;
