@@ -11,6 +11,16 @@ The application follows a **Client-Server** architecture where the state is auth
 - **Shared**: A common crate containing data structures, game logic, and the communication protocol.
 - **QR Comm**: A specialized crate for data transmission via QR codes using network coding (Fountain codes).
 
+### Frontend Capabilities
+The frontend provides a robust foundation for building card games with the following core features:
+-   **WASM & Rust Powers**: High-performance game logic running in the browser.
+-   **Immediate Mode UI**: Built on `egui` for rapid iteration and dynamic interfaces.
+-   **Visual Card Management**:
+    -   **Drag & Drop**: Intuitive mechanics for moving cards between different zones (stacks, player hands, etc.).
+    -   **Local Asset Loading**: Capability to validly load card images from a local directory served via HTTP.
+-   **Configurable Game State**: Support for configurable number of players and flexible initial game setups.
+-   **Extensible Architecture**: Traits and structs designed for easy extension to support various card game rules and visuals.
+
 ## System Context (C4)
 
 ```mermaid

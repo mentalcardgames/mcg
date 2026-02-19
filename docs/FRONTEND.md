@@ -2,18 +2,6 @@
 
 **mcg_visual** is a Rust-based WebAssembly (WASM) framework designed for visualizing card games. It leverages `egui` for the user interface, providing a flexible and responsive environment for card game development and prototyping.
 
-## Project Overview
-
-This project provides a robust foundation for building card games with the following core features:
-
--   **WASM & Rust Powers**: High-performance game logic running in the browser.
--   **Immediate Mode UI**: Built on `egui` for rapid iteration and dynamic interfaces.
--   **Visual Card Management**:
-    -   **Drag & Drop**: Intuitive mechanics for moving cards between different zones (stacks, player hands, etc.).
-    -   **Local Asset Loading**: Capability to validly load card images from a local directory served via HTTP.
--   **Configurable Game State**: Support for configurable number of players and flexible initial game setups.
--   **Extensible Architecture**: Traits and structs designed for easy extension to support various card game rules and visuals.
-
 ## Architecture & API
 
 The core interaction logic is built around a set of traits and structs that define how screens, cards, and fields behave.
@@ -21,13 +9,17 @@ The core interaction logic is built around a set of traits and structs that defi
 ### Key Traits
 
 -   **`ScreenWidget`** @ [frontend/src/game/screens/mod.rs](../frontend/src/game/screens/mod.rs):
-    -   **Purpose**: Defines a distinct screen or state in the application (e.g., Main Menu, Game Setup, Active Game).
-    -   **Usage**: Implement this trait to create new views. The `ui` method handles the logic and UI rendering for that screen.
+    -   **Purpose**: Defines the **rendering logic** and behavior of a screen.
+    -   **Usage**: Implement this trait to create new views (e.g., Main Menu, Game Setup). The `ui` method, called every frame, handles both logic updates and UI drawing.
     -   **Navigation**: Screens can request transitions to other screens via the `AppInterface` (passed as a parameter to `ui`). See [AppInterface](../frontend/src/game/screens/mod.rs).
+
+-   **`ScreenDef`** @ [frontend/src/game/screens/mod.rs](../frontend/src/game/screens/mod.rs):
+    -   **Purpose**: Defines the **metadata** and factory for a screen.
+    -   **Usage**: Implement this to provide static information (path, display name, icon) and a constructor function. This allows the `ScreenRegistry` to list and instantiate screens dynamically.
 
 -   **`CardEncoding`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
     -   **Purpose**: Acts as an interface to make custom types accessible as cards for mental card games in academia.
-    -   **Usage**: Implement this to define how your cards are represented in data (e.g., Suit/Rank, ID). It handles state like whether a card is masked (face down) or open (face up).
+    -   **Usage**: Implement this in order to translate specific cards (e.g., Suit/Rank, ID) into an encoding used by mental card games. It provides operations like to both check whether a card is masked (face down) or open (face up) and to mask or unmask it.
 
 -   **`CardConfig`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
     -   **Purpose**: Defines the visual representation of a card.
@@ -37,7 +29,7 @@ The core interaction logic is built around a set of traits and structs that defi
     -   **Purpose**: Defines a container that holds cards.
     -   **Usage**: Used to render areas where cards exist, such as a draw pile, discard pile, or a player's hand.
 
-### Core Structs
+### Core Structs & Modules
 
 -   **`App`** @ [frontend/src/game.rs](../frontend/src/game.rs):
     -   The main entry point that manages the registration and switching of `ScreenWidget`s via the `ScreenRegistry`.
@@ -48,87 +40,85 @@ The core interaction logic is built around a set of traits and structs that defi
     -   **Purpose**: Serves as a default container for card storage.
     -   **Features**: Supports `Stack` (cards on top of each other) and `Horizontal` (cards side-by-side) layouts. Handles the drag-and-drop logic for cards within or between fields.
 
--   **`DirectoryCardType`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
-    -   A full implementation of `CardConfig`.
-    -   **Purpose**: An example implementation for default 52 playing card sets that is able to display different images depending on the style that is chosen. 
-    -   **Features**: configuring a deck where card images are loaded from a specific directory. Useful for quick prototyping with custom assets.
-
 -   **`SimpleCard`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
-    -   A full implementation of `CardEncoding`.
-    -   **Purpose**: Represents a card in the default 52 playing card set.
+    -   A implementation of `CardEncoding` that enumerate cards by a number and support masking and unmasking operations.
 
-## Extensibility
+-   **`DirectoryCardType`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
+    -   A full implementation of `CardConfig` used for `SimpleCard`.
+    -   **Features**: Configuring a deck where card images are loaded from the backend at a specific directory.
 
-`mcg_visual` is designed to be extended. Here is how you can build upon it:
+-   **`hardcoded_cards`** (Module) @ [frontend/src/hardcoded_cards.rs](../frontend/src/hardcoded_cards.rs):
+    -   **Purpose**: Provides factory functions to create pre-configured card decks (e.g., standard 52-card deck). This is not a struct but a helper module to easily instantiate `DirectoryCardType` with standard assets.
 
-### 1. Custom Game Screens
-Create a struct and implement `ScreenWidget`. Include this file in the module tree (e.g., in `frontend/src/game/screens/my_victory_screen.rs`).
+### Initialization & Lifecycle
+
+The frontend application starts via the `start` function in `frontend/src/lib.rs`, which is marked with `#[wasm_bindgen]`.
+
+> **Note**: The `#[wasm_bindgen]` attribute is critical here. It exposes this Rust function to the JavaScript environment, allowing the browser's JS code to call `frontend.start()` to launch the WebAssembly application.
 
 ```rust
-// frontend/src/game/screens/my_victory_screen.rs
-struct MyVictoryScreen;
-impl ScreenWidget for MyVictoryScreen {
-    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
-         egui::CentralPanel::default().show(ctx, |ui| {
-             ui.heading("You Won!");
-             if ui.button("Back to Menu").clicked() {
-                 app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/".to_string()));
-             }
-         });
-    }
+// frontend/src/lib.rs
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
+    // ... setup and start eframe ...
 }
 ```
 
-**Registration:**
-Register the screen in `frontend/src/game/screens/mod.rs` inside `ScreenRegistry::new()`:
+Once started, the application enters its main loop. The `App` struct (in `frontend/src/game.rs`) implements `eframe::App`, and its `update` method is called every frame by the browser/renderer.
+
+-   **`App::new`**: Initializes the global state (`AppState`), registers screens, and sets up the router.
+-   **`App::update`**: 
+    1.  Processes pending messages (from WebSocket/Network).
+    2.  Handles URL changes (routing).
+    3.  Renders the top navigation bar.
+    4.  Delegates rendering to the active `ScreenWidget` based on the current path.
+
+### Event Handling
+
+The `AppInterface` struct is passed to every screen's `ui` method. It holds a mutable reference to the `AppEvent` queue. Screens push events (like `ChangeRoute` or `StartGame`) to this queue. After the screen's `ui` method returns, `App::update` drains this queue and executes the events. This pattern avoids borrow checker conflicts where a screen tries to mutate the `App` that owns it.
+
+### State Management
+
+Global state is held in `AppState` (in `frontend/src/store.rs`). It contains data shared across the application, such as the current `GameState`, connection status, and player settings. It is accessible via `AppInterface.state()` in any screen.
+
+Local state (like specific UI toggles or temporary input buffers) should remain inside the specific `ScreenWidget` struct.
+
+### Networking (Backend Connection)
+
+Communication with the backend is handled via WebSockets using the `WebSocketConnection` struct (in `frontend/src/game/websocket.rs`).
+
+#### Connecting
+
+You connect by providing callbacks for messages, errors, and disconnection. This is typically done within a screen or a connection manager.
 
 ```rust
-// frontend/src/game/screens/mod.rs
-impl ScreenRegistry {
-    pub fn new() -> Self {
-        // ...
-        reg.register::<MyVictoryScreen>(); // Register your new screen here
-        // ...
-    }
-}
+let mut ws = WebSocketConnection::new();
+ws.connect(
+    "127.0.0.1:3000",
+    players_config,
+    move |msg: ServerMsg| {
+        // Handle incoming message (e.g. queue it to AppState)
+    },
+    move |err| { log(err); },
+    move |reason| { log(reason); }
+);
 ```
 
-### 2. Custom Card Types
-Implement `CardEncoding` for your card logic and `CardConfig` for visual rendering. The key point is to return `egui::Image` in the `CardConfig::img` method so the systems knows which image to display as your card.
+#### Receiving Messages
+
+Because WASM is single-threaded (in this context) and `egui` is immediate mode, we cannot block waiting for messages.
+1.  **Callback**: The WebSocket entry receives a message.
+2.  **Queueing**: The message is pushed to a thread-safe queue (often `AppState.pending_messages` or a `RefCell` queue in the screen).
+3.  **Processing**: The main `App::update` or the screen's `ui` method pops messages from the queue and applies them to the state.
+
+#### Sending Messages
+
+Sending is straightforward using the `WebSocketConnection::send_msg` method, which serializes `ClientMsg` to JSON.
 
 ```rust
-// frontend/src/game/card/my_card.rs
-struct MyCard { id: usize }
-impl CardEncoding for MyCard { ... }
-
-struct MyCardVisuals;
-impl CardConfig for MyCardVisuals {
-    fn img(&self, card: &impl CardEncoding) -> Image {
-        // Return appropriate image based on card state
-    }
-    // ... define dimensions
-}
+ws.send_msg(&ClientMsg::Action { ... });
 ```
-
-### 3. Complex Layouts using `SimpleField`
-You can compose multiple `SimpleField` instances to create complex board states. However, `SimpleField` is primarily designed for horizontal or stacked layouts.
-
-**Example**: For a game like **Solitaire** where you need vertical columns of cards, you would need to create a new struct that extends `FieldWidget`. `SimpleField` is not capable of vertical card placement out of the box.
-
-```rust
-// frontend/src/game/field/vertical_field.rs
-struct VerticalField { ... }
-impl FieldWidget for VerticalField {
-    fn draw(&self) -> impl egui::Widget {
-        // Implementation for drawing cards vertically
-    }
-}
-```
-
-### 4. Custom Fields
-If `SimpleField` doesn't meet your needs (e.g., you need a circular or grid layout), you can implement your own struct that accesses card data and implements `FieldWidget`.
-
-## Features Detailed
 
 ### Drag & Drop (DnD)
 
@@ -146,7 +136,7 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
     ```
 
 2.  **The Source (SimpleField)**:
-    When drawing the field, if a user starts dragging a card, the field sets the payload.
+    When drawing the field, if a user starts dragging a card, the field acts as the source and sets the payload.
     ```rust
     // frontend/src/game/field.rs @ SimpleField::draw_horizontal
     if ui.response().drag_started() {
@@ -156,10 +146,10 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
     ```
 
 3.  **The Detection (Game Loop)**:
-    In your main game loop (`ScreenWidget::ui`), you check if a payload was released over a specific area.
+    In your main game loop (`ScreenWidget::ui`), you check if a payload was released over a specific area (the drop target).
     ```rust
     // frontend/src/game/screens/game.rs @ impl ScreenWidget::ui
-    // Draw the stack
+    // Draw the stack (the drop target)
     let response = ui.add(stack.draw());
 
     // Check if something valid was dropped onto the stack
@@ -170,7 +160,7 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
     ```
 
 4.  **The Mutation**:
-    Finally, you resolve the move by modifying the game state.
+    Finally, you resolve the move by modifying the game state. This usually happens at the end of the update loop.
     ```rust
     // frontend/src/game/screens/game.rs @ impl ScreenWidget::ui
     if let (Some(source), Some(destination)) = (self.drag, self.drop) {
@@ -184,3 +174,99 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
     ```
 
 This separation allows for validation logic (e.g., checking if a move is legal before applying it) to be inserted easily in the `The Mutation` step.
+
+### QR Code Scanning
+
+The project uses the `QrScannerPopup` struct (in `frontend/src/qr_scanner.rs`) to handle camera input and QR detection directly in the browser.
+
+-   **Usage**: The `QrScannerPopup` manages the camera and updates a target string buffer with the result.
+-   **Integration**:
+    ```rust
+    // In your screen struct
+    struct MyScreen {
+        scanner: QrScannerPopup,
+        result: String,
+        raw_result: Vec<u8>
+    }
+    
+    // In your ui() method
+    self.scanner.button_and_popup(ui, ctx, &mut self.result, &mut self.raw_result);
+    ```
+    This single call renders the "Scan QR" button and handles the popup overlay, camera permissions, and decoding logic.
+
+## Extensibility
+
+### How to add a custom screen?
+
+Screens are distinct views (e.g., Main Menu, Poker Table, QR Scanner). To add a new screen, you need to implement both the `ScreenWidget` (logic/view) and `ScreenDef` (metadata/registration) traits.
+
+1.  **Create the Screen Struct**: Implement `ScreenWidget` (for rendering) and `ScreenDef` (for registration).
+    ```rust
+    // frontend/src/game/screens/my_screen.rs
+    pub struct MyScreen;
+    
+    impl ScreenWidget for MyScreen {
+        fn ui(&mut self, app: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+            ui.label("Hello from MyScreen!");
+            if ui.button("Back").clicked() {
+                app.queue_event(AppEvent::ChangeRoute("/".into()));
+            }
+        }
+    }
+    
+    impl ScreenDef for MyScreen {
+        fn metadata() -> ScreenMetadata {
+            ScreenMetadata {
+                path: "/myscreen",
+                display_name: "My Screen",
+                icon: "🌟",
+                description: "A custom example screen",
+                show_in_menu: true,
+            }
+        }
+        fn create() -> Box<dyn ScreenWidget> { Box::new(MyScreen) }
+    }
+    ```
+
+2.  **Register the Screen**: Add it to `ScreenRegistry::new` in `frontend/src/game/screens/mod.rs`.
+    ```rust
+    // frontend/src/game/screens/mod.rs
+    pub fn new() -> Self {
+        // ...
+        reg.register::<MyScreen>();
+        // ...
+    }
+    ```
+
+### How to add a custom card type?
+
+The trait `CardEncoding` is used as an interface to provide data that can be used in a mental card game setting.
+The trait `CardConfig` is used for visual rendering. The key point is to return `egui::Image` in the `CardConfig::img` method so the systems knows which image to display as your card.
+
+```rust
+// frontend/src/game/card/my_card.rs
+struct MyCard { id: usize }
+impl CardEncoding for MyCard { ... }
+
+struct MyCardVisuals;
+impl CardConfig for MyCardVisuals {
+    fn img(&self, card: &impl CardEncoding) -> Image {
+        // Return appropriate image based on card state
+    }
+    // ... define dimensions
+}
+```
+
+### How to add custom Field Layouts?
+
+With `SimpleField` you can create horizontal or stacked layouts. For more complex layouts, for a game like **Solitaire** where you need vertical columns of cards, you need to create a new struct that implements `FieldWidget`.
+
+```rust
+// frontend/src/game/field/vertical_field.rs
+struct VerticalField { ... }
+impl FieldWidget for VerticalField {
+    fn draw(&self) -> impl egui::Widget {
+        // Implementation for drawing cards vertically
+    }
+}
+```
