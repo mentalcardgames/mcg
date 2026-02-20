@@ -14,8 +14,7 @@ use theme::*;
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     ChangeRoute(String),
-    StartGame(screens::GameConfig<screens::DirectoryCardType>),
-    StartDndGame(screens::GameConfig<screens::DirectoryCardType>),
+    StartGame(screens::GameState<screens::DirectoryCardType>),
     ExitGame,
 }
 
@@ -38,7 +37,6 @@ pub struct App {
 
     // typed screens for special access
     game: screens::Game<screens::DirectoryCardType>,
-    game_dnd: screens::CardsTestDND,
 
     // Global settings UI state
     settings_open: bool,
@@ -64,12 +62,11 @@ impl App {
     pub fn new() -> Self {
         // Initialize typed screens
         let mut game_setup = screens::GameSetupScreen::new();
-        let mut game_dnd_setup = screens::GameSetupScreen::new_dnd();
         crate::hardcoded_cards::set_deck_by_theme(
             &mut game_setup.card_config,
             crate::hardcoded_cards::DEFAULT_THEME,
         );
-        crate::hardcoded_cards::set_deck_by_theme(&mut game_dnd_setup.card_config, "alt_cards");
+        crate::hardcoded_cards::set_deck_by_theme(&mut game_setup.card_config, "alt_cards");
 
         #[cfg(target_arch = "wasm32")]
         let router = Router::new().ok();
@@ -91,7 +88,6 @@ impl App {
             screens: std::collections::HashMap::new(),
             screen_registry: screens::ScreenRegistry::new(),
             game: screens::Game::new(),
-            game_dnd: screens::CardsTestDND::new(),
             settings_open: false,
             pending_settings: Settings {
                 dpi: crate::calculate_dpi_scale(),
@@ -282,9 +278,6 @@ impl eframe::App for App {
             if self.current_screen_path == "/game" {
                 self.game.ui(&mut app_interface, ui, frame);
                 return;
-            } else if self.current_screen_path == "/game-dnd" {
-                self.game_dnd.ui(&mut app_interface, ui, frame);
-                return;
             }
 
             // Ensure screen exists
@@ -312,12 +305,8 @@ impl eframe::App for App {
                     self.change_route(&path);
                 }
                 AppEvent::StartGame(config) => {
-                    self.game.set_config(config);
+                    self.game.set_state(config);
                     self.change_route("/game");
-                }
-                AppEvent::StartDndGame(config) => {
-                    self.game_dnd.set_config(config);
-                    self.change_route("/game-dnd");
                 }
                 AppEvent::ExitGame => {
                     self.change_route("/");

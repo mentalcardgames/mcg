@@ -38,6 +38,7 @@ pub enum ClientMsg {
         player_id: PlayerId,
         action: PlayerAction,
     },
+    QrReq(String),
     Subscribe,
     RequestState,
     Ping,
@@ -59,4 +60,5 @@ pub enum ServerMsg {
     State(GameStatePublic),
     Error(String),
     Pong,
+    QrRes(Box<[u8]>),
 }

@@ -19,19 +19,20 @@ futures-util = "0.3.31"
 url = "2.5.4"
 anyhow = "1.0.99"
 owo-colors = "4.2.2"
-reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 toml = "0.7"
 hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
+# Required helper for async trait usage in iroh handler
+async-trait = "0.1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Iroh transport support (enabled by default).
 # Upgraded to 0.95 to match sendme example - includes online() and improved relay support.
 iroh = "0.95"
 getrandom = "0.2"
-
-# Required helper for async trait usage in iroh handler
-async-trait = "0.1"
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
 tokio-tungstenite = { version = "0.24.0", default-features = false }

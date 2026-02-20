@@ -1,6 +1,6 @@
 use crate::FRAGMENT_SIZE_BYTES;
 use crate::network_coding::GaloisField2p4;
-use std::ops::{AddAssign, Deref, DerefMut, Mul, MulAssign};
+use std::ops::{AddAssign, Deref, DerefMut, DivAssign, Mul, MulAssign, SubAssign};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Fragment {
@@ -27,6 +27,18 @@ impl DerefMut for Fragment {
         self.inner.deref_mut()
     }
 }
+// TODO implement other ops
+impl DivAssign<GaloisField2p4> for Fragment {
+    fn div_assign(&mut self, rhs: GaloisField2p4) {
+        self.inner.iter_mut().for_each(|f| {
+            let upper = GaloisField2p4 {
+                inner: (*f & 0xF0) >> 4,
+            } / rhs;
+            let lower = GaloisField2p4 { inner: *f & 0xF } / rhs;
+            *f = (upper.inner << 4) | lower.inner
+        });
+    }
+}
 impl MulAssign<GaloisField2p4> for Fragment {
     fn mul_assign(&mut self, rhs: GaloisField2p4) {
         self.inner.iter_mut().for_each(|f| {
@@ -49,6 +61,16 @@ impl Mul<GaloisField2p4> for Fragment {
 }
 impl AddAssign<Fragment> for Fragment {
     fn add_assign(&mut self, rhs: Fragment) {
+        self.inner
+            .iter_mut()
+            .zip(rhs.inner.iter())
+            .for_each(|(lhs, rhs)| {
+                *lhs ^= rhs;
+            });
+    }
+}
+impl SubAssign<Fragment> for Fragment {
+    fn sub_assign(&mut self, rhs: Fragment) {
         self.inner
             .iter_mut()
             .zip(rhs.inner.iter())
