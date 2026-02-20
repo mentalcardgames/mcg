@@ -1,11 +1,7 @@
 //! Card-related types and constants for the Mental Card Game.
 
-use egui::Vec2;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-
-/// Natural size for card display in the UI
-pub const CARD_NATURAL_SIZE: Vec2 = Vec2::new(140.0, 190.0);
 
 /// Card rank values (0=Ace, 1=2, ..., 12=King)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

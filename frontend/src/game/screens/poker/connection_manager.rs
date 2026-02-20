@@ -1,6 +1,6 @@
 use crate::game::websocket::WebSocketConnection;
 use crate::qr_scanner::QrScannerPopup;
-use crate::store::{AppState, ConnectionStatus};
+use crate::store::{ClientState, ConnectionStatus};
 use egui::{Color32, Context, RichText, Ui};
 use mcg_shared::{PlayerConfig, ServerMsg};
 use std::collections::VecDeque;
@@ -27,13 +27,13 @@ impl ConnectionManager {
     pub fn connect(
         &mut self,
         conn: &mut WebSocketConnection,
-        app_state: &mut AppState,
+        app_state: &mut ClientState,
         ctx: &Context,
         players: Vec<PlayerConfig>,
     ) {
-        app_state.connection_status = ConnectionStatus::Connecting;
-        app_state.last_error = None;
-        app_state.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
+        app_state.connection.connection_status = ConnectionStatus::Connecting;
+        app_state.ui.last_error = None;
+        app_state.ui.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
         app_state.settings.server_address = self.edit_server_address.clone();
 
         // Create a shared message queue using Rc<RefCell<VecDeque<ServerMsg>>>
@@ -85,8 +85,7 @@ impl ConnectionManager {
     }
 
     /// Process any queued messages from WebSocket callbacks
-    pub fn process_queued_messages(&mut self, app_state: &mut AppState) {
-        // Process server messages
+    pub fn process_queued_messages(&mut self, app_state: &mut ClientState) {
         if let Some(queue) = &self.message_queue {
             if let Ok(mut q) = queue.try_borrow_mut() {
                 while let Some(msg) = q.pop_front() {
@@ -95,30 +94,27 @@ impl ConnectionManager {
             }
         }
 
-        // Process error messages
         if let Some(queue) = &self.error_queue {
             if let Ok(mut q) = queue.try_borrow_mut() {
                 while let Some(error) = q.pop_front() {
-                    app_state.last_error = Some(error);
-                    app_state.connection_status = ConnectionStatus::Disconnected;
+                    app_state.ui.last_error = Some(error);
+                    app_state.connection.connection_status = ConnectionStatus::Disconnected;
                 }
             }
         }
     }
 
-    pub fn render_header(&mut self, app_state: &mut AppState, ui: &mut Ui, ctx: &Context) {
-        // Title row with current stage badge
+    pub fn render_header(&mut self, app_state: &mut ClientState, ui: &mut Ui, ctx: &Context) {
         ui.horizontal(|ui| {
             ui.heading("Poker Online");
             ui.add_space(16.0);
-            if let Some(s) = &app_state.game_state {
+            if let Some(s) = &app_state.session.game_state {
                 ui.label(super::ui_components::stage_badge(s.stage));
                 ui.add_space(8.0);
             }
         });
 
-        // Collapsible connection & session controls
-        let default_open = app_state.game_state.is_none();
+        let default_open = app_state.session.game_state.is_none();
         egui::CollapsingHeader::new("Connection & session")
             .default_open(default_open)
             .show(ui, |ui| {
@@ -133,17 +129,16 @@ impl ConnectionManager {
                 );
             });
 
-        // Collapsible player setup section
         egui::CollapsingHeader::new("Player Setup")
             .default_open(false)
             .show(ui, |ui| {
                 super::player_manager::render_player_setup(ui, ctx);
             });
 
-        if let Some(err) = &app_state.last_error {
+        if let Some(err) = &app_state.ui.last_error {
             ui.colored_label(Color32::RED, err);
         }
-        if let Some(info) = &app_state.last_info {
+        if let Some(info) = &app_state.ui.last_info {
             ui.label(RichText::new(info));
         }
         ui.separator();
@@ -151,7 +146,7 @@ impl ConnectionManager {
 
     pub fn render_connection_controls(
         &mut self,
-        _app_state: &mut AppState,
+        _app_state: &mut ClientState,
         ui: &mut Ui,
         ctx: &Context,
         connect_clicked: &mut bool,
@@ -172,8 +167,12 @@ impl ConnectionManager {
                     ui.label("Server:");
                     ui.text_edit_singleline(&mut self.edit_server_address)
                         .on_hover_text("Server address (IP:PORT)");
-                    self.scanner
-                        .button_and_popup(ui, ctx, &mut self.edit_server_address, &mut self.qr_result_raw);
+                    self.scanner.button_and_popup(
+                        ui,
+                        ctx,
+                        &mut self.edit_server_address,
+                        &mut self.qr_result_raw,
+                    );
                 });
             });
         } else {
@@ -181,8 +180,12 @@ impl ConnectionManager {
                 ui.label("Server:");
                 ui.text_edit_singleline(&mut self.edit_server_address)
                     .on_hover_text("Server address (IP:PORT)");
-                self.scanner
-                    .button_and_popup(ui, ctx, &mut self.edit_server_address, &mut self.qr_result_raw);
+                self.scanner.button_and_popup(
+                    ui,
+                    ctx,
+                    &mut self.edit_server_address,
+                    &mut self.qr_result_raw,
+                );
                 ui.add_space(12.0);
                 if ui.button("Connect").clicked() {
                     *connect_clicked = true;

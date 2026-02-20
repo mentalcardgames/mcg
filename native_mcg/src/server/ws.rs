@@ -14,10 +14,10 @@ use crate::server::state::{subscribe_connection, AppState};
 use owo_colors::OwoColorize;
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    ws.on_upgrade(move |socket| manage_websocket(socket, state))
 }
 
-async fn handle_socket(mut socket: WebSocket, state: AppState) {
+async fn manage_websocket(mut socket: WebSocket, state: AppState) {
     let hello = format!("{} {}", "[CONNECT]".bold().green(), "Client".bold());
     tracing::info!("{}", hello);
 
@@ -41,14 +41,14 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                     }
                 }
                 msg = socket.next() => {
-                    if !handle_socket_message(&state, &mut socket, &mut subscription, msg).await {
+                    if !process_websocket_frame(&state, &mut socket, &mut subscription, msg).await {
                         break;
                     }
                 }
             }
         } else {
             let msg = socket.next().await;
-            if !handle_socket_message(&state, &mut socket, &mut subscription, msg).await {
+            if !process_websocket_frame(&state, &mut socket, &mut subscription, msg).await {
                 break;
             }
         }
@@ -67,7 +67,7 @@ async fn send_ws(socket: &mut WebSocket, msg: &mcg_shared::ServerMsg) {
     }
 }
 
-async fn handle_socket_message(
+async fn process_websocket_frame(
     state: &AppState,
     socket: &mut WebSocket,
     subscription: &mut Option<broadcast::Receiver<mcg_shared::ServerMsg>>,
@@ -75,7 +75,7 @@ async fn handle_socket_message(
 ) -> bool {
     match msg {
         Some(Ok(Message::Text(txt))) => {
-            handle_client_text(state, socket, subscription, txt).await;
+            process_websocket_text(state, socket, subscription, txt).await;
             true
         }
         Some(Ok(Message::Binary(_))) => true,
@@ -84,7 +84,7 @@ async fn handle_socket_message(
     }
 }
 
-async fn handle_client_text(
+async fn process_websocket_text(
     state: &AppState,
     socket: &mut WebSocket,
     subscription: &mut Option<broadcast::Receiver<mcg_shared::ServerMsg>>,

@@ -68,24 +68,4 @@ impl ScreenWidget for MainMenu {
     }
 }
 
-impl ScreenDef for MainMenu {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/",
-            display_name: "Main",
-            icon: "🎮",
-            description: "Main menu",
-            show_in_menu: false,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(MainMenu, "/", "Main", "🎮", "Main menu", false);

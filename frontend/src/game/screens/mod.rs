@@ -9,9 +9,11 @@ pub mod pairing_screen;
 
 pub mod poker;
 pub mod qr_test;
-pub mod qr_test_transmit;
 pub mod qr_test_receive;
+pub mod qr_test_transmit;
 
+use crate::game::screens::qr_test_receive::QrTestReceive;
+use crate::game::screens::qr_test_transmit::QrTestTransmit;
 pub use articles_screen::ArticlesScreen;
 use downcast_rs::{impl_downcast, Downcast};
 pub use example_screen::ExampleScreen;
@@ -21,18 +23,16 @@ pub use main_menu::MainMenu;
 pub use pairing_screen::PairingScreen;
 pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
-use crate::game::screens::qr_test_receive::QrTestReceive;
-use crate::game::screens::qr_test_transmit::QrTestTransmit;
 
 pub struct AppInterface<'a> {
     pub events: &'a mut Vec<crate::game::AppEvent>,
-    pub app_state: &'a mut crate::game::AppState,
+    pub app_state: &'a mut crate::store::ClientState,
 }
 impl<'a> AppInterface<'a> {
     pub fn queue_event(&mut self, event: crate::game::AppEvent) {
         self.events.push(event);
     }
-    pub fn state(&mut self) -> &mut crate::game::AppState {
+    pub fn state(&mut self) -> &mut crate::store::ClientState {
         self.app_state
     }
 }
@@ -149,5 +149,29 @@ impl Default for ScreenRegistry {
     }
 }
 
-// Implement ScreenDef for simple screens that already exist
-// Individual screen modules will provide their own impls when needed
+#[macro_export]
+macro_rules! impl_screen_def {
+    ($type:ty, $path:literal, $display_name:literal, $icon:literal, $description:literal, $show_in_menu:expr) => {
+        impl ScreenDef for $type {
+            fn metadata() -> ScreenMetadata
+            where
+                Self: Sized,
+            {
+                ScreenMetadata {
+                    path: $path,
+                    display_name: $display_name,
+                    icon: $icon,
+                    description: $description,
+                    show_in_menu: $show_in_menu,
+                }
+            }
+
+            fn create() -> Box<dyn ScreenWidget>
+            where
+                Self: Sized,
+            {
+                Box::new(Self::new())
+            }
+        }
+    };
+}

@@ -79,7 +79,52 @@ impl Game {
         }
     }
 
-    /// Apply a player action, enforcing betting rules and advancing the game flow.
+    fn execute_fold(&mut self, actor: usize) {
+        self.players[actor].has_folded = true;
+        self.log(ActionEvent::player(
+            mcg_shared::PlayerId(actor),
+            ActionKind::Fold,
+        ));
+    }
+
+    fn execute_check_call(&mut self, actor: usize) {
+        self.do_call(actor);
+    }
+
+    fn execute_bet(&mut self, actor: usize, amount: u32) {
+        let (add, _bet_to) = compute_open_bet_add(self, actor, amount);
+        self.players[actor].stack -= add;
+        self.round_bets[actor] += add;
+        self.pot += add;
+        self.current_bet = self.round_bets[actor];
+        self.min_raise = add;
+        if self.players[actor].stack == 0 {
+            self.players[actor].all_in = true;
+        }
+        self.log(ActionEvent::player(
+            mcg_shared::PlayerId(actor),
+            ActionKind::Bet(add),
+        ));
+    }
+
+    fn execute_raise(&mut self, actor: usize, add: u32, by: u32) {
+        self.players[actor].stack -= add;
+        self.round_bets[actor] += add;
+        self.pot += add;
+        self.current_bet = self.round_bets[actor];
+        self.min_raise = by;
+        if self.players[actor].stack == 0 {
+            self.players[actor].all_in = true;
+        }
+        self.log(ActionEvent::player(
+            mcg_shared::PlayerId(actor),
+            ActionKind::Raise {
+                to: self.current_bet,
+                by,
+            },
+        ));
+    }
+
     pub fn apply_player_action(&mut self, actor: usize, action: PlayerAction) -> Result<()> {
         if actor != self.to_act {
             bail!("Not your turn");
@@ -91,69 +136,32 @@ impl Game {
             bail!("You are all-in");
         }
 
-        // Removed noisy [ACTION] println; relying on Game::log/ActionEvent.
-
         let prev_current_bet = self.current_bet;
         match action {
             PlayerAction::Fold => {
-                self.players[actor].has_folded = true;
-                self.log(ActionEvent::player(
-                    mcg_shared::PlayerId(actor),
-                    ActionKind::Fold,
-                ));
+                self.execute_fold(actor);
             }
             PlayerAction::CheckCall => {
-                self.do_call(actor);
+                self.execute_check_call(actor);
             }
             PlayerAction::Bet(x) => {
                 if x == 0 {
-                    // Bet(0) is effectively a check/call
-                    self.do_call(actor);
+                    self.execute_check_call(actor);
                 } else if self.current_bet == 0 {
-                    // Open bet
-                    let (add, _bet_to) = compute_open_bet_add(self, actor, x);
-                    self.players[actor].stack -= add;
-                    self.round_bets[actor] += add;
-                    self.pot += add;
-                    self.current_bet = self.round_bets[actor];
-                    self.min_raise = add;
-                    if self.players[actor].stack == 0 {
-                        self.players[actor].all_in = true;
-                    }
-                    self.log(ActionEvent::player(
-                        mcg_shared::PlayerId(actor),
-                        ActionKind::Bet(add),
-                    ));
+                    self.execute_bet(actor, x);
                 } else {
-                    // Raise attempt
                     match decide_raise_outcome(self, actor, x, prev_current_bet) {
                         RaiseOutcome::Call => {
-                            // If the raise wasn't valid or enough, it falls back to a call
-                            self.do_call(actor);
+                            self.execute_check_call(actor);
                         }
                         RaiseOutcome::Raise { add, by } => {
-                            self.players[actor].stack -= add;
-                            self.round_bets[actor] += add;
-                            self.pot += add;
-                            self.current_bet = self.round_bets[actor];
-                            self.min_raise = by;
-                            if self.players[actor].stack == 0 {
-                                self.players[actor].all_in = true;
-                            }
-                            self.log(ActionEvent::player(
-                                mcg_shared::PlayerId(actor),
-                                ActionKind::Raise {
-                                    to: self.current_bet,
-                                    by,
-                                },
-                            ));
+                            self.execute_raise(actor, add, by);
                         }
                     }
                 }
             }
         }
 
-        // Delegate to the new centralized flow control function.
         self.post_action_update(actor, prev_current_bet)
     }
 }

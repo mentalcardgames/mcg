@@ -1,7 +1,7 @@
 use crate::game::screens::{ScreenDef, ScreenMetadata};
-use crate::game::websocket::WebSocketConnection;
+use crate::game::websocket::{MessageSender, WebSocketConnection};
 use crate::game::{AppInterface, ScreenWidget};
-use crate::store::AppState;
+use crate::store::ClientState;
 use eframe::Frame;
 use egui::{Context, RichText, Ui};
 use mcg_shared::{PlayerAction, PlayerConfig};
@@ -30,8 +30,8 @@ impl PokerOnlineScreen {
         }
     }
 
-    fn draw_error_popup(&mut self, app_state: &mut AppState, ctx: &Context) {
-        if app_state.last_error.is_none() {
+    fn draw_error_popup(&mut self, app_state: &mut ClientState, ctx: &Context) {
+        if app_state.ui.last_error.is_none() {
             return;
         }
 
@@ -42,7 +42,7 @@ impl PokerOnlineScreen {
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                if let Some(err) = &app_state.last_error {
+                if let Some(err) = &app_state.ui.last_error {
                     ui.label(err);
                 }
                 ui.add_space(8.0);
@@ -52,11 +52,11 @@ impl PokerOnlineScreen {
             });
 
         if !open || close_popup {
-            app_state.last_error = None;
+            app_state.ui.last_error = None;
         }
     }
 
-    fn connect(&mut self, app_state: &mut AppState, ctx: &Context) {
+    fn connect(&mut self, app_state: &mut ClientState, ctx: &Context) {
         self.connection_manager.connect(
             &mut self.conn,
             app_state,
@@ -73,7 +73,12 @@ impl PokerOnlineScreen {
         self.conn.send_msg(msg);
     }
 
-    fn render_full_player_setup(&mut self, ui: &mut Ui, ctx: &Context, app_state: &mut AppState) {
+    fn render_full_player_setup(
+        &mut self,
+        ui: &mut Ui,
+        ctx: &Context,
+        app_state: &mut ClientState,
+    ) {
         render_player_setup(ui, ctx);
 
         // Add the player table and controls
@@ -287,7 +292,12 @@ impl PokerOnlineScreen {
         });
     }
 
-    fn render_start_game_button(&mut self, ui: &mut Ui, app_state: &mut AppState, ctx: &Context) {
+    fn render_start_game_button(
+        &mut self,
+        ui: &mut Ui,
+        app_state: &mut ClientState,
+        ctx: &Context,
+    ) {
         let connected = self.conn.is_connected();
         let label = if connected {
             "Start New Game"
@@ -324,27 +334,14 @@ impl PokerOnlineScreen {
     }
 }
 
-impl ScreenDef for PokerOnlineScreen {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/poker-online",
-            display_name: "Poker Online",
-            icon: "♠",
-            description: "Play poker against bots or online",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    PokerOnlineScreen,
+    "/poker-online",
+    "Poker Online",
+    "♠",
+    "Play poker against bots or online",
+    true
+);
 
 impl Default for PokerOnlineScreen {
     fn default() -> Self {
@@ -418,8 +415,13 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                     self.betting_controls
                         .update_from_game_state(state, player_id);
 
-                    self.betting_controls
-                        .render_betting_controls(ui, state, player_id, player, &self.conn);
+                    self.betting_controls.render_betting_controls(
+                        ui,
+                        state,
+                        player_id,
+                        player,
+                        &self.conn as &dyn MessageSender,
+                    );
                 }
             });
         }
@@ -488,7 +490,7 @@ impl ScreenWidget for PokerOnlineScreen {
         }
 
         // Render main content from the latest snapshot
-        if let Some(state) = &app_state.game_state {
+        if let Some(state) = &app_state.session.game_state {
             super::game_rendering::render_showdown_banner(
                 ui,
                 state,
@@ -509,24 +511,22 @@ impl ScreenWidget for PokerOnlineScreen {
 impl PokerOnlineScreen {
     fn render_header_with_controls(
         &mut self,
-        app_state: &mut AppState,
+        app_state: &mut ClientState,
         ui: &mut Ui,
         ctx: &Context,
         connect_clicked: &mut bool,
         disconnect_clicked: &mut bool,
     ) {
-        // Title row with current stage badge
         ui.horizontal(|ui| {
             ui.heading("Poker Online");
             ui.add_space(16.0);
-            if let Some(s) = &app_state.game_state {
+            if let Some(s) = &app_state.session.game_state {
                 ui.label(super::ui_components::stage_badge(s.stage));
                 ui.add_space(8.0);
             }
         });
 
-        // Collapsible connection & session controls
-        let default_open = app_state.game_state.is_none();
+        let default_open = app_state.session.game_state.is_none();
         egui::CollapsingHeader::new("Connection & session")
             .default_open(default_open)
             .show(ui, |ui| {
@@ -539,17 +539,16 @@ impl PokerOnlineScreen {
                 );
             });
 
-        // Collapsible player setup section
         egui::CollapsingHeader::new("Player Setup")
             .default_open(false)
             .show(ui, |ui| {
                 self.render_full_player_setup(ui, ctx, app_state);
             });
 
-        if let Some(err) = &app_state.last_error {
+        if let Some(err) = &app_state.ui.last_error {
             ui.colored_label(egui::Color32::RED, err);
         }
-        if let Some(info) = &app_state.last_info {
+        if let Some(info) = &app_state.ui.last_info {
             ui.label(RichText::new(info));
         }
         ui.separator();

@@ -4,6 +4,12 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
+/// Trait for sending messages to the server.
+/// Allows decoupling UI components from the concrete WebSocket implementation.
+pub trait MessageSender {
+    fn send(&self, msg: &ClientMsg);
+}
+
 /// A simplified WebSocket connection service with immediate message processing.
 ///
 /// This service processes incoming messages immediately without queuing and triggers
@@ -183,5 +189,11 @@ impl Drop for WebSocketConnection {
     fn drop(&mut self) {
         // Calling close() here handles all cleanup and is idempotent
         self.close();
+    }
+}
+
+impl MessageSender for WebSocketConnection {
+    fn send(&self, msg: &ClientMsg) {
+        self.send_msg(msg);
     }
 }

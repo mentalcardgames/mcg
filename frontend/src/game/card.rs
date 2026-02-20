@@ -9,6 +9,9 @@ use std::slice::Iter;
 #[cfg(target_arch = "wasm32")]
 use web_sys;
 
+/// Natural size for card display in the UI
+pub const CARD_NATURAL_SIZE: Vec2 = Vec2::new(140.0, 190.0);
+
 pub trait CardEncoding {
     fn t(&self) -> Option<usize>;
     fn is_masked(&self) -> bool;

@@ -2,7 +2,6 @@
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
-use std::string::FromUtf8Error;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -239,7 +238,7 @@ pub async fn validate_and_apply_action(
 }
 
 /// Handle an Action message from a client
-async fn handle_action(
+async fn execute_player_action(
     state: &AppState,
     player_id: PlayerId,
     action: mcg_shared::PlayerAction,
@@ -258,7 +257,7 @@ async fn handle_action(
 }
 
 /// Handle a RequestState message from a client
-async fn handle_request_state(state: &AppState) -> mcg_shared::ServerMsg {
+async fn fetch_current_state(state: &AppState) -> mcg_shared::ServerMsg {
     if let Some(gs) = current_state_public(state).await {
         broadcast_state(state).await;
         mcg_shared::ServerMsg::State(gs)
@@ -268,7 +267,7 @@ async fn handle_request_state(state: &AppState) -> mcg_shared::ServerMsg {
 }
 
 /// Handle a NextHand message from a client
-async fn handle_next_hand(state: &AppState) -> mcg_shared::ServerMsg {
+async fn advance_to_next_hand(state: &AppState) -> mcg_shared::ServerMsg {
     // Ensure a game exists first
     {
         let lobby_r = state.lobby.read().await;
@@ -293,7 +292,7 @@ async fn handle_next_hand(state: &AppState) -> mcg_shared::ServerMsg {
 }
 
 /// Handle a NewGame message from a client
-async fn handle_new_game(
+async fn create_game_session(
     state: &AppState,
     players: Vec<mcg_shared::PlayerConfig>,
 ) -> mcg_shared::ServerMsg {
@@ -313,7 +312,7 @@ async fn handle_new_game(
 }
 
 /// Handle a PushState message from a peer node (P2P state sync)
-async fn handle_push_state(
+async fn import_game_state(
     app_state: &AppState,
     game_state: serde_json::Value,
 ) -> mcg_shared::ServerMsg {
@@ -342,24 +341,24 @@ async fn handle_push_state(
 /// bot-driving). Returns a ServerMsg that the originating transport should send
 /// back to the client. Transports should delegate to this function rather than
 /// duplicating handling logic to ensure consistent behavior across transports.
-pub async fn handle_client_msg(
+pub async fn dispatch_client_message(
     state: &AppState,
     cm: mcg_shared::ClientMsg,
 ) -> mcg_shared::ServerMsg {
     match cm {
         mcg_shared::ClientMsg::Action { player_id, action } => {
-            handle_action(state, player_id, action).await
+            execute_player_action(state, player_id, action).await
         }
         mcg_shared::ClientMsg::Subscribe => mcg_shared::ServerMsg::Error("not supported".into()),
-        mcg_shared::ClientMsg::RequestState => handle_request_state(state).await,
+        mcg_shared::ClientMsg::RequestState => fetch_current_state(state).await,
         mcg_shared::ClientMsg::Ping => {
             tracing::info!("received ping from client");
             mcg_shared::ServerMsg::Pong
         }
-        mcg_shared::ClientMsg::NextHand => handle_next_hand(state).await,
-        mcg_shared::ClientMsg::NewGame { players } => handle_new_game(state, players).await,
+        mcg_shared::ClientMsg::NextHand => advance_to_next_hand(state).await,
+        mcg_shared::ClientMsg::NewGame { players } => create_game_session(state, players).await,
         mcg_shared::ClientMsg::PushState { state: game_state } => {
-            handle_push_state(state, game_state).await
+            import_game_state(state, game_state).await
         }
         mcg_shared::ClientMsg::QrReq(file) => {
             match File::open(format!("media/qr_test/{}", file)).await {

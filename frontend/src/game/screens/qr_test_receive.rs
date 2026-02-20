@@ -93,24 +93,11 @@ impl ScreenWidget for QrTestReceive {
     }
 }
 
-impl ScreenDef for QrTestReceive {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/receive",
-            display_name: "Scan QR-Codes",
-            icon: "🔍",
-            description: "Receive QR-Codes from peers",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    QrTestReceive,
+    "/receive",
+    "Scan QR-Codes",
+    "🔍",
+    "Receive QR-Codes from peers",
+    true
+);

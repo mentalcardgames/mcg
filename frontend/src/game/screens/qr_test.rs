@@ -36,7 +36,8 @@ impl ScreenWidget for QrScreen {
         ui.horizontal(|ui| {
             ui.label("Text:");
             ui.text_edit_singleline(&mut self.input);
-            self.scanner.button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
+            self.scanner
+                .button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
         });
         ui.add_space(8.0);
         ui.label("Tip: Click 'Scan QR' to fill this field from a QR code.");
@@ -47,24 +48,11 @@ impl ScreenWidget for QrScreen {
     }
 }
 
-impl ScreenDef for QrScreen {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/qr",
-            display_name: "QR Demo",
-            icon: "🔍",
-            description: "Scan QR codes into an input",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    QrScreen,
+    "/qr",
+    "QR Demo",
+    "🔍",
+    "Scan QR codes into an input",
+    true
+);

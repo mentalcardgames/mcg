@@ -4,7 +4,7 @@ use egui::{vec2, Color32, RichText, ScrollArea};
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::articles::Post;
 use crate::effects::fetch_articles_effect;
-use crate::store::{AppState, ArticlesLoading};
+use crate::store::{ArticlesLoading, ClientState};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -35,7 +35,7 @@ impl ArticlesScreen {
 
     fn render_posts_list(
         &mut self,
-        app_state: &mut AppState,
+        app_state: &mut ClientState,
         ui: &mut egui::Ui,
         posts: &[Post],
         _ctx: &egui::Context,
@@ -89,9 +89,9 @@ impl ScreenWidget for ArticlesScreen {
 
         if let Some(result) = self.pending_result.borrow_mut().take() {
             match result {
-                Ok(posts) => app_state.articles = ArticlesLoading::Loaded(posts),
+                Ok(posts) => app_state.ui.articles = ArticlesLoading::Loaded(posts),
                 Err(e) => {
-                    app_state.articles = ArticlesLoading::Error(e);
+                    app_state.ui.articles = ArticlesLoading::Error(e);
                 }
             }
         }
@@ -106,7 +106,7 @@ impl ScreenWidget for ArticlesScreen {
             );
             ui.add_space(20.0);
 
-            match &app_state.articles {
+            match &app_state.ui.articles {
                 ArticlesLoading::NotStarted => {
                     if ui
                         .add_sized(vec2(150.0, 40.0), egui::Button::new("Fetch Posts"))
@@ -153,24 +153,11 @@ impl ScreenWidget for ArticlesScreen {
     }
 }
 
-impl ScreenDef for ArticlesScreen {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/articles",
-            display_name: "Articles",
-            icon: "📰",
-            description: "Fetch posts from a demo API",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    ArticlesScreen,
+    "/articles",
+    "Articles",
+    "📰",
+    "Fetch posts from a demo API",
+    true
+);

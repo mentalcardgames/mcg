@@ -7,7 +7,7 @@ pub mod websocket;
 use crate::router::Router;
 use crate::{
     game::{card::DirectoryCardType, screens::Game},
-    store::AppState,
+    store::ClientState,
 };
 use egui::Context;
 use screens::{AppInterface, MainMenu, ScreenWidget};
@@ -41,7 +41,7 @@ pub struct App {
     // Global settings UI state
     settings_open: bool,
     pending_settings: Settings,
-    app_state: AppState,
+    app_state: ClientState,
 
     // Router for URL handling
     #[allow(dead_code)]
@@ -82,7 +82,7 @@ impl App {
         #[cfg(not(target_arch = "wasm32"))]
         let current_path = "/".to_string();
 
-        let app_state = AppState::new();
+        let app_state = ClientState::new();
         Self {
             current_screen_path: current_path,
             screens: std::collections::HashMap::new(),

@@ -28,7 +28,7 @@ impl ScreenWidget for PairingScreen {
             ui.add_space(0.0);
         });
 
-        let players = app_state.pairing_players.clone();
+        let players = app_state.ui.pairing_players.clone();
 
         ScrollArea::vertical()
             .auto_shrink([false, false])
@@ -70,8 +70,8 @@ impl ScreenWidget for PairingScreen {
                             {
                                 let pname = player.name.clone();
                                 let action = !player.paired;
-                                app_state.pairing_confirm_player = Some(pname.clone());
-                                app_state.pairing_confirm_action = Some(action);
+                                app_state.ui.pairing_confirm_player = Some(pname.clone());
+                                app_state.ui.pairing_confirm_action = Some(action);
                             }
                             ui.end_row();
                         }
@@ -80,8 +80,8 @@ impl ScreenWidget for PairingScreen {
 
         // Render confirmation window if requested in shared state
         if let (Some(player_name), Some(pair_action)) = (
-            app_state.pairing_confirm_player.clone(),
-            app_state.pairing_confirm_action,
+            app_state.ui.pairing_confirm_player.clone(),
+            app_state.ui.pairing_confirm_action,
         ) {
             let action_text = if pair_action { "pair" } else { "unpair" };
             let player_name_clone = player_name.clone();
@@ -103,8 +103,8 @@ impl ScreenWidget for PairingScreen {
                     ));
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
-                            app_state.pairing_confirm_player = None;
-                            app_state.pairing_confirm_action = None;
+                            app_state.ui.pairing_confirm_player = None;
+                            app_state.ui.pairing_confirm_action = None;
                         }
                         let mut perform_action = false;
                         if ui.button("Confirm").clicked() {
@@ -113,7 +113,7 @@ impl ScreenWidget for PairingScreen {
                         if perform_action {
                             let target = player_name_clone.clone();
                             let _pair_action_local = pair_action;
-                            for p in app_state.pairing_players.iter_mut() {
+                            for p in app_state.ui.pairing_players.iter_mut() {
                                 if p.name == target {
                                     p.paired = pair_action;
                                     sprintln!(
@@ -125,8 +125,8 @@ impl ScreenWidget for PairingScreen {
                                     break;
                                 }
                             }
-                            app_state.pairing_confirm_player = None;
-                            app_state.pairing_confirm_action = None;
+                            app_state.ui.pairing_confirm_player = None;
+                            app_state.ui.pairing_confirm_action = None;
                         }
                     });
                 });
@@ -134,24 +134,11 @@ impl ScreenWidget for PairingScreen {
     }
 }
 
-impl ScreenDef for PairingScreen {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/pairing",
-            display_name: "Pairing",
-            icon: "🔗",
-            description: "Player pairing demo",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    PairingScreen,
+    "/pairing",
+    "Pairing",
+    "🔗",
+    "Player pairing demo",
+    true
+);

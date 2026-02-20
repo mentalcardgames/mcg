@@ -39,7 +39,7 @@ impl MessagePrinter {
             ServerMsg::Error(e) => eprintln!("Server error: {}", e),
             ServerMsg::Pong => println!("Received pong"),
             ServerMsg::QrRes(inner) => {
-                println!("Qr Response: {}", inner);
+                println!("Qr Response: {:?}", inner);
             }
         }
     }
