@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
@@ -12,7 +13,6 @@ use std::rc::Rc;
 
 pub struct QrScreen {
     input: String,
-    raw: Vec<u8>,
     scanner: QrScannerPopup,
     web_socket_connection: WebSocketConnection,
     qr_payload: Rc<RefCell<Option<String>>>,
@@ -22,7 +22,6 @@ impl QrScreen {
     pub fn new() -> Self {
         Self {
             input: String::new(),
-            raw: Vec::new(),
             scanner: QrScannerPopup::new(),
             web_socket_connection: WebSocketConnection::new(),
             qr_payload: Rc::new(RefCell::new(None)),
@@ -81,9 +80,6 @@ impl ScreenWidget for QrScreen {
                 );
                 ui.image(&texture);
             }
-            if !self.raw.is_empty() {
-            let lossy = String::from_utf8_lossy(&self.raw);
-            ui.label(lossy);
         }
     }
 }

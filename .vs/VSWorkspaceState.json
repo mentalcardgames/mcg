@@ -13,6 +13,6 @@
     "\\native_mcg\\src\\server",
     "\\native_mcg\\tests"
   ],
-  "SelectedNode": "\\native_mcg\\src\\server\\iroh.rs",
+  "SelectedNode": "\\frontend\\src\\game\\screens\\example_screen.rs",
   "PreviewInSolutionExplorer": false
 }
