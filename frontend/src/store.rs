@@ -123,7 +123,7 @@ impl ClientState {
         self.connection.pending_messages.push_back(msg);
     }
 
-    pub fn process_pending_messages(&mut self) {
+    pub fn dispatch_pending_messages(&mut self) {
         while let Some(msg) = self.connection.pending_messages.pop_front() {
             self.apply_server_msg(msg);
         }

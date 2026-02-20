@@ -85,7 +85,7 @@ impl ConnectionManager {
     }
 
     /// Process any queued messages from WebSocket callbacks
-    pub fn process_queued_messages(&mut self, app_state: &mut ClientState) {
+    pub fn dispatch_queued_messages(&mut self, app_state: &mut ClientState) {
         if let Some(queue) = &self.message_queue {
             if let Ok(mut q) = queue.try_borrow_mut() {
                 while let Some(msg) = q.pop_front() {

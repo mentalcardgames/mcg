@@ -180,7 +180,7 @@ impl Camera {
             );
             self.frame_count += 1;
             if self.frame_count % 5 == 0 {
-                self.process_qr_detection_raw(
+                self.analyze_qr_frame_raw(
                     &pixels,
                     canvas_width as usize,
                     canvas_height as usize,
@@ -246,7 +246,7 @@ impl Camera {
         self.facing_mode
     }
     #[cfg(target_arch = "wasm32")]
-    fn process_qr_detection(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
+    fn analyze_qr_frame(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
         let mut gray_data = Vec::with_capacity(width * height);
         for pixel in pixels {
             let r = pixel.r() as f32;
@@ -269,7 +269,7 @@ impl Camera {
         }
     }
     #[cfg(target_arch = "wasm32")]
-    fn process_qr_detection_raw(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
+    fn analyze_qr_frame_raw(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
         let mut gray_data = Vec::with_capacity(width * height);
         for pixel in pixels {
             let r = pixel.r() as f32;

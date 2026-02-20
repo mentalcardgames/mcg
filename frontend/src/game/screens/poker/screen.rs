@@ -464,7 +464,7 @@ impl ScreenWidget for PokerOnlineScreen {
         let app_state = &mut app_interface.app_state;
 
         // Process any queued WebSocket messages first
-        self.connection_manager.process_queued_messages(app_state);
+        self.connection_manager.dispatch_queued_messages(app_state);
 
         self.draw_error_popup(app_state, &ctx);
 

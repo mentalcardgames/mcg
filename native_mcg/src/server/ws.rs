@@ -107,7 +107,7 @@ async fn process_websocket_text(
             *subscription = Some(sub.receiver);
         }
         Ok(other) => {
-            let resp = crate::server::handle_client_msg(state, other).await;
+            let resp = crate::server::dispatch_client_message(state, other).await;
             send_ws(socket, &resp).await;
         }
         Err(err) => {
