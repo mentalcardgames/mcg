@@ -17,6 +17,7 @@ server.log
 mcg-server.toml
 tags
 mcg_server_public.toml
+.vs/
 
 CLAUDE.md
 CRUSH.md

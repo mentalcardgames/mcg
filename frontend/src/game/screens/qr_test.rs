@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
