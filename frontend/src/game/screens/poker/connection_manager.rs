@@ -18,7 +18,7 @@ impl ConnectionManager {
         Self {
             edit_server_address: server_address,
             qr_result_raw: Vec::new(),
-            scanner: QrScannerPopup::new(),
+            scanner: QrScannerPopup::default(),
             message_queue: None,
             error_queue: None,
         }

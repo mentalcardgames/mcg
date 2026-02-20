@@ -1,26 +1,11 @@
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
 
+#[derive(Default)]
 pub struct QrScreen {
     input: String,
     raw: Vec<u8>,
     scanner: QrScannerPopup,
-}
-
-impl QrScreen {
-    pub fn new() -> Self {
-        Self {
-            input: String::new(),
-            raw: Vec::new(),
-            scanner: QrScannerPopup::new(),
-        }
-    }
-}
-
-impl Default for QrScreen {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ScreenWidget for QrScreen {

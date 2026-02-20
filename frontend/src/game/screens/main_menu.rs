@@ -3,20 +3,9 @@ use egui::{vec2, FontId, RichText};
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenRegistry, ScreenWidget};
 
+#[derive(Default)]
 pub struct MainMenu {
     screen_registry: ScreenRegistry,
-}
-impl MainMenu {
-    pub fn new() -> Self {
-        Self {
-            screen_registry: ScreenRegistry::new(),
-        }
-    }
-}
-impl Default for MainMenu {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ScreenWidget for MainMenu {

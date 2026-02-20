@@ -5,19 +5,8 @@ use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::sprintln;
 use crate::utils::emoji_hash;
 
+#[derive(Default)]
 pub struct PairingScreen;
-
-impl PairingScreen {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for PairingScreen {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl ScreenWidget for PairingScreen {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {

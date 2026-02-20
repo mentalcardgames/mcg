@@ -3,25 +3,10 @@ use egui::{vec2, FontId, RichText};
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 
-/// Example screen to demonstrate the new generalized screen system
+#[derive(Default)]
 pub struct ExampleScreen {
     counter: i32,
     text_input: String,
-}
-
-impl ExampleScreen {
-    pub fn new() -> Self {
-        Self {
-            counter: 0,
-            text_input: String::new(),
-        }
-    }
-}
-
-impl Default for ExampleScreen {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ScreenWidget for ExampleScreen {

@@ -5,7 +5,7 @@ use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::game::card::{CardConfig, SimpleCard};
 use crate::game::field::{FieldWidget, SimpleField};
 
-/// Struct for a game with one stack and arbitrary players
+#[derive(Default)]
 pub struct Game<C: CardConfig> {
     pub game_state: Option<GameState<C>>,
     player0_idx: usize,
@@ -14,22 +14,8 @@ pub struct Game<C: CardConfig> {
     drop: Option<DNDSelector>,
 }
 impl<C: CardConfig> Game<C> {
-    pub fn new() -> Self {
-        Self {
-            game_state: None,
-            player0_idx: 0,
-            player1_idx: 1,
-            drag: None,
-            drop: None,
-        }
-    }
     pub fn set_state(&mut self, config: GameState<C>) {
         self.game_state = Some(config);
-    }
-}
-impl<C: CardConfig> Default for Game<C> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

@@ -8,18 +8,13 @@ use crate::store::{ArticlesLoading, ClientState};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+#[derive(Default)]
 pub struct ArticlesScreen {
     #[allow(clippy::type_complexity)]
     pending_result: Rc<RefCell<Option<Result<Vec<Post>, String>>>>,
 }
 
 impl ArticlesScreen {
-    pub fn new() -> Self {
-        Self {
-            pending_result: Rc::new(RefCell::new(None)),
-        }
-    }
-
     fn render_loading_ui(&self, ui: &mut egui::Ui) {
         ui.spinner();
         ui.label("Loading posts...");
@@ -76,13 +71,7 @@ impl ArticlesScreen {
     }
 }
 
-impl Default for ArticlesScreen {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ScreenWidget for ArticlesScreen {
+impl ArticlesScreen {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
         let app_state = &mut app_interface.app_state;

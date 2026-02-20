@@ -5,28 +5,12 @@ use mcg_qr_comm::data_structures::Frame;
 use mcg_qr_comm::network_coding::Epoch;
 use mcg_qr_comm::FRAME_SIZE_BYTES;
 
+#[derive(Default)]
 pub struct QrTestReceive {
     frame_buffer: Vec<u8>,
     epoch: Epoch,
     scanner: QrScannerPopup,
     matrix: String,
-}
-
-impl QrTestReceive {
-    pub fn new() -> Self {
-        Self {
-            epoch: Epoch::default(),
-            frame_buffer: Vec::new(),
-            scanner: QrScannerPopup::new(),
-            matrix: String::new(),
-        }
-    }
-}
-
-impl Default for QrTestReceive {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ScreenWidget for QrTestReceive {
