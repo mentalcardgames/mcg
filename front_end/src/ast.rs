@@ -16,7 +16,7 @@ pub mod ast {
         gen_vec_min_1_kvs,
         gen_vec_min_1_kvis,
         gen_vec_min_1_ints,
-        gen_flows_safe
+        gen_flows_safe,
     };
 
     // Operator
@@ -94,6 +94,10 @@ pub mod ast {
         Team{ team: TeamExpr},
         TeamCollection {team_collection: TeamCollection},
         Table,
+        Memory { 
+            #[arbitrary(with = gen_ident)]
+            memory: String 
+        }
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
@@ -252,6 +256,9 @@ pub mod ast {
         Query {query: QueryInt},
         Aggregate {aggregate: AggregateInt},
         Runtime {runtime: RuntimeInt },
+        Memory { 
+            memory: String 
+        },
     }
     // ===========================================================================
 
@@ -275,6 +282,7 @@ pub mod ast {
             value: String
         },
         Query {query: QueryString},
+        Memory { memory: String }
     }
     // ===========================================================================
 
@@ -420,24 +428,44 @@ pub mod ast {
         PlayerCollection {player: PlayerCollection },
         TeamCollection { team: TeamCollection },
         CardSet { card_set: Box<CardSet> },
+        Memory { 
+            #[arbitrary(with = gen_ident)]
+            memory: String 
+        },
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
-    pub struct IntCollection {
-        #[arbitrary(with = gen_vec_min_1_ints)]
-        pub ints: Vec<IntExpr>,
+    pub enum IntCollection {
+        Literal {     
+            #[arbitrary(with = gen_vec_min_1_ints)]
+            ints: Vec<IntExpr>
+        },
+        Memory { 
+            #[arbitrary(with = gen_ident)]
+            memory: String
+        },
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
-    pub struct StringCollection {
-        #[arbitrary(with = gen_vec_min_1)]
-        pub strings: Vec<StringExpr>,
+    pub enum StringCollection {
+        Literal { 
+            #[arbitrary(with = gen_vec_min_1)]
+            strings: Vec<StringExpr>
+        },
+        Memory { 
+            #[arbitrary(with = gen_ident)]
+            memory: String }
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
-    pub struct LocationCollection {
-        #[arbitrary(with = gen_vec_strings)]
-        pub locations: Vec<String>,
+    pub enum LocationCollection {
+        Literal { 
+            #[arbitrary(with = gen_vec_strings)]
+            locations: Vec<String>
+        },
+        Memory { 
+            #[arbitrary(with = gen_ident)]
+            memory: String }
     }
 
     // PlayerCollection
@@ -461,6 +489,7 @@ pub mod ast {
         },
         Aggregate { aggregate: AggregatePlayerCollection },
         Runtime { runtime: RuntimePlayerCollection },
+        Memory { memory: String }
     }
     // ===========================================================================
 
@@ -478,6 +507,7 @@ pub mod ast {
             teams: Vec<TeamExpr> 
         },
         Runtime {runtime: RuntimeTeamCollection },
+        Memory { memory: String }
     }
 
     // ===========================================================================
@@ -493,6 +523,10 @@ pub mod ast {
     pub enum CardSet {
         Group { group: Group },
         GroupOwner { group: Group, owner: Owner},
+        // CardSet is already inside of Collection!
+        Memory { 
+            #[arbitrary(with = gen_ident)]
+            memory: String }
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -525,12 +559,14 @@ pub mod ast {
             precedence: String },
         Higher{ 
             #[arbitrary(with = gen_ident)]
-            key: String, 
+            key: String,
+            value: StringExpr,
             #[arbitrary(with = gen_ident)]
             precedence: String },
         Lower{
             #[arbitrary(with = gen_ident)]
             key: String, 
+            value: StringExpr,
             #[arbitrary(with = gen_ident)]
             precedence: String},
         KeyString{ 

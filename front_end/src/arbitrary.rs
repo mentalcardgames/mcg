@@ -19,11 +19,6 @@ pub fn gen_ident(u: &mut Unstructured) -> arbitrary::Result<String> {
         for _ in 0..len {
             s.push(*u.choose(alphabet.as_bytes())? as char);
         }
-
-        // Only return if it's not a reserved keyword
-        if !KEYWORDS.contains(&s.as_str()) {
-            return Ok(s);
-        }
     }
 
     // If we failed 10 times to find a non-keyword, 
@@ -33,12 +28,12 @@ pub fn gen_ident(u: &mut Unstructured) -> arbitrary::Result<String> {
 
 // Helper function to generate a safe alphanumeric identifier
 pub fn gen_player_name(u: &mut Unstructured) -> Result<String> {
-    gen_ident(u)
+    Ok(format!("P{}", gen_ident(u)?))
 }
 
 // Helper function to generate a safe alphanumeric identifier
 pub fn gen_team_name(u: &mut Unstructured) -> Result<String> {
-    gen_ident(u)
+    Ok(format!("T{}", gen_ident(u)?))
 }
 
 pub fn gen_vec_players_prefixed(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<String>> {
@@ -48,7 +43,7 @@ pub fn gen_vec_players_prefixed(u: &mut arbitrary::Unstructured) -> arbitrary::R
 
     for _ in 0..count {
         // 2. Generate the "P" prefixed string
-        let mut name = gen_ident(u)?;
+        let mut name = gen_player_name(u)?;
 
         vec.push(name);
     }
@@ -78,7 +73,7 @@ pub fn gen_vec_teams_with_players(u: &mut arbitrary::Unstructured) -> arbitrary:
     for _ in 0..count {
         // 2. Generate the "T" prefixed Team Name
         let name_len = u.int_in_range(1..=2)?;
-        let mut team_name = gen_ident(u)?;
+        let mut team_name = gen_team_name(u)?;
         
         // 3. Generate the PlayerCollection (uses its own Arbitrary impl)
         let players = PlayerCollection::arbitrary(u)?;
@@ -262,7 +257,8 @@ impl<'a> Arbitrary<'a> for IntExpr {
         // We give Literal/Runtime/Aggregate high weight so the trees don't get too deep.
         match u.int_in_range(0..=100)? {
             // 70% chance to be a Leaf (terminates recursion)
-            0..=40 => Ok(IntExpr::Literal { int: u.arbitrary()? }),
+            0..=20 => Ok(IntExpr::Literal { int: u.arbitrary()? }),
+            21..=40 => Ok(IntExpr::Memory { memory: gen_ident(u)? }),
             41..=55 => Ok(IntExpr::Runtime { runtime: u.arbitrary()? }),
             56..=70 => Ok(IntExpr::Aggregate { aggregate: u.arbitrary()? }),
             
@@ -320,9 +316,14 @@ impl<'a> Arbitrary<'a> for StringExpr {
         // string-based game logic (like checking a card's name or a location).
         match u.int_in_range(0..=100)? {
             // 70% chance for a Literal identifier
-            0..=69 => Ok(StringExpr::Literal {
+            0..=35 => Ok(StringExpr::Literal {
                 value: gen_ident(u)?,
             }),
+            // 70% chance for a Literal identifier
+            36..=69 => Ok(StringExpr::Memory {
+                memory: gen_ident(u)?,
+            }),
+            
             // 30% chance for a Query (KeyOf, CollectionAt, etc.)
             _ => Ok(StringExpr::Query {
                 query: u.arbitrary()?,
@@ -456,9 +457,14 @@ impl<'a> Arbitrary<'a> for PlayerCollection {
 
         match u.int_in_range(0..=100)? {
             // 40% chance for Runtime (Very cheap)
-            0..=39 => Ok(PlayerCollection::Runtime {
+            0..=20 => Ok(PlayerCollection::Runtime {
                 runtime: u.arbitrary()?,
             }),
+            // 70% chance for a Literal identifier
+            21..=39 => Ok(PlayerCollection::Memory {
+                memory: gen_ident(u)?,
+            }),
+            
             // 40% chance for Literal (Uses our safe vec generator)
             40..=79 => Ok(PlayerCollection::Literal {
                 players: gen_vec_min_1_players(u)?,
@@ -505,9 +511,14 @@ impl<'a> Arbitrary<'a> for TeamCollection {
         // 2. Weighted Selection
         match u.int_in_range(0..=100)? {
             // 40% chance for Runtime (Cheap)
-            0..=39 => Ok(TeamCollection::Runtime {
+            0..=20 => Ok(TeamCollection::Runtime {
                 runtime: u.arbitrary()?,
             }),
+            // 70% chance for a Literal identifier
+            21..=39 => Ok(TeamCollection::Memory {
+                memory: gen_ident(u)?,
+            }),
+            
             // 60% chance for Literal (Uses our safe vec generator)
             _ => Ok(TeamCollection::Literal {
                 teams: gen_vec_min_1_teams(u)?,
@@ -541,6 +552,7 @@ impl<'a> Arbitrary<'a> for CardPosition {
             0..=69 => Ok(CardPosition::Query {
                 query: u.arbitrary()?,
             }),
+            
             // 30% chance for Aggregate (PointMaps, Precedence - heavier)
             _ => Ok(CardPosition::Aggregate {
                 aggregate: u.arbitrary()?,
@@ -604,102 +616,3 @@ impl<'a> Arbitrary<'a> for Group {
         (1, None)
     }
 }
-
-// ===========================================================================
-// ===========================================================================
-// Keywords for generation
-// ===========================================================================
-// ===========================================================================
-pub const KEYWORDS: &[&str] = &[
-    "adjacent",
-    "all",
-    "and",
-    "any",
-    "as",
-    "at",
-    "bid",
-    "bottom",
-    "card",
-    "cards",
-    "case",
-    "choose",
-    "combo",
-    "competitor",
-    "conditional",
-    "create",
-    "current",
-    "cycle",
-    "deal",
-    "demand",
-    "distinct",
-    "down",
-    "else",
-    "empty",
-    "end",
-    "exchange",
-    "face",
-    "fail",
-    "flip",
-    "for",
-    "from",
-    "game",
-    "higher",
-    "highest",
-    "if",
-    "in",
-    "is",
-    "location",
-    "lower",
-    "lowest",
-    "max",
-    "memory",
-    "min",
-    "move",
-    "next",
-    "not",
-    "of",
-    "on",
-    "optional",
-    "or",
-    "other",
-    "others",
-    "out",
-    "owner",
-    "place",
-    "player",
-    "playersin",
-    "playersout",
-    "playroundcounter",
-    "pointmap",
-    "points",
-    "position",
-    "precedence",
-    "previous",
-    "private",
-    "random",
-    "reset",
-    "same",
-    "score",
-    "set",
-    "shuffle",
-    "size",
-    "stage",
-    "stageroundcounter",
-    "successful",
-    "sum",
-    "table",
-    "team",
-    "teams",
-    "times",
-    "to",
-    "token",
-    "top",
-    "turn",
-    "turnorder",
-    "until",
-    "up",
-    "using",
-    "where",
-    "winner",
-    "with",
-];

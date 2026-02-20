@@ -245,8 +245,15 @@ impl AstPass for SymbolVisitor {
                 }
             },
             NodeKind::LocationCollection(l) => {
-                for location in l.locations.iter() {
-                    self.use_id(&location);
+                match l {
+                    LocationCollection::Literal { locations } => {
+                        for location in locations.iter() {
+                            self.use_id(&location);
+                        }
+                    },
+                    LocationCollection::Memory { memory } => {
+                        /* TODO */
+                    },
                 }
             },
             NodeKind::Group(g) => {
@@ -272,11 +279,11 @@ impl AstPass for SymbolVisitor {
                         self.use_id(&spanned);
                         self.use_id(&spanned1);
                     },
-                    AggregateFilter::Higher{key: spanned, precedence: spanned1} => {
+                    AggregateFilter::Higher{key: spanned, value: _, precedence: spanned1} => {
                         self.use_id(&spanned);
                         self.use_id(&spanned1);
                     },
-                    AggregateFilter::Lower{key: spanned, precedence: spanned1} => {
+                    AggregateFilter::Lower{key: spanned, value: _, precedence: spanned1} => {
                         self.use_id(&spanned);
                         self.use_id(&spanned1);
                     },

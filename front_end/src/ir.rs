@@ -42,7 +42,22 @@ pub struct Edge<T>
 {
   pub to: StateID,
   pub payload: T,
+  // TODO:
+  // pub meta: Meta,
 }
+
+// #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+// pub struct Meta {
+//   pub stage: StageType,
+//   pub players: crate::ast::PlayerCollection,
+//   // ADD More info if needed
+// }
+
+// #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+// pub enum StageType {
+//   Sim,
+//   Seq
+// }
 
 // ===========================================================================
 // Ir-Logic

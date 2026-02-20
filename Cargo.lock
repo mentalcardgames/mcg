@@ -645,6 +645,7 @@ dependencies = [
  "pest",
  "pest_consume",
  "pest_derive",
+ "proptest",
  "ropey",
  "serde_json",
  "tokio",

@@ -89,7 +89,8 @@ impl fmt::Display for Owner {
             Owner::Team { team: team } => &format!("{}", team),
             Owner::TeamCollection { team_collection: team_collection} => &format!("{}", team_collection),
             Owner::Table => "table",
-        };
+            Owner::Memory { memory } => &format!("&{}", memory),
+          };
         f.write_str(s)
     }
 }
@@ -248,7 +249,7 @@ impl fmt::Display for RuntimePlayer {
 impl fmt::Display for QueryPlayer {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        QueryPlayer::Turnorder { int: int_expr } => &format!("turnorder {}", int_expr),
+        QueryPlayer::Turnorder { int: int_expr } => &format!("turnorder[{}]", int_expr),
       };
       f.write_str(s)
   }
@@ -279,7 +280,7 @@ impl fmt::Display for PlayerExpr {
 impl fmt::Display for QueryInt {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        QueryInt::IntCollectionAt { int_collection, int_expr} => &format!("{} {}", int_collection, int_expr),
+        QueryInt::IntCollectionAt { int_collection, int_expr} => &format!("{}[{}]", int_collection, int_expr),
       };
       f.write_str(s)
   }
@@ -288,11 +289,11 @@ impl fmt::Display for QueryInt {
 impl fmt::Display for AggregateInt {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        AggregateInt::SizeOf { collection } => &format!("size of {}", collection),
-        AggregateInt::SumOfIntCollection { int_collection} => &format!("sum of {}", int_collection),
+        AggregateInt::SizeOf { collection } => &format!("size({})", collection),
+        AggregateInt::SumOfIntCollection { int_collection} => &format!("sum({})", int_collection),
         AggregateInt::SumOfCardSet { card_set, pointmap} => &format!("sum of {} using {}", card_set, pointmap),
         AggregateInt::ExtremaCardset { extrema, card_set, pointmap} => &format!("{} of {} using {}", extrema, card_set, pointmap),
-        AggregateInt::ExtremaIntCollection { extrema, int_collection } => &format!("{} of {}", extrema, int_collection),
+        AggregateInt::ExtremaIntCollection { extrema, int_collection } => &format!("{}({})", extrema, int_collection),
       };
       f.write_str(s)
   }
@@ -317,6 +318,9 @@ impl fmt::Display for IntExpr {
         IntExpr::Query {query: query_int} => &format!("{}", query_int),
         IntExpr::Aggregate{aggregate: aggregate_int} => &format!("{}", aggregate_int),
         IntExpr::Runtime{runtime: runtime_int} => &format!("{}", runtime_int),
+        IntExpr::Memory { memory } => {
+          &format!("&{}", memory)
+        },
       };
       f.write_str(s)
   }
@@ -326,7 +330,7 @@ impl fmt::Display for QueryString {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
         QueryString::KeyOf{key, card_position} => &format!("{} of {}", key, card_position),
-        QueryString::StringCollectionAt{string_collection, int_expr} => &format!("{} {}", string_collection, int_expr),
+        QueryString::StringCollectionAt{string_collection, int_expr} => &format!("{}[{}]", string_collection, int_expr),
       };
       f.write_str(s)
   }
@@ -337,7 +341,8 @@ impl fmt::Display for StringExpr {
       let s = match self {
         StringExpr::Literal{value} => &format!("\"{}\"", value),
         StringExpr::Query { query: query_string} => &format!("{}", query_string),
-          };
+        StringExpr::Memory { memory } => &format!("&{}", memory),
+      };
       f.write_str(s)
   }
 }
@@ -345,8 +350,8 @@ impl fmt::Display for StringExpr {
 impl fmt::Display for CardSetCompare {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        Self::Eq => "==",
-        Self::Neq => "!=",
+        Self::Eq => "c==",
+        Self::Neq => "c!=",
       };
       f.write_str(s)
   }
@@ -355,8 +360,8 @@ impl fmt::Display for CardSetCompare {
 impl fmt::Display for StringCompare {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        Self::Eq => "==",
-        Self::Neq => "!=",
+        Self::Eq => "s==",
+        Self::Neq => "s!=",
       };
       f.write_str(s)
   }
@@ -474,11 +479,11 @@ impl fmt::Display for QueryCardPosition {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
         QueryCardPosition::At { location, int_expr } => 
-          &format!("{} {}", location, int_expr),
+          &format!("{}[{}]", location, int_expr),
         QueryCardPosition::Top { location } => 
-          &format!("{} top", location),
+          &format!("top({})", location),
         QueryCardPosition::Bottom { location } => 
-          &format!("{} bottom", location),
+          &format!("bottom({})", location),
         };
       f.write_str(s)
   }
@@ -513,6 +518,7 @@ impl fmt::Display for CardSet {
       let s = match self {
         CardSet::Group { group } => &format!("{}", group),
         CardSet::GroupOwner { group, owner } => &format!("{} of {}", group, owner),
+        CardSet::Memory { memory } => &format!("&{}",memory),
       };
       f.write_str(s)
   }
@@ -541,15 +547,15 @@ impl fmt::Display for AggregateFilter {
         AggregateFilter::Size { cmp: int_compare, int_expr } => 
           &format!("size {} {}", int_compare, int_expr),
         AggregateFilter::Same{key} =>
-          &format!("{} same", key),
+          &format!("same {}", key),
         AggregateFilter::Distinct{key} => 
-          &format!("{} distinct", key),
+          &format!("distinct {}", key),
         AggregateFilter::Adjacent{key, precedence} =>
-          &format!("{} adjacent using {}", key, precedence),
-        AggregateFilter::Higher { key, precedence} => 
-          &format!("{} higher using {}", key, precedence),
-        AggregateFilter::Lower { key, precedence} => 
-          &format!("{} lower using {}", key, precedence),
+          &format!("adjacent {} using {}", key, precedence),
+        AggregateFilter::Higher { key, value, precedence} => 
+          &format!("{} higher than {} using {}", key, value, precedence),
+        AggregateFilter::Lower { key, value, precedence} => 
+          &format!("{} lower than {} using {}", key, value, precedence),
         AggregateFilter::KeyString { key, cmp: string_compare, string: string_expr} => 
           &format!("{} {} {}", key, string_compare, string_expr),
         AggregateFilter::Combo { combo } => 
@@ -598,6 +604,8 @@ impl fmt::Display for Collection {
           &format!("teams {}", team_collection),
         Collection::CardSet{card_set} =>
           &format!("cards {}", card_set),
+        Collection::Memory { memory } => 
+          &format!("&{}",memory),
       };
       f.write_str(s)
   }
@@ -605,36 +613,51 @@ impl fmt::Display for Collection {
 
 impl fmt::Display for IntCollection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = self.ints
-            .iter()
-            .map(|i| i.to_string()) // convert each int to string
-            .collect::<Vec<_>>()    // collect into Vec<String>
-            .join(", ");             // join with commas
+      match self {
+        IntCollection::Literal { ints} => {
+          let s = ints
+              .iter()
+              .map(|i| i.to_string()) // convert each int to string
+              .collect::<Vec<_>>()    // collect into Vec<String>
+              .join(", ");             // join with commas
 
-        write!(f, "( {} )", s)
+          write!(f, "( {} )", s)
+        },
+        IntCollection::Memory { memory } => write!(f, "&{}", memory),
+      }
     }
 }
 
 impl fmt::Display for LocationCollection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = self.locations
-            .iter()
-            .map(|i| i.to_string()) // convert each int to string
-            .collect::<Vec<_>>()    // collect into Vec<String>
-            .join(", ");             // join with commas
+        match self {
+        LocationCollection::Literal { locations} => {
+          let s = locations
+              .iter()
+              .map(|i| i.to_string()) // convert each int to string
+              .collect::<Vec<_>>()    // collect into Vec<String>
+              .join(", ");             // join with commas
 
-        write!(f, "( {} )", s)
+          write!(f, "( {} )", s)
+        },
+        LocationCollection::Memory { memory } => write!(f, "&{}", memory),
+      }
     }
 }
 impl fmt::Display for StringCollection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = self.strings
-            .iter()
-            .map(|i| i.to_string()) // convert each int to string
-            .collect::<Vec<_>>()    // collect into Vec<String>
-            .join(", ");             // join with commas
+        match self {
+          StringCollection::Literal { strings} => {
+            let s = strings
+                .iter()
+                .map(|i| i.to_string()) // convert each int to string
+                .collect::<Vec<_>>()    // collect into Vec<String>
+                .join(", ");             // join with commas
 
-        write!(f, "( {} )", s)
+            write!(f, "( {} )", s)
+          },
+          StringCollection::Memory { memory } => write!(f, "&{}", memory),
+      }
     }
 }
 
@@ -675,6 +698,7 @@ impl fmt::Display for PlayerCollection {
               &format!("{}", aggregate_player_collection),
             PlayerCollection::Runtime { runtime: runtime_player_collection } =>
               &format!("{}", runtime_player_collection),
+            PlayerCollection::Memory { memory } => &format!("&{}", memory),
         };
         f.write_str(s)
     }
@@ -703,6 +727,7 @@ impl fmt::Display for TeamCollection {
             },
             TeamCollection::Runtime { runtime: runtime_team_collection} =>
               &format!("{}", runtime_team_collection),
+            TeamCollection::Memory { memory } => &format!("&{}", memory),
         };
         f.write_str(s)
     }

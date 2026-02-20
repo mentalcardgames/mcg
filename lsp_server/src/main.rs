@@ -4,6 +4,7 @@ pub mod completion;
 pub mod validation;
 pub mod rope;
 pub mod semantic_highlighting;
+pub mod tests;
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use arc_swap::ArcSwapAny;

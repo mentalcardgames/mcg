@@ -6,3 +6,6 @@ Cargo.lock
 # IDEs
 .vscode/
 .idea/
+
+# Tests
+tests_out/

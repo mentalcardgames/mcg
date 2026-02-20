@@ -144,7 +144,7 @@ impl AstPass for SemanticVisitor {
                     }
                   );
                 },
-                AggregateFilter::Higher { key: key, precedence: precedence} => {
+                AggregateFilter::Higher { key: key, value, precedence: precedence} => {
                   self.used_corr.push(
                     UsedCorrespondence { 
                       ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
@@ -152,8 +152,42 @@ impl AstPass for SemanticVisitor {
                       span: precedence.span.clone() 
                     }
                   );
+                  match &value.node {
+                    StringExpr::Query { query: q} => {
+                      match &q.node {
+                        QueryString::KeyOf { key: k, card_position: _} => {
+                          self.init_corr.insert( 
+                              CorrespondanceType::Key { 
+                                node: k.node.clone() 
+                              }, 
+                            (k.node.clone(), k.span.clone())
+                          );
+                          self.used_corr.push(
+                            UsedCorrespondence { 
+                              ty: CorrespondanceType::Key { node: k.node.clone() }, 
+                              key: key.node.clone(), 
+                              span: k.span.clone() 
+                            }
+                          );
+                        },
+                        _ => {}
+                      }
+                    },
+                    StringExpr::Literal { value: value} => {
+                      self.used_corr.push(
+                        UsedCorrespondence { 
+                          ty: CorrespondanceType::Value { node: value.node.clone() }, 
+                          key: key.node.clone(), 
+                          span: value.span.clone() 
+                        }
+                      );
+                    },
+                    StringExpr::Memory { memory } => {
+                      /* TODO */
+                    },
+                  }
                 },
-                AggregateFilter::Lower { key: key, precedence: precedence} => {
+                AggregateFilter::Lower { key: key, value, precedence: precedence} => {
                   self.used_corr.push(
                     UsedCorrespondence { 
                       ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
@@ -161,6 +195,40 @@ impl AstPass for SemanticVisitor {
                       span: precedence.span.clone() 
                     }
                   );
+                  match &value.node {
+                    StringExpr::Query { query: q} => {
+                      match &q.node {
+                        QueryString::KeyOf { key: k, card_position: _} => {
+                          self.init_corr.insert( 
+                              CorrespondanceType::Key { 
+                                node: k.node.clone() 
+                              }, 
+                            (k.node.clone(), k.span.clone())
+                          );
+                          self.used_corr.push(
+                            UsedCorrespondence { 
+                              ty: CorrespondanceType::Key { node: k.node.clone() }, 
+                              key: key.node.clone(), 
+                              span: k.span.clone() 
+                            }
+                          );
+                        },
+                        _ => {}
+                      }
+                    },
+                    StringExpr::Literal { value: value} => {
+                      self.used_corr.push(
+                        UsedCorrespondence { 
+                          ty: CorrespondanceType::Value { node: value.node.clone() }, 
+                          key: key.node.clone(), 
+                          span: value.span.clone() 
+                        }
+                      );
+                    },
+                    StringExpr::Memory { memory } => {
+                      /* TODO */
+                    },
+                  }
                 },
                 AggregateFilter::KeyString { key: key, cmp: _, string: string} => {
                   match &string.node {
@@ -192,6 +260,9 @@ impl AstPass for SemanticVisitor {
                           span: value.span.clone() 
                         }
                       );
+                    },
+                    StringExpr::Memory { memory } => {
+                      /* TODO */
                     },
                   }
                 },

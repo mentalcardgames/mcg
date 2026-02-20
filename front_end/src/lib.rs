@@ -5,7 +5,6 @@ pub mod arbitrary;
 include!("ast.rs");
 pub mod ir;
 pub mod symbols;
-pub mod visitor;
 pub mod spans;
 pub mod fsm_to_dot;
 pub mod semantic;

@@ -4,7 +4,7 @@ digraph CFG {
   edge [fontname="Consolas", fontsize=9, arrowsize=0.8];
   entry [shape=point];
   entry -> 0;
-  2 -> 1 [xlabel=" Action "];
   0 -> 2 [xlabel=" Condition "];
   0 -> 1 [xlabel=" Not Condition "];
+  2 -> 1 [xlabel=" Action "];
 }

@@ -445,7 +445,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
-                [location(n), kw_top(_)] => squery_card_position(QueryCardPosition::Top { location: n }, span), 
+                [kw_top(_), location(n)] => squery_card_position(QueryCardPosition::Top { location: n }, span), 
             )
         )
     }
@@ -454,7 +454,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
-                [location(n), kw_bottom(_)] => squery_card_position(QueryCardPosition::Bottom { location: n }, span), 
+                [kw_bottom(_), location(n)] => squery_card_position(QueryCardPosition::Bottom { location: n }, span), 
             )
         )
     }
@@ -675,7 +675,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
-                [kw_size(_), kw_of(_), collection(n)] => saggregate_int(AggregateInt::SizeOf { collection: n }, span),
+                [kw_size(_), collection(n)] => saggregate_int(AggregateInt::SizeOf { collection: n }, span),
             )
         )
     }
@@ -688,7 +688,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
-                [kw_sum(_), kw_of(_), int_collection(n)] => saggregate_int(AggregateInt::SumOfIntCollection { int_collection: n }, span),
+                [kw_sum(_), int_collection(n)] => saggregate_int(AggregateInt::SumOfIntCollection { int_collection: n }, span),
             )
         )
     }
@@ -716,7 +716,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
-                [extrema(n), kw_of(_), int_collection(s)] => saggregate_int(AggregateInt::ExtremaIntCollection { extrema: n, int_collection: s}, span),
+                [extrema(n), int_collection(s)] => saggregate_int(AggregateInt::ExtremaIntCollection { extrema: n, int_collection: s}, span),
             )
         )
     }
@@ -759,6 +759,7 @@ impl CGDSLParser {
     }
 
     pub(crate) fn int_expr(input: Node) -> Result<SIntExpr> {
+        let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
                 [bin_int_op(n)] => n,
@@ -770,6 +771,7 @@ impl CGDSLParser {
                 [extrema_of_int_collection(n)] => n,
                 [runtime_int(n)] => n,
                 [int(n)] => n,
+                [use_memory(m)] => SIntExpr { node: IntExpr::Memory { memory: m }, span },
             )
         )
     }
@@ -798,7 +800,8 @@ impl CGDSLParser {
             match_nodes!(input.into_children();
                 [key_of_card_position(n)] => n,
                 [string_collection_at(n)] => n,
-                [value(v)] => SStringExpr { node: StringExpr::Literal { value: v }, span: span }
+                [value(v)] => SStringExpr { node: StringExpr::Literal { value: v }, span: span },
+                [use_memory(m)] => SStringExpr { node: StringExpr::Memory { memory: m }, span },
             )
         )
     }
@@ -829,7 +832,8 @@ impl CGDSLParser {
     pub(crate) fn int_collection(input: Node) -> Result<SIntCollection> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [int_expr(int_exprs)..] => IntCollection { ints: int_exprs.collect() },
+            [int_expr(int_exprs)..] => IntCollection::Literal { ints: int_exprs.collect() },
+            [use_memory(m)] => IntCollection::Memory { memory: m },
         );
 
         Ok(
@@ -844,7 +848,8 @@ impl CGDSLParser {
     pub(crate) fn string_collection(input: Node) -> Result<SStringCollection> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [string_expr(string_exprs)..] => StringCollection { strings: string_exprs.collect() },
+            [string_expr(string_exprs)..] => StringCollection::Literal { strings: string_exprs.collect() },
+            [use_memory(m)] => StringCollection::Memory { memory: m },
         );
 
         Ok(
@@ -1124,6 +1129,7 @@ impl CGDSLParser {
                 [kw_others(_)] => sruntime_player_collection(RuntimePlayerCollection::Others, span),
                 [kw_playersin(_)] => sruntime_player_collection(RuntimePlayerCollection::PlayersIn, span),
                 [kw_playersout(_)] => sruntime_player_collection(RuntimePlayerCollection::PlayersOut, span),
+                [use_memory(m)] => SPlayerCollection { node: PlayerCollection::Memory { memory: m }, span },
             )
         )
     }
@@ -1194,7 +1200,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.children();
-                [key(key), kw_distinct(_)] => saggregate_filter(AggregateFilter::Same { key: key }, span),
+                [kw_distinct(_), key(key)] => saggregate_filter(AggregateFilter::Same { key: key }, span),
             )
         )
     }
@@ -1211,7 +1217,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.children();
-                [key(key), kw_adjacent(_), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Adjacent { key: key, precedence: prec } , span),
+                [kw_adjacent(_), key(key), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Adjacent { key: key, precedence: prec } , span),
             )
         )
     }
@@ -1224,7 +1230,15 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.children();
-                [key(key), kw_higher(_), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Higher{ key: key, precedence: prec }, span),
+                [key(key), kw_higher(_), kw_than(_), string_expr(s), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Higher{ key: key, value: s, precedence: prec }, span),
+            )
+        )
+    }
+
+    pub(crate) fn use_memory(input: Node) -> Result<SID> {
+        Ok(
+            match_nodes!(input.children();
+                [memory(m)] => m,
             )
         )
     }
@@ -1233,11 +1247,15 @@ impl CGDSLParser {
         Ok(())
     }
 
+    pub(crate) fn kw_than(input: Node) -> Result<()> {
+        Ok(())
+    }
+
     pub(crate) fn key_lower(input: Node) -> Result<SFilterExpr> {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.children();
-                [key(key), kw_lower(_), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Lower{ key: key, precedence: prec }, span),
+                [key(key), kw_lower(_), kw_than(_), string_expr(s), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Lower{ key: key, value: s, precedence: prec }, span),
             )
         )
     }
@@ -1246,7 +1264,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.children();
-                [key(key), kw_same(_)] => saggregate_filter(AggregateFilter::Same { key: key }, span),
+                [kw_same(_), key(key)] => saggregate_filter(AggregateFilter::Same { key: key }, span),
             )
         )
     }
@@ -1484,6 +1502,7 @@ impl CGDSLParser {
             [team_expr(n)] => Owner::Team { team: n },
             [team_collection(n)] => Owner::TeamCollection { team_collection: n },
             [kw_table(_)] => Owner::Table,
+            [use_memory(m)] => Owner::Memory { memory: m },
         );
 
         Ok(
@@ -1522,6 +1541,7 @@ impl CGDSLParser {
             match_nodes!(input.into_children();
                 [group_of_owner(n)] => n,
                 [group(n)] => SCardSet { node: CardSet::Group { group: n }, span },
+                [use_memory(n)] => SCardSet { node: CardSet::Memory { memory: n }, span },
             )
         )
     }
@@ -1536,6 +1556,7 @@ impl CGDSLParser {
                 [kw_teams(_), team_collection(n)] => SCollection {node: Collection::TeamCollection { team: n }, span},
                 [location_collection(n)] => SCollection {node: Collection::LocationCollection { location: n }, span},
                 [kw_cards(_), card_set(n)] => SCollection {node: Collection::CardSet {card_set: Box::new(n)}, span},
+                [use_memory(m)] => SCollection { node: Collection::Memory { memory: m }, span },
             )
         )
     }
@@ -1543,7 +1564,8 @@ impl CGDSLParser {
     pub(crate) fn location_collection(input: Node) -> Result<SLocationCollection> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-                [location(ids)..] => LocationCollection { locations: ids.collect() },
+                [location(ids)..] => LocationCollection::Literal { locations: ids.collect() },
+                [use_memory(m)] => LocationCollection::Memory { memory: m },
         );
         
         Ok(
@@ -1580,6 +1602,7 @@ impl CGDSLParser {
             match_nodes!(input.into_children();
                 [team_expr_collection(n)] => n,
                 [other_teams(_)] => sruntime_team_collection(RuntimeTeamCollection::OtherTeams, span),
+                [use_memory(m)] => STeamCollection { node: TeamCollection::Memory { memory: m }, span },
             )
         )
     }

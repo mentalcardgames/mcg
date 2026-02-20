@@ -181,6 +181,8 @@ impl LanguageServer for Backend {
                     },
                 )),
 
+                definition_provider: Some(OneOf::Left(true)),
+
                 // 2. Autocompletion configuration
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
