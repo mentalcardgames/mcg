@@ -35,6 +35,9 @@ The core interaction logic is built around a set of traits and structs that defi
     -   The main entry point that manages the registration and switching of `ScreenWidget`s via the `ScreenRegistry`.
     -   **Entry Point**: The `update` method (from the `eframe::App` trait) is the main loop where the application state is updated and the UI is rendered.
 
+- **`ClientState`** @ [frontend/src/store.rs](../frontend/src/store.rs):
+    - Holds the important state information of the client e.g. backend address, network messages, etc.
+
 -   **`SimpleField`** @ [frontend/src/game/field.rs](../frontend/src/game/field.rs):
     -   A full implementation of `FieldWidget`.
     -   **Purpose**: Serves as a default container for card storage.
@@ -67,9 +70,9 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
 
 Once started, the application enters its main loop. The `App` struct (in `frontend/src/game.rs`) implements `eframe::App`, and its `update` method is called every frame by the browser/renderer.
 
--   **`App::new`**: Initializes the global state (`AppState`), registers screens, and sets up the router.
+-   **`App::new`**: Initializes the global state (`ClientState`), registers screens, and sets up the router.
 -   **`App::update`**: 
-    1.  Processes pending messages (from WebSocket/Network).
+    1.  Processes pending messages (from WebSocket/Network). This is currently omitted.
     2.  Handles URL changes (routing).
     3.  Renders the top navigation bar.
     4.  Delegates rendering to the active `ScreenWidget` based on the current path.
@@ -80,7 +83,7 @@ The `AppInterface` struct is passed to every screen's `ui` method. It holds a mu
 
 ### State Management
 
-Global state is held in `AppState` (in `frontend/src/store.rs`). It contains data shared across the application, such as the current `GameState`, connection status, and player settings. It is accessible via `AppInterface.state()` in any screen.
+Global state is held in `ClientState` (in `frontend/src/store.rs`). It contains data shared across the application, such as the current game state, connection status, and player settings. It is accessible via `AppInterface.state()` in any screen.
 
 Local state (like specific UI toggles or temporary input buffers) should remain inside the specific `ScreenWidget` struct.
 
@@ -98,7 +101,7 @@ ws.connect(
     "127.0.0.1:3000",
     players_config,
     move |msg: ServerMsg| {
-        // Handle incoming message (e.g. queue it to AppState)
+        // Handle incoming message (e.g. queue it to ClientState)
     },
     move |err| { log(err); },
     move |reason| { log(reason); }
@@ -107,9 +110,10 @@ ws.connect(
 
 #### Receiving Messages
 
-Because WASM is single-threaded (in this context) and `egui` is immediate mode, we cannot block waiting for messages.
+Currently you need to have the `WebSocketConnection` as a field in your screen.
+
 1.  **Callback**: The WebSocket entry receives a message.
-2.  **Queueing**: The message is pushed to a thread-safe queue (often `AppState.pending_messages` or a `RefCell` queue in the screen).
+2.  **Queueing**: The message is pushed to a thread-safe queue.
 3.  **Processing**: The main `App::update` or the screen's `ui` method pops messages from the queue and applies them to the state.
 
 #### Sending Messages
@@ -200,7 +204,7 @@ The project uses the `QrScannerPopup` struct (in `frontend/src/qr_scanner.rs`) t
 
 Screens are distinct views (e.g., Main Menu, Poker Table, QR Scanner). To add a new screen, you need to implement both the `ScreenWidget` (logic/view) and `ScreenDef` (metadata/registration) traits.
 
-1.  **Create the Screen Struct**: Implement `ScreenWidget` (for rendering) and `ScreenDef` (for registration).
+1.  **Create the Screen Struct**: Implement `ScreenWidget` (for rendering) and `ScreenDef` (for registration). Alternatively you can use the `impl_screen_def!` macro to generate the `ScreenDef` implementation.
     ```rust
     // frontend/src/game/screens/my_screen.rs
     pub struct MyScreen;
