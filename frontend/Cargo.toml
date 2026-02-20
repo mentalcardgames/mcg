@@ -66,6 +66,7 @@ mcg-shared = { path = "../shared" }
 mcg_qr_comm = { path = "../crates/qr_comm" }
 image = { version = "0.25.6", features = ["jpeg", "png"] }
 qrcode = "0.14.1"
+downcast-rs = "2.0.2"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.50"

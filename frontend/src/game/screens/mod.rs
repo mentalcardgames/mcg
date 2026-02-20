@@ -13,6 +13,7 @@ pub mod qr_test_transmit;
 pub mod qr_test_receive;
 
 pub use articles_screen::ArticlesScreen;
+use downcast_rs::{impl_downcast, Downcast};
 pub use example_screen::ExampleScreen;
 pub use game::{DNDSelector, DirectoryCardType, Game, GameState};
 pub use game_setup_screen::GameSetupScreen;
@@ -37,9 +38,10 @@ impl<'a> AppInterface<'a> {
 }
 
 /// Object-safe runtime trait for drawing a screen
-pub trait ScreenWidget {
+pub trait ScreenWidget: Downcast {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, frame: &mut Frame);
 }
+impl_downcast!(ScreenWidget);
 
 /// Compile-time definition trait: metadata + factory
 pub trait ScreenDef {

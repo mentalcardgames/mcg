@@ -1,5 +1,3 @@
-use crate::store::AppState;
-use egui::Context;
 pub mod card;
 pub mod field;
 pub mod screens;
@@ -7,6 +5,11 @@ pub mod theme;
 pub mod websocket;
 #[cfg(target_arch = "wasm32")]
 use crate::router::Router;
+use crate::{
+    game::{card::DirectoryCardType, screens::Game},
+    store::AppState,
+};
+use egui::Context;
 use screens::{AppInterface, MainMenu, ScreenWidget};
 use theme::*;
 
@@ -34,9 +37,6 @@ pub struct App {
     screens: std::collections::HashMap<String, Box<dyn ScreenWidget>>,
     // single shared screen registry
     screen_registry: screens::ScreenRegistry,
-
-    // typed screens for special access
-    game: screens::Game<screens::DirectoryCardType>,
 
     // Global settings UI state
     settings_open: bool,
@@ -87,7 +87,6 @@ impl App {
             current_screen_path: current_path,
             screens: std::collections::HashMap::new(),
             screen_registry: screens::ScreenRegistry::new(),
-            game: screens::Game::new(),
             settings_open: false,
             pending_settings: Settings {
                 dpi: crate::calculate_dpi_scale(),
@@ -274,12 +273,6 @@ impl eframe::App for App {
         };
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Special-case typed screens that are owned directly on the App
-            if self.current_screen_path == "/game" {
-                self.game.ui(&mut app_interface, ui, frame);
-                return;
-            }
-
             // Ensure screen exists
             if !self.screens.contains_key(&self.current_screen_path) {
                 if let Some(factory) = self
@@ -305,8 +298,18 @@ impl eframe::App for App {
                     self.change_route(&path);
                 }
                 AppEvent::StartGame(config) => {
-                    self.game.set_state(config);
-                    self.change_route("/game");
+                    if !self.screens.contains_key("/game") {
+                        if let Some(factory) = self.screen_registry.factory_by_path("/game") {
+                            let boxed = factory();
+                            self.screens.insert("/game".to_string(), boxed);
+                        }
+                    }
+                    if let Some(screen) = self.screens.get_mut("/game") {
+                        if let Some(game) = screen.downcast_mut::<Game<DirectoryCardType>>() {
+                            game.set_state(config);
+                            self.change_route("/game");
+                        }
+                    }
                 }
                 AppEvent::ExitGame => {
                     self.change_route("/");
