@@ -44,6 +44,7 @@ pub struct Camera {
     frame_texture: Option<TextureHandle>,
     frame_count: u32,
     last_qr_result: Option<String>,
+    last_qr_result_raw: Option<Vec<u8>>,
     facing_mode: CameraFacing,
 }
 impl Default for Camera {
@@ -67,6 +68,7 @@ impl Camera {
             frame_texture: None,
             frame_count: 0,
             last_qr_result: None,
+            last_qr_result_raw: None,
             facing_mode: CameraFacing::Environment,
         }
     }
@@ -178,7 +180,7 @@ impl Camera {
             );
             self.frame_count += 1;
             if self.frame_count % 5 == 0 {
-                self.process_qr_detection(&pixels, canvas_width as usize, canvas_height as usize);
+                self.process_qr_detection_raw(&pixels, canvas_width as usize, canvas_height as usize);
             }
             if let Some(texture) = &mut self.frame_texture {
                 texture.set(color_image, egui::TextureOptions::LINEAR);
@@ -203,6 +205,9 @@ impl Camera {
     }
     pub fn get_last_qr_result(&self) -> Option<&String> {
         self.last_qr_result.as_ref()
+    }
+    pub fn get_last_qr_result_raw(&self) -> Option<&Vec<u8>> {
+        self.last_qr_result_raw.as_ref()
     }
     #[cfg(target_arch = "wasm32")]
     pub fn stop(&mut self) {
@@ -259,6 +264,29 @@ impl Camera {
             }
         }
     }
+    #[cfg(target_arch = "wasm32")]
+    fn process_qr_detection_raw(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
+        let mut gray_data = Vec::with_capacity(width * height);
+        for pixel in pixels {
+            let r = pixel.r() as f32;
+            let g = pixel.g() as f32;
+            let b = pixel.b() as f32;
+            let gray = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+            gray_data.push(gray);
+        }
+        let mut prepared_image =
+            rqrr::PreparedImage::prepare_from_greyscale(width, height, |x, y| {
+                gray_data[y * width + x]
+            });
+        let grids = prepared_image.detect_grids();
+        for grid in grids {
+            let mut buf = Vec::new();
+            if let Ok(_meta) = grid.decode_to(&mut buf) {
+                self.last_qr_result_raw.replace(buf);
+                break;
+            }
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -287,6 +315,7 @@ impl QrScannerPopup {
         ui: &mut egui::Ui,
         ctx: &egui::Context,
         _target: &mut String,
+        _target_raw: &mut Vec<u8>,
     ) {
         if ui
             .button("Scan QR")
@@ -334,7 +363,11 @@ impl QrScannerPopup {
                                 *_target = qr_result.clone();
                                 camera.stop();
                                 self.started = false;
+                                camera.last_qr_result.take();
                                 self.open = false;
+                            } else if let Some(qr_result_raw) = camera.get_last_qr_result_raw() {
+                                *_target_raw = qr_result_raw.clone();
+                                camera.last_qr_result_raw.take();
                             }
                         } else {
                             ui.label("Camera busy...");
@@ -369,6 +402,22 @@ impl QrScannerPopup {
                         wasm_bindgen_futures::spawn_local(async move {
                             if let Ok(mut cam) = camera_ref.try_borrow_mut() {
                                 let _ = cam.start().await;
+                            }
+                        });
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    if ui
+                        .button("Change Camera")
+                        .on_hover_text("Change which camera is used")
+                        .clicked()
+                    {
+                        if let Ok(mut camera) = self.camera.try_borrow_mut() {
+                            camera.stop();
+                        }
+                        let camera_ref = self.camera.clone();
+                        wasm_bindgen_futures::spawn_local(async move {
+                            if let Ok(mut cam) = camera_ref.try_borrow_mut() {
+                                cam.flip_camera()
                             }
                         });
                     }

@@ -2,18 +2,20 @@
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
+use std::string::FromUtf8Error;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use mcg_shared::{Card, CardRank, CardSuit, PlayerId};
 // rand import removed; use rand::random::<f64>() for probabilistic decisions
-use tokio::sync::broadcast;
-use tokio::sync::RwLock;
-
 use crate::bot::BotManager;
 use crate::game::{Game, Player};
 use crate::pretty;
 use mcg_shared::GameStatePublic;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
+use tokio::sync::broadcast;
+use tokio::sync::RwLock;
 
 pub const CHANNEL_BUFFER_SIZE: usize = 256;
 
@@ -390,6 +392,21 @@ pub async fn handle_client_msg(
                 None => return mcg_shared::ServerMsg::Error("Unable to determine local IP".into()),
             };
             mcg_shared::ServerMsg::IPValue(ip)
+        }
+        mcg_shared::ClientMsg::QrReq(file) => {
+            match File::open(format!("media/qr_test/{}", file)).await {
+                Ok(mut file) => {
+                    let mut buf = Vec::new();
+                    match file.read_to_end(&mut buf).await {
+                        Ok(_) => {
+                            let content: Box<[u8]> = buf.into();
+                            mcg_shared::ServerMsg::QrRes(content)
+                        }
+                        Err(e) => mcg_shared::ServerMsg::Error(e.to_string()),
+                    }
+                }
+                Err(e) => mcg_shared::ServerMsg::Error(e.to_string()),
+            }
         }
     }
 }

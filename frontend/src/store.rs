@@ -134,6 +134,7 @@ impl AppState {
             ServerMsg::Pong => {}
             ServerMsg::TicketValue(_string) => {}
             ServerMsg::IPValue(_string) => {}
+            ServerMsg::QrRes(content) => {}
         }
     }
 }

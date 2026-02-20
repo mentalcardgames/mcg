@@ -3,7 +3,7 @@ use crate::game::card::{CardConfig, CardEncoding};
 use crate::game::screens::DNDSelector;
 use crate::sprintln;
 use eframe::emath::{vec2, Rect};
-use egui::{frame, Color32, DragAndDrop, Sense, Vec2};
+use egui::{frame, Color32, Sense, Vec2};
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::ops::Add;
@@ -122,6 +122,32 @@ impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
     }
 }
 impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
+    fn set_drag_payload(&self, response: &egui::Response, payload: usize) {
+        // TODO Make the payload be a unique identifier
+        response.dnd_set_drag_payload(DNDSelector::Index(payload));
+        self.drag_payload.replace(Some(payload));
+    }
+    fn set_drop_payload(&self, response: &egui::Response, payload: usize) {
+        // TODO Make the payload be a unique identifier
+        if response.dnd_release_payload::<DNDSelector>().is_some() {
+            self.drop_payload.replace(Some(payload));
+        }
+    }
+    fn horizontal_card_selection(&self, ui: &egui::Ui) -> Option<usize> {
+        let pointer_pos = ui.input(|state| state.pointer.latest_pos());
+        let rect = ui.min_rect();
+        if pointer_pos.is_some() && rect.contains(pointer_pos.unwrap()) {
+            let max = if self.cards.len() > self.max_cards {
+                rect.right() - rect.left()
+            } else {
+                self.cards.len() as f32 * (self.get_card_size().x + self.margin as f32)
+                    - self.margin as f32
+            };
+            Some((self.cards.len() as f32 * (pointer_pos.unwrap().x - rect.left()) / max) as usize)
+        } else {
+            None
+        }
+    }
     fn horizontal_drag_size(&self) -> Vec2 {
         let mut size = self.get_card_size();
         size.x = self.card_pos(1).x - self.card_pos(0).x;
@@ -189,142 +215,83 @@ impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
             );
         }
         if self.draggable && !self.cards.is_empty() {
-            let card = self.cards.last().unwrap();
             ui.scope_builder(
-                egui::UiBuilder::new().max_rect(Rect::from_min_size(
-                    origin.add(self.card_pos(self.cards.len())),
-                    self.get_card_size(),
-                )),
+                egui::UiBuilder::new()
+                    .sense(Sense::click_and_drag())
+                    .max_rect(Rect::from_min_size(
+                        origin.add(self.card_pos(self.cards.len() - 1)),
+                        self.get_card_size(),
+                    )),
                 |ui| {
-                    let response = ui
-                        .dnd_drag_source(
-                            ui.next_auto_id(),
-                            DNDSelector::Index(self.cards.len() - 1),
-                            |ui| ui.add(self.card_config.img(card)),
-                        )
-                        .response;
-                    if DragAndDrop::has_any_payload(ui.ctx())
-                        && self.drag_payload.borrow().is_none()
-                    {
-                        self.drag_payload.replace(Some(self.cards.len() - 1));
+                    ui.set_min_size(self.get_card_size());
+                    if ui.response().drag_started() {
+                        self.set_drag_payload(&ui.response(), self.cards.len() - 1);
                     }
-                    response
-                        .dnd_release_payload::<DNDSelector>()
-                        .into_iter()
-                        .for_each(|payload| {
-                            sprintln!("Received Payload in {:?} over dnd_drag_source", self.kind);
-                            sprintln!("Payload: {payload:?}");
-                            self.drop_payload.replace(Some(self.cards.len() - 1));
-                        });
+                    self.set_drop_payload(&ui.response(), self.cards.len());
+                    ui.response().context_menu(|ui| {
+                        if ui.button("Show inner").clicked() {
+                            sprintln!(
+                                "Imagine the hided information of card {idx} here",
+                                idx = self.cards.len() - 1
+                            );
+                            if ui.should_close() {
+                                ui.close();
+                            }
+                        }
+                    });
                 },
             );
+            self.set_drop_payload(&ui.response(), self.cards.len());
         }
-        let response = ui.response();
-        if let Some(payload) = response.dnd_release_payload::<DNDSelector>() {
-            sprintln!("Received Payload in {:?}", self.kind);
-            sprintln!("Payload: {payload:?}");
-            self.drop_payload.replace(Some(self.cards.len() - 1));
-        }
-        response
+        ui.response()
     }
     fn draw_horizontal(&self, ui: &mut egui::Ui) -> egui::Response {
         ui.set_min_size(self.content_size());
         let origin = ui.cursor().left_top().add(vec2(0.0, self.margin as f32));
-        let pointer_pos = ui.input(|state| state.pointer.latest_pos());
-        let rect = ui.min_rect();
-        let selection: Option<usize> = if let Some(p) = pointer_pos {
-            if rect.contains(p) {
-                let max = if self.cards.len() > self.max_cards {
-                    rect.right() - rect.left()
-                } else {
-                    self.cards.len() as f32 * (self.get_card_size().x + self.margin as f32)
-                        - self.margin as f32
-                };
-                Some((self.cards.len() as f32 * (p.x - rect.left()) / max) as usize)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        type Partition<'a, E> = (Vec<(usize, &'a E)>, Vec<(usize, &'a E)>);
-        let (normal, selected): Partition<E> = self.cards.iter().enumerate().partition(|(i, _)| {
-            let _true_selection =
-                !(self.selectable && (selection.is_some() && selection.unwrap() == *i));
-            true
-        });
-        for (idx, card) in normal {
+        // TODO show card on mouse hover if obstructed
+        let _selection: Option<usize> = self.horizontal_card_selection(ui);
+        for (idx, card) in self.cards.iter().enumerate() {
             self.card_config.img(card).paint_at(
                 ui,
                 Rect::from_min_size(origin.add(self.card_pos(idx)), self.get_card_size()),
             );
+            if self.draggable {
+                ui.scope_builder(
+                    egui::UiBuilder::new()
+                        .sense(Sense::click_and_drag())
+                        .max_rect(Rect::from_min_size(
+                            origin.add(self.card_pos(idx)),
+                            self.horizontal_drag_size(),
+                        )),
+                    |ui| {
+                        ui.set_min_size(self.horizontal_drag_size());
+                        if ui.response().drag_started() {
+                            self.set_drag_payload(&ui.response(), idx);
+                        }
+                        self.set_drop_payload(&ui.response(), idx)
+                    },
+                );
+            }
+        }
+        if self.draggable {
+            let last_drag_rect_min = origin.add(self.card_pos(self.cards.len()));
+            let mut last_drag_rect_size = self.get_card_size();
+            last_drag_rect_size.x -= self.horizontal_drag_size().x;
             ui.scope_builder(
                 egui::UiBuilder::new()
-                    .max_rect(Rect::from_min_size(
-                        origin.add(self.card_pos(idx)),
-                        self.horizontal_drag_size(),
-                    ))
-                    .sense(Sense::click_and_drag()),
+                    .sense(Sense::click_and_drag())
+                    .max_rect(Rect::from_min_size(last_drag_rect_min, last_drag_rect_size)),
                 |ui| {
-                    let drag_source =
-                        ui.dnd_drag_source(ui.next_auto_id(), DNDSelector::Index(idx), |ui| {
-                            ui.add(
-                                self.card_config
-                                    .img(card)
-                                    .maintain_aspect_ratio(false)
-                                    .sense(Sense::click_and_drag())
-                                    .tint(
-                                        Color32::from_hex("#0000007f").unwrap_or(
-                                            Color32::from_rgba_unmultiplied(0, 0, 0, 127),
-                                        ),
-                                    ),
-                            )
-                        });
-                    if DragAndDrop::has_any_payload(ui.ctx())
-                        && self.drag_payload.borrow().is_none()
-                    {
-                        self.drag_payload.replace(Some(idx));
+                    ui.set_min_size(last_drag_rect_size);
+                    if ui.response().drag_started() {
+                        self.set_drag_payload(&ui.response(), self.cards.len() - 1);
                     }
-                    drag_source
-                        .response
-                        .dnd_release_payload::<DNDSelector>()
-                        .into_iter()
-                        .for_each(|payload| {
-                            sprintln!("Received Payload at card {:?} over dnd_drag_source", idx);
-                            sprintln!("Payload: {payload:?}");
-                            self.drop_payload.replace(Some(idx));
-                        });
+                    self.set_drop_payload(&ui.response(), self.cards.len())
                 },
             );
+            self.set_drop_payload(&ui.response(), self.cards.len());
         }
-        for (idx, card) in selected {
-            let img = self.card_config.img(card);
-            egui::Area::new(ui.next_auto_id())
-                .fixed_pos(
-                    origin
-                        .add(self.card_pos(idx))
-                        .add(vec2(0.0, -self.margin as f32)),
-                )
-                .show(ui.ctx(), |ui| {
-                    egui::Frame::new()
-                        .stroke(egui::Stroke::new(2.0, Color32::RED))
-                        .corner_radius(egui::CornerRadius::same(2))
-                        .show(ui, |ui| {
-                            ui.set_min_size(self.get_card_size());
-                            img.paint_at(
-                                ui,
-                                Rect::from_min_size(ui.cursor().left_top(), self.get_card_size()),
-                            );
-                        });
-                });
-        }
-        let response = ui.response();
-        if let Some(payload) = response.dnd_release_payload::<DNDSelector>() {
-            sprintln!("Received Payload in {:?}", self.kind);
-            sprintln!("Payload: {payload:?}");
-            self.drop_payload.replace(Some(self.cards.len()));
-        }
-        response
+        ui.response()
     }
 }
 

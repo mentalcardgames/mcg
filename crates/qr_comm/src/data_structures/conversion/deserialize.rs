@@ -1,7 +1,7 @@
 use crate::data_structures::{Fragment, Frame, FrameFactor, FrameHeader};
 use crate::network_coding::GaloisField2p4;
 use crate::{
-    CODING_FACTOR_OFFSET_SIZE_BYTES, CODING_FACTORS_PER_FRAME, CODING_FACTORS_SIZE_BYTES,
+    CODING_FACTOR_OFFSET_SIZE_BYTES, CODING_FACTOR_WIDTH_SIZE_BYTES, CODING_FACTORS_PER_FRAME,
     FRAGMENT_SIZE_BYTES, FRAME_SIZE_BYTES, HEADER_SIZE_BYTES, MAX_PARTICIPANTS,
     NETWORK_CODING_SIZE_BYTES,
 };
@@ -9,11 +9,11 @@ use std::array::from_fn;
 
 impl From<[u8; FRAME_SIZE_BYTES]> for Frame {
     fn from(value: [u8; FRAME_SIZE_BYTES]) -> Self {
-        debug_assert_eq!(FRAME_SIZE_BYTES, 1367);
-        debug_assert_eq!(HEADER_SIZE_BYTES, 55);
-        debug_assert_eq!(CODING_FACTOR_OFFSET_SIZE_BYTES, 32);
-        debug_assert_eq!(CODING_FACTORS_SIZE_BYTES, 256);
-        debug_assert_eq!(FRAGMENT_SIZE_BYTES, 1024);
+        // debug_assert_eq!(FRAME_SIZE_BYTES, 792);
+        // debug_assert_eq!(HEADER_SIZE_BYTES, 5);
+        // debug_assert_eq!(CODING_FACTOR_OFFSET_SIZE_BYTES, 32);
+        // debug_assert_eq!(CODING_FACTORS_SIZE_BYTES, 256);
+        // debug_assert_eq!(FRAGMENT_SIZE_BYTES, 483);
 
         let mut a = 0;
         let mut b = 0;
@@ -38,7 +38,7 @@ impl From<[u8; FRAME_SIZE_BYTES]> for Frame {
 
 impl From<[u8; HEADER_SIZE_BYTES]> for FrameHeader {
     fn from(value: [u8; HEADER_SIZE_BYTES]) -> Self {
-        debug_assert_eq!(HEADER_SIZE_BYTES, 55);
+        // debug_assert_eq!(HEADER_SIZE_BYTES, 5);
         let participant = value[0];
         let is_overflowing = value[1] != 0;
         let epoch = value[2];
@@ -60,13 +60,14 @@ impl From<[u8; NETWORK_CODING_SIZE_BYTES]> for FrameFactor {
             ])
         });
         let mut coding_factors = [GaloisField2p4::ZERO; CODING_FACTORS_PER_FRAME];
-        let factors: Vec<GaloisField2p4> = value[CODING_FACTOR_OFFSET_SIZE_BYTES..]
+        let factors: Vec<GaloisField2p4> = value
+            [(CODING_FACTOR_OFFSET_SIZE_BYTES + CODING_FACTOR_WIDTH_SIZE_BYTES)..]
             .iter()
             .flat_map(|b| {
                 [
                     GaloisField2p4 { inner: *b & 0xF },
                     GaloisField2p4 {
-                        inner: (*b | 0xF0) >> 4,
+                        inner: (*b & 0xF0) >> 4,
                     },
                 ]
             })

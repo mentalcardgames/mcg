@@ -7,6 +7,7 @@ use std::collections::VecDeque;
 
 pub struct ConnectionManager {
     edit_server_address: String,
+    qr_result_raw: Vec<u8>,
     scanner: QrScannerPopup,
     message_queue: Option<std::rc::Rc<std::cell::RefCell<VecDeque<ServerMsg>>>>,
     error_queue: Option<std::rc::Rc<std::cell::RefCell<VecDeque<String>>>>,
@@ -16,6 +17,7 @@ impl ConnectionManager {
     pub fn new(server_address: String) -> Self {
         Self {
             edit_server_address: server_address,
+            qr_result_raw: Vec::new(),
             scanner: QrScannerPopup::new(),
             message_queue: None,
             error_queue: None,
@@ -171,7 +173,7 @@ impl ConnectionManager {
                     ui.text_edit_singleline(&mut self.edit_server_address)
                         .on_hover_text("Server address (IP:PORT)");
                     self.scanner
-                        .button_and_popup(ui, ctx, &mut self.edit_server_address);
+                        .button_and_popup(ui, ctx, &mut self.edit_server_address, &mut self.qr_result_raw);
                 });
             });
         } else {
@@ -180,7 +182,7 @@ impl ConnectionManager {
                 ui.text_edit_singleline(&mut self.edit_server_address)
                     .on_hover_text("Server address (IP:PORT)");
                 self.scanner
-                    .button_and_popup(ui, ctx, &mut self.edit_server_address);
+                    .button_and_popup(ui, ctx, &mut self.edit_server_address, &mut self.qr_result_raw);
                 ui.add_space(12.0);
                 if ui.button("Connect").clicked() {
                     *connect_clicked = true;

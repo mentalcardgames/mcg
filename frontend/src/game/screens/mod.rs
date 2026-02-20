@@ -1,8 +1,6 @@
 use eframe::Frame;
 
 pub mod articles_screen;
-pub mod cards_test_dnd;
-pub mod dnd_test;
 pub mod example_screen;
 pub mod game;
 pub mod game_setup_screen;
@@ -11,17 +9,20 @@ pub mod pairing_screen;
 
 pub mod poker;
 pub mod qr_test;
+pub mod qr_test_transmit;
+pub mod qr_test_receive;
 
 pub use articles_screen::ArticlesScreen;
-pub use cards_test_dnd::CardsTestDND;
-pub use dnd_test::DNDTest;
+use downcast_rs::{impl_downcast, Downcast};
 pub use example_screen::ExampleScreen;
-pub use game::{DNDSelector, DirectoryCardType, Game, GameConfig};
+pub use game::{DNDSelector, DirectoryCardType, Game, GameState};
 pub use game_setup_screen::GameSetupScreen;
 pub use main_menu::MainMenu;
 pub use pairing_screen::PairingScreen;
 pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
+use crate::game::screens::qr_test_receive::QrTestReceive;
+use crate::game::screens::qr_test_transmit::QrTestTransmit;
 
 pub struct AppInterface<'a> {
     pub events: &'a mut Vec<crate::game::AppEvent>,
@@ -37,9 +38,10 @@ impl<'a> AppInterface<'a> {
 }
 
 /// Object-safe runtime trait for drawing a screen
-pub trait ScreenWidget {
+pub trait ScreenWidget: Downcast {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, frame: &mut Frame);
 }
+impl_downcast!(ScreenWidget);
 
 /// Compile-time definition trait: metadata + factory
 pub trait ScreenDef {
@@ -100,10 +102,10 @@ impl ScreenRegistry {
         reg.register::<GameSetupScreen>();
         reg.register::<Game<DirectoryCardType>>();
         reg.register::<PairingScreen>();
-        reg.register::<DNDTest>();
-        reg.register::<CardsTestDND>();
         reg.register::<ArticlesScreen>();
         reg.register::<QrScreen>();
+        reg.register::<QrTestTransmit>();
+        reg.register::<QrTestReceive>();
         reg.register::<PokerOnlineScreen>();
         reg.register::<ExampleScreen>();
 

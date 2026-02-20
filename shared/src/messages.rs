@@ -33,11 +33,12 @@ pub struct GameStatePublic {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum ClientMsg {
-    /// Player-initiated action: must specify which player is performing the action.
+    /// Player-initiated action: gets applied to the game
     Action {
         player_id: PlayerId,
         action: PlayerAction,
     },
+    QrReq(String),
     Subscribe,
     RequestState,
     Ping,
@@ -64,4 +65,5 @@ pub enum ServerMsg {
     Pong,
     TicketValue(String),
     IPValue(String),
+    QrRes(Box<[u8]>),
 }
