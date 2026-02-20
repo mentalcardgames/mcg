@@ -263,8 +263,7 @@ async fn manage_iroh_connection(
             match reader.read_line(&mut line).await {
                 Ok(0) => break,
                 Ok(_) => {
-                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim())
-                        .await?
+                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim()).await?
                     {
                         break;
                     }

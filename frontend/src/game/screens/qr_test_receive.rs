@@ -66,7 +66,7 @@ impl ScreenWidget for QrTestReceive {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             ui.label("Received Frames:");
-            ui.label(&self.epoch.equations.len().to_string());
+            ui.label(self.epoch.equations.len().to_string());
             ui.label("Number equations:");
             ui.label(self.epoch.needed_eqs.to_string());
         });

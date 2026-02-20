@@ -5,7 +5,7 @@ use egui::{RichText, Ui};
 use mcg_shared::{ClientMsg, GameStatePublic, PlayerAction, PlayerId, PlayerPublic};
 
 /// Manages betting controls state for the poker interface
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BettingControls {
     /// Amount to raise BY (not total)
     pub raise_amount: u32,
@@ -17,18 +17,6 @@ pub struct BettingControls {
     pub max_raise: u32,
     /// Whether to show the betting controls
     pub show_betting_controls: bool,
-}
-
-impl Default for BettingControls {
-    fn default() -> Self {
-        Self {
-            raise_amount: 0,
-            bet_amount: 0,
-            min_raise: 0,
-            max_raise: 0,
-            show_betting_controls: false,
-        }
-    }
 }
 
 impl BettingControls {

@@ -32,8 +32,9 @@ pub struct PlayerPublic {
     pub id: PlayerId,
     pub name: String,
     pub stack: u32,
-    pub cards: Option<[Card; 2]>, // only set for the viewer
+    pub cards: Option<[Card; 2]>,
     pub has_folded: bool,
+    pub all_in: bool,
     pub bet_this_round: u32,
 }
 
