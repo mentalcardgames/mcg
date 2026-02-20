@@ -6,7 +6,6 @@ use std::hash::Hash;
 #[allow(unused_imports)]
 use std::rc::Rc;
 use std::slice::Iter;
-#[cfg(target_arch = "wasm32")]
 use web_sys;
 
 /// Natural size for card display in the UI

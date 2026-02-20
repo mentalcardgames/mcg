@@ -3,7 +3,6 @@ pub mod field;
 pub mod screens;
 pub mod theme;
 pub mod websocket;
-#[cfg(target_arch = "wasm32")]
 use crate::router::Router;
 use crate::{
     game::{card::DirectoryCardType, screens::Game},
@@ -44,12 +43,7 @@ pub struct App {
     app_state: ClientState,
 
     // Router for URL handling
-    #[allow(dead_code)]
-    #[cfg(target_arch = "wasm32")]
     router: Option<Router>,
-    #[allow(dead_code)]
-    #[cfg(not(target_arch = "wasm32"))]
-    router: Option<()>,
 }
 
 impl Default for App {
@@ -68,19 +62,12 @@ impl App {
         );
         crate::hardcoded_cards::set_deck_by_theme(&mut game_setup.card_config, "alt_cards");
 
-        #[cfg(target_arch = "wasm32")]
         let router = Router::new().ok();
 
-        #[cfg(target_arch = "wasm32")]
         let current_path = router
             .as_ref()
             .map(|r| r.current_path().to_string())
             .unwrap_or_else(|| "/".to_string());
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let router: Option<()> = None;
-        #[cfg(not(target_arch = "wasm32"))]
-        let current_path = "/".to_string();
 
         let app_state = ClientState::new();
         Self {
@@ -94,9 +81,6 @@ impl App {
                 dark_mode: true,
             },
             app_state,
-            #[cfg(target_arch = "wasm32")]
-            router,
-            #[cfg(not(target_arch = "wasm32"))]
             router,
         }
     }
@@ -106,7 +90,6 @@ impl App {
         let new_path = self.screen_registry.path_from_path(path).unwrap_or("/");
         if self.current_screen_path != new_path {
             self.current_screen_path = new_path.to_string();
-            #[cfg(target_arch = "wasm32")]
             if let Some(ref mut router) = self.router {
                 let _ = router.navigate_to_path(new_path);
             }
@@ -115,7 +98,6 @@ impl App {
 
     /// Check for URL changes and update current path
     fn check_url_changes(&mut self) {
-        #[cfg(target_arch = "wasm32")]
         if let Some(ref mut router) = self.router {
             if let Ok(changed) = router.check_for_url_changes() {
                 if changed {

@@ -1,10 +1,7 @@
 //! Client-side routing for MCG WASM application
 
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
-#[cfg(target_arch = "wasm32")]
 use web_sys::{window, History, Location};
 
 /// Router for managing client-side navigation and URL synchronization
@@ -12,19 +9,15 @@ pub struct Router {
     /// Current path (pathname) observed in the browser
     current_path: String,
     /// Browser history API
-    #[cfg(target_arch = "wasm32")]
     history: History,
     /// Browser location API
-    #[cfg(target_arch = "wasm32")]
     location: Location,
     /// Callback closure for popstate events
-    #[cfg(target_arch = "wasm32")]
     _popstate_callback: Closure<dyn FnMut(web_sys::Event)>,
 }
 
 impl Router {
     /// Create a new router instance
-    #[cfg(target_arch = "wasm32")]
     pub fn new() -> Result<Self, JsValue> {
         let window = window().ok_or("No window object")?;
         let history = window.history()?;
@@ -53,7 +46,6 @@ impl Router {
     }
 
     /// Parse the current path from browser location
-    #[cfg(target_arch = "wasm32")]
     fn parse_current_path(location: &Location) -> Result<String, JsValue> {
         let pathname = location.pathname()?;
         // Ensure non-empty and always start with '/'
@@ -71,7 +63,6 @@ impl Router {
     }
 
     /// Navigate to a path
-    #[cfg(target_arch = "wasm32")]
     pub fn navigate_to_path(&mut self, path: &str) -> Result<(), JsValue> {
         let path = if path.is_empty() { "/" } else { path };
         if path != self.current_path {
@@ -85,7 +76,6 @@ impl Router {
 
     /// Check if the URL has changed and update current path
     /// Returns true if the path changed
-    #[cfg(target_arch = "wasm32")]
     pub fn check_for_url_changes(&mut self) -> Result<bool, JsValue> {
         let new_path = Self::parse_current_path(&self.location)?;
         if new_path != self.current_path {
@@ -96,7 +86,6 @@ impl Router {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
 impl Default for Router {
     fn default() -> Self {
         Self::new().unwrap_or_else(|_| {

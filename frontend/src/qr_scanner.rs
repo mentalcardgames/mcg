@@ -2,9 +2,7 @@ use egui::TextureHandle;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{JsCast, JsValue};
-#[cfg(target_arch = "wasm32")]
 use web_sys::{
     CanvasRenderingContext2d, HtmlCanvasElement, HtmlVideoElement, MediaStreamConstraints,
 };
@@ -30,14 +28,11 @@ impl std::fmt::Display for CameraFacing {
 }
 
 #[allow(dead_code)]
+#[derive(Default)]
 pub struct Camera {
-    #[cfg(target_arch = "wasm32")]
     video_element: Option<HtmlVideoElement>,
-    #[cfg(target_arch = "wasm32")]
     canvas_element: Option<HtmlCanvasElement>,
-    #[cfg(target_arch = "wasm32")]
     context: Option<CanvasRenderingContext2d>,
-    #[cfg(target_arch = "wasm32")]
     stream: Option<web_sys::MediaStream>,
     is_active: bool,
     is_video_ready: bool,
@@ -47,32 +42,7 @@ pub struct Camera {
     last_qr_result_raw: Option<Vec<u8>>,
     facing_mode: CameraFacing,
 }
-impl Default for Camera {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 impl Camera {
-    pub fn new() -> Self {
-        Self {
-            #[cfg(target_arch = "wasm32")]
-            video_element: None,
-            #[cfg(target_arch = "wasm32")]
-            canvas_element: None,
-            #[cfg(target_arch = "wasm32")]
-            context: None,
-            #[cfg(target_arch = "wasm32")]
-            stream: None,
-            is_active: false,
-            is_video_ready: false,
-            frame_texture: None,
-            frame_count: 0,
-            last_qr_result: None,
-            last_qr_result_raw: None,
-            facing_mode: CameraFacing::Environment,
-        }
-    }
-    #[cfg(target_arch = "wasm32")]
     pub async fn start(&mut self) -> Result<HtmlVideoElement, JsValue> {
         if self.is_active {
             return self
@@ -128,7 +98,6 @@ impl Camera {
         self.is_active = true;
         Ok(video)
     }
-    #[cfg(target_arch = "wasm32")]
     pub fn capture_frame(&mut self, ctx: &egui::Context) -> Result<(), JsValue> {
         if let (Some(video), Some(canvas), Some(context)) =
             (&self.video_element, &self.canvas_element, &self.context)
@@ -209,7 +178,6 @@ impl Camera {
     pub fn get_last_qr_result_raw(&self) -> Option<&Vec<u8>> {
         self.last_qr_result_raw.as_ref()
     }
-    #[cfg(target_arch = "wasm32")]
     pub fn stop(&mut self) {
         if let Some(stream) = &self.stream {
             let tracks = stream.get_tracks();
@@ -241,7 +209,6 @@ impl Camera {
     pub fn get_facing_mode(&self) -> CameraFacing {
         self.facing_mode
     }
-    #[cfg(target_arch = "wasm32")]
     fn analyze_qr_frame(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
         let mut gray_data = Vec::with_capacity(width * height);
         for pixel in pixels {
@@ -264,7 +231,6 @@ impl Camera {
             }
         }
     }
-    #[cfg(target_arch = "wasm32")]
     fn analyze_qr_frame_raw(&mut self, pixels: &[egui::Color32], width: usize, height: usize) {
         let mut gray_data = Vec::with_capacity(width * height);
         for pixel in pixels {
@@ -290,25 +256,14 @@ impl Camera {
 }
 
 #[allow(dead_code)]
+#[derive(Default)]
 pub struct QrScannerPopup {
     open: bool,
     camera: Rc<RefCell<Camera>>,
     started: bool,
 }
 
-impl Default for QrScannerPopup {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 impl QrScannerPopup {
-    pub fn new() -> Self {
-        Self {
-            camera: Rc::new(RefCell::new(Camera::new())),
-            open: false,
-            started: false,
-        }
-    }
     #[allow(clippy::ptr_arg)]
     pub fn button_and_popup(
         &mut self,
@@ -323,18 +278,15 @@ impl QrScannerPopup {
             .clicked()
         {
             self.open = true;
-            #[cfg(target_arch = "wasm32")]
-            {
-                let camera_ref = self.camera.clone();
-                self.started = true;
-                wasm_bindgen_futures::spawn_local(async move {
-                    // Avoid keeping a RefCell borrow across await by taking then re-borrowing
-                    let _ = camera_ref.try_borrow_mut().ok().map(|_| ());
-                    if let Ok(mut cam) = camera_ref.try_borrow_mut() {
-                        let _ = cam.start().await;
-                    }
-                });
-            }
+            let camera_ref = self.camera.clone();
+            self.started = true;
+            wasm_bindgen_futures::spawn_local(async move {
+                // Avoid keeping a RefCell borrow across await by taking then re-borrowing
+                let _ = camera_ref.try_borrow_mut().ok().map(|_| ());
+                if let Ok(mut cam) = camera_ref.try_borrow_mut() {
+                    let _ = cam.start().await;
+                }
+            });
         }
         if self.open {
             let mut open = true;
@@ -343,43 +295,35 @@ impl QrScannerPopup {
                 .collapsible(false)
                 .resizable(false)
                 .show(ctx, |ui| {
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        if let Ok(mut camera) = self.camera.try_borrow_mut() {
-                            // If camera failed to start previously, keep showing a friendly message
-                            let _ = camera.capture_frame(ctx);
-                            if let Some(texture) = camera.get_texture() {
-                                ui.add(
-                                    egui::Image::from_texture(texture)
-                                        .max_size(egui::vec2(640.0, 480.0))
-                                        .corner_radius(egui::CornerRadius::same(5)),
-                                );
-                            } else if camera.is_video_ready() {
-                                ui.label("Processing video frames...");
-                            } else {
-                                ui.label("Waiting for camera to initialize...");
-                            }
-                            if let Some(qr_result) = camera.get_last_qr_result() {
-                                *_target = qr_result.clone();
-                                camera.stop();
-                                self.started = false;
-                                camera.last_qr_result.take();
-                                self.open = false;
-                            } else if let Some(qr_result_raw) = camera.get_last_qr_result_raw() {
-                                *_target_raw = qr_result_raw.clone();
-                                camera.last_qr_result_raw.take();
-                            }
+                    if let Ok(mut camera) = self.camera.try_borrow_mut() {
+                        // If camera failed to start previously, keep showing a friendly message
+                        let _ = camera.capture_frame(ctx);
+                        if let Some(texture) = camera.get_texture() {
+                            ui.add(
+                                egui::Image::from_texture(texture)
+                                    .max_size(egui::vec2(640.0, 480.0))
+                                    .corner_radius(egui::CornerRadius::same(5)),
+                            );
+                        } else if camera.is_video_ready() {
+                            ui.label("Processing video frames...");
                         } else {
-                            ui.label("Camera busy...");
+                            ui.label("Waiting for camera to initialize...");
                         }
-                    }
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        ui.label("Camera not available on native build");
+                        if let Some(qr_result) = camera.get_last_qr_result() {
+                            *_target = qr_result.clone();
+                            camera.stop();
+                            self.started = false;
+                            camera.last_qr_result.take();
+                            self.open = false;
+                        } else if let Some(qr_result_raw) = camera.get_last_qr_result_raw() {
+                            *_target_raw = qr_result_raw.clone();
+                            camera.last_qr_result_raw.take();
+                        }
+                    } else {
+                        ui.label("Camera busy...");
                     }
                     ui.add_space(8.0);
                     if ui.button("Close").clicked() {
-                        #[cfg(target_arch = "wasm32")]
                         if let Ok(mut camera) = self.camera.try_borrow_mut() {
                             if self.started {
                                 camera.stop();
@@ -388,7 +332,6 @@ impl QrScannerPopup {
                         self.started = false;
                         self.open = false;
                     }
-                    #[cfg(target_arch = "wasm32")]
                     if ui
                         .button("Retry")
                         .on_hover_text("Retry initializing the camera")
@@ -405,7 +348,6 @@ impl QrScannerPopup {
                             }
                         });
                     }
-                    #[cfg(target_arch = "wasm32")]
                     if ui
                         .button("Change Camera")
                         .on_hover_text("Change which camera is used")
@@ -423,7 +365,6 @@ impl QrScannerPopup {
                     }
                 });
             if !open {
-                #[cfg(target_arch = "wasm32")]
                 if let Ok(mut camera) = self.camera.try_borrow_mut() {
                     if self.started {
                         camera.stop();
