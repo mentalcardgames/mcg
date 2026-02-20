@@ -556,7 +556,7 @@ mod tests {
             let maybe_ap = e.get_package(participant_idx, 0);
             assert!(maybe_ap.is_some());
             let Package {
-                mut data,
+                data,
                 size: _size,
             } = maybe_ap.unwrap();
             if let Ok(mut file) = File::create(format!("tests/out_dir/{}", file)) {

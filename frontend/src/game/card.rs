@@ -104,7 +104,7 @@ impl CardConfig for DirectoryCardType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 #[allow(non_snake_case)]
 pub struct DirectoryCardType {
     pub(crate) path: String,

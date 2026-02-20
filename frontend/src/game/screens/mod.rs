@@ -170,7 +170,7 @@ macro_rules! impl_screen_def {
             where
                 Self: Sized,
             {
-                Box::new(Self::new())
+                Box::new(Self::default())
             }
         }
     };

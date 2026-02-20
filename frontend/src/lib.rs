@@ -71,8 +71,7 @@ pub fn calculate_dpi_scale() -> f32 {
     } else {
         1.0
     };
-    let scale = base_scale * (device_pixel_ratio / 2.0).max(0.75).min(1.5);
-    scale
+    base_scale * (device_pixel_ratio / 2.0).clamp(0.75, 1.5)
 }
 
 #[wasm_bindgen]

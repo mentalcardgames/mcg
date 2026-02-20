@@ -269,7 +269,7 @@ impl eframe::App for App {
                 screen.ui(&mut app_interface, ui, frame);
             } else {
                 // fallback: main menu
-                let mut mm = MainMenu::new();
+                let mut mm = MainMenu::default();
                 mm.ui(&mut app_interface, ui, frame);
             }
         });

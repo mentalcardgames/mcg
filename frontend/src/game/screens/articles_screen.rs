@@ -71,7 +71,7 @@ impl ArticlesScreen {
     }
 }
 
-impl ArticlesScreen {
+impl ScreenWidget for ArticlesScreen {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
         let app_state = &mut app_interface.app_state;

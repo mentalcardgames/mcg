@@ -127,7 +127,7 @@ impl Camera {
             let image_data =
                 context.get_image_data(0.0, 0.0, canvas_width as f64, canvas_height as f64)?;
             let data = image_data.data();
-            if data.len() == 0 {
+            if data.is_empty() {
                 return Ok(());
             }
             let mut pixels = Vec::with_capacity((canvas_width * canvas_height) as usize);
@@ -148,7 +148,7 @@ impl Camera {
                 pixels.clone(),
             );
             self.frame_count += 1;
-            if self.frame_count % 5 == 0 {
+            if self.frame_count.is_multiple_of(5) {
                 self.analyze_qr_frame_raw(&pixels, canvas_width as usize, canvas_height as usize);
             }
             if let Some(texture) = &mut self.frame_texture {
@@ -280,9 +280,8 @@ impl QrScannerPopup {
             self.open = true;
             let camera_ref = self.camera.clone();
             self.started = true;
+            #[allow(clippy::await_holding_refcell_ref)]
             wasm_bindgen_futures::spawn_local(async move {
-                // Avoid keeping a RefCell borrow across await by taking then re-borrowing
-                let _ = camera_ref.try_borrow_mut().ok().map(|_| ());
                 if let Ok(mut cam) = camera_ref.try_borrow_mut() {
                     let _ = cam.start().await;
                 }

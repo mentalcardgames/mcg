@@ -136,14 +136,14 @@ impl<E: CardEncoding, C: CardConfig> SimpleField<E, C> {
     fn horizontal_card_selection(&self, ui: &egui::Ui) -> Option<usize> {
         let pointer_pos = ui.input(|state| state.pointer.latest_pos());
         let rect = ui.min_rect();
-        if pointer_pos.is_some() && rect.contains(pointer_pos.unwrap()) {
+        if let Some(pos) = pointer_pos.filter(|p| rect.contains(*p)) {
             let max = if self.cards.len() > self.max_cards {
                 rect.right() - rect.left()
             } else {
                 self.cards.len() as f32 * (self.get_card_size().x + self.margin as f32)
                     - self.margin as f32
             };
-            Some((self.cards.len() as f32 * (pointer_pos.unwrap().x - rect.left()) / max) as usize)
+            Some((self.cards.len() as f32 * (pos.x - rect.left()) / max) as usize)
         } else {
             None
         }
