@@ -6,7 +6,6 @@ pub mod ast {
     use serde::{Serialize, Deserialize};
     use crate::arbitrary::{
         gen_vec_min_1,
-        gen_player_name, 
         gen_team_name, 
         gen_vec_strings, 
         gen_vec_players_prefixed, 
@@ -73,13 +72,6 @@ pub mod ast {
             memory: String,
             owner: Box<Owner>
         },
-    }
-
-    // Helper
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
-    pub enum IdentOrMemory {
-        Ident { ident: String },
-        Memory { memory: UseMemory },
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
@@ -230,7 +222,6 @@ pub mod ast {
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     pub enum PlayerExpr {
         Literal { 
-            // #[arbitrary(with = gen_player_name)]
             name: String 
         },
         Runtime {runtime: RuntimePlayer},
@@ -628,7 +619,8 @@ pub mod ast {
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum FlowComponent {
-        Stage {stage: SeqStage},
+        SeqStage {stage: SeqStage},
+        SimStage {stage: SimStage},
         Rule{game_rule: GameRule},
         IfRule{if_rule: IfRule},
         ChoiceRule {choice_rule: ChoiceRule},
@@ -747,6 +739,16 @@ pub mod ast {
         #[arbitrary(with = gen_ident)]
         pub stage: String,
         pub player: PlayerExpr,
+        pub end_condition: EndCondition,
+        #[arbitrary(with = gen_flows_safe)]
+        pub flows: Vec<FlowComponent>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
+    pub struct SimStage {
+        #[arbitrary(with = gen_ident)]
+        pub stage: String,
+        pub players: PlayerCollection,
         pub end_condition: EndCondition,
         #[arbitrary(with = gen_flows_safe)]
         pub flows: Vec<FlowComponent>,

@@ -28,12 +28,14 @@ pub fn gen_ident(u: &mut Unstructured) -> arbitrary::Result<String> {
 
 // Helper function to generate a safe alphanumeric identifier
 pub fn gen_player_name(u: &mut Unstructured) -> Result<String> {
-    Ok(format!("P{}", gen_ident(u)?))
+    // Ok(format!("P{}", gen_ident(u)?))
+    gen_ident(u)
 }
 
 // Helper function to generate a safe alphanumeric identifier
 pub fn gen_team_name(u: &mut Unstructured) -> Result<String> {
-    Ok(format!("T{}", gen_ident(u)?))
+    // Ok(format!("T{}", gen_ident(u)?))
+    gen_ident(u)
 }
 
 pub fn gen_vec_players_prefixed(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<String>> {
@@ -472,7 +474,6 @@ impl<'a> Arbitrary<'a> for PlayerCollection {
                     memory: gen_ident(u)?,
                 }
             }),
-            
             // 40% chance for Literal (Uses our safe vec generator)
             40..=79 => Ok(PlayerCollection::Literal {
                 players: gen_vec_min_1_players(u)?,

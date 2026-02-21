@@ -75,7 +75,7 @@ impl fmt::Display for Groupable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             Groupable::Location { name: location } => location,
-            Groupable::LocationCollection { location_collection: location_collection } => &format!("{}", location_collection),
+            Groupable::LocationCollection { location_collection } => &format!("{}", location_collection),
         };
         f.write_str(s)
     }
@@ -84,12 +84,11 @@ impl fmt::Display for Groupable {
 impl fmt::Display for Owner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Owner::Player { player: player } => &format!("{}", player),
-            Owner::PlayerCollection { player_collection: player_collection } => &format!("{}", player_collection),
-            Owner::Team { team: team } => &format!("{}", team),
-            Owner::TeamCollection { team_collection: team_collection} => &format!("{}", team_collection),
+            Owner::Player { player } => &format!("{}", player),
+            Owner::PlayerCollection { player_collection } => &format!("{}", player_collection),
+            Owner::Team { team } => &format!("{}", team),
+            Owner::TeamCollection { team_collection} => &format!("{}", team_collection),
             Owner::Table => "table",
-            // Owner::Memory { memory } => &format!("&{}", memory),
           };
         f.write_str(s)
     }
@@ -98,9 +97,9 @@ impl fmt::Display for Owner {
 impl fmt::Display for Quantity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Quantity::Int { int: int} => &format!("{}", int),
-            Quantity::Quantifier { qunatifier: quant }  => &format!("{}", quant),
-            Quantity::IntRange { int_range: int_range } => &format!("{}", int_range),
+            Quantity::Int { int} => &format!("{}", int),
+            Quantity::Quantifier { qunatifier }  => &format!("{}", qunatifier),
+            Quantity::IntRange { int_range } => &format!("{}", int_range),
         };
         f.write_str(s)
     }
@@ -150,8 +149,8 @@ impl fmt::Display for Quantifier {
 impl fmt::Display for EndCondition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            EndCondition::UntilBool { bool_expr: bool_expr } => &format!("until {}", bool_expr),
-            EndCondition::UntilBoolRep { bool_expr: bool_expr, logic: logic_bin_op, reps: repititions} => &format!("until {} {} {}", bool_expr, logic_bin_op, repititions),
+            EndCondition::UntilBool { bool_expr } => &format!("until {}", bool_expr),
+            EndCondition::UntilBoolRep { bool_expr, logic: logic_bin_op, reps: repititions} => &format!("until {} {} {}", bool_expr, logic_bin_op, repititions),
             EndCondition::UntilRep { reps: repititions } => &format!("{}", repititions),
             EndCondition::UntilEnd => "until end",
         };
@@ -324,7 +323,7 @@ impl fmt::Display for IntExpr {
         IntExpr::Aggregate{aggregate: aggregate_int} => &format!("{}", aggregate_int),
         IntExpr::Runtime{runtime: runtime_int} => &format!("{}", runtime_int),
         IntExpr::Memory { memory } => {
-          &format!("&{}", memory)
+          &format!("{}", memory)
         },
       };
       f.write_str(s)
@@ -346,7 +345,7 @@ impl fmt::Display for StringExpr {
       let s = match self {
         StringExpr::Literal{value} => &format!("\"{}\"", value),
         StringExpr::Query { query: query_string} => &format!("{}", query_string),
-        StringExpr::Memory { memory } => &format!("&{}", memory),
+        StringExpr::Memory { memory } => &format!("{}", memory),
       };
       f.write_str(s)
   }
@@ -523,7 +522,7 @@ impl fmt::Display for CardSet {
       let s = match self {
         CardSet::Group { group } => &format!("{}", group),
         CardSet::GroupOwner { group, owner } => &format!("{} of {}", group, owner),
-        CardSet::Memory { memory } => &format!("&{}",memory),
+        CardSet::Memory { memory } => &format!("{}",memory),
       };
       f.write_str(s)
   }
@@ -609,8 +608,6 @@ impl fmt::Display for Collection {
           &format!("{}", team_collection),
         Collection::CardSet{card_set} =>
           &format!("cards {}", card_set),
-        // Collection::Memory { memory } => 
-        //   &format!("&{}",memory),
       };
       f.write_str(s)
   }
@@ -628,7 +625,7 @@ impl fmt::Display for IntCollection {
 
           write!(f, "( {} )", s)
         },
-        IntCollection::Memory { memory } => write!(f, "&{}", memory),
+        IntCollection::Memory { memory } => write!(f, "{}", memory),
       }
     }
 }
@@ -645,7 +642,7 @@ impl fmt::Display for LocationCollection {
 
           write!(f, "( {} )", s)
         },
-        LocationCollection::Memory { memory } => write!(f, "&{}", memory),
+        LocationCollection::Memory { memory } => write!(f, "{}", memory),
       }
     }
 }
@@ -661,7 +658,7 @@ impl fmt::Display for StringCollection {
 
             write!(f, "( {} )", s)
           },
-          StringCollection::Memory { memory } => write!(f, "&{}", memory),
+          StringCollection::Memory { memory } => write!(f, "{}", memory),
       }
     }
 }
@@ -703,7 +700,7 @@ impl fmt::Display for PlayerCollection {
               &format!("{}", aggregate_player_collection),
             PlayerCollection::Runtime { runtime: runtime_player_collection } =>
               &format!("{}", runtime_player_collection),
-            PlayerCollection::Memory { memory } => &format!("&{}", memory),
+            PlayerCollection::Memory { memory } => &format!("{}", memory),
         };
         f.write_str(s)
     }
@@ -732,7 +729,7 @@ impl fmt::Display for TeamCollection {
             },
             TeamCollection::Runtime { runtime: runtime_team_collection} =>
               &format!("{}", runtime_team_collection),
-            TeamCollection::Memory { memory } => &format!("&{}", memory),
+            TeamCollection::Memory { memory } => &format!("{}", memory),
         };
         f.write_str(s)
     }
@@ -873,9 +870,9 @@ impl fmt::Display for UseMemory {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let s = match self {
         UseMemory::Memory { memory } => 
-          &format!("{}", memory),
+          &format!("&{}", memory),
         UseMemory::WithOwner { memory, owner } => 
-          &format!("{} of {}", memory, owner),
+          &format!("&({} of {})", memory, owner),
     };
     f.write_str(s)
   }
@@ -1040,6 +1037,19 @@ impl fmt::Display for SeqStage {
   }
 }
 
+impl fmt::Display for SimStage {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let flows = self.flows
+      .iter()
+      .map(|f| format!("{}", f)) // convert each int to string
+      .collect::<Vec<_>>()    // collect into Vec<String>
+      .join("\n");
+
+    let s = &format!("stage {} for {} {} {{\n {} }}\n", self.stage, self.players, self.end_condition, flows);
+    f.write_str(s)
+  }
+}
+
 impl fmt::Display for IfRule {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let flows = self.flows
@@ -1131,7 +1141,9 @@ impl fmt::Display for Conditional {
 impl fmt::Display for FlowComponent {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let s = match self {
-        FlowComponent::Stage{stage} =>
+        FlowComponent::SeqStage{stage} =>
+          &format!("{}", stage),
+        FlowComponent::SimStage{stage} =>
           &format!("{}", stage),
         FlowComponent::Rule{game_rule} =>
           &format!("{}", game_rule),

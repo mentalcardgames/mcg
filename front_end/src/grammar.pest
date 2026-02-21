@@ -29,7 +29,7 @@ token       = { ident }
 precedence  = { ident }
 combo       = { ident }
 memory      = { ident }
-use_memory  = { "&" ~ memory ~ (kw_of ~ owner)? }
+use_memory  = { "&" ~ "(" ~ memory ~ (kw_of ~ owner)? ~ ")" | "&" ~ memory }
 pointmap    = { ident }
 key         = { ident }
 value       = { ident }
@@ -346,12 +346,10 @@ team_expr = {
 
 // Collection
 // =======================
-ident_or_use_memory = { ident | use_memory }
-
 collection = { 
     use_memory
   | "(" ~ ident ~ ("," ~ ident) ~ ")"
-  | "(" ~ ident_or_use_memory ~ ("," ~ ident_or_use_memory) ~ ")"
+  | "(" ~ use_memory ~ ("," ~ use_memory) ~ ")"
   | int_collection
   | string_collection
   | player_collection
@@ -427,7 +425,8 @@ game_flow = { flow_component+ }
 // FlowComponent
 // =======================
 flow_component = { 
-    seq_stage 
+    sim_stage 
+  | seq_stage 
   | game_rule 
   | if_rule 
   | choice_rule 
@@ -558,7 +557,8 @@ create_combo = { kw_combo ~ combo ~ kw_where ~ filter_expr }
 
 // CreateMemory
 // =======================
-memory_type = { (use_memory | int_expr | string_expr | collection) }
+// Check if a slice of the memory is there (IntCollection and StringCollection)
+memory_type = { (use_memory ~ !("[") | int_expr | string_expr | collection) }
 // can not initialize a memory with a memory!
 create_memory = { kw_memory ~ memory ~ (memory_type)? ~ kw_on ~ owner }
 // =======================
@@ -586,7 +586,7 @@ stage_rule = {
 
 // SimStage
 // =======================
-sim_stage = { kw_stage ~ stage ~ kw_for ~ player_collection ~ end_condition ~ ":" ~ (kw_create ~ flow_component)+ }
+sim_stage = { kw_stage ~ stage ~ kw_for ~ player_collection ~ end_condition ~ "{" ~ flow_component+ ~ "}" }
 // =======================
 
 // SeqStage

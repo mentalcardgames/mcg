@@ -463,8 +463,13 @@ impl IrBuilder<SpannedPayload> {
         FlowComponent::ChoiceRule { choice_rule } => {
             self.build_choice_rule(&choice_rule.node, entry, exit)
         },
-        FlowComponent::Stage { stage } => {
+        FlowComponent::SeqStage { stage } => {
             self.build_seq_stage(&stage.node, entry, exit)
+        },
+        FlowComponent::SimStage { stage } => {
+            // TODO
+            // self.build_seq_stage(&stage.node, entry, exit)
+            0
         },
         FlowComponent::Rule {game_rule} => {
             // Can have GameFlowChanges! So return here.

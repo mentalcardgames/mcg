@@ -82,7 +82,8 @@ impl CGDSLParser {
     pub(crate) fn flow_component(input: Node) -> Result<SFlowComponent> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-                [seq_stage(n)] => FlowComponent::Stage { stage: n },
+                [seq_stage(n)] => FlowComponent::SeqStage { stage: n },
+                [sim_stage(n)] => FlowComponent::SimStage { stage: n },
                 [if_rule(s)] => FlowComponent::IfRule { if_rule: s },
                 [choice_rule(t)] => FlowComponent::ChoiceRule { choice_rule: t },
                 [optional_rule(l)] => FlowComponent::OptionalRule { optional_rule: l },
@@ -116,6 +117,26 @@ impl CGDSLParser {
             }
         )
     }
+
+    pub(crate) fn sim_stage(input: Node) -> Result<SSimStage> {
+        let span = OwnedSpan::from(input.as_span());
+        let node = match_nodes!(input.into_children();
+            [kw_stage(_), stage(s), kw_for(_), player_collection(p), end_condition(e), flow_component(f)..] => SimStage {
+                stage: s,
+                players: p,
+                end_condition: e,
+                flows: f.collect(), // Collects the trailing flow_components into a Vec
+            },
+        );
+
+        Ok(
+            SSimStage {
+                node: node,
+                span
+            }
+        )
+    }
+
 
     pub(crate) fn kw_case(input: Node) -> Result<()> {
         Ok(())
@@ -1777,7 +1798,7 @@ impl CGDSLParser {
             match_nodes!(input.clone().into_children();
                 [use_memory(memory)] => resolve_collection_memory(memory, span, input),
                 [ident(ids)..] => resolve_collection_idents(ids.collect(), span, input),
-                [ident_or_use_memory(mis)..] => resolve_collection_ident_or_use_memory(mis.collect(), span, input),
+                [use_memory(mis)..] => resolve_collection_use_memory(mis.collect(), span, input),
                 [int_collection(n)] => SCollection {node: Collection::IntCollection { int: n }, span},
                 [string_collection(n)] => SCollection {node: Collection::StringCollection { string: n }, span},
                 [player_collection(n)] => SCollection {node: Collection::PlayerCollection { player: n }, span},
@@ -1787,17 +1808,6 @@ impl CGDSLParser {
             )
         )
     }
-
-    pub(crate) fn ident_or_use_memory(input: Node) -> Result<SIdentOrMemory> {
-        let span = OwnedSpan::from(input.as_span());
-        Ok(
-            match_nodes!{input.into_children();
-                [ident(id)] => SIdentOrMemory { node: IdentOrMemory::Ident { ident: id}, span},
-                [use_memory(mem)] => SIdentOrMemory { node: IdentOrMemory::Memory { memory: mem}, span},
-            }
-        )
-    }
-
 
     pub(crate) fn location_collection(input: Node) -> Result<SLocationCollection> {
         let span = OwnedSpan::from(input.as_span());
@@ -3091,70 +3101,185 @@ pub(crate) fn resolve_collection_idents(ids: Vec<SID>, span: OwnedSpan, input: N
     }
 }
 
-pub(crate) fn resolve_collection_ident_or_use_memory(ids: Vec<SIdentOrMemory>, span: OwnedSpan, input: Node) -> SCollection {
+pub(crate) fn resolve_collection_use_memory(ids: Vec<SUseMemory>, span: OwnedSpan, input: Node) -> SCollection {
     // ints
-    if ids.iter().all(|i| 
-        matches!(i.node, IdentOrMemory::Memory { memory: _ })
-    ) {
-        let ints: Vec<SIntExpr> = ids.iter().map(
-            |id| 
-            {
-                match &id.node {
-                    IdentOrMemory::Memory { memory} => {
-                        SIntExpr {
-                            node: IntExpr::Memory { memory: memory.clone() },
-                            span: span.clone() 
+    // checking the first type
+    let id = ids.first().unwrap();
+    match &id.node {
+        UseMemory::Memory { memory} => {
+            if let Some(ty) = input.user_data().borrow().memories.get(&memory.node) {
+                match ty {
+                    MemType::Int => {
+                        return SCollection {
+                            node: Collection::IntCollection {
+                                int: SIntCollection {
+                                    node: IntCollection::Literal { ints: 
+                                        ids.iter().map(|i|
+                                            SIntExpr {
+                                                node: IntExpr::Memory {
+                                                    memory: i.clone(),
+                                                },
+                                                span: span.clone()
+                                            }
+                                        ).collect()
+                                    },
+                                    span: span.clone()
+                                }
+                            },
+                            span
                         }
                     },
-                    // This will never happen
-                    _ => {
-                        panic!()
+                    MemType::String => {
+                        return SCollection {
+                            node: Collection::StringCollection {
+                                string: SStringCollection {
+                                    node: StringCollection::Literal { strings: 
+                                        ids.iter().map(|i|
+                                            SStringExpr {
+                                                node: StringExpr::Memory {
+                                                    memory: i.clone(),
+                                                },
+                                                span: span.clone()
+                                            }
+                                        ).collect()
+                                    },
+                                    span: span.clone()
+                                }
+                            },
+                            span
+                        }
                     },
+                    // FallBack is IntCollection
+                    _ => {
+                        return SCollection {
+                            node: Collection::IntCollection {
+                                int: SIntCollection {
+                                    node: IntCollection::Literal { ints: 
+                                        ids.iter().map(|i|
+                                            SIntExpr {
+                                                node: IntExpr::Memory {
+                                                    memory: i.clone(),
+                                                },
+                                                span: span.clone()
+                                            }
+                                        ).collect()
+                                    },
+                                    span: span.clone()
+                                }
+                            },
+                            span
+                        }
+                    }
+                }
+            } else {
+                // FallBack is IntCollection
+                return SCollection {
+                    node: Collection::IntCollection {
+                        int: SIntCollection {
+                            node: IntCollection::Literal { ints: 
+                                ids.iter().map(|i|
+                                    SIntExpr {
+                                        node: IntExpr::Memory {
+                                            memory: i.clone(),
+                                        },
+                                        span: span.clone()
+                                    }
+                                ).collect()
+                            },
+                            span: span.clone()
+                        }
+                    },
+                    span
                 }
             }
-        ).collect();
-
-        return SCollection {
-            node: Collection::IntCollection { 
-                int: SIntCollection {
-                    node: IntCollection::Literal { ints },
-                    span: span.clone()
-                } 
-            }, 
-            span
-        }
-    }
-
-    // Check if all String and FallBack
-    let strings: Vec<SStringExpr> = ids.iter().map(
-        |id| 
-        {
-            match &id.node {
-                IdentOrMemory::Ident {ident: id} => {
-                    SStringExpr {
-                        // This is weird but we need a FallBack
-                        node: StringExpr::Literal { value: id.clone() },
-                        span: span.clone() 
+        },
+        UseMemory::WithOwner { memory, owner} => {
+            if let Some(ty) = input.user_data().borrow().memories.get(&memory.node) {
+                match ty {
+                    MemType::Int => {
+                        return SCollection {
+                            node: Collection::IntCollection {
+                                int: SIntCollection {
+                                    node: IntCollection::Literal { ints: 
+                                        ids.iter().map(|i|
+                                            SIntExpr {
+                                                node: IntExpr::Memory {
+                                                    memory: i.clone(),
+                                                },
+                                                span: span.clone()
+                                            }
+                                        ).collect()
+                                    },
+                                    span: span.clone()
+                                }
+                            },
+                            span
+                        }
+                    },
+                    MemType::String => {
+                        return SCollection {
+                            node: Collection::StringCollection {
+                                string: SStringCollection {
+                                    node: StringCollection::Literal { strings: 
+                                        ids.iter().map(|i|
+                                            SStringExpr {
+                                                node: StringExpr::Memory {
+                                                    memory: i.clone(),
+                                                },
+                                                span: span.clone()
+                                            }
+                                        ).collect()
+                                    },
+                                    span: span.clone()
+                                }
+                            },
+                            span
+                        }
+                    },
+                    // FallBack is IntCollection
+                    _ => {
+                        return SCollection {
+                            node: Collection::IntCollection {
+                                int: SIntCollection {
+                                    node: IntCollection::Literal { ints: 
+                                        ids.iter().map(|i|
+                                            SIntExpr {
+                                                node: IntExpr::Memory {
+                                                    memory: i.clone(),
+                                                },
+                                                span: span.clone()
+                                            }
+                                        ).collect()
+                                    },
+                                    span: span.clone()
+                                }
+                            },
+                            span
+                        }
                     }
-                },
-                IdentOrMemory::Memory { memory} => {
-                    SStringExpr {
-                        node: StringExpr::Memory { memory: memory.clone() },
-                        span: span.clone() 
-                    }
-                },
+                }
+            } else {
+                // FallBack is IntCollection
+                return SCollection {
+                    node: Collection::IntCollection {
+                        int: SIntCollection {
+                            node: IntCollection::Literal { ints: 
+                                ids.iter().map(|i|
+                                    SIntExpr {
+                                        node: IntExpr::Memory {
+                                            memory: i.clone(),
+                                        },
+                                        span: span.clone()
+                                    }
+                                ).collect()
+                            },
+                            span: span.clone()
+                        }
+                    },
+                    span
+                }
             }
-        }
-    ).collect();
-
-    return SCollection {
-        node: Collection::StringCollection { 
-            string: SStringCollection {
-                node: StringCollection::Literal { strings },
-                span: span.clone() 
-            }
-        }, 
-        span
+        },
     }
 }
 

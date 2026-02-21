@@ -297,7 +297,7 @@ proptest! {
 
 proptest! {
     #![proptest_config(Config {
-        cases: 100,
+        cases: 100000,
         .. Config::default()
     })]
 
@@ -308,6 +308,11 @@ proptest! {
 
     #[test]
     fn test_seq_stage(expr in arb::<SeqStage>()) {
+      parse_ast_parse(&format!("{}", expr));
+    }
+
+    #[test]
+    fn test_sim_stage(expr in arb::<SimStage>()) {
       parse_ast_parse(&format!("{}", expr));
     }
 
@@ -665,7 +670,6 @@ fn resolve_collection_idents() {
   ] } });
 }
 
-
 #[test]
 fn resolve_owner_with_table() {
   // ================================================
@@ -826,4 +830,36 @@ fn resolve_memory_type_with_table() {
   assert_eq!(collection.lower(), MemoryType::PlayerCollection { players: PlayerCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });  
 }
 
+// memory Id399 &Id100 of PIdentfallback[1] on PIdentfallback
+#[test]
+fn parse_game_rule() {
+  let input = "&(Id100 of PIdentfallback)[1]";
+  let game_rule = match test_rule_consume(
+      input,
+      Rule::int_expr,
+      CGDSLParser::int_expr,
+  ) {
+    Ok(a) => {
+      println!("{:?}", a);
+    },
+    Err(e) => {
+      println!("{}", input);
+      println!("{:?}", e);
+      panic!("parse failed")
+    }
+  };
 
+  // let input = "memory Id399 &Id100 of PIdentfallback[1] on PIdentfallback";
+  // let game_rule = match test_rule_consume(
+  //     input,
+  //     Rule::game_rule,
+  //     CGDSLParser::game_rule,
+  // ) {
+  //   Ok(a) => a,
+  //   Err(e) => {
+  //     println!("{}", input);
+  //     println!("{:?}", e);
+  //     panic!("parse failed")
+  //   }
+  // };
+}
