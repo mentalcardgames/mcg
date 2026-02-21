@@ -357,7 +357,7 @@ impl AstPass for SymbolVisitor {
                     ActionRule::ResetMemory{memory: spanned} => {
                         self.use_id(&spanned);
                     },
-                    ActionRule::BidMemoryAction{ memory: spanned, quantity: _} => {
+                    ActionRule::BidMemoryAction{ memory: spanned, quantity: _, owner: _} => {
                         self.use_id(&spanned);
                     },
                     _ => {}

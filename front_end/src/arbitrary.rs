@@ -258,7 +258,11 @@ impl<'a> Arbitrary<'a> for IntExpr {
         match u.int_in_range(0..=100)? {
             // 70% chance to be a Leaf (terminates recursion)
             0..=20 => Ok(IntExpr::Literal { int: u.arbitrary()? }),
-            21..=40 => Ok(IntExpr::Memory { memory: gen_ident(u)? }),
+            21..=40 => Ok(IntExpr::Memory {
+                memory: UseMemory::Memory {
+                    memory: gen_ident(u)?,
+                } 
+            }),
             41..=55 => Ok(IntExpr::Runtime { runtime: u.arbitrary()? }),
             56..=70 => Ok(IntExpr::Aggregate { aggregate: u.arbitrary()? }),
             
@@ -321,7 +325,9 @@ impl<'a> Arbitrary<'a> for StringExpr {
             }),
             // 70% chance for a Literal identifier
             36..=69 => Ok(StringExpr::Memory {
-                memory: gen_ident(u)?,
+                memory: UseMemory::Memory {
+                    memory: gen_ident(u)?,
+                }
             }),
             
             // 30% chance for a Query (KeyOf, CollectionAt, etc.)
@@ -462,7 +468,9 @@ impl<'a> Arbitrary<'a> for PlayerCollection {
             }),
             // 70% chance for a Literal identifier
             21..=39 => Ok(PlayerCollection::Memory {
-                memory: gen_ident(u)?,
+                memory: UseMemory::Memory {
+                    memory: gen_ident(u)?,
+                }
             }),
             
             // 40% chance for Literal (Uses our safe vec generator)
@@ -516,7 +524,9 @@ impl<'a> Arbitrary<'a> for TeamCollection {
             }),
             // 70% chance for a Literal identifier
             21..=39 => Ok(TeamCollection::Memory {
-                memory: gen_ident(u)?,
+                memory: UseMemory::Memory {
+                    memory: gen_ident(u)?,
+                }
             }),
             
             // 60% chance for Literal (Uses our safe vec generator)

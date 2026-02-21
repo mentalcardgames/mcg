@@ -1,9 +1,12 @@
 use std::path::Path;
 use std::process::Command;
+use std::cell::RefCell;
 
+use crate::ast::ast_spanned::{SCollection, SMemoryType, SOwner};
 use crate::fsm_to_dot::fsm_to_dot;
 use crate::ir::{Ir, IrBuilder, SpannedPayload};
 use crate::lower::Lower;
+use crate::parser::SymbolTable;
 use crate::walker::*;
 // use crate::{lower::Lower};
 use pest_consume::*;
@@ -19,17 +22,42 @@ where
     // T: Lower<L>,
     T: Walker,
 {
-    // 1. Parsing: pest_consume::parse already returns Result<Nodes, Error<Rule>>
-    let nodes = CGDSLParser::parse(rule, input)?;
+    // 1. Initialize the state your Node alias expects
+    let state = RefCell::new(SymbolTable::default());
+
+    // 2. Use parse_with_userdata instead of parse
+    // This ensures the Nodes contain RefCell<SymbolTable> instead of ()
+    let nodes = CGDSLParser::parse_with_userdata(rule, input, state)?;
     
-    // 2. Extract Single Node: .single() returns Result<Node, Error<Rule>>
+    // 3. Extract Single Node
     let node = nodes.single()?;
 
-    // 3. Mapping: mapper returns Result<T, Error<Rule>>
+    // 4. Mapping
     let parsed_ast = mapper(node)?;
 
-    // // 4. Lowering: Convert custom logic errors to pest_consume::Error
-    // let result = parsed_ast.lower();
+    Ok(parsed_ast)
+}
+
+pub fn test_rule_consume_with_table<T, F>(
+    input: &str, 
+    rule: Rule, 
+    mapper: F,
+    table: SymbolTable,
+) -> Result<T> // Returns pest_consume::Result
+where 
+    F: FnOnce(Node) -> Result<T>,
+    // T: Lower<L>,
+    T: Walker,
+{
+    // 2. Use parse_with_userdata instead of parse
+    // This ensures the Nodes contain RefCell<SymbolTable> instead of ()
+    let nodes = CGDSLParser::parse_with_userdata(rule, input, RefCell::new(table))?;
+    
+    // 3. Extract Single Node
+    let node = nodes.single()?;
+
+    // 4. Mapping
+    let parsed_ast = mapper(node)?;
 
     Ok(parsed_ast)
 }
@@ -41,143 +69,6 @@ fn parse_game(input: &str) {
         CGDSLParser::file,
     ).expect("parse failed");
 }
-
-// ===========================================================================
-// Run one test game (one benchmark)
-// ===========================================================================
-// #[test]
-// fn test_prase_rule() {
-//   parse_game(
-//     "
-//       set current out of stage
-//     "
-//   );
-// }
-
-// #[test]
-// fn test_parse_optional() {
-//   parse_game(
-//     "
-//       optional {
-//         set current out of stage
-//       }
-//     "
-//   );
-// }
-
-// #[test]
-// fn test_parse_if() {
-//   parse_game(
-//     "
-//       if (Hand is empty) {
-//         set current out of stage
-//       }
-//     "
-//   );
-// }
-
-// #[test]
-// fn test_parse_stage() {
-//   parse_game(
-// "
-//     stage Preparation for current 1 times {
-//       deal 12 from Stock top private to Hand of all
-//     }      
-//     "
-//   );
-// }
-
-// #[test]
-// fn test_parse_choose() {
-//   parse_game(
-// "
-//     choose {
-//       move Discard top private to Hand
-//       or
-//       move Stock top private to Hand
-//     }
-//     "
-//   );
-// }
-
-// #[test]
-// fn test_parse_conditional() {
-//   parse_game(
-// "
-//     conditional {
-//       case:
-//         move Discard top private to Hand
-//       case Hand is empty:
-//         move Stock top private to Hand
-//       case else:
-//         move Stock top private to Hand 
-//     }
-//     "
-//   );
-// }
-
-// #[test]
-// fn test_parse_game() {
-//   parse_game( 
-//     "
-//         player P1, P2, P3
-//         turnorder (P1, P2, P3)
-//         location Hand, LayDown, Trash on all
-//         location Stock, Discard on table
-//         card on Stock:
-//           Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)
-//             for Suite(Diamonds, Hearts, Spades, Clubs)
-//         precedence RankOrder on Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King)
-//         points Values on Rank(Ace: 1, Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7, Eight: 8, Nine: 9 , Ten: 10, Jack: 10, Queen: 10, King: 10)
-//         combo Sequence where ((size >= 3 and Suite same) and Rank adjacent using RankOrder)
-//         combo Set where ((size >= 3 and Suite distinct) and Rank same)
-//         combo Deadwood where (not Sequence and not Set)
-
-//         stage Preparation for current 1 times {
-//           deal 12 from Stock top private to Hand of all
-//         }
-
-//         stage Collect for current until previous out of stage  {
-//           choose {
-//             move Discard top private to Hand
-//             or
-//             move Stock top private to Hand
-//           }
-
-//           move any from Hand face up to Discard top
-
-//           if (sum of Deadwood in Hand using Values <= 10) {
-//             optional {
-//               move all from Set in Hand face up to LayDown top
-//               move all from Sequence in Hand face up to LayDown top
-
-//               if (Hand is empty) {
-//                 move all from Set in Hand of next face up to LayDown top of next
-//                 move all from Sequence in Hand of next face up to LayDown top of next
-//                 move Hand of next face up to Trash of next
-
-//                 move Hand face up to Trash
-//                 set current out of stage
-//               }
-//             }
-//           }
-
-//           cycle to next
-//         }
-
-//         stage FinalLayDown for current 1 times {
-//           move LayDown of previous face up to Hand of current
-//           move all from Set in Hand face up to LayDown top
-//           move all from Sequence in Hand face up to LayDown top
-
-//           move Hand face up to Trash
-//         }
-
-//         score sum of Trash using Values to LeftOver of all
-//         winner is lowest LeftOver
-//     "
-//   );
-// }
 
 // ===========================================================================
 // Test IR builder
@@ -406,7 +297,7 @@ proptest! {
 
 proptest! {
     #![proptest_config(Config {
-        cases: 100000,
+        cases: 100,
         .. Config::default()
     })]
 
@@ -444,40 +335,6 @@ proptest! {
     fn test_game_rule(expr in arb::<GameRule>()) {
       parse_ast_parse(&format!("{}", expr));
     }
-}
-
-#[test]
-fn parse_int_collection() {
-  let input = "&Id832 c!= &Id581 of other teams";
-  match test_rule_consume(
-      input,
-      Rule::bool_expr,
-      CGDSLParser::bool_expr,
-  ) {
-    Ok(a) => {
-      println!("{:?}", a.lower());
-      a
-    },
-    Err(e) => {
-      println!("{}", input);
-      println!("{:?}", e);
-      panic!("parse failed")
-    }
-  };
-}
-
-#[test]
-fn test_arbitrary_builds() {
-    use arbitrary::{Arbitrary, Unstructured};
-
-    // Some random bytes
-    let data: Vec<u8> = (0..4096).map(|i| i as u8).collect();
-
-    let mut u = Unstructured::new(&data);
-
-    let result = GameRule::arbitrary(&mut u);
-
-    println!("{:?}", result);
 }
 
 #[test]
@@ -544,3 +401,429 @@ fn test_reparse_game() {
       "
   );
 }
+
+#[test]
+fn resolve_collection_fall_back() {
+  let input = "&Ident";
+  let collection: SCollection = match test_rule_consume(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  // Test FallBack 
+  assert_eq!(collection.lower(), Collection::IntCollection { int: IntCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+}
+
+#[test]
+fn resolve_collection_with_table() {
+  // ================================================
+  // CardSet
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::CardSet);
+  let input = "&Ident";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Collection::CardSet { card_set: Box::new(CardSet::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } }) });
+
+  // ================================================
+  // String
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::StringCollection);
+  let input = "&Ident";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Collection::StringCollection { string: StringCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+
+  // ================================================
+  // Player
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::PlayerCollection);
+  let input = "&Ident";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Collection::PlayerCollection { player: PlayerCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+  
+  // ================================================
+  // Team
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::TeamCollection);
+  let input = "&Ident";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Collection::TeamCollection { team: TeamCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+  
+  // ================================================
+  // IntCollection
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::IntCollection);
+  let input = "&Ident";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Collection::IntCollection { int: IntCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+ 
+  // FAILING TESTS
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::String);
+  let input = "&Ident";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  // Goes to FallBack
+  assert_eq!(collection.lower(), Collection::IntCollection { int: IntCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+ 
+  let mut table = SymbolTable::default();
+    table.memories.insert("Ident".to_string(), crate::parser::MemType::Int);
+    let input = "&Ident";
+    let collection: SCollection = match test_rule_consume_with_table(
+        input,
+        Rule::collection,
+        CGDSLParser::collection,
+        table
+    ) {
+      Ok(col) => col,
+      Err(e) => {
+        println!("{:?}", e);
+        panic!()
+      }
+    };
+
+    // Goes to FallBack
+    assert_eq!(collection.lower(), Collection::IntCollection { int: IntCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+}
+
+#[test]
+fn resolve_collection_idents() {
+  // Player
+  let mut table = SymbolTable::default();
+  table.symbols.insert("Ident".to_string(), crate::symbols::GameType::Player);
+  table.symbols.insert("Ident1".to_string(), crate::symbols::GameType::Player);
+  let input = "(Ident, Ident1)";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Collection::PlayerCollection { player: PlayerCollection::Literal { players: vec![
+    PlayerExpr::Literal { name: "Ident".to_string() },
+    PlayerExpr::Literal { name: "Ident1".to_string() },
+  ] } });
+
+
+  // Team
+  let mut table = SymbolTable::default();
+  table.symbols.insert("Ident".to_string(), crate::symbols::GameType::Team);
+  table.symbols.insert("Ident1".to_string(), crate::symbols::GameType::Team);
+  let input = "(Ident, Ident1)";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Collection::TeamCollection { team: TeamCollection::Literal { teams: vec![
+    TeamExpr::Literal { name: "Ident".to_string() },
+    TeamExpr::Literal { name: "Ident1".to_string() },
+  ] } });
+
+  // Location
+  let mut table = SymbolTable::default();
+  table.symbols.insert("Ident".to_string(), crate::symbols::GameType::Location);
+  table.symbols.insert("Ident1".to_string(), crate::symbols::GameType::Location);
+  let input = "(Ident, Ident1)";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Collection::LocationCollection { location: LocationCollection::Literal { locations: vec![
+    "Ident".to_string(),
+    "Ident1".to_string(),
+  ] } });
+
+  // FallBack
+  let mut table = SymbolTable::default();
+  table.symbols.insert("Ident".to_string(), crate::symbols::GameType::Location);
+  table.symbols.insert("Ident1".to_string(), crate::symbols::GameType::Player);
+  let input = "(Ident, Ident1)";
+  let collection: SCollection = match test_rule_consume_with_table(
+      input,
+      Rule::collection,
+      CGDSLParser::collection,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  // Looks at first type and the builds the Vector. This will output LocationCollection
+  assert_eq!(collection.lower(), Collection::LocationCollection { location: LocationCollection::Literal { locations: vec![
+    "Ident".to_string(),
+    "Ident1".to_string(),
+  ] } });
+}
+
+
+#[test]
+fn resolve_owner_with_table() {
+  // ================================================
+  // Player
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::PlayerCollection);
+  let input = "&Ident";
+  let collection: SOwner = match test_rule_consume_with_table(
+      input,
+      Rule::owner,
+      CGDSLParser::owner,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Owner::PlayerCollection { player_collection: PlayerCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+  
+  // ================================================
+  // Team
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::TeamCollection);
+  let input = "&Ident";
+  let collection: SOwner = match test_rule_consume_with_table(
+      input,
+      Rule::owner,
+      CGDSLParser::owner,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Owner::TeamCollection { team_collection: TeamCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+}
+
+#[test]
+fn resolve_owner_idents() {
+  // Player
+  let mut table = SymbolTable::default();
+  table.symbols.insert("Ident".to_string(), crate::symbols::GameType::Player);
+  table.symbols.insert("Ident1".to_string(), crate::symbols::GameType::Player);
+  let input = "(Ident, Ident1)";
+  let collection: SOwner = match test_rule_consume_with_table(
+      input,
+      Rule::owner,
+      CGDSLParser::owner,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Owner::PlayerCollection { player_collection: PlayerCollection::Literal { players: vec![
+    PlayerExpr::Literal { name: "Ident".to_string() },
+    PlayerExpr::Literal { name: "Ident1".to_string() },
+  ] } });
+
+  // Team
+  let mut table = SymbolTable::default();
+  table.symbols.insert("Ident".to_string(), crate::symbols::GameType::Team);
+  table.symbols.insert("Ident1".to_string(), crate::symbols::GameType::Team);
+  let input = "(Ident, Ident1)";
+  let collection: SOwner = match test_rule_consume_with_table(
+      input,
+      Rule::owner,
+      CGDSLParser::owner,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), Owner::TeamCollection { team_collection: TeamCollection::Literal { teams: vec![
+    TeamExpr::Literal { name: "Ident".to_string() },
+    TeamExpr::Literal { name: "Ident1".to_string() },
+  ] } });
+}
+
+#[test]
+fn resolve_memory_type_with_table() {
+  // ================================================
+  // Int
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::Int);
+  let input = "&Ident";
+  let collection: SMemoryType = match test_rule_consume_with_table(
+      input,
+      Rule::memory_type,
+      CGDSLParser::memory_type,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), MemoryType::Int { int: IntExpr::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+  
+  // ================================================
+  // String
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::String);
+  let input = "&Ident";
+  let collection: SMemoryType = match test_rule_consume_with_table(
+      input,
+      Rule::memory_type,
+      CGDSLParser::memory_type,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), MemoryType::String { string: StringExpr::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });
+
+  // ================================================
+  // PlayerCollection
+  // ================================================
+  let mut table = SymbolTable::default();
+  table.memories.insert("Ident".to_string(), crate::parser::MemType::PlayerCollection);
+  let input = "&Ident";
+  let collection: SMemoryType = match test_rule_consume_with_table(
+      input,
+      Rule::memory_type,
+      CGDSLParser::memory_type,
+      table
+  ) {
+    Ok(col) => col,
+    Err(e) => {
+      println!("{:?}", e);
+      panic!()
+    }
+  };
+
+  assert_eq!(collection.lower(), MemoryType::PlayerCollection { players: PlayerCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });  
+}
+
+

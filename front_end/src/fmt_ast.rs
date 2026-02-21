@@ -89,7 +89,7 @@ impl fmt::Display for Owner {
             Owner::Team { team: team } => &format!("{}", team),
             Owner::TeamCollection { team_collection: team_collection} => &format!("{}", team_collection),
             Owner::Table => "table",
-            Owner::Memory { memory } => &format!("&{}", memory),
+            // Owner::Memory { memory } => &format!("&{}", memory),
           };
         f.write_str(s)
     }
@@ -171,7 +171,12 @@ impl fmt::Display for MemoryType {
         let s = match self {
             MemoryType::Int { int: int_expr } => &format!("{}", int_expr),
             MemoryType::String { string: string_expr } => &format!("{}", string_expr),
-            MemoryType::Collection { collection: collection }  => &format!("{}", collection),
+            MemoryType::StringCollection { strings } => &format!("{}", strings),
+            MemoryType::IntCollection { ints } => &format!("{}", ints),
+            MemoryType::PlayerCollection { players } => &format!("{}", players),
+            MemoryType::TeamCollection { teams } => &format!("{}", teams),
+            MemoryType::LocationCollection { locations } => &format!("{}", locations),
+            MemoryType::CardSet { card_set } => &format!("cards {}", card_set),
         };
         f.write_str(s)
     }
@@ -599,13 +604,13 @@ impl fmt::Display for Collection {
         Collection::LocationCollection { location: location_collection} =>
           &format!("{}", location_collection),
         Collection::PlayerCollection {player: player_collection} =>
-          &format!("players {}", player_collection),
+          &format!("{}", player_collection),
         Collection::TeamCollection{ team: team_collection} =>
-          &format!("teams {}", team_collection),
+          &format!("{}", team_collection),
         Collection::CardSet{card_set} =>
           &format!("cards {}", card_set),
-        Collection::Memory { memory } => 
-          &format!("&{}",memory),
+        // Collection::Memory { memory } => 
+        //   &format!("&{}",memory),
       };
       f.write_str(s)
   }
@@ -844,8 +849,8 @@ impl fmt::Display for ActionRule {
             ActionRule::BidAction{quantitiy} => {
               &format!("bid {}", quantitiy)
             },
-            ActionRule::BidMemoryAction {memory, quantity} => {
-              &format!("bid {} on {}", quantity, memory)
+            ActionRule::BidMemoryAction {memory, quantity, owner} => {
+              &format!("bid {} on {} of {}", quantity, memory, owner)
             },
             ActionRule::EndAction{end_type} => {
               &format!("end {}", end_type)
@@ -862,6 +867,18 @@ impl fmt::Display for ActionRule {
         };
         f.write_str(s)
     }
+}
+
+impl fmt::Display for UseMemory {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let s = match self {
+        UseMemory::Memory { memory } => 
+          &format!("{}", memory),
+        UseMemory::WithOwner { memory, owner } => 
+          &format!("{} of {}", memory, owner),
+    };
+    f.write_str(s)
+  }
 }
 
 impl fmt::Display for MoveType {

@@ -18,34 +18,18 @@ ident = @{ &capital ~ (alpha | digit)* }
 //////////////////////////
 gamename    = { ident }
 stage       = { ident }
-// teamname starts with T
-teamname    = { &"T" ~ ident }
-// teamname starts with P
-playername  = { &"P" ~ ident }
+// create teamname
+cteamname   = { ident }
+teamname    = { ident }
+// create playername
+cplayername = { ident }
+playername  = { ident }
 location    = { ident }
 token       = { ident }
 precedence  = { ident }
 combo       = { ident }
 memory      = { ident }
-mt = {
-  // CardSet
-  "C" ~ ident
-  // TeamCollection
-  | "T" ~ ident
-  // PlayerCollection
-  | "P" ~ ident
-  // LocationCollection
-  | "L" ~ ident
-  // StringCollection
-  | "S" ~ ident
-  // StringExpr
-  | "s" ~ ident
-  // IntCollection
-  | "I" ~ ident
-  // IntExpr
-  | "i" ~ ident
-}
-use_memory  = { "&" ~ memory }
+use_memory  = { "&" ~ memory ~ (kw_of ~ owner)? }
 pointmap    = { ident }
 key         = { ident }
 value       = { ident }
@@ -163,6 +147,7 @@ player_name_list = { playername ~ ("," ~ playername)* }
 // =======================
 owner = {
     use_memory
+  | "(" ~ ident ~ ("," ~ ident)* ~ ")"
   | player_collection
   | team_collection
   | player_expr
@@ -313,13 +298,21 @@ card_set_empty = { card_set ~ kw_is ~ kw_empty }
 bool_expr_binary = { "(" ~ bool_expr ~ bool_op ~ bool_expr ~ ")" }
 bool_expr_unary = { unary_op ~ bool_expr }
 players_out_of = { players ~ kw_out ~ kw_of ~ out_of }
+boundary = _{ &(")" | "and" | "or" | ":" | "{") }
 
-bool_expr = {
-    card_set_bool
+cmp_bool = {
+  // handling amiguity with positives
+  // What can come after a BoolExpr: ')', 'and', 'or', ':', '{'
+    use_memory ~ (eq | neq) ~ use_memory ~ boundary
+  | card_set_bool
   | string_expr_bool
   | player_expr_bool
   | team_expr_bool
   | int_expr_bool
+}
+
+bool_expr = {
+    cmp_bool
   | card_set_not_empty
   | card_set_empty
   | bool_expr_binary
@@ -353,14 +346,17 @@ team_expr = {
 
 // Collection
 // =======================
+ident_or_use_memory = { ident | use_memory }
+
 collection = { 
     use_memory
+  | "(" ~ ident ~ ("," ~ ident) ~ ")"
+  | "(" ~ ident_or_use_memory ~ ("," ~ ident_or_use_memory) ~ ")"
   | int_collection
   | string_collection
-  | kw_players ~ player_collection
-  | kw_teams ~ team_collection
+  | player_collection
+  | team_collection
   | location_collection
-  // if not here then ambiguous
   | kw_cards ~ card_set
 }
 // =======================
@@ -515,7 +511,8 @@ action_rule = {
 
 // CreatePlayer
 // =======================
-create_player = { kw_player ~ player_name_list }
+create_player_names = { playername ~ ("," ~ playername)* }
+create_player = { kw_player ~ create_player_names }
 // =======================
 
 // CreateTeam
@@ -561,7 +558,8 @@ create_combo = { kw_combo ~ combo ~ kw_where ~ filter_expr }
 
 // CreateMemory
 // =======================
-memory_type = { (int_expr | string_expr | collection) }
+memory_type = { (use_memory | int_expr | string_expr | collection) }
+// can not initialize a memory with a memory!
 create_memory = { kw_memory ~ memory ~ (memory_type)? ~ kw_on ~ owner }
 // =======================
 
@@ -658,7 +656,7 @@ cycle_action = { kw_cycle ~ kw_to ~ player_expr }
 
 // BidAction
 // =======================
-bid_action = { kw_bid ~ quantity ~ (kw_on ~ memory)? }
+bid_action = { kw_bid ~ quantity ~ (kw_on ~ memory ~ kw_of ~ owner)? }
 // =======================
 
 // EndAction

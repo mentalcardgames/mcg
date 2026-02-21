@@ -63,6 +63,26 @@ pub mod ast {
     // ===========================================================================
     // ===========================================================================
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
+    pub enum UseMemory {
+        Memory { 
+            #[arbitrary(with = gen_ident)]
+            memory: String
+        },
+        WithOwner { 
+            #[arbitrary(with = gen_ident)]
+            memory: String,
+            owner: Box<Owner>
+        },
+    }
+
+    // Helper
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
+    pub enum IdentOrMemory {
+        Ident { ident: String },
+        Memory { memory: UseMemory },
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum Extrema {
         Min,
         Max,
@@ -94,10 +114,6 @@ pub mod ast {
         Team{ team: TeamExpr},
         TeamCollection {team_collection: TeamCollection},
         Table,
-        Memory { 
-            #[arbitrary(with = gen_ident)]
-            memory: String 
-        }
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
@@ -143,7 +159,12 @@ pub mod ast {
     pub enum MemoryType {
         Int {int: IntExpr},
         String {string: StringExpr },
-        Collection {collection: Collection},
+        PlayerCollection { players: PlayerCollection},
+        StringCollection { strings: StringCollection},
+        TeamCollection { teams: TeamCollection},
+        IntCollection { ints: IntCollection},
+        LocationCollection { locations: LocationCollection},
+        CardSet { card_set: CardSet },
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
@@ -257,7 +278,7 @@ pub mod ast {
         Aggregate {aggregate: AggregateInt},
         Runtime {runtime: RuntimeInt },
         Memory { 
-            memory: String 
+            memory: UseMemory,
         },
     }
     // ===========================================================================
@@ -282,7 +303,7 @@ pub mod ast {
             value: String
         },
         Query {query: QueryString},
-        Memory { memory: String }
+        Memory { memory: UseMemory },
     }
     // ===========================================================================
 
@@ -428,10 +449,6 @@ pub mod ast {
         PlayerCollection {player: PlayerCollection },
         TeamCollection { team: TeamCollection },
         CardSet { card_set: Box<CardSet> },
-        Memory { 
-            #[arbitrary(with = gen_ident)]
-            memory: String 
-        },
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
@@ -441,8 +458,7 @@ pub mod ast {
             ints: Vec<IntExpr>
         },
         Memory { 
-            #[arbitrary(with = gen_ident)]
-            memory: String
+            memory: UseMemory
         },
     }
 
@@ -453,8 +469,8 @@ pub mod ast {
             strings: Vec<StringExpr>
         },
         Memory { 
-            #[arbitrary(with = gen_ident)]
-            memory: String }
+            memory: UseMemory
+        },
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
@@ -464,8 +480,8 @@ pub mod ast {
             locations: Vec<String>
         },
         Memory { 
-            #[arbitrary(with = gen_ident)]
-            memory: String }
+            memory: UseMemory
+        },
     }
 
     // PlayerCollection
@@ -489,7 +505,7 @@ pub mod ast {
         },
         Aggregate { aggregate: AggregatePlayerCollection },
         Runtime { runtime: RuntimePlayerCollection },
-        Memory { memory: String }
+        Memory { memory: UseMemory },
     }
     // ===========================================================================
 
@@ -507,7 +523,7 @@ pub mod ast {
             teams: Vec<TeamExpr> 
         },
         Runtime {runtime: RuntimeTeamCollection },
-        Memory { memory: String }
+        Memory { memory: UseMemory },
     }
 
     // ===========================================================================
@@ -525,8 +541,8 @@ pub mod ast {
         GroupOwner { group: Group, owner: Owner},
         // CardSet is already inside of Collection!
         Memory { 
-            #[arbitrary(with = gen_ident)]
-            memory: String }
+            memory: UseMemory
+        }
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -700,7 +716,8 @@ pub mod ast {
         BidMemoryAction{ 
             #[arbitrary(with = gen_ident)]
             memory: String,
-            quantity: Quantity
+            quantity: Quantity,
+            owner: Owner,
         },
         EndAction{end_type: EndType},
         DemandAction{demand_type: DemandType},

@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use pest_consume::Parser;
@@ -5,11 +6,15 @@ use crate::ir::{GameFlowError, IrBuilder, SpannedPayload};
 use crate::parser::Result;
 use crate::semantic::{SemanticError, SemanticVisitor};
 use crate::symbols::GameType;
+use crate::parser::SymbolTable;
 use crate::{ast::ast_spanned::SGame, parser::{CGDSLParser, Rule}, symbols::{SymbolError, SymbolVisitor}, walker::Walker};
 
 pub fn parse_document(text: &str) -> Result<SGame> {
+  // 1. Initialize the state your Node alias expects
+  let state = RefCell::new(SymbolTable::default());
+
   // 1. Parsing: pest_consume::parse already returns Result<Nodes, Error<Rule>>
-  let nodes = CGDSLParser::parse(Rule::file, text)?;
+  let nodes = CGDSLParser::parse_with_userdata(Rule::file, text, state)?;
 
   // 2. Extract Single Node: .single() returns Result<Node, Error<Rule>>
   let node = nodes.single()?;
