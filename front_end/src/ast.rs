@@ -168,7 +168,11 @@ pub mod ast {
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum EndType {
         Turn,
-        Stage,
+        CurrentStage,
+        Stage { 
+            #[arbitrary(with = gen_ident)]
+            stage: String
+        },
         GameWithWinner {players: Players},
     }
 
@@ -207,6 +211,7 @@ pub mod ast {
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum QueryPlayer {
         Turnorder {int: IntExpr},
+        CollectionAt { players: PlayerCollection, int: IntExpr },
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
@@ -347,6 +352,8 @@ pub mod ast {
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub enum AggregateBool {
         Compare { cmp_bool: CompareBool},
+        StringInCardSet { string: StringExpr, card_set: CardSet },
+        StringNotInCardSet { string: StringExpr, card_set: CardSet },
         CardSetEmpty{card_set: CardSet},
         CardSetNotEmpty{card_set: CardSet},
         OutOfPlayer{players: Players, out_of: OutOf},
@@ -576,10 +583,16 @@ pub mod ast {
             value: StringExpr,
             #[arbitrary(with = gen_ident)]
             precedence: String},
-        KeyString{ 
+        KeyIsString{ 
             #[arbitrary(with = gen_ident)]
-            key: String, 
-            cmp: StringCompare, string: Box<StringExpr>},
+            key: String,
+            string: Box<StringExpr>
+        },
+        KeyIsNotString{ 
+            #[arbitrary(with = gen_ident)]
+            key: String,
+            string: Box<StringExpr>
+        },
         Combo {
             #[arbitrary(with = gen_ident)]
             combo: String
@@ -649,7 +662,8 @@ pub mod ast {
         CreateCardOnLocation { 
             #[arbitrary(with = gen_ident)]
             location: String, 
-            types: Types 
+            #[arbitrary(with = gen_vec_min_1)]
+            cards: Vec<Types>
         },
         CreateTokenOnLocation { int: IntExpr, 
             #[arbitrary(with = gen_ident)]
@@ -794,6 +808,12 @@ pub mod ast {
     pub struct ChoiceRule {
         #[arbitrary(with = gen_flows_safe)]
         pub options: Vec<FlowComponent>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
+    pub struct TriggerRule {
+        #[arbitrary(with = gen_flows_safe)]
+        pub flows: Vec<FlowComponent>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]

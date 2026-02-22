@@ -35,29 +35,24 @@ impl StateID {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "T: Serialize + DeserializeOwned")] // Tell Serde how to handle the generic
 pub struct Edge<T>
   where T: serde::Serialize
 {
   pub to: StateID,
   pub payload: T,
-  // TODO:
-  // pub meta: Meta,
+  pub meta: Option<Vec<Meta>>,
 }
 
-// #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-// pub struct Meta {
-//   pub stage: StageType,
-//   pub players: crate::ast::PlayerCollection,
-//   // ADD More info if needed
-// }
-
-// #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-// pub enum StageType {
-//   Sim,
-//   Seq
-// }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Meta {
+  SimStageEndCondition { stage: Stage, end_condition: EndCondition, players: PlayerCollection }
+  // Add new Meta-Information here
+  // -------------------------------------
+  
+  // -------------------------------------
+}
 
 // ===========================================================================
 // Ir-Logic
@@ -83,8 +78,8 @@ impl<T: Serialize + DeserializeOwned> Default for Ir<T> {
 
 impl<T: Serialize + DeserializeOwned> Ir<T> {
   /// Both States need to be added before the edge can be added.
-  pub fn add_edge(&mut self, from: StateID, to: StateID, payload: T) {
-    let edge = Edge { to: to, payload: payload };
+  pub fn add_edge(&mut self, from: StateID, to: StateID, payload: T, meta: Option<Vec<Meta>>) {
+    let edge = Edge { to: to, payload: payload, meta };
     let vec = self.states
       .get_mut(&from)
       .expect("StateID was not added before!");
@@ -200,6 +195,7 @@ impl Ir<SpannedPayload> {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum GameFlowChange {
   EndCurrentStage(u32),
+  EndStage(u32),
   EndGame(u32),
   None(u32),
 }
@@ -324,7 +320,7 @@ impl From<Ir<SpannedPayload>> for Ir<LoweredPayLoad> {
               Payload::Optional => Payload::Optional,
             };
           
-            edges.push(Edge { to: e.to,  payload: lowered_payload});
+            edges.push(Edge { to: e.to,  payload: lowered_payload, meta: None});
           }
 
           (s, edges)
@@ -347,6 +343,7 @@ pub struct IrBuilder<T: serde::Serialize> {
   pub fsm: Ir<T>,
   state_counter: u32,
   stage_exits: Vec<u32>,
+  stage_to_exit: HashMap<String, u32>,
   pub diagnostics: Vec<GameFlowError>, 
 }
 
@@ -356,6 +353,7 @@ impl<T: Serialize + DeserializeOwned> Default for IrBuilder<T> {
       fsm: Ir::default(),
       state_counter: 0,
       stage_exits: Vec::new(),
+      stage_to_exit: HashMap::new(),
       diagnostics: Vec::new()
     }
   }
@@ -381,11 +379,12 @@ impl IrBuilder<SpannedPayload> {
   }
 
   /// Adds edge to the FSM.
-  fn new_edge(&mut self, from: u32, to: u32, payload: SpannedPayload) {
+  fn new_edge(&mut self, from: u32, to: u32, payload: SpannedPayload, meta: Option<Vec<Meta>>) {
     self.fsm.add_edge(
       StateID(from),
       StateID(to),
-      payload
+      payload,
+      meta
     );
   }
 
@@ -436,6 +435,16 @@ impl IrBuilder<SpannedPayload> {
 
           // Every FlowComponent after this will not be evaluated 
           return GameFlowChange::EndCurrentStage(stage)
+        },
+        GameFlowChange::EndStage(stage) => {
+          // The flow_exit was not used, so remove it
+          self.remove_state(flow_exit);
+
+          // Check for unreachable code
+          self.unreachable(&flows[(i+1)..]);
+
+          // Every FlowComponent after this will not be evaluated 
+          return GameFlowChange::EndStage(stage)
         },
         GameFlowChange::EndGame(game) => {
           // The flow_exit was not used, so remove it
@@ -499,7 +508,8 @@ impl IrBuilder<SpannedPayload> {
       self.new_edge(
         entry,
         choice,
-        Payload::Choice
+        Payload::Choice,
+        None
       );
 
       self.build_flow(option, choice, choice_exit);
@@ -518,6 +528,7 @@ impl IrBuilder<SpannedPayload> {
 
     // Creating a new stage_exit
     self.stage_exits.push(exit);
+    self.stage_to_exit.insert(stage_id.node.clone(), exit);
 
     // Check End-Condition Type
     match end_condition.node {
@@ -529,7 +540,8 @@ impl IrBuilder<SpannedPayload> {
                 self.new_edge(
                   flows_exit,
                   entry,
-                  Payload::StageRoundCounter(stage_id.clone())
+                  Payload::StageRoundCounter(stage_id.clone()),
+                  None
                 );
               },
               _ => {}
@@ -545,7 +557,8 @@ impl IrBuilder<SpannedPayload> {
           self.new_edge(
             entry,
             exit,
-            Payload::EndCondition { expr: end_condition.clone(), negated: true }
+            Payload::EndCondition { expr: end_condition.clone(), negated: true },
+            None
           );
 
           let else_state = self.new_state();
@@ -553,7 +566,8 @@ impl IrBuilder<SpannedPayload> {
           self.new_edge(
             entry, 
           else_state,
-              Payload::EndCondition { expr: end_condition.clone(), negated: false }
+              Payload::EndCondition { expr: end_condition.clone(), negated: false },
+              None
           );
 
           let flows_exit = self.new_state();
@@ -562,7 +576,8 @@ impl IrBuilder<SpannedPayload> {
                 self.new_edge(
                   flows_exit,
                   entry,
-                  Payload::StageRoundCounter(stage_id.clone())
+                  Payload::StageRoundCounter(stage_id.clone()),
+                  None
                 );
               },
               _ => {}
@@ -575,6 +590,92 @@ impl IrBuilder<SpannedPayload> {
         },
     }
   }
+
+  // =========================================================================
+  // =========================================================================
+  // =========================================================================
+  // =========================================================================
+  // =========================================================================
+  // TODO: SimStage is not implemented!
+  /// Build SimStage has to worry about the most GameFlowChanges.
+  /// UntilEnd has to be handled separately.
+  /// EndStage and EndGame are already handled in the build_flows method (can be ignored here).
+  /// Additionally we need to spawn a sub graph for each player and each edge needs to check
+  /// if no player has finished the stage already (or any other condition).
+  fn build_sim_stage(&mut self, stage: &SimStage, entry: u32, exit: u32) -> u32 {
+    // Stage information
+    let stage_id = stage.stage.clone();
+    let end_condition = stage.end_condition.clone();
+
+    // Creating a new stage_exit
+    self.stage_exits.push(exit);
+    self.stage_to_exit.insert(stage_id.node.clone(), exit);
+
+    // Check End-Condition Type
+    match end_condition.node {
+        EndCondition::UntilEnd => {
+          let flows_exit = self.new_state();
+          // Dont do a split with EndCondition and NotEndCondition
+          match self.build_flows(&stage.flows, entry, flows_exit) {
+              GameFlowChange::None(_) => {
+                self.new_edge(
+                  flows_exit,
+                  entry,
+                  Payload::StageRoundCounter(stage_id.clone()),
+                  None
+                );
+              },
+              _ => {}
+          }
+
+          // Remove current Stage
+          self.stage_exits.pop();
+
+          return exit
+        },
+        _ => {
+          // Do a split with EndCondition and NotEndCondition
+          self.new_edge(
+            entry,
+            exit,
+            Payload::EndCondition { expr: end_condition.clone(), negated: true },
+            None
+          );
+
+          let else_state = self.new_state();
+
+          self.new_edge(
+            entry, 
+          else_state,
+              Payload::EndCondition { expr: end_condition.clone(), negated: false },
+              None
+          );
+
+          let flows_exit = self.new_state();
+          match self.build_flows(&stage.flows, else_state, flows_exit) {
+              GameFlowChange::None(_) => {
+                self.new_edge(
+                  flows_exit,
+                  entry,
+                  Payload::StageRoundCounter(stage_id.clone()),
+                  None
+                );
+              },
+              _ => {}
+          }
+
+          // Remove current Stage
+          self.stage_exits.pop();
+
+          return exit
+        },
+    }
+  }
+  // =========================================================================
+  // =========================================================================
+  // =========================================================================
+  // =========================================================================
+  // =========================================================================
   
   /// Needs to take care of GameFlowChange. Only Source that emits this.
   /// Takes care of EndStage and EndGame
@@ -582,53 +683,95 @@ impl IrBuilder<SpannedPayload> {
     // Take care of EndStage
     match &rule.node {
         GameRule::Action { action: spanned } => {
-            if matches!(spanned, SActionRule { node: ActionRule::EndAction { end_type: SEndType { node: EndType::Stage, span: _ } }, span: _ } ) {
-              if let Some(last_stage_exit) = self.stage_exits.last().cloned() {
-                self.new_edge(
-                  entry,
-                  last_stage_exit,
-                  Payload::Action(rule.clone())
-                );
+          match &spanned.node {
+            ActionRule::EndAction { end_type } => {
+              match &end_type.node {
+                EndType::CurrentStage => {
+                  if let Some(last_stage_exit) = self.stage_exits.last().cloned() {
+                    self.new_edge(
+                      entry,
+                      last_stage_exit,
+                      Payload::Action(rule.clone()),
+                      None
+                    );
 
-                // Nothing after end stage will be evaluated!
-                return GameFlowChange::EndCurrentStage(last_stage_exit);
-              } else {
-                // No stage found to end
-                self.diagnostics.push(
-                  GameFlowError::NoStageToEnd { span: spanned.span.clone() }
-                );
+                    // Nothing after end stage will be evaluated!
+                    return GameFlowChange::EndCurrentStage(last_stage_exit);
+                  } else {
+                    // No stage found to end
+                    self.diagnostics.push(
+                      GameFlowError::NoStageToEnd { span: spanned.span.clone() }
+                    );
+
+                    return GameFlowChange::None(exit)
+                  }
+                },
+                EndType::Stage { stage } => {
+                  if let Some(specific_exit) = self.stage_to_exit.get(&stage.node).cloned() {
+                    self.new_edge(
+                      entry,
+                      specific_exit,
+                      Payload::Action(rule.clone()),
+                      None
+                    );
+
+                    // Nothing after end stage will be evaluated!
+                    return GameFlowChange::EndStage(specific_exit);
+                  } else {
+                    // No stage found to end
+                    self.diagnostics.push(
+                      GameFlowError::NoStageToEnd { span: spanned.span.clone() }
+                    );
+
+                    return GameFlowChange::None(exit)
+                  }
+                },
+                EndType::GameWithWinner { players } => {
+                  let goal = self.fsm.goal.0;
+
+                  self.new_edge(
+                    entry,
+                    goal,
+                    Payload::Action(rule.clone()),
+                    None
+                  );
+
+                  // Nothing after end game will be evaluated!
+                  return GameFlowChange::EndGame(goal)
+                },
+                EndType::Turn => {
+                  // Normal action with no GameFlowChange
+                  self.new_edge(
+                    entry,
+                    exit,
+                    Payload::Action(rule.clone()),
+                    None
+                  );
+
+                  return GameFlowChange::None(exit)
+                },
               }
-            }
-
-            // Take care of EndGame
-            if matches!(spanned, SActionRule { node: ActionRule::EndAction { end_type: SEndType { node: EndType::GameWithWinner { players: _}, span: _ } }, span: _ } ) {
-              let goal = self.fsm.goal.0;
-
+            },
+            _ => {
+              // Normal action with no GameFlowChange
               self.new_edge(
                 entry,
-                goal,
-                Payload::Action(rule.clone())
+                exit,
+                Payload::Action(rule.clone()),
+                None
               );
 
-              // Nothing after end game will be evaluated!
-              return GameFlowChange::EndGame(goal);
-            } 
-
-            // Normal action with no GameFlowChange
-            self.new_edge(
-              entry,
-              exit,
-              Payload::Action(rule.clone())
-            );
-
-            return GameFlowChange::None(exit)
+              return GameFlowChange::None(exit)
+            }
+          }
         },
         GameRule::SetUp {setup: _} => {
           // Normal action with no GameFlowChange
           self.new_edge(
             entry,
             exit,
-            Payload::Action(rule.clone())
+            Payload::Action(rule.clone()),
+            None
           );
 
           return GameFlowChange::None(exit)
@@ -638,7 +781,8 @@ impl IrBuilder<SpannedPayload> {
           self.new_edge(
             entry,
             exit,
-            Payload::Action(rule.clone())
+            Payload::Action(rule.clone()),
+            None
           );
 
           return GameFlowChange::None(exit)
@@ -654,13 +798,15 @@ impl IrBuilder<SpannedPayload> {
     self.new_edge(
       entry,
       if_body,
-      Payload::Condition { expr: condition.clone(), negated: false }
+      Payload::Condition { expr: condition.clone(), negated: false },
+      None
     );
 
     self.new_edge(
       entry,
       exit,
-      Payload::Condition { expr: condition.clone(), negated: true }
+      Payload::Condition { expr: condition.clone(), negated: true },
+      None
     );
 
     self.build_flows(&if_rule.flows, if_body, exit);
@@ -689,13 +835,15 @@ impl IrBuilder<SpannedPayload> {
           self.new_edge(
             next_entry,
             body,
-            Payload::Condition { expr: condition.clone(), negated: false }
+            Payload::Condition { expr: condition.clone(), negated: false },
+            None
           );
 
           self.new_edge(
             next_entry,
             case_exit,
-            Payload::Condition { expr: condition.clone(), negated: true }
+            Payload::Condition { expr: condition.clone(), negated: true },
+            None
           );
 
           self.build_flows(&spanneds, body, case_exit);          
@@ -711,9 +859,9 @@ impl IrBuilder<SpannedPayload> {
   /// GameFlowChanges are handled separately. build_optional_rule does not need to worry!
   fn build_optional_rule(&mut self, optional_rule: &OptionalRule, entry: u32, exit: u32) -> u32 {
     let optional_body = self.new_state();
-    self.new_edge(entry, optional_body, Payload::Optional);
+    self.new_edge(entry, optional_body, Payload::Optional, None);
     self.build_flows(&optional_rule.flows, optional_body, exit);
-    self.new_edge(entry, exit, Payload::Optional);
+    self.new_edge(entry, exit, Payload::Optional, None);
 
     return exit
   }

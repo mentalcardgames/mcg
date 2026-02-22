@@ -15,7 +15,7 @@ use pest_consume::Error;
 pub type Result<T> = std::result::Result<T, Error<Rule>>;
 pub type Node<'i> = pest_consume::Node<'i, Rule, RefCell<SymbolTable>>;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum MemType {
     Int,
     String,
@@ -225,6 +225,27 @@ impl CGDSLParser {
 
         Ok(
             SChoiceRule {
+                node: node,
+                span
+            }
+        )
+
+    }
+
+    pub(crate) fn kw_trigger(input: Node) -> Result<()> {
+        Ok(())
+    }
+
+    pub(crate) fn trigger_rule(input: Node) -> Result<STriggerRule> {
+        let span = OwnedSpan::from(input.as_span());
+        let node = match_nodes!(input.into_children();
+            [kw_trigger(_), flow_component(f)..] => TriggerRule {
+                flows: f.collect(), // Collects the trailing flow_components into a Vec
+            }
+        );
+
+        Ok(
+            STriggerRule {
                 node: node,
                 span
             }
@@ -607,10 +628,19 @@ impl CGDSLParser {
         )
     }
 
+    pub(crate) fn players_at(input: Node) -> Result<QueryPlayer> {
+        Ok(
+            match_nodes!(input.into_children();
+                [player_collection(pc), int_expr(i)] => QueryPlayer::CollectionAt { players: pc, int: i },
+            )
+        )
+    }
+
     pub(crate) fn player_expr(input: Node) -> Result<SPlayerExpr> {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
+                [players_at(p)] => SPlayerExpr { node: PlayerExpr::Query { query: SQueryPlayer { node: p, span: span.clone() } }, span },
                 [kw_current(n)] => sruntime_player(n, span),
                 [kw_previous(s)] => sruntime_player(s, span),
                 [kw_competitor(t)] => sruntime_player(t, span),
@@ -1077,7 +1107,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
-                [card_set(n), kw_is(_), kw_not(_), kw_empty(_)] => saggregate_bool(AggregateBool::CardSetNotEmpty { card_set: n}, span),
+                [card_set(n), kw_not(_), kw_empty(_)] => saggregate_bool(AggregateBool::CardSetNotEmpty { card_set: n}, span),
             )
         )
     }
@@ -1086,7 +1116,7 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.into_children();
-                [card_set(n), kw_is(_), kw_empty(_)] => saggregate_bool(AggregateBool::CardSetEmpty { card_set: n }, span),
+                [card_set(n), kw_empty(_)] => saggregate_bool(AggregateBool::CardSetEmpty { card_set: n }, span),
             )
         )
     }
@@ -1416,9 +1446,22 @@ impl CGDSLParser {
         )
     }
 
+    pub(crate) fn string_card_set(input: Node) -> Result<SBoolExpr> {
+        let span = OwnedSpan::from(input.as_span());
+        Ok(
+            match_nodes!(input.into_children();
+                [string_expr(s), kw_in(_), card_set(c)] => 
+                    saggregate_bool(AggregateBool::StringInCardSet { string: s, card_set: c }, span),
+                [string_expr(s), kw_not(_), kw_in(_), card_set(c)] => 
+                    saggregate_bool(AggregateBool::StringNotInCardSet { string: s, card_set: c }, span),
+            )
+        )
+    }
+
     pub(crate) fn bool_expr(input: Node) -> Result<SBoolExpr> {
         Ok(
             match_nodes!(input.into_children();
+                [string_card_set(n)] => n,
                 [cmp_bool(n)] => n,
                 [card_set_not_empty(n)] => n,
                 [card_set_empty(n)] => n,
@@ -1527,7 +1570,8 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         Ok(
             match_nodes!(input.children();
-                [key(key), string_expr_compare(n), string_expr(s)] => saggregate_filter(AggregateFilter::KeyString { key: key, cmp: n, string: Box::new(s) }, span),
+                [key(key), kw_is(_), string_expr(s)] => saggregate_filter(AggregateFilter::KeyIsString { key: key, string: Box::new(s) }, span),
+                [key(key), kw_is(_), kw_not(_), string_expr(s)] => saggregate_filter(AggregateFilter::KeyIsNotString { key: key, string: Box::new(s) }, span),
             )
         )
     }
@@ -2072,10 +2116,18 @@ impl CGDSLParser {
         )
     } 
 
+    pub(crate) fn cards(input: Node) -> Result<Vec<STypes>> {
+        Ok(
+            match_nodes!(input.into_children();
+                [types(ts)..] => ts.collect()
+            )
+        )
+    } 
+
     pub(crate) fn create_card(input: Node) -> Result<SSetUpRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_card(_), kw_on(_), location(location), types(t)] => SetUpRule::CreateCardOnLocation { location: location, types: t },
+            [kw_card(_), kw_on(_), location(location), cards(t)] => SetUpRule::CreateCardOnLocation { location: location, cards: t },
         );
 
         Ok(
@@ -2440,7 +2492,8 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
             [kw_turn(_)] => EndType::Turn,
-            [kw_stage(_)] => EndType::Stage,
+            [kw_stage(_)] => EndType::CurrentStage,
+            [stage(s)] => EndType::Stage { stage: s },
             [kw_game(_), kw_with(_), kw_winner(_), players(p)] => EndType::GameWithWinner { players: p },
 
         );

@@ -4,6 +4,9 @@ export const controlKeywords = [
   "optional",
   "choose",
   "case",
+  "conditional",
+  "else",
+  "trigger",
 ];
 
 export const helperKeywords = [
@@ -63,107 +66,3 @@ export const statusKeywords = [
 function wordRegex(words: [&String]) {
   return `\\b(${words.join("|")})\\b`;
 }
-
-
-// Old Code
-// "semanticTokenScopes": [
-//   {
-//     "language": "cgdsl",
-//     "scopes": {
-//       "player":     ["entity.name.type"],
-//       "team":       ["entity.name.class"],
-//       "location":   ["entity.name.class"],
-//       "precedence": ["keyword.other.unit"],
-//       "pointmap":   ["keyword.other.unit"],
-//       "combo":      ["entity.name.type.enum"],
-//       "key":        ["entity.name.type.enum"],
-//       "value":      ["entity.name.type.enum"],
-//       "memory":     ["entity.name.type.enum"],
-//       "token":      ["entity.name.type.enum"],
-//       "stage":      ["entity.name.type.enum"]
-//     }
-//   }
-// ]  
-
-// Updated Change:
-// "configurationDefaults": {
-//       "editor.tokenColorCustomizations": {
-//         "semanticTokenColors": {
-//           "player": "#388828",
-//           "team": "#0a869c",
-//           "location": "#7a0a9c",
-//           "precedence": "#9c8d0a",
-//           "pointmap": "#b9830e",
-//           "combo": "#410eb9",
-//           "key": "#0d5f0a",
-//           "value": "#0a5f5b",
-//           "memory": "#db8d17",
-//           "token": "#171ad1",
-//           "stage": "#d11746",
-//           "notype": "#FB7185"
-//         }
-//       }
-//     }
-
-
-// Custom color
-// "contributes": {
-//   "configurationDefaults": {
-//     "editor.tokenColorCustomizations": {
-//       "semanticTokenColors": {
-//         "player": {
-//           "foreground": "#d11746",
-//           "fontStyle": "bold"
-//         },
-//         "team": "#60A5FA",
-//         "location": "#34D399",
-//         "precedence": "#FB7185",
-//         "memory": {
-//           "foreground": "#A78BFA",
-//           "fontStyle": "italic"
-//         }
-//       }
-//     }
-//   }
-// }
-
-// "editor.tokenColorCustomizations": {
-//   "[*Dark*]": {
-//     "semanticTokenColors": {
-//       "player": "#FF8888"
-//     }
-//   },
-//   "[*Light*]": {
-//     "semanticTokenColors": {
-//       "player": "#AA0000"
-//     }
-//   }
-// }
-
-
-
-// Semantic Toke Scopes ordered:
-// "semanticTokenScopes": [
-//     {
-//       "language": "cgdsl",
-//       "scopes": {
-//         "player":     ["entity.name.class"],
-//         "team":       ["entity.name.class"],
-
-//         "precedence": ["entity.name.namespace"],
-//         "pointmap":   ["entity.name.namespace"],
-//         "combo":      ["entity.name.namespace"],
-
-//         "key":        ["variable.parameter"],
-//         "value":      ["variable.other"],
-
-//         "memory":     ["support.variable"],
-//         "token":      ["support.variable"],
-//         "location":   ["support.variable"],
-
-//         "stage":      ["entity.name.enum"],
-
-//         "notype":     ["entity.name.type"]
-//       }
-//     }
-//   ]

@@ -4,8 +4,13 @@ digraph CFG {
   edge [fontname="Consolas", fontsize=9, arrowsize=0.8];
   entry [shape=point];
   entry -> 0;
-  2 -> 3 [xlabel=" Action "];
-  3 -> 0 [xlabel=" Stage Round Counter "];
-  0 -> 1 [xlabel=" Not EndCondition "];
-  0 -> 2 [xlabel=" EndCondition "];
+  7 -> 1 [xlabel=" Action "];
+  3 -> 2 [xlabel=" Not EndCondition "];
+  3 -> 4 [xlabel=" EndCondition "];
+  4 -> 6 [xlabel=" Action "];
+  5 -> 3 [xlabel=" Stage Round Counter "];
+  6 -> 7 [xlabel=" Condition "];
+  6 -> 5 [xlabel=" Not Condition "];
+  2 -> 0 [xlabel=" Stage Round Counter "];
+  0 -> 3 [xlabel=" Action "];
 }

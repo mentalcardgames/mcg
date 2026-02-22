@@ -85,7 +85,13 @@ impl SymbolVisitor {
             if concrete_assignments.len() > 1 {
                 for (sid, _) in concrete_assignments {
                     // 4. Return the SID with multiple definitions
-                    errs.push(SymbolError::DefinedMultipleTimes { var: Var::from((*sid).clone()) });
+                    if let Some(ty) = self.symbols.get(sid) {
+                        // Key and Value are allowed to be defined multiple types!
+                        if *ty == GameType::Key || *ty == GameType::Value {
+                            continue
+                        }
+                        errs.push(SymbolError::DefinedMultipleTimes { var: Var::from((*sid).clone()) });
+                    }
                 }
             }
         }
@@ -287,7 +293,10 @@ impl AstPass for SymbolVisitor {
                         self.use_id(&spanned);
                         self.use_id(&spanned1);
                     },
-                    AggregateFilter::KeyString{key: spanned, cmp: _, string: _} => {
+                    AggregateFilter::KeyIsString{key: spanned, string: _} => {
+                        self.use_id(&spanned);
+                    },
+                    AggregateFilter::KeyIsNotString{key: spanned, string: _} => {
                         self.use_id(&spanned);
                     },
                     AggregateFilter::Combo{combo: spanned} => {
@@ -316,7 +325,7 @@ impl AstPass for SymbolVisitor {
                             self.init_id(&s, GameType::Location);
                         }
                     },
-                    SetUpRule::CreateCardOnLocation{location: spanned, types: _} => {
+                    SetUpRule::CreateCardOnLocation{location: spanned, cards: _} => {
                         self.use_id(&spanned);
                     },
                     SetUpRule::CreateTokenOnLocation{int: _, token: spanned1, location: spanned2} => {
@@ -390,6 +399,16 @@ impl AstPass for SymbolVisitor {
                         self.use_id(&spanned);
                     },
                     _ => {},
+                }
+            },
+            NodeKind::UseMemory(m) => {
+                match m {
+                    UseMemory::Memory { memory } => {
+                        self.use_id(&memory)
+                    },
+                    UseMemory::WithOwner { memory, owner: _ } => {
+                        self.use_id(&memory)
+                    },
                 }
             }
             _ => {}

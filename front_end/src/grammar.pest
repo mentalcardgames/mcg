@@ -124,6 +124,7 @@ kw_times      = @{ "times" }
 kw_to         = @{ "to" }
 kw_token      = @{ "token" }
 kw_top        = @{ "top" }
+kw_trigger    = @{ "trigger" }
 kw_turn       = @{ "turn" }
 kw_turnorder  = @{ "turnorder" }
 kw_until      = @{ "until" }
@@ -146,11 +147,13 @@ player_name_list = { playername ~ ("," ~ playername)* }
 // Owner
 // =======================
 owner = {
-    use_memory
-  | "(" ~ ident ~ ("," ~ ident)* ~ ")"
+    // Here to resolve the similar rule
+    use_memory ~ !("[")
+    // Matching No PlayerExpr::CollectionAt
+  | "(" ~ ident ~ ("," ~ ident)* ~ ")" ~ !("[")
+  | player_expr
   | player_collection
   | team_collection
-  | player_expr
   | team_expr
   | kw_table
 }
@@ -159,8 +162,8 @@ owner = {
 // Players
 // =======================
 players = {
-    player_collection
-  | player_expr
+    player_expr
+  | player_collection
 }
 
 // =======================
@@ -201,6 +204,7 @@ int_op = {
 // PlayerExpr
 // =======================
 turnorder_at = { kw_turnorder ~ "[" ~ int_expr ~ "]" }
+players_at = { player_collection ~ "[" ~ int_expr ~ "]" }
 owner_of_player  = { kw_owner ~ kw_of ~ (card_position | extrema ~ memory) }
 
 player_expr = { 
@@ -211,6 +215,7 @@ player_expr = {
   | turnorder_at
   | owner_of_player
   | playername
+  | players_at
 }
 // =======================
 
@@ -272,10 +277,10 @@ card_position = {
 
 // BoolExpr
 // =======================
-card_set_compare = { "c" ~ (eq | neq) }
-player_expr_compare = { "p" ~ (eq | neq) }
-team_expr_compare = { "t" ~ (eq | neq) }
-string_expr_compare = { "s" ~ (eq | neq) }
+card_set_compare = { (eq | neq) }
+player_expr_compare = { (eq | neq) }
+team_expr_compare = { (eq | neq) }
+string_expr_compare = { (eq | neq) }
 bool_op = { (kw_and | kw_or) }
 unary_op = { (kw_not) }
 int_compare = {
@@ -290,29 +295,31 @@ int_compare = {
 out_of = { kw_stage | stage | kw_game }
 card_set_bool = { card_set ~ card_set_compare ~ card_set }
 string_expr_bool = { string_expr ~ string_expr_compare ~ string_expr }
+string_card_set = { string_expr ~ (kw_not)? ~ kw_in ~ card_set }
 player_expr_bool = { player_expr ~ player_expr_compare ~ player_expr }
 team_expr_bool = { team_expr ~ team_expr_compare ~ team_expr }
 int_expr_bool = { int_expr ~ int_compare ~ int_expr }
-card_set_not_empty = { card_set ~ kw_is ~ kw_not ~ kw_empty }
-card_set_empty = { card_set ~ kw_is ~ kw_empty }
+card_set_not_empty = { card_set ~ kw_not ~ kw_empty }
+card_set_empty = { card_set ~ kw_empty }
 bool_expr_binary = { "(" ~ bool_expr ~ bool_op ~ bool_expr ~ ")" }
 bool_expr_unary = { unary_op ~ bool_expr }
 players_out_of = { players ~ kw_out ~ kw_of ~ out_of }
-boundary = _{ &(")" | "and" | "or" | ":" | "{") }
+boundary = _{ &(")" | "and" | "or" | ":" | "{" | EOI) }
 
 cmp_bool = {
   // handling amiguity with positives
   // What can come after a BoolExpr: ')', 'and', 'or', ':', '{'
     use_memory ~ (eq | neq) ~ use_memory ~ boundary
-  | card_set_bool
-  | string_expr_bool
-  | player_expr_bool
-  | team_expr_bool
-  | int_expr_bool
+  | card_set_bool ~ boundary
+  | string_expr_bool ~ boundary
+  | player_expr_bool ~ boundary
+  | team_expr_bool ~ boundary
+  | int_expr_bool ~ boundary
 }
 
 bool_expr = {
     cmp_bool
+  | string_card_set
   | card_set_not_empty
   | card_set_empty
   | bool_expr_binary
@@ -535,7 +542,8 @@ create_location = { kw_location ~ location_list ~ kw_on ~ owner }
 values = { "(" ~ value ~ ("," ~ value)* ~ ")" }
 for_key_values = { kw_for ~ key ~ values }
 types = { key ~ values ~ (for_key_values)* }
-create_card = { kw_card ~ kw_on ~ location ~ ":" ~ types }
+cards = { types ~ ("," ~ types)* }
+create_card = { kw_card ~ kw_on ~ location ~ ":" ~ cards }
 // =======================
 
 // CreateToken
@@ -620,6 +628,12 @@ optional_rule = { kw_optional ~ "{" ~ flow_component+ ~ "}" }
 choice_rule = { kw_choose ~ "{" ~ flow_component+ ~ ("or" ~ flow_component+)* ~ "}" }
 // =======================
 
+// TriggerRule
+// =======================
+trigger_rule = { kw_trigger ~ "{" ~ flow_component+ ~ "}" }
+// =======================
+
+
 //////////////////////////
 // Actions
 //////////////////////////
@@ -661,7 +675,7 @@ bid_action = { kw_bid ~ quantity ~ (kw_on ~ memory ~ kw_of ~ owner)? }
 
 // EndAction
 // =======================
-end_type = { (kw_turn | kw_stage | kw_game ~ kw_with ~ kw_winner ~ players) }
+end_type = { (stage | kw_turn | kw_stage | kw_game ~ kw_with ~ kw_winner ~ players) }
 end_action = { kw_end ~ end_type }
 // =======================
 
@@ -705,6 +719,7 @@ group_of_owner = { group ~ kw_of ~ owner }
 card_set = {
     group_of_owner 
   | use_memory ~ (!kw_where)
+  // Guard
   | group 
 }
 // =======================
@@ -731,13 +746,12 @@ key_adjacent = { kw_adjacent ~ key ~ kw_using ~ precedence }
 key_higher = { key ~ kw_higher ~ kw_than ~ string_expr ~ kw_using ~ precedence }
 key_lower = { key ~ kw_lower ~ kw_than ~ string_expr ~ kw_using ~ precedence }
 size_int = { kw_size ~ int_compare ~ int_expr }
-key_string = { key ~ string_expr_compare ~ string_expr }
+key_string = { key ~ kw_is ~ (kw_not)? ~ string_expr }
 filter_combo = { (kw_not)? ~ combo }
 filter_bin_op = { "(" ~ filter_expr ~ filter_op ~ filter_expr ~ ")" }
 
 filter_expr = { 
     size_int
-  | filter_bin_op
   | key_string
   | key_adjacent
   | key_higher
@@ -745,6 +759,7 @@ filter_expr = {
   | key_same
   | key_distinct
   | filter_combo
+  | filter_bin_op
 }
 // =======================
 

@@ -65,6 +65,10 @@ pub fn semantic_error_to_diagnostics(semantic_error: &SemanticError) -> Diagnost
       message = format!("'{}' does not correspond to '{}'", &key.id, &ty.id);
       spanned = key;
     },
+    SemanticError::MemoryMismatch { memory } => {
+      message = format!("'{}' does not match initialized value", &memory.id);
+      spanned = memory;
+    },
   }
 
   Diagnostic {

@@ -171,17 +171,23 @@ fn show_graph(fsm: &Ir<SpannedPayload>, name: &str) {
 //   show_graph(&fsm, "if");
 // }
 
-// #[test]
-// fn test_stage_ir() {
-//   let fsm = build_ir_from(
-// "
-//     stage Preparation for current 1 times {
-//       deal 12 from Stock top private to Hand of all
-//     }      
-//     "
-//   );
-//   show_graph(&fsm, "stage");
-// }
+#[test]
+fn test_stage_ir() {
+  let fsm = build_ir_from(
+"
+      stage Outside for current until end {
+        deal 12 from top(Stock) private to Hand of all
+        stage Preparation for current 1 times {
+          deal 12 from top(Stock) private to Hand of all
+          if (Hand empty) {
+            end Outside
+          }
+        } 
+      }
+    "
+  );
+  show_graph(&fsm, "stage");
+}
 
 // #[test]
 // fn test_choose_ir() {
@@ -228,7 +234,7 @@ fn test_game_ir() {
           precedence RankOrder on Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King)
           points Values on Rank(Ace: 1, Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7, Eight: 8, Nine: 9 , Ten: 10, Jack: 10, Queen: 10, King: 10)
           combo Sequence where ((size >= 3 and same Suite) and adjacent Rank using RankOrder)
-          combo Set where ((size >= 3 and distinct Suite) and Rank s== \"Ace\")
+          combo Set where ((size >= 3 and distinct Suite) and Rank is \"Ace\")
           combo Deadwood where (not Sequence and not Set)
 
           stage Preparation for current 1 times {
@@ -249,7 +255,7 @@ fn test_game_ir() {
                 move all from Set in Hand face up to top(LayDown)
                 move all from Sequence in Hand face up to top(LayDown)
 
-                if (Hand is empty) {
+                if (Hand empty) {
                   move all from Set in Hand of next face up to top(LayDown) of next
                   move all from Sequence in Hand of next face up to top(LayDown) of next
                   move Hand of next face up to Trash of next
@@ -356,7 +362,7 @@ fn test_reparse_game() {
           precedence RankOrder on Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King)
           points Values on Rank(Ace: 1, Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7, Eight: 8, Nine: 9 , Ten: 10, Jack: 10, Queen: 10, King: 10)
           combo Sequence where ((size >= 3 and same Suite) and adjacent Rank using RankOrder)
-          combo Set where ((size >= 3 and distinct Suite) and Rank s== \"Ace\")
+          combo Set where ((size >= 3 and distinct Suite) and Rank is \"Ace\")
           combo Deadwood where (not Sequence and not Set)
 
           stage Preparation for current 1 times {
@@ -377,7 +383,7 @@ fn test_reparse_game() {
                 move all from Set in Hand face up to top(LayDown)
                 move all from Sequence in Hand face up to top(LayDown)
 
-                if (Hand is empty) {
+                if (Hand empty) {
                   move all from Set in Hand of next face up to top(LayDown) of next
                   move all from Sequence in Hand of next face up to top(LayDown) of next
                   move Hand of next face up to Trash of next
@@ -830,14 +836,16 @@ fn resolve_memory_type_with_table() {
   assert_eq!(collection.lower(), MemoryType::PlayerCollection { players: PlayerCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });  
 }
 
-// memory Id399 &Id100 of PIdentfallback[1] on PIdentfallback
+/*
+stage Id779 for playersout sum of &(Id663 of ( Id100, Identfallback )[1]) using Identfallback times { end turn }
+*/
 #[test]
 fn parse_game_rule() {
-  let input = "&(Id100 of PIdentfallback)[1]";
+  let input = "Id356 is not \"Id100\"";
   let game_rule = match test_rule_consume(
       input,
-      Rule::int_expr,
-      CGDSLParser::int_expr,
+      Rule::key_string,
+      CGDSLParser::key_string,
   ) {
     Ok(a) => {
       println!("{:?}", a);

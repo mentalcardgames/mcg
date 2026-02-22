@@ -195,7 +195,8 @@ impl fmt::Display for EndType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             EndType::Turn => "turn",
-            EndType::Stage => "stage",
+            EndType::CurrentStage => "stage",
+            EndType::Stage { stage } => &format!("{}", stage),
             EndType::GameWithWinner { players } => 
               &format!("game with winner {}", players),
         };
@@ -253,7 +254,12 @@ impl fmt::Display for RuntimePlayer {
 impl fmt::Display for QueryPlayer {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        QueryPlayer::Turnorder { int: int_expr } => &format!("turnorder[{}]", int_expr),
+        QueryPlayer::Turnorder { int: int_expr } => {
+            &format!("turnorder[{}]", int_expr)
+        },
+        QueryPlayer::CollectionAt { players, int: int_expr } => {
+            &format!("{}[{}]", players, int_expr)
+        },
       };
       f.write_str(s)
   }
@@ -354,8 +360,8 @@ impl fmt::Display for StringExpr {
 impl fmt::Display for CardSetCompare {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        Self::Eq => "c==",
-        Self::Neq => "c!=",
+        Self::Eq => "==",
+        Self::Neq => "!=",
       };
       f.write_str(s)
   }
@@ -364,8 +370,8 @@ impl fmt::Display for CardSetCompare {
 impl fmt::Display for StringCompare {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        Self::Eq => "s==",
-        Self::Neq => "s!=",
+        Self::Eq => "==",
+        Self::Neq => "!=",
       };
       f.write_str(s)
   }
@@ -374,8 +380,8 @@ impl fmt::Display for StringCompare {
 impl fmt::Display for PlayerCompare {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        Self::Eq => "p==",
-        Self::Neq => "p!=",
+        Self::Eq => "==",
+        Self::Neq => "!=",
       };
       f.write_str(s)
   }
@@ -384,8 +390,8 @@ impl fmt::Display for PlayerCompare {
 impl fmt::Display for TeamCompare {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        Self::Eq => "t==",
-        Self::Neq => "t!=",
+        Self::Eq => "==",
+        Self::Neq => "!=",
       };
       f.write_str(s)
   }
@@ -424,11 +430,15 @@ impl fmt::Display for AggregateBool {
         AggregateBool::Compare { cmp_bool: compare_bool} => 
           &format!("{}", compare_bool),
         AggregateBool::CardSetEmpty{card_set} => 
-          &format!("{} is empty", card_set),
+          &format!("{} empty", card_set),
         AggregateBool::CardSetNotEmpty{card_set} => 
-          &format!("{} is not empty", card_set),
+          &format!("{} not empty", card_set),
         AggregateBool::OutOfPlayer{players, out_of} => 
-          &format!("{} out of {}", players, out_of),        
+          &format!("{} out of {}", players, out_of),
+        AggregateBool::StringInCardSet { string, card_set } =>
+          &format!("{} in {}", string, card_set),
+        AggregateBool::StringNotInCardSet { string, card_set } =>
+          &format!("{} not in {}", string, card_set),
       };
       f.write_str(s)
   }
@@ -560,8 +570,10 @@ impl fmt::Display for AggregateFilter {
           &format!("{} higher than {} using {}", key, value, precedence),
         AggregateFilter::Lower { key, value, precedence} => 
           &format!("{} lower than {} using {}", key, value, precedence),
-        AggregateFilter::KeyString { key, cmp: string_compare, string: string_expr} => 
-          &format!("{} {} {}", key, string_compare, string_expr),
+        AggregateFilter::KeyIsString { key, string: string_expr} => 
+          &format!("{} is {}", key, string_expr),
+        AggregateFilter::KeyIsNotString { key, string: string_expr} => 
+          &format!("{} is not {}", key, string_expr),
         AggregateFilter::Combo { combo } => 
           &format!("{}", combo),
         AggregateFilter::NotCombo { combo } =>
@@ -779,8 +791,13 @@ impl fmt::Display for SetUpRule {
                   .join(", ");
               &format!("location {} on {}", s_inner, owner)
             },
-            SetUpRule::CreateCardOnLocation { location, types } => {
-              &format!("card on {} : {}", location, types)
+            SetUpRule::CreateCardOnLocation { location, cards } => {
+              let s_inner = cards
+                  .iter()
+                  .map(|i| i.to_string()) // convert each int to string
+                  .collect::<Vec<_>>()    // collect into Vec<String>
+                  .join(", ");
+              &format!("card on {} : {}", location, s_inner)
             },
             SetUpRule::CreateTokenOnLocation { int: int_expr, token, location} => {
               &format!("token {} {} on {}", int_expr, token, location)
