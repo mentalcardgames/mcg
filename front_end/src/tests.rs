@@ -8,7 +8,6 @@ use crate::ir::{Ir, IrBuilder, SpannedPayload};
 use crate::lower::Lower;
 use crate::parser::SymbolTable;
 use crate::walker::*;
-// use crate::{lower::Lower};
 use pest_consume::*;
 use crate::parser::{CGDSLParser, Rule, Node, Result};
 
@@ -62,14 +61,6 @@ where
     Ok(parsed_ast)
 }
 
-fn parse_game(input: &str) {
-    test_rule_consume(
-        input,
-        Rule::file,
-        CGDSLParser::file,
-    ).expect("parse failed");
-}
-
 // ===========================================================================
 // Test IR builder
 // ===========================================================================
@@ -102,16 +93,16 @@ fn parse_ast_parse(input: &str) {
       }
     };
 
-    // let fmt_game = &format!("{}", game.lower());
+    let fmt_game = &format!("{}", game.lower());
     
-    // let parsed_fmt_game = test_rule_consume(
-    //     fmt_game,
-    //     Rule::file,
-    //     CGDSLParser::file,
-    // ).expect("parse failed");
+    let parsed_fmt_game = test_rule_consume(
+        fmt_game,
+        Rule::file,
+        CGDSLParser::file,
+    ).expect("parse failed");
 
 
-    // assert_eq!(game.lower(), parsed_fmt_game.lower()); 
+    assert_eq!(game.lower(), parsed_fmt_game.lower()); 
 }
 
 fn show_graph(fsm: &Ir<SpannedPayload>, name: &str) {
@@ -137,39 +128,39 @@ fn show_graph(fsm: &Ir<SpannedPayload>, name: &str) {
   assert!(status.success());
 }
 
-// #[test]
-// fn test_rule_ir() {
-//   let fsm = build_ir_from(
-//     "
-//       set current out of stage
-//     "
-//   );
-//   show_graph(&fsm, "rule");
-// }
+#[test]
+fn test_rule_ir() {
+  let fsm = build_ir_from(
+    "
+      set current out of stage
+    "
+  );
+  show_graph(&fsm, "rule");
+}
 
-// #[test]
-// fn test_optional_ir() {
-//   let fsm = build_ir_from(
-//     "
-//       optional {
-//         set current out of stage
-//       }
-//     "
-//   );
-//   show_graph(&fsm, "optional");
-// }
+#[test]
+fn test_optional_ir() {
+  let fsm = build_ir_from(
+    "
+      optional {
+        set current out of stage
+      }
+    "
+  );
+  show_graph(&fsm, "optional");
+}
 
-// #[test]
-// fn test_if_ir() {
-//   let fsm = build_ir_from(
-//     "
-//       if (Hand is empty) {
-//         set current out of stage
-//       }
-//     "
-//   );
-//   show_graph(&fsm, "if");
-// }
+#[test]
+fn test_if_ir() {
+  let fsm = build_ir_from(
+    "
+      if (Hand empty) {
+        set current out of stage
+      }
+    "
+  );
+  show_graph(&fsm, "if");
+}
 
 #[test]
 fn test_stage_ir() {
@@ -189,36 +180,36 @@ fn test_stage_ir() {
   show_graph(&fsm, "stage");
 }
 
-// #[test]
-// fn test_choose_ir() {
-//   let fsm = build_ir_from(
-// "
-//     choose {
-//       move Discard top private to Hand
-//       or
-//       move Stock top private to Hand
-//     }
-//     "
-//   );
-//   show_graph(&fsm, "choose");
-// }
+#[test]
+fn test_choose_ir() {
+  let fsm = build_ir_from(
+"
+    choose {
+      move top(Discard) private to Hand
+      or
+      move top(Stock) private to Hand
+    }
+    "
+  );
+  show_graph(&fsm, "choose");
+}
 
-// #[test]
-// fn test_conditional_ir() {
-//   let fsm = build_ir_from(
-// "
-//     conditional {
-//       case:
-//         move Discard top private to Hand
-//       case Hand is empty:
-//         move Stock top private to Hand
-//       case else:
-//         move Stock top private to Hand 
-//     }
-//     "
-//   );
-//   show_graph(&fsm, "conditional");
-// }
+#[test]
+fn test_conditional_ir() {
+  let fsm = build_ir_from(
+"
+    conditional {
+      case:
+        move top(Discard) private to Hand
+      case Hand empty:
+        move top(Stock) private to Hand
+      case else:
+        move top(Stock) private to Hand 
+    }
+    "
+  );
+  show_graph(&fsm, "conditional");
+}
 
 #[test]
 fn test_game_ir() {
@@ -287,7 +278,7 @@ fn test_game_ir() {
 }
 
 // ===========================================================================
-// Parser tests
+// Proptests
 // ===========================================================================
 use proptest::proptest;
 use crate::ast::*;
@@ -836,13 +827,13 @@ fn resolve_memory_type_with_table() {
   assert_eq!(collection.lower(), MemoryType::PlayerCollection { players: PlayerCollection::Memory { memory: UseMemory::Memory { memory: "Ident".to_string() } } });  
 }
 
-/*
-stage Id779 for playersout sum of &(Id663 of ( Id100, Identfallback )[1]) using Identfallback times { end turn }
-*/
+// ===========================================================================
+// If parsing for a rule fails (for experimenting and trying out)
+// ===========================================================================
 #[test]
-fn parse_game_rule() {
+fn test_specific_rule() {
   let input = "Id356 is not \"Id100\"";
-  let game_rule = match test_rule_consume(
+  let _ = match test_rule_consume(
       input,
       Rule::key_string,
       CGDSLParser::key_string,
@@ -856,18 +847,4 @@ fn parse_game_rule() {
       panic!("parse failed")
     }
   };
-
-  // let input = "memory Id399 &Id100 of PIdentfallback[1] on PIdentfallback";
-  // let game_rule = match test_rule_consume(
-  //     input,
-  //     Rule::game_rule,
-  //     CGDSLParser::game_rule,
-  // ) {
-  //   Ok(a) => a,
-  //   Err(e) => {
-  //     println!("{}", input);
-  //     println!("{:?}", e);
-  //     panic!("parse failed")
-  //   }
-  // };
 }

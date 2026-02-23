@@ -87,6 +87,7 @@ impl CGDSLParser {
                 [if_rule(s)] => FlowComponent::IfRule { if_rule: s },
                 [choice_rule(t)] => FlowComponent::ChoiceRule { choice_rule: t },
                 [optional_rule(l)] => FlowComponent::OptionalRule { optional_rule: l },
+                [trigger_rule(l)] => FlowComponent::TriggerRule { trigger_rule: l },
                 [game_rule(k)] => FlowComponent::Rule { game_rule: k },
                 [cond_rule(k)] => FlowComponent::Conditional { conditional: k },
         );
@@ -1260,176 +1261,10 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.clone().into_children();
             [players(n), kw_out(_), kw_of(_), out_of(s)] => saggregate_bool(AggregateBool::OutOfPlayer { players: n, out_of: s }, span),
-            [use_memory(m1), eq(e), use_memory(m2)] => {
-                let mid = match &m1.node {
-                    UseMemory::Memory { memory } => &memory.node,
-                    UseMemory::WithOwner { memory, owner: _ } => &memory.node,
-                };
-                let mid1 = match &m2.node {
-                    UseMemory::Memory { memory } => &memory.node,
-                    UseMemory::WithOwner { memory, owner: _ } => &memory.node,
-                };
-                
-                if let Some(ty1) = input.user_data().borrow().memories.get(mid) {
-                    if let Some(ty2) = input.user_data().borrow().memories.get(mid1) {
-                        if ty1 == ty2 {
-                            match ty1 {
-                                MemType::Int => {
-                                    let int = SIntExpr {
-                                        node: IntExpr::Memory { memory: m1 },
-                                        span: span.clone()
-                                    };
-                                    let int1 = SIntExpr {
-                                        node: IntExpr::Memory { memory: m2 },
-                                        span: span.clone()
-                                    };
-                                    let int_cmp = SIntCompare {
-                                        node: IntCompare::Eq,
-                                        span: e
-                                    };
-
-                                    return Ok(saggregate_compare_bool(CompareBool::Int { int , cmp: int_cmp, int1 }, span))
-                                },
-                                MemType::String => {
-                                    let string = SStringExpr {
-                                        node: StringExpr::Memory { memory: m1 },
-                                        span: span.clone()
-                                    };
-                                    let string1 = SStringExpr {
-                                        node: StringExpr::Memory { memory: m2 },
-                                        span: span.clone()
-                                    };
-                                    let string_cmp = SStringCompare {
-                                        node: StringCompare::Eq,
-                                        span: e
-                                    };
-
-                                    return Ok(saggregate_compare_bool(CompareBool::String { string , cmp: string_cmp, string1 }, span))
-                                },
-                                MemType::CardSet => {
-                                    let card_set = SCardSet {
-                                        node: CardSet::Memory { memory: m1 },
-                                        span: span.clone()
-                                    };
-                                    let card_set1 = SCardSet {
-                                        node: CardSet::Memory { memory: m2 },
-                                        span: span.clone()
-                                    };
-                                    let card_set_cmp = SCardSetCompare {
-                                        node: CardSetCompare::Eq,
-                                        span: e
-                                    };
-
-                                    return Ok(saggregate_compare_bool(CompareBool::CardSet { card_set , cmp: card_set_cmp, card_set1 }, span))
-                                },
-                                // FallBack
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-
-                // FallBack
-                let int = SIntExpr {
-                    node: IntExpr::Memory { memory: m1 },
-                    span: span.clone()
-                };
-                let int1 = SIntExpr {
-                    node: IntExpr::Memory { memory: m2 },
-                    span: span.clone()
-                };
-                let int_cmp = SIntCompare {
-                    node: IntCompare::Eq,
-                    span: e
-                };
-
-                saggregate_compare_bool(CompareBool::Int { int , cmp: int_cmp, int1 }, span)
-            },
-            [use_memory(m1), neq(ne), use_memory(m2)] => {
-                let mid = match &m1.node {
-                    UseMemory::Memory { memory } => &memory.node,
-                    UseMemory::WithOwner { memory, owner: _ } => &memory.node,
-                };
-                let mid1 = match &m2.node {
-                    UseMemory::Memory { memory } => &memory.node,
-                    UseMemory::WithOwner { memory, owner: _ } => &memory.node,
-                };
-
-                if let Some(ty1) = input.user_data().borrow().memories.get(mid) {
-                    if let Some(ty2) = input.user_data().borrow().memories.get(mid1) {
-                        if ty1 == ty2 {
-                            match ty1 {
-                                MemType::Int => {
-                                    let int = SIntExpr {
-                                        node: IntExpr::Memory { memory: m1 },
-                                        span: span.clone()
-                                    };
-                                    let int1 = SIntExpr {
-                                        node: IntExpr::Memory { memory: m2 },
-                                        span: span.clone()
-                                    };
-                                    let int_cmp = SIntCompare {
-                                        node: IntCompare::Neq,
-                                        span: ne
-                                    };
-
-                                    return Ok(saggregate_compare_bool(CompareBool::Int { int , cmp: int_cmp, int1 }, span))
-                                },
-                                MemType::String => {
-                                    let string = SStringExpr {
-                                        node: StringExpr::Memory { memory: m1 },
-                                        span: span.clone()
-                                    };
-                                    let string1 = SStringExpr {
-                                        node: StringExpr::Memory { memory: m2 },
-                                        span: span.clone()
-                                    };
-                                    let string_cmp = SStringCompare {
-                                        node: StringCompare::Neq,
-                                        span: ne
-                                    };
-
-                                    return Ok(saggregate_compare_bool(CompareBool::String { string , cmp: string_cmp, string1 }, span))
-                                },
-                                MemType::CardSet => {
-                                    let card_set = SCardSet {
-                                        node: CardSet::Memory { memory: m1 },
-                                        span: span.clone()
-                                    };
-                                    let card_set1 = SCardSet {
-                                        node: CardSet::Memory { memory: m2 },
-                                        span: span.clone()
-                                    };
-                                    let card_set_cmp = SCardSetCompare {
-                                        node: CardSetCompare::Neq,
-                                        span: ne
-                                    };
-
-                                    return Ok(saggregate_compare_bool(CompareBool::CardSet { card_set , cmp: card_set_cmp, card_set1 }, span))
-                                },
-                                // FallBack
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-
-                // FallBack
-                let int = SIntExpr {
-                    node: IntExpr::Memory { memory: m1 },
-                    span: span.clone()
-                };
-                let int1 = SIntExpr {
-                    node: IntExpr::Memory { memory: m2 },
-                    span: span.clone()
-                };
-                let int_cmp = SIntCompare {
-                    node: IntCompare::Neq,
-                    span: ne
-                };
-
-                saggregate_compare_bool(CompareBool::Int { int , cmp: int_cmp, int1 }, span)
-            },
+            [use_memory(m1), eq(e), use_memory(m2)] =>
+                resolve_use_memory_eq_use_memory(m1, e, m2, span, input),
+            [use_memory(m1), neq(ne), use_memory(m2)] =>
+                resolve_use_memory_neq_use_memory(m1, ne, m2, span, input),
             [card_set_bool(n)] => n,
             [string_expr_bool(n)] => n,
             [player_expr_bool(n)] => n,
@@ -1438,10 +1273,6 @@ impl CGDSLParser {
         );
 
         Ok(
-            // SBoolExpr {
-            //     node: node,
-            //     span
-            // }
             node
         )
     }
@@ -3246,7 +3077,7 @@ pub(crate) fn resolve_collection_use_memory(ids: Vec<SUseMemory>, span: OwnedSpa
                 }
             }
         },
-        UseMemory::WithOwner { memory, owner} => {
+        UseMemory::WithOwner { memory, owner: _} => {
             if let Some(ty) = input.user_data().borrow().memories.get(&memory.node) {
                 match ty {
                     MemType::Int => {
@@ -3523,4 +3354,177 @@ pub(crate) fn resolve_owner_memory(memory: SUseMemory, span: OwnedSpan, input: N
             span: span
         }
     }
+}
+
+fn resolve_use_memory_eq_use_memory(m1: Spanned<UseMemory>, e: OwnedSpan, m2: Spanned<UseMemory>, span: OwnedSpan, input: Node) -> SBoolExpr {
+    let mid = match &m1.node {
+        UseMemory::Memory { memory } => &memory.node,
+        UseMemory::WithOwner { memory, owner: _ } => &memory.node,
+    };
+    let mid1 = match &m2.node {
+        UseMemory::Memory { memory } => &memory.node,
+        UseMemory::WithOwner { memory, owner: _ } => &memory.node,
+    };
+
+    if let Some(ty1) = input.user_data().borrow().memories.get(mid) {
+        if let Some(ty2) = input.user_data().borrow().memories.get(mid1) {
+            if ty1 == ty2 {
+                match ty1 {
+                    MemType::Int => {
+                        let int = SIntExpr {
+                            node: IntExpr::Memory { memory: m1 },
+                            span: span.clone()
+                        };
+                        let int1 = SIntExpr {
+                            node: IntExpr::Memory { memory: m2 },
+                            span: span.clone()
+                        };
+                        let int_cmp = SIntCompare {
+                            node: IntCompare::Eq,
+                            span: e
+                        };
+
+                        return saggregate_compare_bool(CompareBool::Int { int , cmp: int_cmp, int1 }, span)
+                    },
+                    MemType::String => {
+                        let string = SStringExpr {
+                            node: StringExpr::Memory { memory: m1 },
+                            span: span.clone()
+                        };
+                        let string1 = SStringExpr {
+                            node: StringExpr::Memory { memory: m2 },
+                            span: span.clone()
+                        };
+                        let string_cmp = SStringCompare {
+                            node: StringCompare::Eq,
+                            span: e
+                        };
+
+                        return saggregate_compare_bool(CompareBool::String { string , cmp: string_cmp, string1 }, span)
+                    },
+                    MemType::CardSet => {
+                        let card_set = SCardSet {
+                            node: CardSet::Memory { memory: m1 },
+                            span: span.clone()
+                        };
+                        let card_set1 = SCardSet {
+                            node: CardSet::Memory { memory: m2 },
+                            span: span.clone()
+                        };
+                        let card_set_cmp = SCardSetCompare {
+                            node: CardSetCompare::Eq,
+                            span: e
+                        };
+
+                        return saggregate_compare_bool(CompareBool::CardSet { card_set , cmp: card_set_cmp, card_set1 }, span)
+                    },
+                    // FallBack
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // FallBack
+    let int = SIntExpr {
+        node: IntExpr::Memory { memory: m1 },
+        span: span.clone()
+    };
+    let int1 = SIntExpr {
+        node: IntExpr::Memory { memory: m2 },
+        span: span.clone()
+    };
+    let int_cmp = SIntCompare {
+        node: IntCompare::Eq,
+        span: e
+    };
+
+    saggregate_compare_bool(CompareBool::Int { int , cmp: int_cmp, int1 }, span)
+}
+
+
+fn resolve_use_memory_neq_use_memory(m1: Spanned<UseMemory>, ne: OwnedSpan, m2: Spanned<UseMemory>, span: OwnedSpan, input: Node) -> SBoolExpr {
+    let mid = match &m1.node {
+        UseMemory::Memory { memory } => &memory.node,
+        UseMemory::WithOwner { memory, owner: _ } => &memory.node,
+    };
+    let mid1 = match &m2.node {
+        UseMemory::Memory { memory } => &memory.node,
+        UseMemory::WithOwner { memory, owner: _ } => &memory.node,
+    };
+
+    if let Some(ty1) = input.user_data().borrow().memories.get(mid) {
+        if let Some(ty2) = input.user_data().borrow().memories.get(mid1) {
+            if ty1 == ty2 {
+                match ty1 {
+                    MemType::Int => {
+                        let int = SIntExpr {
+                            node: IntExpr::Memory { memory: m1 },
+                            span: span.clone()
+                        };
+                        let int1 = SIntExpr {
+                            node: IntExpr::Memory { memory: m2 },
+                            span: span.clone()
+                        };
+                        let int_cmp = SIntCompare {
+                            node: IntCompare::Neq,
+                            span: ne
+                        };
+
+                        return saggregate_compare_bool(CompareBool::Int { int , cmp: int_cmp, int1 }, span)
+                    },
+                    MemType::String => {
+                        let string = SStringExpr {
+                            node: StringExpr::Memory { memory: m1 },
+                            span: span.clone()
+                        };
+                        let string1 = SStringExpr {
+                            node: StringExpr::Memory { memory: m2 },
+                            span: span.clone()
+                        };
+                        let string_cmp = SStringCompare {
+                            node: StringCompare::Neq,
+                            span: ne
+                        };
+
+                        return saggregate_compare_bool(CompareBool::String { string , cmp: string_cmp, string1 }, span)
+                    },
+                    MemType::CardSet => {
+                        let card_set = SCardSet {
+                            node: CardSet::Memory { memory: m1 },
+                            span: span.clone()
+                        };
+                        let card_set1 = SCardSet {
+                            node: CardSet::Memory { memory: m2 },
+                            span: span.clone()
+                        };
+                        let card_set_cmp = SCardSetCompare {
+                            node: CardSetCompare::Neq,
+                            span: ne
+                        };
+
+                        return saggregate_compare_bool(CompareBool::CardSet { card_set , cmp: card_set_cmp, card_set1 }, span)
+                    },
+                    // FallBack
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // FallBack
+    let int = SIntExpr {
+        node: IntExpr::Memory { memory: m1 },
+        span: span.clone()
+    };
+    let int1 = SIntExpr {
+        node: IntExpr::Memory { memory: m2 },
+        span: span.clone()
+    };
+    let int_cmp = SIntCompare {
+        node: IntCompare::Neq,
+        span: ne
+    };
+
+    saggregate_compare_bool(CompareBool::Int { int , cmp: int_cmp, int1 }, span)
 }

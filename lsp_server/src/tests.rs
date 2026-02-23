@@ -1,15 +1,14 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use arc_swap::ArcSwapAny;
-use tokio::sync::{Mutex, mpsc};
-use dashmap::DashMap;
-use tower_lsp::{lsp_types::Url, *};
-use crate::lsp::{Backend};
-use tower_lsp::Client;
-
 #[tokio::test]
 async fn test_initialization_flow() {
+    use std::{collections::HashMap};
+    use arc_swap::ArcSwapAny;
+    use tokio::sync::{Mutex, mpsc};
+    use dashmap::DashMap;
+    use tower_lsp::{*};
+    use crate::lsp::{Backend};
+
     // 1. Setup a real channel to intercept messages the server sends to the 'client'
-    let (service, mut messages) = LspService::build(|client| {
+    let (service, _) = LspService::build(|client| {
         Backend {
             client,
             documents: Mutex::new(HashMap::new()),

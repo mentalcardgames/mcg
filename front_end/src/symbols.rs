@@ -257,9 +257,7 @@ impl AstPass for SymbolVisitor {
                             self.use_id(&location);
                         }
                     },
-                    LocationCollection::Memory { memory } => {
-                        /* TODO */
-                    },
+                    _ => {}
                 }
             },
             NodeKind::Group(g) => {

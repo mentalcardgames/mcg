@@ -223,6 +223,7 @@ pub enum Payload<Ctx: AstContext>
   EndStage(Ctx::Id),
   Choice,
   Optional,
+  Trigger,
 }
 
 impl<Ctx: AstContext> Payload<Ctx> {
@@ -246,6 +247,9 @@ impl<Ctx: AstContext> Payload<Ctx> {
             },
             Payload::Optional => {
               "Optional"
+            },
+            Payload::Trigger => {
+              "Trigger"
             },
         };
 
@@ -318,6 +322,7 @@ impl From<Ir<SpannedPayload>> for Ir<LoweredPayLoad> {
               },
               Payload::Choice => Payload::Choice,
               Payload::Optional => Payload::Optional,
+              Payload::Trigger => Payload::Trigger,
             };
           
             edges.push(Edge { to: e.to,  payload: lowered_payload, meta: None});
@@ -476,9 +481,11 @@ impl IrBuilder<SpannedPayload> {
             self.build_seq_stage(&stage.node, entry, exit)
         },
         FlowComponent::SimStage { stage } => {
-            // TODO
-            // self.build_seq_stage(&stage.node, entry, exit)
-            0
+            // TODO:
+            // Place holde
+            // Function is just seq stage
+            self.build_sim_stage(&stage.node, entry, exit)
+            
         },
         FlowComponent::Rule {game_rule} => {
             // Can have GameFlowChanges! So return here.
@@ -489,6 +496,9 @@ impl IrBuilder<SpannedPayload> {
         },
         FlowComponent::OptionalRule { optional_rule} => {
             self.build_optional_rule(&optional_rule.node, entry, exit)
+        },
+        FlowComponent::TriggerRule { trigger_rule} => {
+            self.build_trigger_rule(&trigger_rule.node, entry, exit)
         },
         FlowComponent::Conditional {conditional} => {
             self.build_cond_rule(&conditional.node, entry, exit)
@@ -726,7 +736,7 @@ impl IrBuilder<SpannedPayload> {
                     return GameFlowChange::None(exit)
                   }
                 },
-                EndType::GameWithWinner { players } => {
+                EndType::GameWithWinner { players: _ } => {
                   let goal = self.fsm.goal.0;
 
                   self.new_edge(
@@ -862,6 +872,15 @@ impl IrBuilder<SpannedPayload> {
     self.new_edge(entry, optional_body, Payload::Optional, None);
     self.build_flows(&optional_rule.flows, optional_body, exit);
     self.new_edge(entry, exit, Payload::Optional, None);
+
+    return exit
+  }
+
+  /// GameFlowChanges are handled separately. build_optional_rule does not need to worry!
+  fn build_trigger_rule(&mut self, trigger_rule: &TriggerRule, entry: u32, exit: u32) -> u32 {
+    let trigger_body = self.new_state();
+    self.new_edge(entry, trigger_body, Payload::Trigger, None);
+    self.build_flows(&trigger_rule.flows, trigger_body, exit);
 
     return exit
   }

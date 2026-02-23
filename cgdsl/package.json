@@ -14,10 +14,6 @@
       "editor.semanticHighlighting.enabled": true
     }
   },
-  "activationEvents": [
-    "onLanguage:cgdsl",
-    "onCommand:cgdsl.runFile"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [{

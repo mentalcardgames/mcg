@@ -1,5 +1,4 @@
 use core::fmt;
-use std::fmt::format;
 
 use crate::ast::*;
 
@@ -268,7 +267,7 @@ impl fmt::Display for QueryPlayer {
 impl fmt::Display for AggregatePlayer {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
       let s = match self {
-        AggregatePlayer::OwnerOfCardPostion { card_position: card_position } => &format!("owner of {}", card_position),
+        AggregatePlayer::OwnerOfCardPostion { card_position } => &format!("owner of {}", card_position),
         AggregatePlayer::OwnerOfMemory { extrema, memory } => &format!("owner of {} {}", extrema, memory),
       };
       f.write_str(s)
@@ -1106,6 +1105,20 @@ impl fmt::Display for OptionalRule {
   }
 }
 
+impl fmt::Display for TriggerRule {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let flows = self.flows
+      .iter()
+      .map(|f| format!("{}", f)) // convert each int to string
+      .collect::<Vec<_>>()    // collect into Vec<String>
+      .join("\n");
+
+    let s = &format!("trigger {{\n {} }}\n", flows);
+    f.write_str(s)
+  }
+}
+
+
 impl fmt::Display for Case {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let s = match self {
@@ -1172,6 +1185,8 @@ impl fmt::Display for FlowComponent {
           &format!("{}", optional_rule),
         FlowComponent::Conditional{conditional} =>
           &format!("{}", conditional),
+        FlowComponent::TriggerRule{trigger_rule} =>
+          &format!("{}", trigger_rule),
     };
     f.write_str(s)
   }

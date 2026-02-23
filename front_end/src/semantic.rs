@@ -54,6 +54,7 @@ impl CorrespondanceType {
 pub struct SemanticVisitor {
   init_corr: HashMap<CorrespondanceType, (String, OwnedSpan)>,
   used_corr: Vec<UsedCorrespondence>,
+  // Resolving Memory Types
   memories: Vec<(String, (MemType, OwnedSpan))>
 }
 
@@ -155,11 +156,11 @@ impl AstPass for SemanticVisitor {
         match unwrapped_node {
           NodeKind::SetUpRule(s) => {
             match s {
-              SetUpRule::CreateMemoryWithMemoryType { memory, memory_type, owner } => {
+              SetUpRule::CreateMemoryWithMemoryType { memory, memory_type, owner: _ } => {
                   self.memories.push((memory.node.clone(), (memory_type_to_mem_type(&memory_type.node), memory.span.clone())));
                   // TODO: Owner
               },
-              SetUpRule::CreatePrecedence { precedence: precedence, kvs: key_value_pairs } => {
+              SetUpRule::CreatePrecedence { precedence, kvs: key_value_pairs } => {
                 for (k, v) in key_value_pairs.iter() {
                   self.init_corr.insert( 
                     CorrespondanceType::Precedence { 
@@ -176,7 +177,7 @@ impl AstPass for SemanticVisitor {
                   );
                 }
               },
-              SetUpRule::CreatePointMap { pointmap: pointmap, kvis: key_value_int_triples} => {
+              SetUpRule::CreatePointMap { pointmap, kvis: key_value_int_triples} => {
                 for (k, v, _) in key_value_int_triples.iter() {
                   self.init_corr.insert( 
                     CorrespondanceType::PointMap { 
@@ -217,20 +218,8 @@ impl AstPass for SemanticVisitor {
                   UseMemory::Memory { memory: mem } => {
                     self.memories.push((mem.node.clone(), (MemType::String, mem.span.clone())));
                   },
-                  UseMemory::WithOwner { memory: mem, owner } => {
+                  UseMemory::WithOwner { memory: mem, owner: _ } => {
                       self.memories.push((mem.node.clone(), (MemType::String, mem.span.clone())));
-
-                    // match &owner.node {
-                    //     Owner::PlayerCollection { player_collection } => {
-                    //       self.memories.push((mem.node.clone(), (MemType::StringCollection, mem.span.clone())));
-                    //     }
-                    //     Owner::TeamCollection { team_collection } => {
-                    //       self.memories.push((mem.node.clone(), (MemType::StringCollection, mem.span.clone())));
-                    //     },
-                    //     _ => {
-                    //       self.memories.push((mem.node.clone(), (MemType::String, mem.span.clone())));
-                    //     },
-                    // }
                     // TODO check if owner is correct
                   },
                 }
@@ -245,20 +234,8 @@ impl AstPass for SemanticVisitor {
                   UseMemory::Memory { memory: mem } => {
                     self.memories.push((mem.node.clone(), (MemType::Int, mem.span.clone())));
                   },
-                  UseMemory::WithOwner { memory: mem, owner } => {
+                  UseMemory::WithOwner { memory: mem, owner: _ } => {
                     self.memories.push((mem.node.clone(), (MemType::Int, mem.span.clone())));
-
-                    // match &owner.node {
-                    //     Owner::PlayerCollection { player_collection } => {
-                    //       self.memories.push((mem.node.clone(), (MemType::IntCollection, mem.span.clone())));
-                    //     }
-                    //     Owner::TeamCollection { team_collection } => {
-                    //       self.memories.push((mem.node.clone(), (MemType::IntCollection, mem.span.clone())));
-                    //     },
-                    //     _ => {
-                    //       self.memories.push((mem.node.clone(), (MemType::Int, mem.span.clone())));
-                    //     },
-                    // }
                     // TODO check if owner is correct
                   },
                 }
@@ -277,10 +254,10 @@ impl AstPass for SemanticVisitor {
                     // self.memories.push((mem.node.clone(), (MemType::IntCollection, mem.span.clone())));
 
                     match &owner.node {
-                        Owner::PlayerCollection { player_collection } => {
+                        Owner::PlayerCollection { player_collection: _ } => {
                           self.memories.push((mem.node.clone(), (MemType::Int, mem.span.clone())));
                         }
-                        Owner::TeamCollection { team_collection } => {
+                        Owner::TeamCollection { team_collection: _ } => {
                           self.memories.push((mem.node.clone(), (MemType::Int, mem.span.clone())));
                         },
                         _ => {
@@ -305,10 +282,10 @@ impl AstPass for SemanticVisitor {
                     // self.memories.push((mem.node.clone(), (MemType::StringCollection, mem.span.clone())));
 
                     match &owner.node {
-                        Owner::PlayerCollection { player_collection } => {
+                        Owner::PlayerCollection { player_collection: _ } => {
                           self.memories.push((mem.node.clone(), (MemType::String, mem.span.clone())));
                         }
-                        Owner::TeamCollection { team_collection } => {
+                        Owner::TeamCollection { team_collection: _ } => {
                           self.memories.push((mem.node.clone(), (MemType::String, mem.span.clone())));
                         },
                         _ => {
@@ -329,7 +306,7 @@ impl AstPass for SemanticVisitor {
                   UseMemory::Memory { memory: mem } => {
                     self.memories.push((mem.node.clone(), (MemType::LocationCollection, mem.span.clone())));
                   },
-                  UseMemory::WithOwner { memory: mem, owner } => {
+                  UseMemory::WithOwner { memory: mem, owner: _ } => {
                     self.memories.push((mem.node.clone(), (MemType::LocationCollection, mem.span.clone())));
                     // TODO check if owner is correct
                   },
@@ -345,7 +322,7 @@ impl AstPass for SemanticVisitor {
                   UseMemory::Memory { memory: mem } => {
                     self.memories.push((mem.node.clone(), (MemType::PlayerCollection, mem.span.clone())));
                   },
-                  UseMemory::WithOwner { memory: mem, owner } => {
+                  UseMemory::WithOwner { memory: mem, owner: _ } => {
                     self.memories.push((mem.node.clone(), (MemType::PlayerCollection, mem.span.clone())));
                     // TODO check if owner is correct
                   },
@@ -361,7 +338,7 @@ impl AstPass for SemanticVisitor {
                   UseMemory::Memory { memory: mem } => {
                     self.memories.push((mem.node.clone(), (MemType::TeamCollection, mem.span.clone())));
                   },
-                  UseMemory::WithOwner { memory: mem, owner } => {
+                  UseMemory::WithOwner { memory: mem, owner: _ } => {
                     self.memories.push((mem.node.clone(), (MemType::TeamCollection, mem.span.clone())));
                     // TODO check if owner is correct
                   },
@@ -377,7 +354,7 @@ impl AstPass for SemanticVisitor {
                   UseMemory::Memory { memory: mem } => {
                     self.memories.push((mem.node.clone(), (MemType::CardSet, mem.span.clone())));
                   },
-                  UseMemory::WithOwner { memory: mem, owner } => {
+                  UseMemory::WithOwner { memory: mem, owner: _ } => {
                     self.memories.push((mem.node.clone(), (MemType::CardSet, mem.span.clone())));
                     // TODO check if owner is correct
                   },
@@ -388,7 +365,7 @@ impl AstPass for SemanticVisitor {
           },
           NodeKind::AggregateFilter(a) => {
             match a {
-                AggregateFilter::Adjacent { key: key, precedence: precedence} => {
+                AggregateFilter::Adjacent { key, precedence } => {
                   self.used_corr.push(
                     UsedCorrespondence { 
                       ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
@@ -397,48 +374,7 @@ impl AstPass for SemanticVisitor {
                     }
                   );
                 },
-                AggregateFilter::Higher { key: key, value, precedence: precedence} => {
-                  self.used_corr.push(
-                    UsedCorrespondence { 
-                      ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
-                      key: key.node.clone(), 
-                      span: precedence.span.clone() 
-                    }
-                  );
-                  match &value.node {
-                    StringExpr::Query { query: q} => {
-                      match &q.node {
-                        QueryString::KeyOf { key: k, card_position: _} => {
-                          self.init_corr.insert( 
-                              CorrespondanceType::Key { 
-                                node: k.node.clone() 
-                              }, 
-                            (k.node.clone(), k.span.clone())
-                          );
-                          self.used_corr.push(
-                            UsedCorrespondence { 
-                              ty: CorrespondanceType::Key { node: k.node.clone() }, 
-                              key: key.node.clone(), 
-                              span: k.span.clone() 
-                            }
-                          );
-                        },
-                        _ => {}
-                      }
-                    },
-                    StringExpr::Literal { value: value} => {
-                      self.used_corr.push(
-                        UsedCorrespondence { 
-                          ty: CorrespondanceType::Value { node: value.node.clone() }, 
-                          key: key.node.clone(), 
-                          span: value.span.clone() 
-                        }
-                      );
-                    },
-                    _ => {}
-                  }
-                },
-                AggregateFilter::Lower { key: key, value, precedence: precedence} => {
+                AggregateFilter::Higher { key, value, precedence} => {
                   self.used_corr.push(
                     UsedCorrespondence { 
                       ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
@@ -467,7 +403,7 @@ impl AstPass for SemanticVisitor {
                         _ => {}
                       }
                     },
-                    StringExpr::Literal { value: value} => {
+                    StringExpr::Literal { value } => {
                       self.used_corr.push(
                         UsedCorrespondence { 
                           ty: CorrespondanceType::Value { node: value.node.clone() }, 
@@ -479,8 +415,15 @@ impl AstPass for SemanticVisitor {
                     _ => {}
                   }
                 },
-                AggregateFilter::KeyIsString { key: key, string: string} => {
-                  match &string.node {
+                AggregateFilter::Lower { key, value, precedence } => {
+                  self.used_corr.push(
+                    UsedCorrespondence { 
+                      ty: CorrespondanceType::Precedence { node: precedence.node.clone() }, 
+                      key: key.node.clone(), 
+                      span: precedence.span.clone() 
+                    }
+                  );
+                  match &value.node {
                     StringExpr::Query { query: q} => {
                       match &q.node {
                         QueryString::KeyOf { key: k, card_position: _} => {
@@ -501,7 +444,7 @@ impl AstPass for SemanticVisitor {
                         _ => {}
                       }
                     },
-                    StringExpr::Literal { value: value} => {
+                    StringExpr::Literal { value } => {
                       self.used_corr.push(
                         UsedCorrespondence { 
                           ty: CorrespondanceType::Value { node: value.node.clone() }, 
@@ -510,12 +453,10 @@ impl AstPass for SemanticVisitor {
                         }
                       );
                     },
-                    StringExpr::Memory { memory } => {
-                      /* TODO */
-                    },
+                    _ => {}
                   }
                 },
-                AggregateFilter::KeyIsNotString { key: key, string: string} => {
+                AggregateFilter::KeyIsString { key, string } => {
                   match &string.node {
                     StringExpr::Query { query: q} => {
                       match &q.node {
@@ -537,7 +478,41 @@ impl AstPass for SemanticVisitor {
                         _ => {}
                       }
                     },
-                    StringExpr::Literal { value: value} => {
+                    StringExpr::Literal { value } => {
+                      self.used_corr.push(
+                        UsedCorrespondence { 
+                          ty: CorrespondanceType::Value { node: value.node.clone() }, 
+                          key: key.node.clone(), 
+                          span: value.span.clone() 
+                        }
+                      );
+                    },
+                    _ => {}
+                  }
+                },
+                AggregateFilter::KeyIsNotString { key, string } => {
+                  match &string.node {
+                    StringExpr::Query { query: q} => {
+                      match &q.node {
+                        QueryString::KeyOf { key: k, card_position: _} => {
+                          self.init_corr.insert( 
+                              CorrespondanceType::Key { 
+                                node: k.node.clone() 
+                              }, 
+                            (k.node.clone(), k.span.clone())
+                          );
+                          self.used_corr.push(
+                            UsedCorrespondence { 
+                              ty: CorrespondanceType::Key { node: k.node.clone() }, 
+                              key: key.node.clone(), 
+                              span: k.span.clone() 
+                            }
+                          );
+                        },
+                        _ => {}
+                      }
+                    },
+                    StringExpr::Literal { value} => {
                       self.used_corr.push(
                         UsedCorrespondence { 
                           ty: CorrespondanceType::Value { node: value.node.clone() }, 
@@ -557,7 +532,7 @@ impl AstPass for SemanticVisitor {
               ActionRule::SetMemory { memory, memory_type } => {
                 self.memories.push((memory.node.clone(), (memory_type_to_mem_type(&memory_type.node), memory.span.clone())));
               },
-              ActionRule::BidMemoryAction { memory, quantity, owner } => {
+              ActionRule::BidMemoryAction { memory, quantity: _, owner: _ } => {
                 self.memories.push((memory.node.clone(), (MemType::Int, memory.span.clone())));
               },
               _ => {}
@@ -565,7 +540,7 @@ impl AstPass for SemanticVisitor {
           },
           NodeKind::ScoreRule(s) => {
             match s {
-                ScoreRule::ScoreMemory { int, memory, players } => {
+                ScoreRule::ScoreMemory { int: _, memory, players: _ } => {
                   self.memories.push((memory.node.clone(), (MemType::Int, memory.span.clone())));
                 },
                 _ => {}
@@ -585,13 +560,13 @@ impl AstPass for SemanticVisitor {
 
 fn memory_type_to_mem_type(mt: &MemoryType) -> MemType {
   match mt {
-    MemoryType::Int { int } => MemType::Int,
-    MemoryType::String { string } => MemType::String,
-    MemoryType::PlayerCollection { players } => MemType::PlayerCollection,
-    MemoryType::StringCollection { strings } => MemType::StringCollection,
-    MemoryType::TeamCollection { teams } => MemType::TeamCollection,
-    MemoryType::IntCollection { ints } => MemType::IntCollection,
-    MemoryType::LocationCollection { locations } => MemType::LocationCollection,
-    MemoryType::CardSet { card_set } => MemType::CardSet,
+    MemoryType::Int { int: _ } => MemType::Int,
+    MemoryType::String { string: _ } => MemType::String,
+    MemoryType::PlayerCollection { players: _ } => MemType::PlayerCollection,
+    MemoryType::StringCollection { strings: _ } => MemType::StringCollection,
+    MemoryType::TeamCollection { teams: _ } => MemType::TeamCollection,
+    MemoryType::IntCollection { ints: _ } => MemType::IntCollection,
+    MemoryType::LocationCollection { locations: _ } => MemType::LocationCollection,
+    MemoryType::CardSet { card_set: _ } => MemType::CardSet,
   }
 }

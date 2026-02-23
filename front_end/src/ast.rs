@@ -638,6 +638,7 @@ pub mod ast {
         IfRule{if_rule: IfRule},
         ChoiceRule {choice_rule: ChoiceRule},
         OptionalRule{ optional_rule: OptionalRule},
+        TriggerRule{ trigger_rule: TriggerRule},
         Conditional {conditional: Conditional},
     }
 

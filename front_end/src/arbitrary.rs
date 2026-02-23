@@ -1,5 +1,4 @@
 use arbitrary::{Arbitrary, Unstructured, Result};
-use proptest::prelude::{Strategy, any_with, prop};
 use crate::ast::*;
 
 pub fn gen_ident(u: &mut Unstructured) -> arbitrary::Result<String> {
@@ -45,7 +44,7 @@ pub fn gen_vec_players_prefixed(u: &mut arbitrary::Unstructured) -> arbitrary::R
 
     for _ in 0..count {
         // 2. Generate the "P" prefixed string
-        let mut name = gen_player_name(u)?;
+        let name = gen_player_name(u)?;
 
         vec.push(name);
     }
@@ -60,7 +59,7 @@ pub fn gen_vec_strings(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec
 
     for _ in 0..count {
         // 2. Generate the "P" prefixed string
-        let mut name = gen_ident(u)?;
+        let name = gen_ident(u)?;
         vec.push(name);
     }
     
@@ -74,8 +73,7 @@ pub fn gen_vec_teams_with_players(u: &mut arbitrary::Unstructured) -> arbitrary:
 
     for _ in 0..count {
         // 2. Generate the "T" prefixed Team Name
-        let name_len = u.int_in_range(1..=2)?;
-        let mut team_name = gen_team_name(u)?;
+        let team_name = gen_team_name(u)?;
         
         // 3. Generate the PlayerCollection (uses its own Arbitrary impl)
         let players = PlayerCollection::arbitrary(u)?;

@@ -439,6 +439,7 @@ flow_component = {
   | choice_rule 
   | cond_rule
   | optional_rule 
+  | trigger_rule 
 }
 // =======================
 
