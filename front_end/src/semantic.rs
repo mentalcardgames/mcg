@@ -121,6 +121,7 @@ impl SemanticVisitor {
   /// The first occurrence is the infered type of the Memory.
   /// Afterwards we check if the Memory is used with other types and if so then
   /// gather the information and convert them to SemanticErrors. 
+  #[allow(dead_code)]
   fn find_memory_mismatches(&self) -> Vec<SemanticError> {
       let mut grouped: HashMap<String, Vec<(MemType, OwnedSpan)>> = HashMap::new();
 
