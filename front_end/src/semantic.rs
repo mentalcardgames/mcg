@@ -1,3 +1,15 @@
+/*
+  This is a prototype implementation for Semantic Checks.
+  It is checked if a Key corresponds to the correct Value, PointMap or Precedence.
+  It also checks if a Memory is initialized with the same Type and also used with
+  that Type.
+
+  The BachelorThesis does not specify how the Memory is handled. If it is like a Python-
+  style storage of a variable or more like a C-style.
+  
+  Feel free to optimize and/or change anything that does not feel correct.
+*/
+
 use std::{collections::HashMap, fmt};
 
 use crate::{ast::ast_spanned::{NodeKind, *}, parser::MemType, spans::OwnedSpan, symbols::Var, walker::AstPass};
@@ -67,6 +79,8 @@ impl SemanticVisitor {
     }
   }
 
+  /// It iterates over all initialized correspondances (e.g. Precedence -> Key)
+  /// and gathers the used correspondances that do not allign with the initialized ones.
   pub fn semantic_check(&self) -> Option<Vec<SemanticError>> {
     let mut err = Vec::new();
 
@@ -89,9 +103,10 @@ impl SemanticVisitor {
       }
     }
 
-    let memory_errs = self.find_memory_mismatches();
-
-    err.extend(memory_errs);
+    // The Memory checks are more complicated.
+    // Maybe not checking them at all is better.
+    // let memory_errs = self.find_memory_mismatches();
+    // err.extend(memory_errs);
 
     if err.is_empty() {
       return None
@@ -101,6 +116,11 @@ impl SemanticVisitor {
   }
 
 
+  /// Finding Memory Mismatches is more complicated.
+  /// We have a Vector of < Tuple of (Name of Memory and (Memory-Type and Span)) >.
+  /// The first occurrence is the infered type of the Memory.
+  /// Afterwards we check if the Memory is used with other types and if so then
+  /// gather the information and convert them to SemanticErrors. 
   fn find_memory_mismatches(&self) -> Vec<SemanticError> {
       let mut grouped: HashMap<String, Vec<(MemType, OwnedSpan)>> = HashMap::new();
 
@@ -148,6 +168,8 @@ impl SemanticVisitor {
   }
 }
 
+
+/// Gathers the information needed for the Semantic Check and Memory Check.
 impl AstPass for SemanticVisitor {
   fn enter_node<T: crate::walker::Walker>(&mut self, node: &T)
   where

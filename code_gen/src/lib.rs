@@ -1,39 +1,22 @@
+/*
+    Manually writing repetitive logic for a walker or lowering-logic or even a mirrored spanned version of the original AST is very annoying.
+    This crate allows to generate all of it.
+
+    We can specify:
+    #[spanned_ast] over a module and it will generate a sub-module with the Spanned-version, walker-logic and lowering-logic with it.
+
+    If you have trouble with declaring the AST then change by your liking. 
+*/
+
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Fields, Ident, Item, ItemMod, Token, Variant, Visibility, parse_macro_input, punctuated::Punctuated};
 
-fn generate_struct_walk(fields: &syn::Fields) -> proc_macro2::TokenStream {
-    match fields {
-        Fields::Named(f) => {
-            let names = f.named.iter().map(|field| &field.ident);
-            quote! { #( self.#names.walk(visitor); )* }
-        }
-        Fields::Unnamed(f) => {
-            let indices = (0..f.unnamed.len()).map(syn::Index::from);
-            quote! { #( self.#indices.walk(visitor); )* }
-        }
-        Fields::Unit => quote! {},
-    }
-}
-
-fn generate_enum_walk(variants: &syn::punctuated::Punctuated<syn::Variant, syn::Token![,]>) -> proc_macro2::TokenStream {
-    let arms = variants.iter().map(|v| {
-        let v_ident = &v.ident;
-        match &v.fields {
-            Fields::Unnamed(fields) => {
-                let vars: Vec<_> = (0..fields.unnamed.len()).map(|i| format_ident!("_f{}", i)).collect();
-                quote! { Self::#v_ident( #(#vars),* ) => { #(#vars.walk(visitor);)* } }
-            }
-            Fields::Named(fields) => {
-                let names: Vec<_> = fields.named.iter().map(|f| &f.ident).collect();
-                quote! { Self::#v_ident { #(#names),* } => { #(#names.walk(visitor);)* } }
-            }
-            Fields::Unit => quote! { Self::#v_ident => {} },
-        }
-    });
-    quote! { match self { #(#arms)* } }
-}
-
+// ===========================================================================
+// ===========================================================================
+// Main-Logic
+// ===========================================================================
+// ===========================================================================
 #[proc_macro_attribute]
 pub fn spanned_ast(_: TokenStream, item: TokenStream) -> TokenStream {
     let module = parse_macro_input!(item as ItemMod);
@@ -210,6 +193,12 @@ pub fn spanned_ast(_: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+
+// ===========================================================================
+// ===========================================================================
+// Helper
+// ===========================================================================
+// ===========================================================================
 fn span_fields(fields: &mut syn::Fields) {
     for field in fields.iter_mut() {
         field.ty = transform_type_spanned(&field.ty);
@@ -244,19 +233,19 @@ fn transform_type_spanned(ty: &syn::Type) -> syn::Type {
 
             match &mut last_segment.arguments {
                 syn::PathArguments::AngleBracketed(args) => {
-                    // ✅ This is a container/wrapper
+                    // This is a container/wrapper
                     for arg in &mut args.args {
                         if let syn::GenericArgument::Type(inner_ty) = arg {
                             *inner_ty = transform_type_spanned(inner_ty);
                         }
                     }
 
-                    // 🚨 DO NOT WRAP OUTER TYPE
+                    // DO NOT WRAP OUTER TYPE
                     syn::Type::Path(new_path)
                 }
 
                 _ => {
-                    // ✅ No generics → this is a leaf AST node
+                    // No generics → this is a leaf AST node
                     syn::parse_quote!(Spanned<#ty>)
                 }
             }
@@ -280,6 +269,11 @@ fn transform_type_spanned(ty: &syn::Type) -> syn::Type {
     }
 }
 
+// ===========================================================================
+// ===========================================================================
+// Lowering Logic
+// ===========================================================================
+// ===========================================================================
 fn generate_struct_lower_spanned(
     name: &Ident,
     fields: &Fields,
@@ -364,6 +358,50 @@ fn generate_enum_lower_spanned(
     }
 }
 
+// ===========================================================================
+// ===========================================================================
+// Walking Logic
+// ===========================================================================
+// ===========================================================================
+fn generate_struct_walk(fields: &syn::Fields) -> proc_macro2::TokenStream {
+    match fields {
+        Fields::Named(f) => {
+            let names = f.named.iter().map(|field| &field.ident);
+            quote! { #( self.#names.walk(visitor); )* }
+        }
+        Fields::Unnamed(f) => {
+            let indices = (0..f.unnamed.len()).map(syn::Index::from);
+            quote! { #( self.#indices.walk(visitor); )* }
+        }
+        Fields::Unit => quote! {},
+    }
+}
+
+fn generate_enum_walk(variants: &syn::punctuated::Punctuated<syn::Variant, syn::Token![,]>) -> proc_macro2::TokenStream {
+    let arms = variants.iter().map(|v| {
+        let v_ident = &v.ident;
+        match &v.fields {
+            Fields::Unnamed(fields) => {
+                let vars: Vec<_> = (0..fields.unnamed.len()).map(|i| format_ident!("_f{}", i)).collect();
+                quote! { Self::#v_ident( #(#vars),* ) => { #(#vars.walk(visitor);)* } }
+            }
+            Fields::Named(fields) => {
+                let names: Vec<_> = fields.named.iter().map(|f| &f.ident).collect();
+                quote! { Self::#v_ident { #(#names),* } => { #(#names.walk(visitor);)* } }
+            }
+            Fields::Unit => quote! { Self::#v_ident => {} },
+        }
+    });
+    quote! { match self { #(#arms)* } }
+}
+
+// ===========================================================================
+// ===========================================================================
+// Remove Traits that clash with the generated Spanned AST
+// E.g. Arbitrary clashes and is not necessary to have for the Spanned AST
+// (only the unspanned/lowered AST has trait Arbitrary!)
+// ===========================================================================
+// ===========================================================================
 fn scrub_arbitrary_derive(attrs: &mut Vec<syn::Attribute>) {
     attrs.retain_mut(|attr| {
         if attr.path().is_ident("derive") {

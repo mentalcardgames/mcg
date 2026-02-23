@@ -1,3 +1,8 @@
+/*
+    We give an extra output for checking if the game generated is visually fine.
+    In this file is defined how to convert the IR into a visual depiction of it.
+*/
+
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;

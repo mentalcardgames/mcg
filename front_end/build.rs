@@ -1,3 +1,11 @@
+/*
+    We want to have some auto-completion. This is just a prototype sketch for very basic auto-completion.
+
+    Feel free to optimize and making it better as it is right now.
+
+    However due to the deeply recursive nature of the grammar this will be a big task to do it nicely.
+*/
+
 use std::collections::HashMap;
 
 use pest_meta::ast::Expr;
@@ -29,7 +37,8 @@ fn main() {
             continue;
         }
 
-        let mut variants = flatten_expression(&rule.expr, 1, &rule_map, &mut Vec::new(), 2);
+        // Depth decides on how deep/long the completion should be
+        let mut variants = flatten_expression(&rule.expr, 1, &rule_map, &mut Vec::new(), 1);
 
         // Safety: only take the first 50 variants so the LSP doesn't lag
         if variants.len() > 15 {

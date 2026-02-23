@@ -5,7 +5,7 @@ digraph CFG {
   entry [shape=point];
   entry -> 0;
   2 -> 1 [xlabel=" Action "];
+  3 -> 1 [xlabel=" Action "];
   0 -> 2 [xlabel=" Choice "];
   0 -> 3 [xlabel=" Choice "];
-  3 -> 1 [xlabel=" Action "];
 }

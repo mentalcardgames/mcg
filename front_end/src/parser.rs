@@ -1,3 +1,26 @@
+/*
+    This is the Parsing logic. We use a "direct to AST"-parsing method.
+    The library used are pest and especially pest_consume.
+
+    The Grammar is in some parts ambiguous so a Symbol-Table is added (is doable with pest_consume)
+    to resolve the ambiguous Rules (e.g. Collection: "(" ident ("," ident)* ")" is matched by multiple
+    collections: LocationCollection, PlayerCollection, TeamCollection)
+
+    It might make sense to use (or return to) a Sigil-style type naming in the future to get rid of ambiguity:
+    - Players start with "P"
+    - Teams start with "T"
+    - Combos start with "C"
+    - ...
+    - Memory-Type:
+    > Player-Memory starts with "P:"
+    > ...
+
+    This would make the parsing very dumb and easy to extend.
+
+    However if no more ambiguity comes forth that we can keep this approach.
+*/
+
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 

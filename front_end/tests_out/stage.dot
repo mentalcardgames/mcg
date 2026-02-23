@@ -5,12 +5,12 @@ digraph CFG {
   entry [shape=point];
   entry -> 0;
   7 -> 1 [xlabel=" Action "];
+  0 -> 3 [xlabel=" Action "];
+  2 -> 0 [xlabel=" Stage Round Counter "];
+  6 -> 7 [xlabel=" Condition "];
+  6 -> 5 [xlabel=" Not Condition "];
   3 -> 2 [xlabel=" Not EndCondition "];
   3 -> 4 [xlabel=" EndCondition "];
   4 -> 6 [xlabel=" Action "];
   5 -> 3 [xlabel=" Stage Round Counter "];
-  6 -> 7 [xlabel=" Condition "];
-  6 -> 5 [xlabel=" Not Condition "];
-  2 -> 0 [xlabel=" Stage Round Counter "];
-  0 -> 3 [xlabel=" Action "];
 }

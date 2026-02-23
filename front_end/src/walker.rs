@@ -1,3 +1,19 @@
+/*
+    There are two ASTs used in this front-end:
+    Spanned AST and an unspanned (lowered) AST.
+
+    The Spanned is used for validation and parsing for
+    better Error-reporting.
+
+    The unspanned AST is given to the game engine.
+
+    The Spanned AST gets a generated Walker-Implementation as well.
+    This Walker/Visitor can be used for validation.
+
+    The type NodeKind is also generated in code_gen.
+    How NodeKind is used: Look at symbol.rs or semantic.rs. 
+*/
+
 use crate::spans::*;
 
 use crate::ast::ast_spanned::NodeKind as NodeKind;
@@ -41,14 +57,14 @@ where
     S: Walker,
 {
     fn walk<V: AstPass>(&self, visitor: &mut V) {
-        // We iterate through the vector and call walk on every element.
+        // We iterate through the tuple and call walk on every element.
         // If T is Spanned<something>, it uses your Spanned implementation.
         self.0.walk(visitor);
         self.1.walk(visitor);  
     }
 
     fn kind(&self) -> Option<NodeKind<'_>> {
-        // Usually, vectors aren't considered a single "node" in the AST 
+        // Usually, tuples aren't considered a single "node" in the AST 
         // sense for kind-tracking, so we often return a generic tag.
         None
     }
@@ -61,7 +77,7 @@ where
     P: Walker,
 {
     fn walk<V: AstPass>(&self, visitor: &mut V) {
-        // We iterate through the vector and call walk on every element.
+        // We iterate through the typle and call walk on every element.
         // If T is Spanned<something>, it uses your Spanned implementation.
         self.0.walk(visitor);
         self.1.walk(visitor);  
@@ -69,7 +85,7 @@ where
     }
 
     fn kind(&self) -> Option<NodeKind<'_>> {
-        // Usually, vectors aren't considered a single "node" in the AST 
+        // Usually, tuples aren't considered a single "node" in the AST 
         // sense for kind-tracking, so we often return a generic tag.
         None
     }

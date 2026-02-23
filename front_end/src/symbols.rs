@@ -1,3 +1,11 @@
+/*
+    We check the Symbols via two main concepts: Initialization and Usage.
+    If a Variable is used we give the Variable a NoType. If it is initialized
+    then we give it the specific initialization Type (e.g. GameType::Player).
+    We can catch if a Symbol is never initialized and/or if it is defined
+    multiple times.
+*/
+
 use std::collections::HashMap;
 
 use crate::ast::ast_spanned::*;
@@ -5,6 +13,30 @@ use crate::spans::*;
 use crate::walker::AstPass;
 use crate::ast::ast_spanned::NodeKind as NodeKind;
 use crate::walker::Walker;
+
+
+#[derive(Debug, Clone)]
+pub struct Var {
+  pub id: String,
+  pub span: OwnedSpan,
+}
+
+impl From<SID> for Var {
+    fn from(value: SID) -> Self {
+      Var {
+        id: value.node,
+        span: value.span
+      }
+    }
+}
+
+impl PartialEq for Var {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+pub type TypedVars = Vec<(Var, GameType)>;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum GameType {
@@ -40,6 +72,7 @@ impl SymbolVisitor {
     pub fn new() -> Self {
         SymbolVisitor { symbols: HashMap::new() }
     }
+
     fn use_id(&mut self, id: &SID) {
         self.symbols.insert(id.clone(), GameType::NoType);
     }
@@ -48,6 +81,7 @@ impl SymbolVisitor {
         self.symbols.insert(id.clone(), game_type);
     }
 
+    /// Checks for multiple declarations and no initialization.
     pub fn check_game_type(&self) -> Option<Vec<SymbolError>> {
         let mut errs = Vec::new();
 
@@ -112,6 +146,7 @@ impl SymbolVisitor {
             .collect::<TypedVars>()
     }
 
+    /// Gives the name-resolution for the LSP (Language Server Protocol) for Semantic Highlighting
     pub fn name_resolution(&self) -> TypedVars {
         // Build lookup: String -> GameType
         let string_to_type: HashMap<String, GameType> = self.symbols
@@ -148,6 +183,7 @@ impl SymbolVisitor {
     }
 }
 
+/// Gathering the information needed to do Symbol-Checking.
 impl AstPass for SymbolVisitor {
     fn enter_node<T: Walker>(&mut self, node: &T)
     where
@@ -421,26 +457,3 @@ impl AstPass for SymbolVisitor {
         
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct Var {
-  pub id: String,
-  pub span: OwnedSpan,
-}
-
-impl From<SID> for Var {
-    fn from(value: SID) -> Self {
-      Var {
-        id: value.node,
-        span: value.span
-      }
-    }
-}
-
-impl PartialEq for Var {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-pub type TypedVars = Vec<(Var, GameType)>;

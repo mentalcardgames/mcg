@@ -1,9 +1,34 @@
+/*
+    You can define more AST-structures in here.
+    It will automatically generate a Spanned-Version of the new AST
+    and the corresponding Lowering/Walking logic for it.
+
+    Be careful with naming certain structs and enums:
+    For example the Spanned versions have always a 'S' at the front
+    of the original naming:
+    IntExpr -> SIntExpr
+
+    Do not do naming like this (in this file):
+    enum Template {
+        ...
+    } 
+
+    enum STemplate {
+        ...
+    }
+
+    This will cause an error.
+
+    For more information look at code_gen.
+*/
+
 use code_gen::*;
 
 #[spanned_ast]
 pub mod ast {
     use arbitrary::Arbitrary;
     use serde::{Serialize, Deserialize};
+    // For generating Arbitrary ASTs (for Testing)
     use crate::arbitrary::{
         gen_vec_min_1,
         gen_team_name, 

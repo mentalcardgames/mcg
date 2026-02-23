@@ -13,13 +13,13 @@ pub fn parse_document(text: &str) -> Result<SGame> {
   // 1. Initialize the state your Node alias expects
   let state = RefCell::new(SymbolTable::default());
 
-  // 1. Parsing: pest_consume::parse already returns Result<Nodes, Error<Rule>>
+  // 2. Parsing: pest_consume::parse already returns Result<Nodes, Error<Rule>>
   let nodes = CGDSLParser::parse_with_userdata(Rule::file, text, state)?;
 
-  // 2. Extract Single Node: .single() returns Result<Node, Error<Rule>>
+  // 3. Extract Single Node: .single() returns Result<Node, Error<Rule>>
   let node = nodes.single()?;
 
-  // 3. Mapping: mapper returns Result<T, Error<Rule>>
+  // 4. Mapping: mapper returns Result<T, Error<Rule>>
   let parsed_ast = CGDSLParser::file(node)?;
 
   Ok(parsed_ast)
