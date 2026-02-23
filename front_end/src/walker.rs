@@ -11,12 +11,12 @@
     This Walker/Visitor can be used for validation.
 
     The type NodeKind is also generated in code_gen.
-    How NodeKind is used: Look at symbol.rs or semantic.rs. 
+    How NodeKind is used: Look at symbol.rs or semantic.rs.
 */
 
 use crate::spans::*;
 
-use crate::ast::ast_spanned::NodeKind as NodeKind;
+use crate::ast::ast_spanned::NodeKind;
 
 pub trait AstPass {
     fn enter_node<T: Walker>(&mut self, node: &T)
@@ -32,9 +32,9 @@ pub trait Walker {
     fn kind(&self) -> Option<NodeKind<'_>>;
 }
 
-impl<T> Walker for Vec<T> 
-where 
-    T: Walker 
+impl<T> Walker for Vec<T>
+where
+    T: Walker,
 {
     fn walk<V: AstPass>(&self, visitor: &mut V) {
         // We iterate through the vector and call walk on every element.
@@ -45,14 +45,14 @@ where
     }
 
     fn kind(&self) -> Option<NodeKind<'_>> {
-        // Usually, vectors aren't considered a single "node" in the AST 
+        // Usually, vectors aren't considered a single "node" in the AST
         // sense for kind-tracking, so we often return a generic tag.
         None
     }
 }
 
-impl<T, S> Walker for (T, S) 
-where 
+impl<T, S> Walker for (T, S)
+where
     T: Walker,
     S: Walker,
 {
@@ -60,18 +60,18 @@ where
         // We iterate through the tuple and call walk on every element.
         // If T is Spanned<something>, it uses your Spanned implementation.
         self.0.walk(visitor);
-        self.1.walk(visitor);  
+        self.1.walk(visitor);
     }
 
     fn kind(&self) -> Option<NodeKind<'_>> {
-        // Usually, tuples aren't considered a single "node" in the AST 
+        // Usually, tuples aren't considered a single "node" in the AST
         // sense for kind-tracking, so we often return a generic tag.
         None
     }
 }
 
-impl<T, S, P> Walker for (T, S, P) 
-where 
+impl<T, S, P> Walker for (T, S, P)
+where
     T: Walker,
     S: Walker,
     P: Walker,
@@ -80,28 +80,24 @@ where
         // We iterate through the typle and call walk on every element.
         // If T is Spanned<something>, it uses your Spanned implementation.
         self.0.walk(visitor);
-        self.1.walk(visitor);  
-        self.2.walk(visitor);  
+        self.1.walk(visitor);
+        self.2.walk(visitor);
     }
 
     fn kind(&self) -> Option<NodeKind<'_>> {
-        // Usually, tuples aren't considered a single "node" in the AST 
+        // Usually, tuples aren't considered a single "node" in the AST
         // sense for kind-tracking, so we often return a generic tag.
         None
     }
 }
 
-
 impl Walker for i32 {
-    fn walk<V: AstPass>(&self, _: &mut V) {
-        
-    }
+    fn walk<V: AstPass>(&self, _: &mut V) {}
 
     fn kind(&self) -> Option<NodeKind<'_>> {
         None
     }
 }
-
 
 impl<T> Walker for Spanned<T>
 where

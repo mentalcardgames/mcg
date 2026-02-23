@@ -3,19 +3,19 @@
     Additional helper functions for not-empty Vector, etc. are implemented here.
 */
 
-
-use arbitrary::{Arbitrary, Unstructured, Result};
 use crate::ast::*;
+use arbitrary::{Arbitrary, Result, Unstructured};
 
 pub fn gen_ident(u: &mut Unstructured) -> arbitrary::Result<String> {
-    // Hard fallback: If we are low on entropy, return a known safe string 
+    // Hard fallback: If we are low on entropy, return a known safe string
     // that is definitely NOT a keyword.
     if u.len() < 5 {
         return Ok("Identfallback".to_string());
     }
 
     // Attempt to generate a unique, non-keyword identifier
-    for _ in 0..10 { // Limit attempts to prevent infinite loops
+    for _ in 0..10 {
+        // Limit attempts to prevent infinite loops
         let len = u.int_in_range(3..=10)?;
         let capitals = "ABCDEFGHIJKLMNOPQRSTUVXYZ";
         let alphabet = "abcdefghijklmnopqrstuvwxyz";
@@ -26,7 +26,7 @@ pub fn gen_ident(u: &mut Unstructured) -> arbitrary::Result<String> {
         }
     }
 
-    // If we failed 10 times to find a non-keyword, 
+    // If we failed 10 times to find a non-keyword,
     // append a suffix to the last generated string to break the keyword match.
     Ok("Id".to_owned() + &u.int_in_range(100..=999)?.to_string())
 }
@@ -54,7 +54,7 @@ pub fn gen_vec_players_prefixed(u: &mut arbitrary::Unstructured) -> arbitrary::R
 
         vec.push(name);
     }
-    
+
     Ok(vec)
 }
 
@@ -68,11 +68,13 @@ pub fn gen_vec_strings(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec
         let name = gen_ident(u)?;
         vec.push(name);
     }
-    
+
     Ok(vec)
 }
 
-pub fn gen_vec_teams_with_players(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<(String, PlayerCollection)>> {
+pub fn gen_vec_teams_with_players(
+    u: &mut arbitrary::Unstructured,
+) -> arbitrary::Result<Vec<(String, PlayerCollection)>> {
     // 1. Force 1 to 3 teams
     let count = u.int_in_range(1..=2)?;
     let mut vec = Vec::with_capacity(count);
@@ -80,17 +82,19 @@ pub fn gen_vec_teams_with_players(u: &mut arbitrary::Unstructured) -> arbitrary:
     for _ in 0..count {
         // 2. Generate the "T" prefixed Team Name
         let team_name = gen_team_name(u)?;
-        
+
         // 3. Generate the PlayerCollection (uses its own Arbitrary impl)
         let players = PlayerCollection::arbitrary(u)?;
-        
+
         vec.push((team_name, players));
     }
-    
+
     Ok(vec)
 }
 
-pub fn gen_types_and_subtypes(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<(String, Vec<String>)>> {
+pub fn gen_types_and_subtypes(
+    u: &mut arbitrary::Unstructured,
+) -> arbitrary::Result<Vec<(String, Vec<String>)>> {
     // 1. Force at least 1 outer entry
     let outer_count = u.int_in_range(1..=2)?;
     let mut result = Vec::with_capacity(outer_count);
@@ -122,11 +126,13 @@ pub fn gen_vec_min_1<'a, T: Arbitrary<'a>>(u: &mut Unstructured<'a>) -> arbitrar
     Ok(items)
 }
 
-pub fn gen_vec_min_1_kvs(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<(String, String)>> {
+pub fn gen_vec_min_1_kvs(
+    u: &mut arbitrary::Unstructured,
+) -> arbitrary::Result<Vec<(String, String)>> {
     let remaining = u.len();
 
     // 1. Hard Fallback
-    // If entropy is critically low, return a single simple pair 
+    // If entropy is critically low, return a single simple pair
     // to guarantee the "min_1" constraint is satisfied without failing.
     if remaining < 32 {
         return Ok(vec![("Key".to_string(), "Val".to_string())]);
@@ -146,14 +152,20 @@ pub fn gen_vec_min_1_kvs(u: &mut arbitrary::Unstructured) -> arbitrary::Result<V
     Ok(kvs)
 }
 
-pub fn gen_vec_min_1_kvis(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<(String, String, IntExpr)>> {
+pub fn gen_vec_min_1_kvis(
+    u: &mut arbitrary::Unstructured,
+) -> arbitrary::Result<Vec<(String, String, IntExpr)>> {
     let remaining = u.len();
 
     // 1. Hard Fallback
-    // If entropy is critically low, return a single simple pair 
+    // If entropy is critically low, return a single simple pair
     // to guarantee the "min_1" constraint is satisfied without failing.
     if remaining < 32 {
-        return Ok(vec![("Key".to_string(), "Val".to_string(), IntExpr::Literal { int: 1 })]);
+        return Ok(vec![(
+            "Key".to_string(),
+            "Val".to_string(),
+            IntExpr::Literal { int: 1 },
+        )]);
     }
 
     // 2. Determine count (1 to 4 is usually plenty for AST testing)
@@ -183,13 +195,13 @@ pub fn gen_vec_min_1_ints(u: &mut arbitrary::Unstructured) -> arbitrary::Result<
     }
 
     // 2. Controlled Generation
-    // We cap the number of expressions in a collection to 1-3. 
+    // We cap the number of expressions in a collection to 1-3.
     // Large collections of complex expressions are rarely needed for AST testing.
     let count = u.int_in_range(1..=3)?;
     let mut ints = Vec::with_capacity(count);
 
     for _ in 0..count {
-        // Since IntExpr has its own entropy-check/fallback, 
+        // Since IntExpr has its own entropy-check/fallback,
         // this call is safe.
         ints.push(u.arbitrary()?);
     }
@@ -204,9 +216,13 @@ pub fn gen_flows_safe(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<
     // If we have very little gas, return a single, simple action.
     // "EndTurn" or a similar trivial rule is best here to stop the recursion.
     if remaining < 128 {
-        return Ok(vec![
-            FlowComponent::Rule { game_rule: GameRule::Action { action: ActionRule::EndAction { end_type: EndType::Turn } } }
-        ]);
+        return Ok(vec![FlowComponent::Rule {
+            game_rule: GameRule::Action {
+                action: ActionRule::EndAction {
+                    end_type: EndType::Turn,
+                },
+            },
+        }]);
     }
 
     // 2. Controlled Width
@@ -218,15 +234,23 @@ pub fn gen_flows_safe(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<
     for _ in 0..count {
         // Check entropy again inside the loop
         if u.len() < 64 {
-            flows.push(FlowComponent::Rule { game_rule: GameRule::Action { action: ActionRule::EndAction { end_type: EndType::Turn } } });
+            flows.push(FlowComponent::Rule {
+                game_rule: GameRule::Action {
+                    action: ActionRule::EndAction {
+                        end_type: EndType::Turn,
+                    },
+                },
+            });
             break;
         }
 
-        // We manually steer the fuzzer away from recursive variants 
+        // We manually steer the fuzzer away from recursive variants
         // (like Sequences or Loops) if entropy is dropping.
         let component = if u.len() < 256 {
             // Force a non-recursive Rule or simple leaf
-            FlowComponent::Rule { game_rule: u.arbitrary()? }
+            FlowComponent::Rule {
+                game_rule: u.arbitrary()?,
+            }
         } else {
             // High entropy: allow full recursive generation
             u.arbitrary()?
@@ -248,9 +272,9 @@ impl<'a> Arbitrary<'a> for IntExpr {
         // 1. Check available entropy to prevent infinite recursion
         // If we have fewer than 64 bytes left, we force a "Leaf" node.
         let remaining_bytes = u.len();
-        
+
         if remaining_bytes < 64 {
-            return Ok(IntExpr::Literal { int: 1 })
+            return Ok(IntExpr::Literal { int: 1 });
             // Pick between the three non-recursive leaf types
             // return match u.int_in_range(0..=2)? {
             //     0 => Ok(IntExpr::Literal { int: u.arbitrary()? }),
@@ -263,18 +287,26 @@ impl<'a> Arbitrary<'a> for IntExpr {
         // We give Literal/Runtime/Aggregate high weight so the trees don't get too deep.
         match u.int_in_range(0..=100)? {
             // 70% chance to be a Leaf (terminates recursion)
-            0..=20 => Ok(IntExpr::Literal { int: u.arbitrary()? }),
+            0..=20 => Ok(IntExpr::Literal {
+                int: u.arbitrary()?,
+            }),
             21..=40 => Ok(IntExpr::Memory {
                 memory: UseMemory::Memory {
                     memory: gen_ident(u)?,
-                } 
+                },
             }),
-            41..=55 => Ok(IntExpr::Runtime { runtime: u.arbitrary()? }),
-            56..=70 => Ok(IntExpr::Aggregate { aggregate: u.arbitrary()? }),
-            
+            41..=55 => Ok(IntExpr::Runtime {
+                runtime: u.arbitrary()?,
+            }),
+            56..=70 => Ok(IntExpr::Aggregate {
+                aggregate: u.arbitrary()?,
+            }),
+
             // 15% chance to be a Query
-            71..=85 => Ok(IntExpr::Query { query: u.arbitrary()? }),
-            
+            71..=85 => Ok(IntExpr::Query {
+                query: u.arbitrary()?,
+            }),
+
             // 15% chance to be a Binary (recursive)
             _ => Ok(IntExpr::Binary {
                 int: Box::new(u.arbitrary()?),
@@ -322,7 +354,7 @@ impl<'a> Arbitrary<'a> for PlayerExpr {
 
 impl<'a> Arbitrary<'a> for StringExpr {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        // We prioritize Literals because they are the "base case" for 
+        // We prioritize Literals because they are the "base case" for
         // string-based game logic (like checking a card's name or a location).
         match u.int_in_range(0..=100)? {
             // 70% chance for a Literal identifier
@@ -333,9 +365,9 @@ impl<'a> Arbitrary<'a> for StringExpr {
             36..=69 => Ok(StringExpr::Memory {
                 memory: UseMemory::Memory {
                     memory: gen_ident(u)?,
-                }
+                },
             }),
-            
+
             // 30% chance for a Query (KeyOf, CollectionAt, etc.)
             _ => Ok(StringExpr::Query {
                 query: u.arbitrary()?,
@@ -344,7 +376,7 @@ impl<'a> Arbitrary<'a> for StringExpr {
     }
 
     fn size_hint(_depth: usize) -> (usize, Option<usize>) {
-        // Minimum 1 byte for the variant, but we know gen_ident 
+        // Minimum 1 byte for the variant, but we know gen_ident
         // will consume at least a few more bytes.
         (1, None)
     }
@@ -359,15 +391,15 @@ impl<'a> Arbitrary<'a> for BoolExpr {
         // 128 bytes is a safe buffer for a CompareBool + its inner expressions.
         if remaining < 128 {
             return Ok(BoolExpr::Aggregate {
-                aggregate: AggregateBool::CardSetEmpty { 
-                  card_set: CardSet::Group { 
-                    group: Group::Groupable { 
-                      groupable: Groupable::Location { 
-                        name: "BASECASE".to_string() 
-                      } 
-                    } 
-                  } 
-                }
+                aggregate: AggregateBool::CardSetEmpty {
+                    card_set: CardSet::Group {
+                        group: Group::Groupable {
+                            groupable: Groupable::Location {
+                                name: "BASECASE".to_string(),
+                            },
+                        },
+                    },
+                },
             });
         }
 
@@ -378,13 +410,13 @@ impl<'a> Arbitrary<'a> for BoolExpr {
             0..=74 => Ok(BoolExpr::Aggregate {
                 aggregate: u.arbitrary()?,
             }),
-            
+
             // Recursive Case: Unary (NOT x)
             75..=84 => Ok(BoolExpr::Unary {
                 op: u.arbitrary()?,
                 bool_expr: Box::new(u.arbitrary()?),
             }),
-            
+
             // Recursive Case: Binary (x AND y)
             _ => Ok(BoolExpr::Binary {
                 bool_expr: Box::new(u.arbitrary()?),
@@ -411,8 +443,8 @@ impl<'a> Arbitrary<'a> for FilterExpr {
         // so we need a decent buffer to generate it successfully.
         if remaining < 128 {
             return Ok(FilterExpr::Aggregate {
-                aggregate: AggregateFilter::Combo { 
-                    combo: "BASECASE".to_string() 
+                aggregate: AggregateFilter::Combo {
+                    combo: "BASECASE".to_string(),
                 },
             });
         }
@@ -437,7 +469,9 @@ impl<'a> Arbitrary<'a> for FilterExpr {
     }
 }
 
-pub fn gen_vec_min_1_players(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<PlayerExpr>> {
+pub fn gen_vec_min_1_players(
+    u: &mut arbitrary::Unstructured,
+) -> arbitrary::Result<Vec<PlayerExpr>> {
     // 1. Hard Fallback
     // If we are low on bytes, return a single Runtime player (Current).
     // This is the "cheapest" possible valid PlayerCollection.
@@ -476,7 +510,7 @@ impl<'a> Arbitrary<'a> for PlayerCollection {
             21..=39 => Ok(PlayerCollection::Memory {
                 memory: UseMemory::Memory {
                     memory: gen_ident(u)?,
-                }
+                },
             }),
             // 40% chance for Literal (Uses our safe vec generator)
             40..=79 => Ok(PlayerCollection::Literal {
@@ -531,9 +565,9 @@ impl<'a> Arbitrary<'a> for TeamCollection {
             21..=39 => Ok(TeamCollection::Memory {
                 memory: UseMemory::Memory {
                     memory: gen_ident(u)?,
-                }
+                },
             }),
-            
+
             // 60% chance for Literal (Uses our safe vec generator)
             _ => Ok(TeamCollection::Literal {
                 teams: gen_vec_min_1_teams(u)?,
@@ -567,7 +601,7 @@ impl<'a> Arbitrary<'a> for CardPosition {
             0..=69 => Ok(CardPosition::Query {
                 query: u.arbitrary()?,
             }),
-            
+
             // 30% chance for Aggregate (PointMaps, Precedence - heavier)
             _ => Ok(CardPosition::Aggregate {
                 aggregate: u.arbitrary()?,
@@ -589,8 +623,8 @@ impl<'a> Arbitrary<'a> for Group {
         // This avoids triggering FilterExpr or complex CardPosition lookups.
         if remaining < 128 {
             return Ok(Group::Groupable {
-                groupable: Groupable::Location { 
-                    name: "Defaultloc".to_string() 
+                groupable: Groupable::Location {
+                    name: "Defaultloc".to_string(),
                 },
             });
         }
@@ -619,7 +653,7 @@ impl<'a> Arbitrary<'a> for Group {
                         groupable: u.arbitrary()?,
                     })
                 }
-            },
+            }
             // 20% CardPosition
             _ => Ok(Group::CardPosition {
                 card_position: u.arbitrary()?,

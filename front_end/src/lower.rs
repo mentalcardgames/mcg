@@ -12,7 +12,6 @@
     for specific types.
 */
 
-
 use crate::spans::*;
 
 pub trait Lower<T> {
@@ -31,7 +30,7 @@ where
 
 impl Lower<String> for SID {
     fn lower(&self) -> String {
-      self.node.clone()
+        self.node.clone()
     }
 }
 
@@ -47,7 +46,7 @@ where
     T: Lower<U>,
 {
     fn lower(&self) -> Box<U> {
-        // Use .as_ref() to get a reference to the inner T, 
+        // Use .as_ref() to get a reference to the inner T,
         // then call lower() to get a U, then wrap it in a new Box.
         Box::new(self.as_ref().lower())
     }

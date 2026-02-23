@@ -1,5 +1,9 @@
-use front_end::{ast::ast_spanned::SGame, symbols::{GameType, SymbolVisitor}, walker::Walker};
 use crate::error_to_diagnostics::to_range;
+use front_end::{
+    ast::ast_spanned::SGame,
+    symbols::{GameType, SymbolVisitor},
+    walker::Walker,
+};
 
 pub struct AbsoluteToken {
     line: u32,
@@ -47,7 +51,7 @@ pub fn tokenize_ast(ast: &SGame) -> Vec<AbsoluteToken> {
         .iter()
         .map(|(v, g_type)| {
             let range = to_range(&v.span);
-            
+
             AbsoluteToken {
                 line: range.start.line,
                 start: range.start.character,
@@ -55,9 +59,9 @@ pub fn tokenize_ast(ast: &SGame) -> Vec<AbsoluteToken> {
                 length: if range.end.line == range.start.line {
                     range.end.character - range.start.character
                 } else {
-                    // If a token spans multiple lines, LSP usually expects 
+                    // If a token spans multiple lines, LSP usually expects
                     // a separate entry per line, but for identifiers, this is rare.
-                    (v.span.end - v.span.start) as u32 
+                    (v.span.end - v.span.start) as u32
                 },
                 token_type: game_type_to_legend_index(g_type),
                 modifiers: 0, // You can add "readonly" or "static" logic here later
@@ -66,20 +70,19 @@ pub fn tokenize_ast(ast: &SGame) -> Vec<AbsoluteToken> {
         .collect()
 }
 
-
 fn game_type_to_legend_index(gt: &GameType) -> u32 {
-  match gt {
-    GameType::Player => 0,
-    GameType::Team => 1,
-    GameType::Location => 2,
-    GameType::Precedence => 3,
-    GameType::PointMap => 4,
-    GameType::Combo => 5,
-    GameType::Key => 6,
-    GameType::Value => 7,
-    GameType::Memory => 8,
-    GameType::Token => 9,
-    GameType::Stage => 10,
-    GameType::NoType => 11,
-  }
+    match gt {
+        GameType::Player => 0,
+        GameType::Team => 1,
+        GameType::Location => 2,
+        GameType::Precedence => 3,
+        GameType::PointMap => 4,
+        GameType::Combo => 5,
+        GameType::Key => 6,
+        GameType::Value => 7,
+        GameType::Memory => 8,
+        GameType::Token => 9,
+        GameType::Stage => 10,
+        GameType::NoType => 11,
+    }
 }

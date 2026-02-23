@@ -5,8 +5,7 @@
     This allows better diagnostics and a nicer user experience.
 */
 
-
-use serde::{Serialize, Deserialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub type SID = Spanned<String>;
 pub type SInt = Spanned<i32>;
@@ -25,7 +24,7 @@ impl From<pest::Span<'_>> for OwnedSpan {
             start: input.start(),
             end: input.end(),
             start_pos: input.start_pos().line_col(),
-            end_pos: input.end_pos().line_col()
+            end_pos: input.end_pos().line_col(),
         }
     }
 }
@@ -36,4 +35,3 @@ pub struct Spanned<T> {
     pub node: T,
     pub span: OwnedSpan,
 }
-

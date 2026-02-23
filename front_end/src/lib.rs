@@ -1,15 +1,15 @@
-pub mod parser;
-pub mod lower;
-pub mod fmt_ast;
 pub mod arbitrary;
+pub mod fmt_ast;
+pub mod lower;
+pub mod parser;
 include!("ast.rs");
-pub mod ir;
-pub mod symbols;
-pub mod spans;
 pub mod fsm_to_dot;
+pub mod ir;
 pub mod semantic;
-pub mod walker;
+pub mod spans;
+pub mod symbols;
 pub mod validation;
+pub mod walker;
 
 #[cfg(test)]
 pub mod tests;

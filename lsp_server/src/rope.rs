@@ -1,7 +1,6 @@
 use ropey::Rope;
 use tower_lsp::lsp_types::{Position, TextDocumentContentChangeEvent};
 
-
 #[derive(Debug, Clone)]
 pub struct Document {
     pub(crate) rope: Rope,
@@ -22,7 +21,7 @@ pub fn apply_change(rope: &mut Rope, change: &TextDocumentContentChangeEvent) {
         if safe_start < safe_end {
             rope.remove(safe_start..safe_end);
         }
-        
+
         if !change.text.is_empty() {
             rope.insert(safe_start, &change.text);
         }
@@ -51,7 +50,7 @@ pub fn position_to_char(rope: &Rope, position: Position) -> usize {
         if current_utf16 >= utf16_col {
             break;
         }
-        
+
         // Stop if we hit a newline character—LSP positions for a line
         // shouldn't technically include the newline itself.
         if c == '\n' || c == '\r' {

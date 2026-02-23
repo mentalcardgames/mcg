@@ -1,17 +1,17 @@
-pub mod lsp;
-pub mod error_to_diagnostics;
 pub mod completion;
-pub mod validation;
+pub mod error_to_diagnostics;
+pub mod lsp;
 pub mod rope;
 pub mod semantic_highlighting;
 pub mod tests;
+pub mod validation;
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use crate::lsp::Backend;
 use arc_swap::ArcSwapAny;
-use tokio::sync::{Mutex, mpsc};
 use dashmap::DashMap;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::sync::{Mutex, mpsc};
 use tower_lsp::{lsp_types::Url, *};
-use crate::lsp::{Backend};
 
 #[tokio::main]
 async fn main() {
@@ -28,7 +28,7 @@ async fn main() {
             documents: Mutex::new(HashMap::new()),
             last_ast: ArcSwapAny::new(None),
             analysis_tx: tx,
-            symbol_table: DashMap::new()
+            symbol_table: DashMap::new(),
         });
 
         // 3. Spawn the background worker task
@@ -39,10 +39,10 @@ async fn main() {
                 // DEBOUNCE: Wait for the user to stop typing
                 tokio::time::sleep(Duration::from_millis(200)).await;
 
-                // Clear out any "stale" requests for the same URI that arrived 
+                // Clear out any "stale" requests for the same URI that arrived
                 // while we were sleeping.
-                while let Ok(_) = rx.try_recv() { 
-                    /* Just draining the pipe to get to the freshest state */ 
+                while let Ok(_) = rx.try_recv() {
+                    /* Just draining the pipe to get to the freshest state */
                 }
 
                 // Execute the heavy analysis

@@ -16,16 +16,13 @@ fn main() {
     println!("cargo:rerun-if-changed=src/grammar.pest");
 
     let grammar_content = std::fs::read_to_string("./src/grammar.pest").expect("Check path");
-    
-    let rules = parser::parse(MetaRule::grammar_rules, &grammar_content)
-        .expect("Grammar is invalid");
+
+    let rules =
+        parser::parse(MetaRule::grammar_rules, &grammar_content).expect("Grammar is invalid");
     let ast = parser::consume_rules(rules).expect("Failed to consume rules");
 
     // Create a map for rule lookups
-    let rule_map: HashMap<String, &Expr> = ast
-        .iter()
-        .map(|r| (r.name.clone(), &r.expr))
-        .collect();
+    let rule_map: HashMap<String, &Expr> = ast.iter().map(|r| (r.name.clone(), &r.expr)).collect();
 
     let mut code = String::from("use std::collections::HashMap;\n\n");
     code.push_str("pub fn get_snippet_map() -> HashMap<&'static str, Vec<&'static str>> {\n");
@@ -47,17 +44,18 @@ fn main() {
 
         for (body, _) in variants {
             let trimmed = body.trim();
-            if trimmed.is_empty() { continue; }
+            if trimmed.is_empty() {
+                continue;
+            }
 
             let escaped_body = trimmed.replace("\"", "\\\"");
-            
-            // We use rule.name as the key. 
-            // Note: If one rule has multiple snippets, you might want to 
+
+            // We use rule.name as the key.
+            // Note: If one rule has multiple snippets, you might want to
             // store Vec<&'static str> in your Map instead of a single string.
             code.push_str(&format!(
-                "    m.entry(\"{}\").or_insert_with(Vec::new).push(\"{}\");\n", 
-                rule.name, 
-                escaped_body
+                "    m.entry(\"{}\").or_insert_with(Vec::new).push(\"{}\");\n",
+                rule.name, escaped_body
             ));
         }
     }
@@ -70,44 +68,42 @@ fn main() {
 }
 
 fn is_infrastructure(name: &str) -> bool {
-    matches!(name,
-        "WHITESPACE" 
-      | "alpha" 
-      | "digit" 
-      | "int" 
-      | "ident" 
-      | "SOI" 
-      | "EOI"
-      | "kw" 
-      | "block_comment" 
-      | "line_comment"
-      | "game"
-      | "flow_component"
-      | "file"
-      | "game_flow"
+    matches!(
+        name,
+        "WHITESPACE"
+            | "alpha"
+            | "digit"
+            | "int"
+            | "ident"
+            | "SOI"
+            | "EOI"
+            | "kw"
+            | "block_comment"
+            | "line_comment"
+            | "game"
+            | "flow_component"
+            | "file"
+            | "game_flow"
     )
 }
 
 fn is_ident(name: &str) -> bool {
-    matches!(name,
-      | "playername" 
-      | "teamname"
-      | "location"
-      | "precedence"
-      | "pointmap"
-      | "combo"
-      | "key"
-      | "value"
-      | "memory"
-      | "token"
-      | "stage"
-    )
+    matches!(name, |"playername"| "teamname"
+        | "location"
+        | "precedence"
+        | "pointmap"
+        | "combo"
+        | "key"
+        | "value"
+        | "memory"
+        | "token"
+        | "stage")
 }
 
 // 4. The "Pass Down" Logic
 fn flatten_expression(
-    expr: &Expr, 
-    t: usize, 
+    expr: &Expr,
+    t: usize,
     rule_map: &HashMap<String, &Expr>,
     visited: &mut Vec<String>,
     depth: usize, // <--- Add this
@@ -130,7 +126,7 @@ fn flatten_expression(
                 // We reached max depth or a cycle: stop and show the rule name
                 vec![(format!("${{{}:{}}}", t, name), t + 1)]
             }
-        },
+        }
         // For Seq, Choice, and Opt, just pass the SAME depth down.
         // Only Ident "consumes" a level of depth.
         Expr::Seq(lhs, rhs) => {
@@ -155,7 +151,7 @@ fn flatten_expression(
         // OPTIONAL: Return a version with the content AND a version with nothing
         Expr::Opt(inner) => {
             let mut variants = flatten_expression(inner, t, rule_map, visited, depth); // Version with
-            variants.push(("".to_string(), t));            // Version without
+            variants.push(("".to_string(), t)); // Version without
             variants
         }
 

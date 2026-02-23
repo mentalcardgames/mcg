@@ -1,28 +1,28 @@
 use std::collections::HashMap;
 
+use crate::rope::{Document, apply_change};
+use crate::semantic_highlighting::{calculate_deltas, tokenize_ast};
+use crate::validation::{validate_document, validate_game, validate_parsing};
+use arc_swap::ArcSwapOption;
 use dashmap::DashMap;
 use front_end::ast::ast_spanned::SGame;
 use front_end::symbols::GameType;
 use front_end::validation::parse_document;
-use ropey::{Rope};
-use crate::rope::{Document, apply_change};
-use crate::semantic_highlighting::{calculate_deltas, tokenize_ast};
-use crate::validation::{validate_document, validate_game, validate_parsing};
-use tokio::sync::{Mutex, mpsc};
-use arc_swap::ArcSwapOption;
+use ropey::Rope;
 use std::sync::Arc;
+use tokio::sync::{Mutex, mpsc};
 use tower_lsp::jsonrpc::{self, Result};
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
-use crate::completion::{get_completions};
+use crate::completion::get_completions;
 
 #[derive(Debug)]
 pub struct Backend {
     pub client: Client,
     pub documents: Mutex<HashMap<Url, Document>>, // stores current document text
     // No Mutex needed! ArcSwap handles thread-safety internally.
-    pub last_ast: ArcSwapOption<SGame>, 
+    pub last_ast: ArcSwapOption<SGame>,
     // Debouncer to minimize flickering
     pub analysis_tx: mpsc::UnboundedSender<Url>,
     pub symbol_table: DashMap<GameType, Vec<String>>,
@@ -43,7 +43,9 @@ impl Backend {
             let mut docs = self.documents.lock().await;
             docs.insert(uri.clone(), Document { rope });
 
-            self.client.publish_diagnostics(uri, diagnostics, None).await;
+            self.client
+                .publish_diagnostics(uri, diagnostics, None)
+                .await;
         }
     }
 
@@ -60,7 +62,7 @@ impl Backend {
                         for (game_type, names) in new_table {
                             self.symbol_table.insert(game_type, names);
                         }
-                    },
+                    }
                     Err(v) => {
                         diagnostics = v;
                     }
@@ -88,14 +90,14 @@ impl Backend {
                         for (game_type, names) in new_table {
                             self.symbol_table.insert(game_type, names);
                         }
-                    },
+                    }
                     Err(v) => {
                         diagnostics.extend(v);
                     }
                 }
                 // Run game validation
                 match validate_game(&ast) {
-                    None => {},
+                    None => {}
                     Some(v) => {
                         diagnostics.extend(v);
                     }
@@ -113,20 +115,20 @@ impl Backend {
     pub async fn get_rope(&self, uri: &Url) -> Rope {
         let mut docs = self.documents.lock().await;
 
-        let doc = docs
-            .get_mut(&uri)
-            .expect("didSave before didOpen");
+        let doc = docs.get_mut(&uri).expect("didSave before didOpen");
 
         // Materialize full text ONCE
         doc.rope.clone()
     }
 
-    pub async fn get_rope_and_apply_change(&self, uri: &Url, params: &DidChangeTextDocumentParams) -> Rope {
+    pub async fn get_rope_and_apply_change(
+        &self,
+        uri: &Url,
+        params: &DidChangeTextDocumentParams,
+    ) -> Rope {
         let mut docs = self.documents.lock().await;
 
-        let doc = docs
-            .get_mut(&uri)
-            .expect("didChange before didOpen");
+        let doc = docs.get_mut(&uri).expect("didChange before didOpen");
 
         // Apply *all* changes
         for change in params.content_changes.iter() {
@@ -136,7 +138,6 @@ impl Backend {
         // Materialize full text ONCE
         doc.rope.clone()
     }
-
 
     pub fn get_semantic_tokens(&self) -> Option<Vec<SemanticToken>> {
         let tokens;
@@ -186,34 +187,40 @@ impl LanguageServer for Backend {
                 // 2. Autocompletion configuration
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_string(), ":".to_string(), " ".to_string()]),
+                    trigger_characters: Some(vec![
+                        ".".to_string(),
+                        ":".to_string(),
+                        " ".to_string(),
+                    ]),
                     ..Default::default()
                 }),
 
                 // 3. ADDED: Semantic Tokens configuration
                 semantic_tokens_provider: Some(
-                    SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
-                        legend: SemanticTokensLegend {
-                            token_types: vec![
-                                SemanticTokenType::from("player"),
-                                SemanticTokenType::from("team"),
-                                SemanticTokenType::from("location"),
-                                SemanticTokenType::from("precedence"),
-                                SemanticTokenType::from("pointmap"),
-                                SemanticTokenType::from("combo"),
-                                SemanticTokenType::from("key"),
-                                SemanticTokenType::from("value"),
-                                SemanticTokenType::from("memory"),
-                                SemanticTokenType::from("token"),
-                                SemanticTokenType::from("stage"),
-                                SemanticTokenType::from("notype"),
-                            ],
-                            token_modifiers: vec![],
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: SemanticTokensLegend {
+                                token_types: vec![
+                                    SemanticTokenType::from("player"),
+                                    SemanticTokenType::from("team"),
+                                    SemanticTokenType::from("location"),
+                                    SemanticTokenType::from("precedence"),
+                                    SemanticTokenType::from("pointmap"),
+                                    SemanticTokenType::from("combo"),
+                                    SemanticTokenType::from("key"),
+                                    SemanticTokenType::from("value"),
+                                    SemanticTokenType::from("memory"),
+                                    SemanticTokenType::from("token"),
+                                    SemanticTokenType::from("stage"),
+                                    SemanticTokenType::from("notype"),
+                                ],
+                                token_modifiers: vec![],
+                            },
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            range: None,
+                            work_done_progress_options: Default::default(),
                         },
-                        full: Some(SemanticTokensFullOptions::Bool(true)),
-                        range: None,
-                        work_done_progress_options: Default::default(),
-                    }),
+                    ),
                 ),
 
                 execute_command_provider: Some(ExecuteCommandOptions {
@@ -243,19 +250,15 @@ impl LanguageServer for Backend {
         let result = parse_document(&rope.to_string());
 
         match result {
-            Err(err) => {
-                Ok(get_completions(err, &self.symbol_table))
-            },
-            Ok(_) => {Ok(None)}
+            Err(err) => Ok(get_completions(err, &self.symbol_table)),
+            Ok(_) => Ok(None),
         }
     }
 
     async fn hover(&self, _: HoverParams) -> Result<Option<Hover>> {
         Ok(Some(Hover {
-            contents: HoverContents::Scalar(
-                MarkedString::String("You're hovering!".to_string())
-            ),
-            range: None
+            contents: HoverContents::Scalar(MarkedString::String("You're hovering!".to_string())),
+            range: None,
         }))
     }
 
@@ -263,14 +266,16 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let text = params.text_document.text;
         let rope = Rope::from_str(&text);
-        
+
         let diagnostics = self.get_diagnostics(&rope);
 
         // Standard document storage
         let mut docs = self.documents.lock().await;
         docs.insert(uri.clone(), Document { rope });
 
-        self.client.publish_diagnostics(uri, diagnostics, None).await;
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
@@ -282,7 +287,9 @@ impl LanguageServer for Backend {
         let mut docs = self.documents.lock().await;
         docs.insert(uri.clone(), Document { rope });
 
-        self.client.publish_diagnostics(uri, diagnostics, None).await;
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -294,7 +301,9 @@ impl LanguageServer for Backend {
         let mut docs = self.documents.lock().await;
         docs.insert(uri.clone(), Document { rope });
 
-        self.client.publish_diagnostics(uri, diagnostics, None).await;
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
     }
 
     async fn semantic_tokens_full(
@@ -305,34 +314,38 @@ impl LanguageServer for Backend {
             return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
                 result_id: None,
                 data: semantic_tokens,
-            })))
+            })));
         }
 
-        return Ok(None)
+        return Ok(None);
     }
 
-    async fn execute_command(&self, params: ExecuteCommandParams) -> jsonrpc::Result<Option<serde_json::Value>> {
+    async fn execute_command(
+        &self,
+        params: ExecuteCommandParams,
+    ) -> jsonrpc::Result<Option<serde_json::Value>> {
         if let Some(safe_ast) = &*self.last_ast.load() {
             if params.command == "cgdsl.generateGraph" {
                 // Get your graph data
-                let graph = safe_ast.to_lowered_graph(); 
-                
+                let graph = safe_ast.to_lowered_graph();
+
                 // 1. Get the path from TS arguments
-                let path_str = params.arguments.get(0)
+                let path_str = params
+                    .arguments
+                    .get(0)
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| jsonrpc::Error::invalid_params("Missing path"))?;
-                
+
                 let dot_path = std::path::Path::new(path_str);
 
                 // 3. Write the DOT file (The "Game View")
-                front_end::fsm_to_dot::fsm_to_dot(&graph, dot_path).map_err(|_| {
-                    jsonrpc::Error::internal_error()
-                })?;
-                
-                // Return it as a JSON value
-                let json_value = serde_json::to_value(&graph)
+                front_end::fsm_to_dot::fsm_to_dot(&graph, dot_path)
                     .map_err(|_| jsonrpc::Error::internal_error())?;
-                    
+
+                // Return it as a JSON value
+                let json_value =
+                    serde_json::to_value(&graph).map_err(|_| jsonrpc::Error::internal_error())?;
+
                 return Ok(Some(json_value));
             }
         } else {
@@ -343,7 +356,10 @@ impl LanguageServer for Backend {
     }
 
     // Use this for REQUESTS (expects a response)
-    async fn symbol(&self, _params: WorkspaceSymbolParams) -> jsonrpc::Result<Option<Vec<SymbolInformation>>> {
+    async fn symbol(
+        &self,
+        _params: WorkspaceSymbolParams,
+    ) -> jsonrpc::Result<Option<Vec<SymbolInformation>>> {
         // Standard LSP method
         Ok(None)
     }
