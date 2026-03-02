@@ -6,7 +6,7 @@
     However due to the deeply recursive nature of the grammar this will be a big task to do it nicely.
 */
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use pest_meta::ast::Expr;
 use pest_meta::parser::{self, Rule as MetaRule};
@@ -28,31 +28,22 @@ fn main() {
     code.push_str("pub fn get_snippet_map() -> HashMap<&'static str, Vec<&'static str>> {\n");
     code.push_str("    let mut m = HashMap::new();\n");
 
-    // Inside your main loop in build.rs
     for rule in &ast {
         if is_infrastructure(&rule.name) || rule.name.starts_with('_') {
             continue;
         }
 
-        // Depth decides on how deep/long the completion should be
-        let mut variants = flatten_expression(&rule.expr, 1, &rule_map, &mut Vec::new(), 1);
+        let mut visited = Vec::new();
+        let variants = get_first_terminals(&rule.expr, &rule_map, &mut visited);
 
-        // Safety: only take the first 50 variants so the LSP doesn't lag
-        if variants.len() > 15 {
-            variants.truncate(15);
-        }
+        // Use a HashSet to filter out duplicates like "(" appearing multiple times
+        let unique_variants: HashSet<String> = variants.into_iter()
+            .filter(|s| !s.trim().is_empty())
+            .collect();
 
-        for (body, _) in variants {
-            let trimmed = body.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
+        for body in unique_variants {
+            let escaped_body = body.replace("\"", "\\\"");
 
-            let escaped_body = trimmed.replace("\"", "\\\"");
-
-            // We use rule.name as the key.
-            // Note: If one rule has multiple snippets, you might want to
-            // store Vec<&'static str> in your Map instead of a single string.
             code.push_str(&format!(
                 "    m.entry(\"{}\").or_insert_with(Vec::new).push(\"{}\");\n",
                 rule.name, escaped_body
@@ -100,7 +91,8 @@ fn is_ident(name: &str) -> bool {
         | "stage")
 }
 
-// 4. The "Pass Down" Logic
+// The "Pass Down" Logic
+#[allow(dead_code)]
 fn flatten_expression(
     expr: &Expr,
     t: usize,
@@ -156,5 +148,84 @@ fn flatten_expression(
         }
 
         _ => vec![("".to_string(), t)],
+    }
+}
+
+fn get_first_terminals(
+    expr: &Expr,
+    rule_map: &HashMap<String, &Expr>,
+    visited: &mut Vec<String>,
+) -> Vec<String> {
+    match expr {
+        Expr::Ident(name) => {
+            // 1. If it's a keyword terminal, we found it!
+            if name.starts_with("kw_") {
+                return vec![name.replace("kw_", "")];
+            }
+
+            // 2. If it's a known placeholder (int, ident, etc.), 
+            // you might want to return the name or nothing.
+            if is_ident(name) || is_infrastructure(name) {
+                // Return name as a hint, or return empty vec![] if you only want strings
+                return vec![name.clone()]; 
+            }
+
+            // 3. Recurse into the rule definition
+            if !visited.contains(name) {
+                if let Some(sub_expr) = rule_map.get(name) {
+                    visited.push(name.clone());
+                    let res = get_first_terminals(sub_expr, rule_map, visited);
+                    visited.pop();
+                    return res;
+                }
+            }
+            vec![]
+        }
+
+        // We only care about the first part of a sequence
+        Expr::Seq(lhs, rhs) => {
+            let mut results = get_first_terminals(lhs, rule_map, visited);
+            // If the LHS could be empty (like an Optional rule), 
+            // the "first" terminal could actually be the start of the RHS.
+            if can_be_empty(lhs, rule_map, &mut Vec::new()) {
+                results.extend(get_first_terminals(rhs, rule_map, visited));
+            }
+            results
+        }
+
+        // This is exactly what you want: get the firsts for ALL branches
+        Expr::Choice(lhs, rhs) => {
+            let mut variants = get_first_terminals(lhs, rule_map, visited);
+            variants.extend(get_first_terminals(rhs, rule_map, visited));
+            variants
+        }
+
+        // Drills into the content
+        Expr::Opt(inner) | Expr::Rep(inner) | Expr::RepOnce(inner) => {
+            get_first_terminals(inner, rule_map, visited)
+        }
+
+        // Direct string literals in the grammar: e.g., "(" or "match"
+        Expr::Str(s) => vec![s.clone()],
+
+        _ => vec![],
+    }
+}
+
+fn can_be_empty(expr: &Expr, rule_map: &HashMap<String, &Expr>, visited: &mut Vec<String>) -> bool {
+    match expr {
+        Expr::Opt(_) | Expr::Rep(_) => true,
+        Expr::Ident(name) => {
+            if !visited.contains(name) {
+                if let Some(sub_expr) = rule_map.get(name) {
+                    visited.push(name.clone());
+                    return can_be_empty(sub_expr, rule_map, visited);
+                }
+            }
+            false
+        },
+        Expr::Seq(a, b) => can_be_empty(a, rule_map, visited) && can_be_empty(b, rule_map, visited),
+        Expr::Choice(a, b) => can_be_empty(a, rule_map, visited) || can_be_empty(b, rule_map, visited),
+        _ => false,
     }
 }

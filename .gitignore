@@ -6,6 +6,6 @@ Cargo.lock
 tests_out/
 
 # IDEs
-# is part of the extension
+# .vscode is part of the extension
 # .vscode/
 .idea/

@@ -23,6 +23,7 @@ const grammar = {
   name: "cgdsl",
   scopeName: "source.cgdsl",
   patterns: [
+    { include: "#comments" },
     { include: "#punctuation" },
     { include: "#control" },
     { include: "#actions" },
@@ -156,7 +157,27 @@ const grammar = {
           match: "\\\\."
         }
       ]
-    }
+    },
+
+    comments: {
+      patterns: [
+        {
+          "name": "comment.line.double-slash.cgdsl",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.cgdsl",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.comment.cgdsl" }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.comment.cgdsl" }
+          }
+        }
+      ]
+    },
   }
 };
 

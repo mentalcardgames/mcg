@@ -12,6 +12,14 @@
     },
     {
       "scope": "keyword.control.action.cgdsl",
+      "settings": { "foreground": "#A792EA" }
+    },
+    {
+      "scope": "comment.line.double-slash.cgdsl",
+      "settings": { "foreground": "#A792EA" }
+    },
+    {
+      "scope": "comment.block.cgdsl",
       "settings": { "foreground": "#C792EA" }
     },
     {

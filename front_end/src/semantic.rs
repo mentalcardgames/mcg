@@ -132,8 +132,8 @@ impl SemanticVisitor {
 
         // The Memory checks are more complicated.
         // Maybe not checking them at all is better.
-        // let memory_errs = self.find_memory_mismatches();
-        // err.extend(memory_errs);
+        let memory_errs = self.find_memory_mismatches();
+        err.extend(memory_errs);
 
         if err.is_empty() {
             return None;
@@ -147,7 +147,6 @@ impl SemanticVisitor {
     /// The first occurrence is the infered type of the Memory.
     /// Afterwards we check if the Memory is used with other types and if so then
     /// gather the information and convert them to SemanticErrors.
-    #[allow(dead_code)]
     fn find_memory_mismatches(&self) -> Vec<SemanticError> {
         let mut grouped: HashMap<String, Vec<(MemType, OwnedSpan)>> = HashMap::new();
 
@@ -222,7 +221,6 @@ impl AstPass for SemanticVisitor {
                                     memory.span.clone(),
                                 ),
                             ));
-                            // TODO: check if owner is correct
                         }
                         SetUpRule::CreatePrecedence {
                             precedence,
@@ -299,7 +297,6 @@ impl AstPass for SemanticVisitor {
                                         mem.node.clone(),
                                         (MemType::String, mem.span.clone()),
                                     ));
-                                    // TODO check if owner is correct
                                 }
                             }
                         }
@@ -320,7 +317,6 @@ impl AstPass for SemanticVisitor {
                                 } => {
                                     self.memories
                                         .push((mem.node.clone(), (MemType::Int, mem.span.clone())));
-                                    // TODO check if owner is correct
                                 }
                             }
                         }
@@ -337,35 +333,20 @@ impl AstPass for SemanticVisitor {
                                         (MemType::IntCollection, mem.span.clone()),
                                     ));
                                 }
-                                UseMemory::WithOwner { memory: mem, owner } => {
-                                    // self.memories.push((mem.node.clone(), (MemType::IntCollection, mem.span.clone())));
-
-                                    match &owner.node {
-                                        Owner::PlayerCollection {
-                                            player_collection: _,
-                                        } => {
-                                            self.memories.push((
-                                                mem.node.clone(),
-                                                (MemType::Int, mem.span.clone()),
-                                            ));
-                                        }
-                                        Owner::TeamCollection { team_collection: _ } => {
-                                            self.memories.push((
-                                                mem.node.clone(),
-                                                (MemType::Int, mem.span.clone()),
-                                            ));
-                                        }
-                                        _ => {
-                                            self.memories.push((
-                                                mem.node.clone(),
-                                                (MemType::IntCollection, mem.span.clone()),
-                                            ));
-                                        }
-                                    }
-                                    // TODO check if owner is correct
+                                UseMemory::WithOwner { memory, owner: _ } => {
+                                    self.memories.push((
+                                        memory.node.clone(),
+                                        (MemType::IntCollection, memory.span.clone()),
+                                    ));
                                 }
                             }
-                        }
+                        },
+                        IntCollection::AggregateMemory { memory, multi: _ } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (MemType::Int, memory.span.clone()),
+                            ));
+                        },
                         _ => {}
                     }
                 }
@@ -379,35 +360,20 @@ impl AstPass for SemanticVisitor {
                                         (MemType::StringCollection, mem.span.clone()),
                                     ));
                                 }
-                                UseMemory::WithOwner { memory: mem, owner } => {
-                                    // self.memories.push((mem.node.clone(), (MemType::StringCollection, mem.span.clone())));
-
-                                    match &owner.node {
-                                        Owner::PlayerCollection {
-                                            player_collection: _,
-                                        } => {
-                                            self.memories.push((
-                                                mem.node.clone(),
-                                                (MemType::String, mem.span.clone()),
-                                            ));
-                                        }
-                                        Owner::TeamCollection { team_collection: _ } => {
-                                            self.memories.push((
-                                                mem.node.clone(),
-                                                (MemType::String, mem.span.clone()),
-                                            ));
-                                        }
-                                        _ => {
-                                            self.memories.push((
-                                                mem.node.clone(),
-                                                (MemType::StringCollection, mem.span.clone()),
-                                            ));
-                                        }
-                                    }
-                                    // TODO check if owner is correct
+                                UseMemory::WithOwner { memory: mem, owner: _ } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::StringCollection, mem.span.clone()),
+                                    ));
                                 }
                             }
-                        }
+                        },
+                        StringCollection::AggregateMemory { memory, multi: _ } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (MemType::String, memory.span.clone()),
+                            ));
+                        },
                         _ => {}
                     }
                 }
@@ -429,7 +395,6 @@ impl AstPass for SemanticVisitor {
                                         mem.node.clone(),
                                         (MemType::LocationCollection, mem.span.clone()),
                                     ));
-                                    // TODO check if owner is correct
                                 }
                             }
                         }
@@ -454,10 +419,15 @@ impl AstPass for SemanticVisitor {
                                         mem.node.clone(),
                                         (MemType::PlayerCollection, mem.span.clone()),
                                     ));
-                                    // TODO check if owner is correct
                                 }
                             }
-                        }
+                        },
+                        PlayerCollection::AggregateMemory { memory, multi: _ } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (MemType::Player, memory.span.clone()),
+                            ));
+                        },
                         _ => {}
                     }
                 }
@@ -479,10 +449,15 @@ impl AstPass for SemanticVisitor {
                                         mem.node.clone(),
                                         (MemType::TeamCollection, mem.span.clone()),
                                     ));
-                                    // TODO check if owner is correct
                                 }
                             }
-                        }
+                        },
+                        TeamCollection::AggregateMemory { memory, multi: _ } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (MemType::Team, memory.span.clone()),
+                            ));
+                        },
                         _ => {}
                     }
                 }
@@ -504,7 +479,6 @@ impl AstPass for SemanticVisitor {
                                         mem.node.clone(),
                                         (MemType::CardSet, mem.span.clone()),
                                     ));
-                                    // TODO check if owner is correct
                                 }
                             }
                         }

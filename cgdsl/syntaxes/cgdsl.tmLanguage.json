@@ -4,6 +4,9 @@
   "scopeName": "source.cgdsl",
   "patterns": [
     {
+      "include": "#comments"
+    },
+    {
       "include": "#punctuation"
     },
     {
@@ -151,6 +154,29 @@
         {
           "name": "constant.character.escape.cgdsl",
           "match": "\\\\."
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cgdsl",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.cgdsl",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.cgdsl"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.cgdsl"
+            }
+          }
         }
       ]
     }

@@ -496,6 +496,30 @@ impl AstPass for SymbolVisitor {
                     UseMemory::Memory { memory } => self.use_id(&memory),
                     UseMemory::WithOwner { memory, owner: _ } => self.use_id(&memory),
                 },
+                NodeKind::UseSingleMemory(m) => match m {
+                    UseSingleMemory::Memory { memory } => self.use_id(&memory),
+                    UseSingleMemory::WithOwner { memory, owner: _ } => self.use_id(&memory),
+                },
+                NodeKind::IntCollection(ic) => match ic {
+                    IntCollection::AggregateMemory { memory, multi: _ } => self.use_id(&memory),
+                    _ => {},
+                },
+                NodeKind::StringCollection(sc) => match sc {
+                    StringCollection::AggregateMemory { memory, multi: _ } => self.use_id(&memory),
+                    _ => {},
+                },
+                NodeKind::TeamCollection(tc) => match tc {
+                    TeamCollection::AggregateMemory { memory, multi: _ } => self.use_id(&memory),
+                    _ => {},
+                },
+                NodeKind::PlayerCollection(pc) => match pc {
+                    PlayerCollection::AggregateMemory { memory, multi: _ } => self.use_id(&memory),
+                    _ => {},
+                },
+                NodeKind::RuntimeInt(ri) => match ri {
+                    RuntimeInt::StageRoundCounter { stage } => self.use_id(stage),
+                    _ => {},
+                },
                 _ => {}
             }
         }
