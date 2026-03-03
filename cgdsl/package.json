@@ -116,11 +116,10 @@
     ]
   },
   "scripts": {
-    "setup": "npm install && cargo build --workspace",
+    "build-lsp": "cargo build --manifest-path ../Cargo.toml -p lsp_server",
     "generate-grammar": "npx ts-node ./src/generate-grammar.ts",
-    "compile": "npm run generate-grammar && npx tsc -p ./",
-    "watch": "npm run generate-grammar && npx tsc -watch -p ./",
-    "test-extension": "npm run compile && code --extensionDevelopmentPath=$(pwd) ."
+    "watch": "npm run generate-grammar && tsc -watch -p ./",
+    "compile": "npm run build-lsp && npx tsc -p ./"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

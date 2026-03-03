@@ -7,22 +7,20 @@
 
 ---
 
-### Running the VS Code Extension
-
-> **Important:** The `.cgdsl` file must be inside a **workspace folder** so that outputs (`output.json`, `output.dot`, `output.png`) can be created.
-
-Create a workspace folder for your game and add a `.cgdsl` file:
-
+### Test Extension for Linux/macOS
 ```bash
-mkdir ~/my_cgdl_game
-cd ~/my_cgdl_game
-touch my_game.cgdsl
-```
-
-### Run Extension
-```bash
+# 1. Navigate into the extension directory
 cd cgdsl
-code --extensionDevelopmentPath=$(pwd) ./test-workspace/sample.cgdsl
+
+# 2. Install dependencies (Required to generate the grammar)
+npm install
+
+# 3. Build the Rust LSP and compile the TypeScript source
+# This ensures the binary exists in ../target/debug/
+npm run compile
+
+# 4. Launch the Extension Development Host
+code --extensionDevelopmentPath="$PWD" ./test-workspace
 ```
 
 ### Build Project

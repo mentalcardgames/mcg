@@ -15,7 +15,9 @@ let client: LanguageClient;
 
 export function activate(context: vscode.ExtensionContext) {
     const serverBinary = process.platform === 'win32' ? 'lsp_server.exe' : 'lsp_server';
-    const serverPath = path.join(context.extensionPath, 'bin', serverBinary);
+    const serverPath = process.platform === 'win32' 
+        ? path.join(__dirname, '..', '..', 'target', 'debug', 'lsp_server.exe')
+        : path.join(__dirname, '..', '..', 'target', 'debug', 'lsp_server');
 
     const serverOptions: ServerOptions = {
         run: { command: serverPath, transport: TransportKind.stdio },
