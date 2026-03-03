@@ -4,4 +4,4 @@ dist
 node_modules
 .vscode-test/
 *.vsix
-cgdsl-output/
+test-workspace/cgdsl-output/
