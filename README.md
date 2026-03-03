@@ -39,7 +39,7 @@ CGDL provides a structured way to define card games, capturing rules, stages, ac
 ### Test Extension for Linux/macOS
 ```bash
 # 1. Navigate into the extension directory
-cd cgdsl
+cd ./cardgamedsl/cgdsl
 
 # 2. Install dependencies (Required to generate the grammar)
 npm install
