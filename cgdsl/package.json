@@ -116,13 +116,11 @@
     ]
   },
   "scripts": {
+    "setup": "npm install && cargo build --workspace",
     "generate-grammar": "npx ts-node ./src/generate-grammar.ts",
-    "vscode:prepublish": "npm run compile",
-    "compile": "npm run generate-grammar && tsc -p ./",
-    "watch": "npm run generate-grammar && tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
+    "compile": "npm run generate-grammar && npx tsc -p ./",
+    "watch": "npm run generate-grammar && npx tsc -watch -p ./",
+    "test-extension": "npm run compile && code --extensionDevelopmentPath=$(pwd) ."
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

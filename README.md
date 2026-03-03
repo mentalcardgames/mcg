@@ -49,7 +49,7 @@ touch my_game.cgdsl
 ### Run Extension
 ```bash
 cd cgdsl
-cargo build --workspace && code --extensionDevelopmentPath=$(pwd) .
+code --extensionDevelopmentPath=$(pwd) ./test-workspace/sample.cgdsl
 ```
 
 ### Build Project
