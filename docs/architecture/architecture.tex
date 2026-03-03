@@ -7,6 +7,20 @@
 \usepackage{hyperref}
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Highlighting for the dummy code
+\lstset{
+    language=Python,
+    backgroundcolor=\color{gray!10},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single
+}
 
 % Point this to your DOC_OUT directory
 \graphicspath{ {./docs/architecture/build/} }
@@ -645,5 +659,149 @@ This document has described the architecture of the Card Game Description Langua
 Key design decisions, such as using a manual AST, a spanned AST for diagnostics, and a graph-based IR, provide a robust foundation for semantic validation, structural analysis, and advanced tooling such as LSP integration and VS Code support. The procedural macro infrastructure further reduces boilerplate while preserving semantic clarity.
 
 The architecture also anticipates future improvements, including more advanced semantic validation, game-theoretic analysis of FSMs, enhanced auto-completion, and flexible IR extensions. These features ensure that the language front-end can evolve with the needs of game designers and researchers, providing both a practical tool for game development and a platform for experimentation with formal verification and analysis techniques.
+
+
+\section{Appendix}
+
+\begin{lstlisting}
+player P1, P2, P3, P4, P5, P6, P7
+turnorder all random 
+location Hand, Trick, WonTricks on all
+location Stock on table
+card on Stock: 
+  Rank (Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace)
+    for Suit (Spades, Clubs)
+      for Color (Black),
+  Rank (Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace)
+    for Suit (Diamonds, Hearts)
+      for Color (Red)
+precedence Rankorder on Rank (Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace)
+memory Deals (7, 6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7) on table
+memory Trump on table
+memory Lead on table
+memory Score on all
+memory IntermediateWinner on table 
+memory Bid 0 on all
+stage Play for current 13 times {
+  stage Preparation for current 1 times {
+    flip Stock to face down
+    shuffle Stock
+    deal &IC:Deals[stageroundcounter(Play)] from Stock private to Hand of all
+    cycle to next
+  }
+
+  stage Bidding for current until all out of Bidding {
+    conditional {
+      case size(playersin) == 1:
+        bid != (&IC:Deals[stageroundcounter(Play)] - sum((&I:Bid of all))) on Bid of current
+      case else:
+        bid <= &IC:Deals[stageroundcounter(Play)] on Bid of current
+    }
+
+    cycle to current
+    set current out of stage
+  }
+
+  stage Tricks for current until Hand of all empty {
+    stage PlayOneTrick for current until all out of stage {
+      conditional {
+        case Trick empty:
+          move any from Hand face up to Trick
+          Lead is Suit of top(Trick)
+        case (Trick not empty and &S:Lead not in Hand):
+          move any from Hand face up to top(Trick)
+        case (Trick not empty and &S:Lead in Hand):
+          move any from Hand where Suit is &S:Lead face up to top(Trick)
+      }
+
+      set current out of stage
+      cycle to next 
+    }
+
+    stage DeclareTrickWinner for current 1 times {
+      precedence TrickScore ( Rank Two, Rank Three, Rank Four, Rank Five, Rank Six, Rank Seven
+      , Rank Eight, Rank Nine, Rank Ten, Rank Jack, Rank Queen, Rank King, Rank Ace)
+      IntermediateWinner is ( owner of max of Trick of all using TrickScore )
+      move Trick of all face up to IntermediateWinner
+      cycle to &PC:IntermediateWinner[0]
+    } 
+  }
+
+  stage RoundScoring for current until all out of stage {
+    if (size(cards WonTricks) == &I:Bid) {
+      score (10 + &I:Bid) to Score of current
+    }
+
+    set current out of stage
+    cycle to next
+  }
+
+  stage Clearup for current 1 times {
+    move WonTricks of all face down to top(Stock)
+  }
+}
+
+winner is highest Score
+\end{lstlisting}
+
+\begin{lstlisting}
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand, LayDown, Trash on all
+location Stock, Discard on table
+card on Stock:
+Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)
+    for Suite(Diamonds, Hearts, Spades, Clubs)
+precedence RankOrder on Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King)
+points Values on Rank(Ace: 1, Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7, Eight: 8, Nine: 9 , Ten: 10, Jack: 10, Queen: 10, King: 10)
+combo Sequence where ((size >= 3 and same Suite) and adjacent Rank using RankOrder)
+combo Set where ((size >= 3 and distinct Suite) and Rank is "Ace")
+combo Deadwood where (not Sequence and not Set)
+
+stage Preparation for current 1 times {
+    deal 12 from top(Stock) private to Hand of all
+}
+
+stage Collect for current until previous out of stage  {
+    choose {
+        move top(Discard) private to Hand
+        or
+        move top(Stock) private to Hand
+    }
+
+    move any from Hand face up to top(Discard)
+
+    if (sum of Deadwood in Hand using Values <= 10) {
+        optional {
+            move all from Set in Hand face up to top(LayDown)
+            move all from Sequence in Hand face up to top(LayDown)
+
+            if (Hand empty) {
+                move all from Set in Hand of next face up to top(LayDown) of next
+                move all from Sequence in Hand of next face up to top(LayDown) of next
+                move Hand of next face up to Trash of next
+
+                move Hand face up to Trash
+                set current out of stage
+            }
+        }
+    }
+
+    cycle to next
+}
+
+stage FinalLayDown for current 1 times {
+    move LayDown of previous face up to Hand of current
+    move all from Set in Hand face up to top(LayDown)
+    move all from Sequence in Hand face up to top(LayDown)
+
+    move Hand face up to Trash
+}
+
+memory LeftOver on all
+
+score sum of Trash using Values to LeftOver of all
+winner is lowest LeftOver
+\end{lstlisting}
 
 \end{document}

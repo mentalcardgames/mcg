@@ -1,7 +1,5 @@
-/*
-    Some Types are deeply recursive and need extra handling for generating Arbitrary ASTs.
-    Additional helper functions for not-empty Vector, etc. are implemented here.
-*/
+///    Some Types are deeply recursive and need extra handling for generating Arbitrary ASTs.
+///    Additional helper functions for not-empty Vector, etc. are implemented here.
 
 use crate::ast::*;
 use arbitrary::{Arbitrary, Result, Unstructured};

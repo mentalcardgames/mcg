@@ -38,9 +38,7 @@ CGDL provides a structured way to define card games, capturing rules, stages, ac
 
 ### Running the VS Code Extension
 
-> **Important:** The `.cgdsl` file must be inside a **workspace folder** so that outputs (`output.json`, `output.dot`, `output.png`) can be created.
-
-Create a workspace folder for your game and add a `.cgdsl` file:
+Create a `.cgdsl` file:
 
 ```bash
 mkdir ~/my_cgdl_game

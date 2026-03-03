@@ -124,7 +124,9 @@ pub fn spanned_ast(_: TokenStream, item: TokenStream) -> TokenStream {
     let mut walker_impls = Vec::new();
     // all items and adding the types
     let all_items = vec![spanned_items.clone(), type_items.clone()].concat();
-    println!("Total items found in module: {}", items.len());
+
+    // Debug
+    // println!("Total items found in module: {}", items.len());
 
     for item in all_items.iter() {
         // Use a simpler visibility check to ensure we aren't skipping everything
@@ -252,7 +254,7 @@ fn transform_type_spanned(ty: &syn::Type) -> syn::Type {
                 }
 
                 _ => {
-                    // No generics → this is a leaf AST node
+                    // No generics -> this is a leaf AST node
                     syn::parse_quote!(Spanned<#ty>)
                 }
             }
