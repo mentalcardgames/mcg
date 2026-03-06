@@ -14,10 +14,15 @@ import {
 let client: LanguageClient;
 
 export function activate(context: vscode.ExtensionContext) {
-    const serverBinary = process.platform === 'win32' ? 'lsp_server.exe' : 'lsp_server';
-    const serverPath = process.platform === 'win32' 
-        ? path.join(__dirname, '..', '..', 'target', 'debug', 'lsp_server.exe')
-        : path.join(__dirname, '..', '..', 'target', 'debug', 'lsp_server');
+    const platform = process.platform; 
+    const binaryName = platform === 'win32' ? 'lsp_server.exe' : 'lsp_server';
+
+    // Since Mac is now a single 'universal' file in bin/darwin/
+    const serverPath = path.join(context.extensionPath, 'bin', platform, binaryName);
+
+    if (platform !== 'win32' && fs.existsSync(serverPath)) {
+        fs.chmodSync(serverPath, '755');
+    }
 
     const serverOptions: ServerOptions = {
         run: { command: serverPath, transport: TransportKind.stdio },

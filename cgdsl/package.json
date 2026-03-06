@@ -3,6 +3,11 @@
   "displayName": "cgdsl-lsp",
   "description": "Support for cgdsl (Card Game DSL)",
   "version": "0.0.1",
+  "publisher": "till-h",
+  "author": {
+    "name": "Till Hoffmann",
+    "email": "your-email@example.com"
+  },
   "license": "MIT OR Apache-2.0",
   "engines": {
     "vscode": "^1.108.0"
@@ -15,6 +20,20 @@
       "editor.semanticHighlighting.enabled": true
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mentalcardgames/cardgamedsl.git"
+  },
+  "files": [
+    "out/**/*.js",
+    "language-configuration.json",
+    "icons/*.svg",
+    "bin/**/**",
+    "themes/**/*.json",
+    "syntaxes/*.json",
+    "LICENSE",
+    "README.md"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
@@ -116,10 +135,16 @@
     ]
   },
   "scripts": {
-    "build-lsp": "cargo build --manifest-path ../Cargo.toml -p lsp_server",
     "generate-grammar": "npx ts-node ./src/generate-grammar.ts",
     "watch": "npm run generate-grammar && tsc -watch -p ./",
-    "compile": "npm run build-lsp && npx tsc -p ./"
+    "build-lsp-win": "cargo zigbuild --release --target x86_64-pc-windows-gnu",
+    "build-lsp-linux": "cargo zigbuild --release --target x86_64-unknown-linux-gnu",
+    "build-lsp-mac": "cargo zigbuild --release --target universal2-apple-darwin --manifest-path ../Cargo.toml",
+    "copy-bins": "mkdir -p bin/win32 bin/linux bin/darwin && cp ../target/x86_64-pc-windows-gnu/release/lsp_server.exe ./bin/win32/ && cp ../target/x86_64-unknown-linux-gnu/release/lsp_server ./bin/linux/ && cp ../target/universal2-apple-darwin/release/lsp_server ./bin/darwin/",
+    "compile": "npm run build-all-lsp && npx tsc -p ./",
+    "build-all-lsp": "npm run build-lsp-win && npm run build-lsp-linux && npm run build-lsp-mac && npm run copy-bins",
+    "bundle": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "vscode:prepublish": "npm run generate-grammar && npm run build-all-lsp && npm run bundle"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -129,11 +154,16 @@
     "@typescript-eslint/parser": "^8.39.0",
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.27.3",
     "eslint": "^9.32.0",
     "mocha": "^11.3.0",
     "typescript": "^5.9.2"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
-  }
+  },
+  "activationEvents": [
+    "onLanguage:cgdsl",
+    "onCommand:cgdsl.runFile"
+  ]
 }
