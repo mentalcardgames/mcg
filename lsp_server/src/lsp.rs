@@ -339,25 +339,40 @@ impl LanguageServer for Backend {
     ) -> jsonrpc::Result<Option<serde_json::Value>> {
         if let Some(safe_ast) = &*self.last_ast.load() {
             if params.command == "cgdsl.generateGraph" {
-                // Get your graph data
                 let graph = safe_ast.to_lowered_graph();
 
-                // 1. Get the path from TS arguments
-                let path_str = params
+                // 1. Get the base path from TS arguments
+                let base_path_str = params
                     .arguments
                     .get(0)
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| jsonrpc::Error::invalid_params("Missing path"))?;
 
-                let dot_path = std::path::Path::new(path_str);
+                let base_path = std::path::Path::new(base_path_str);
 
-                // 3. Write the DOT file (The "Game View")
-                front_end::fsm_to_dot::fsm_to_dot(&graph, dot_path)
+                // 2. Derive separate paths for DOT and SVG
+                // This ensures we save "mygame.dot" and "mygame.svg"
+                let dot_path = base_path.with_extension("dot");
+                let svg_path = base_path.with_extension("svg");
+
+                // 3. Write the DOT file
+                front_end::fsm_to_dot::fsm_to_dot(&graph, &dot_path)
+                    .map_err(|e| {
+                        eprintln!("DOT Error: {}", e);
+                        jsonrpc::Error::internal_error()
+                    })?;
+
+                // 4. Write the SVG file (Pure Rust version)
+                front_end::fsm_to_dot::fsm_to_svg(&graph, &svg_path)
+                    .map_err(|e| {
+                        eprintln!("SVG Error: {}", e);
+                        jsonrpc::Error::internal_error()
+                    })?;
+
+                // 5. Return the graph data to the extension 
+                // (The extension can then use this to open the SVG automatically)
+                let json_value = serde_json::to_value(&graph)
                     .map_err(|_| jsonrpc::Error::internal_error())?;
-
-                // Return it as a JSON value
-                let json_value =
-                    serde_json::to_value(&graph).map_err(|_| jsonrpc::Error::internal_error())?;
 
                 return Ok(Some(json_value));
             }

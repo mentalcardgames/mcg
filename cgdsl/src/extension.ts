@@ -46,7 +46,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     client.start();
 
-    // 1. Register the command that the user triggers (e.g., from a button or Command Palette)
     const runCommand = vscode.commands.registerCommand('cgdsl.runFile', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -54,43 +53,43 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        // 1. Get the directory of the currently open file
         const filePath = editor.document.uri.fsPath;
         const fileDir = path.dirname(filePath);
-
-        // 2. Define the output directory relative to the file
-        // This creates a folder named 'cgdsl-output' right next to your .cgdsl file
+        const fileName = path.basename(filePath, path.extname(filePath));
+        
+        // Define the output directory
         const outDir = path.join(fileDir, 'cgdsl-output');
         
         try {
-            // Ensure outDir exists (recursive: true handles parent folders if needed)
             if (!fs.existsSync(outDir)) {
                 fs.mkdirSync(outDir, { recursive: true });
             }
 
-            const dotPath = path.join(outDir, 'graph.dot');
-            const jsonPath = path.join(outDir, 'graph.json');
-            const pngPath = path.join(outDir, 'graph.png');
+            // Rust will append .dot and .svg to this.
+            // Define the output folder and base filename
+            const baseOutputPath = path.join(outDir, fileName); // No extension here!
 
-            // 3. Request your LSP/Server to generate the data
-            const graphData = await vscode.commands.executeCommand('cgdsl.generateGraph', dotPath);
+            const jsonPath = path.join(outDir, 'game.json');
+
+            // Rust will turn baseOutputPath into baseOutputPath.dot and baseOutputPath.svg
+            const graphData = await vscode.commands.executeCommand('cgdsl.generateGraph', baseOutputPath);
 
             if (graphData) {
                 fs.writeFileSync(jsonPath, JSON.stringify(graphData, null, 2));
-                
-                const doc = await vscode.workspace.openTextDocument(jsonPath);
-                await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
-
-                // 4. Execute Graphviz
-                cp.exec(`dot -Tpng "${dotPath}" -o "${pngPath}"`, (error) => {
-                    if (error) {
-                        vscode.window.showErrorMessage(`Graphviz Error: ${error.message}`);
-                        return;
-                    }
-                    vscode.window.showInformationMessage(`Generated files in: ${outDir}`);
-                    vscode.commands.executeCommand('vscode.open', vscode.Uri.file(pngPath));
-                });
+                const jsonDoc = await vscode.workspace.openTextDocument(jsonPath);
+                await vscode.window.showTextDocument(jsonDoc, vscode.ViewColumn.One);
+            } else {
+                vscode.window.showErrorMessage("LSP returned no data. Check the Rust logs.");
             }
+
+            // 2. Now TypeScript just needs to know where to find them to open them
+            const svgPath = path.join(outDir, `${fileName}.svg`);
+            const svgUri = vscode.Uri.file(svgPath);
+            await vscode.commands.executeCommand('vscode.open', svgUri, vscode.ViewColumn.Two);
+
+            const dotPath = path.join(outDir, `${fileName}.dot`);
+            const dotUri = vscode.Uri.file(svgPath);
+            await vscode.commands.executeCommand('vscode.open', dotUri, vscode.ViewColumn.Two);
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to generate graph: ${err}`);
         }

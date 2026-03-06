@@ -2,7 +2,7 @@
   "name": "cgdsl",
   "displayName": "cgdsl-lsp",
   "description": "Support for cgdsl (Card Game DSL)",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "till-h",
   "author": {
     "name": "Till Hoffmann",
