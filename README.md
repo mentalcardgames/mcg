@@ -28,29 +28,12 @@ CGDL provides a structured way to define card games, capturing rules, stages, ac
 
 ## Getting Started
 
-### Prerequisites
+### Install the Extension
 
-- Rust 1.70+  
-- Node.js 18+ (for building VS Code extension)  
-- VS Code (latest stable release)  
-
----
-
-### Test Extension for Linux/macOS
-```bash
-# 1. Navigate into the extension directory
-cd ./cardgamedsl/cgdsl
-
-# 2. Install dependencies (Required to generate the grammar)
-npm install
-
-# 3. Build the Rust LSP and compile the TypeScript source
-# This ensures the binary exists in ../target/debug/
-npm run compile
-
-# 4. Launch the Extension Development Host
-code --extensionDevelopmentPath="$PWD" ./test-workspace
-```
+1. Open **Visual Studio Code**.  
+2. Open the **Extensions** panel (`Ctrl + Shift + X`).  
+3. Search for **cgdsl-lsp**.  
+4. Click **Install** to enable it.
 
 ### Build Project
 
