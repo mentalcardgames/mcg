@@ -1,12 +1,13 @@
 {
   "name": "cgdsl",
-  "displayName": "cgdsl-lsp",
+  "displayName": "CGDSL",
   "description": "Support for cgdsl (Card Game DSL)",
-  "version": "0.0.2",
+  "version": "0.0.5",
   "publisher": "till-h",
+  "icon": "images/icon.png",
   "author": {
     "name": "Till Hoffmann",
-    "email": "your-email@example.com"
+    "email": "rabbit.zootopia@gmail.com"
   },
   "license": "MIT OR Apache-2.0",
   "engines": {
@@ -28,6 +29,7 @@
     "out/**/*.js",
     "language-configuration.json",
     "icons/*.svg",
+    "images/icon.png",
     "bin/**/**",
     "themes/**/*.json",
     "syntaxes/*.json",

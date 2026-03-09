@@ -32,7 +32,7 @@ CGDL provides a structured way to define card games, capturing rules, stages, ac
 
 1. Open **Visual Studio Code**.  
 2. Open the **Extensions** panel (`Ctrl + Shift + X`).  
-3. Search for **cgdsl-lsp**.  
+3. Search for **CGDSL**.  
 4. Click **Install** to enable it.
 
 ### Build Project
