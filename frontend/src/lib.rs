@@ -29,13 +29,13 @@ extern "C" {
 /// Platform-agnostic println! alternative that works in both native and WASM targets
 #[macro_export]
 macro_rules! sprintln {
-	($($arg:tt)*) => {{
-		$crate::log(format!($($arg)*).as_str());
-	}};
+    ($($arg:tt)*) => {{
+        $crate::log(format!($($arg)*).as_str());
+    }};
 }
 
 pub fn start_game(
-    canvas: web_sys::HtmlCanvasElement,
+    canvas: HtmlCanvasElement,
     init: AppCreator<'static>,
 ) -> Result<(), JsValue> {
     #[cfg(feature = "console_error_panic_hook")]
@@ -49,7 +49,7 @@ pub fn start_game(
     spawn_local(async move {
         if let Err(e) = WebRunner::new().start(canvas, web_options, init).await {
             // Avoid panicking inside wasm task; log instead
-            crate::sprintln!("Failed to start eframe: {:?}", e);
+            sprintln!("Failed to start eframe: {:?}", e);
         }
     });
     Ok(())

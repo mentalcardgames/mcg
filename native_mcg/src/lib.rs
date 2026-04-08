@@ -7,6 +7,3 @@ pub mod pretty;
 pub mod public;
 pub mod server;
 pub mod transport;
-
-// Re-export server as backend for backward compatibility
-pub use server as backend;
