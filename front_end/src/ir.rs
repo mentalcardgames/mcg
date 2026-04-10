@@ -304,7 +304,7 @@ impl AstContext for SpannedCtx {
 
 pub type LoweredPayLoad = Payload<LoweredCtx>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LoweredCtx;
 impl AstContext for LoweredCtx {
     type Condition = L::BoolExpr;
@@ -511,9 +511,7 @@ impl IrBuilder<SpannedPayload> {
                 self.build_choice_rule(&choice_rule.node, entry, exit)
             }
             FlowComponent::SeqStage { stage } => self.build_seq_stage(&stage.node, entry, exit),
-            FlowComponent::SimStage { stage } => {
-                self.build_sim_stage(&stage.node, entry, exit)
-            }
+            FlowComponent::SimStage { stage } => self.build_sim_stage(&stage.node, entry, exit),
             FlowComponent::GameRule { game_rule } => {
                 // Can have GameFlowChanges! So return here.
                 return self.build_rule(game_rule, entry, exit);
