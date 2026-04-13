@@ -1,6 +1,6 @@
 use std::io::IsTerminal;
 
-use mcg_shared::{GameStatePublic, PlayerConfig, ServerMsg};
+use mcg_shared::{GameStatePublic, PlayerConfig, Backend2FrontendMsg};
 
 use native_mcg::pretty::{format_event_human, format_state_human, format_table_header};
 
@@ -27,18 +27,18 @@ impl MessagePrinter {
         }
     }
 
-    pub fn handle(&mut self, msg: &ServerMsg) {
+    pub fn handle(&mut self, msg: &Backend2FrontendMsg) {
         match msg {
-            ServerMsg::State(gs) => {
+            Backend2FrontendMsg::State(gs) => {
                 self.latest_state = Some(gs.clone());
                 match self.mode {
                     DisplayMode::FullState => self.print_full_state(gs),
                     DisplayMode::Incremental => self.print_incremental(gs),
                 }
             }
-            ServerMsg::Error(e) => eprintln!("Server error: {}", e),
-            ServerMsg::Pong => println!("Received pong"),
-            ServerMsg::QrRes(inner) => {
+            Backend2FrontendMsg::Error(e) => eprintln!("Server error: {}", e),
+            Backend2FrontendMsg::Pong => println!("Received pong"),
+            Backend2FrontendMsg::QrRes(inner) => {
                 println!("Qr Response: {:?}", inner);
             }
         }

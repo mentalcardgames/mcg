@@ -2,14 +2,14 @@ use crate::game::websocket::WebSocketConnection;
 use crate::qr_scanner::QrScannerPopup;
 use crate::store::{ClientState, ConnectionStatus};
 use egui::{Color32, Context, RichText, Ui};
-use mcg_shared::{PlayerConfig, ServerMsg};
+use mcg_shared::{PlayerConfig, Backend2FrontendMsg};
 use std::collections::VecDeque;
 
 pub struct ConnectionManager {
     edit_server_address: String,
     qr_result_raw: Vec<u8>,
     scanner: QrScannerPopup,
-    message_queue: Option<std::rc::Rc<std::cell::RefCell<VecDeque<ServerMsg>>>>,
+    message_queue: Option<std::rc::Rc<std::cell::RefCell<VecDeque<Backend2FrontendMsg>>>>,
     error_queue: Option<std::rc::Rc<std::cell::RefCell<VecDeque<String>>>>,
 }
 
@@ -39,7 +39,7 @@ impl ConnectionManager {
         // Create a shared message queue using Rc<RefCell<VecDeque<ServerMsg>>>
         let message_queue =
             std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<
-                mcg_shared::ServerMsg,
+                mcg_shared::Backend2FrontendMsg,
             >::new()));
         let error_queue = std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<
             String,
@@ -56,7 +56,7 @@ impl ConnectionManager {
         conn.connect(
             &self.edit_server_address,
             players,
-            move |msg: mcg_shared::ServerMsg| {
+            move |msg: mcg_shared::Backend2FrontendMsg| {
                 // Queue the message safely
                 if let Ok(mut queue) = msg_queue_for_msg.try_borrow_mut() {
                     queue.push_back(msg);

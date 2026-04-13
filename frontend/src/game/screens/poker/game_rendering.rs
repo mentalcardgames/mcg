@@ -219,5 +219,5 @@ pub trait PokerScreenActions {
         enabled: bool,
         show_next: bool,
     );
-    fn send(&self, msg: &mcg_shared::ClientMsg);
+    fn send(&self, msg: &mcg_shared::Frontend2BackendMsg);
 }

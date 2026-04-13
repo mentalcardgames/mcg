@@ -1,5 +1,5 @@
 use crate::articles::Post;
-use mcg_shared::{GameStatePublic, ServerMsg};
+use mcg_shared::{GameStatePublic, Backend2FrontendMsg};
 use std::collections::VecDeque;
 
 #[derive(Clone, Default, Debug)]
@@ -48,7 +48,7 @@ pub struct GameSessionState {
 #[derive(Clone, Debug, Default)]
 pub struct ConnectionState {
     pub connection_status: ConnectionStatus,
-    pub pending_messages: VecDeque<ServerMsg>,
+    pub pending_messages: VecDeque<Backend2FrontendMsg>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -119,7 +119,7 @@ impl ClientState {
         }
     }
 
-    pub fn queue_server_msg(&mut self, msg: ServerMsg) {
+    pub fn queue_server_msg(&mut self, msg: Backend2FrontendMsg) {
         self.connection.pending_messages.push_back(msg);
     }
 
@@ -129,19 +129,19 @@ impl ClientState {
         }
     }
 
-    pub fn apply_server_msg(&mut self, msg: ServerMsg) {
+    pub fn apply_server_msg(&mut self, msg: Backend2FrontendMsg) {
         match msg {
-            ServerMsg::State(gs) => {
+            Backend2FrontendMsg::State(gs) => {
                 self.connection.connection_status = ConnectionStatus::Connected;
                 self.session.game_state = Some(gs.clone());
                 self.ui.last_error = None;
                 self.ui.last_info = None;
             }
-            ServerMsg::Error(e) => {
+            Backend2FrontendMsg::Error(e) => {
                 self.ui.last_error = Some(e.clone());
             }
-            ServerMsg::Pong => {}
-            ServerMsg::QrRes(_content) => {}
+            Backend2FrontendMsg::Pong => {}
+            Backend2FrontendMsg::QrRes(_content) => {}
         }
     }
 }
