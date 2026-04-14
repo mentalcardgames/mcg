@@ -67,7 +67,7 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
 
 Once started, the application enters its main loop. The `App` struct (in `frontend/src/game.rs`) implements `eframe::App`, and its `update` method is called every frame by the browser/renderer.
 
--   **`App::new`**: Initializes the global state (`AppState`), registers screens, and sets up the router.
+-   **`App::new`**: Initializes the global state (`ClientState`), registers screens, and sets up the router.
 -   **`App::update`**: 
     1.  Processes pending messages (from WebSocket/Network).
     2.  Handles URL changes (routing).
@@ -80,7 +80,7 @@ The `AppInterface` struct is passed to every screen's `ui` method. It holds a mu
 
 ### State Management
 
-Global state is held in `AppState` (in `frontend/src/store.rs`). It contains data shared across the application, such as the current `GameState`, connection status, and player settings. It is accessible via `AppInterface.state()` in any screen.
+Global state is held in `ClientState` (in `frontend/src/store.rs`). It contains data shared across the application, such as the current `GameState`, connection status, and player settings. It is accessible via `AppInterface.state()` in any screen.
 
 Local state (like specific UI toggles or temporary input buffers) should remain inside the specific `ScreenWidget` struct.
 
@@ -98,7 +98,7 @@ ws.connect(
     "127.0.0.1:3000",
     players_config,
     move |msg: ServerMsg| {
-        // Handle incoming message (e.g. queue it to AppState)
+        // Handle incoming message (e.g. queue it to ClientState)
     },
     move |err| { log(err); },
     move |reason| { log(reason); }
@@ -109,7 +109,7 @@ ws.connect(
 
 Because WASM is single-threaded (in this context) and `egui` is immediate mode, we cannot block waiting for messages.
 1.  **Callback**: The WebSocket entry receives a message.
-2.  **Queueing**: The message is pushed to a thread-safe queue (often `AppState.pending_messages` or a `RefCell` queue in the screen).
+2.  **Queueing**: The message is pushed to a thread-safe queue (often `ClientState.pending_messages` or a `RefCell` queue in the screen).
 3.  **Processing**: The main `App::update` or the screen's `ui` method pops messages from the queue and applies them to the state.
 
 #### Sending Messages

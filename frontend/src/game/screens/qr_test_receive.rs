@@ -5,28 +5,12 @@ use mcg_qr_comm::data_structures::Frame;
 use mcg_qr_comm::network_coding::Epoch;
 use mcg_qr_comm::FRAME_SIZE_BYTES;
 
+#[derive(Default)]
 pub struct QrTestReceive {
     frame_buffer: Vec<u8>,
     epoch: Epoch,
     scanner: QrScannerPopup,
     matrix: String,
-}
-
-impl QrTestReceive {
-    pub fn new() -> Self {
-        Self {
-            epoch: Epoch::default(),
-            frame_buffer: Vec::new(),
-            scanner: QrScannerPopup::new(),
-            matrix: String::new(),
-        }
-    }
-}
-
-impl Default for QrTestReceive {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ScreenWidget for QrTestReceive {
@@ -66,7 +50,7 @@ impl ScreenWidget for QrTestReceive {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             ui.label("Received Frames:");
-            ui.label(&self.epoch.equations.len().to_string());
+            ui.label(self.epoch.equations.len().to_string());
             ui.label("Number equations:");
             ui.label(self.epoch.needed_eqs.to_string());
         });
@@ -93,24 +77,11 @@ impl ScreenWidget for QrTestReceive {
     }
 }
 
-impl ScreenDef for QrTestReceive {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/receive",
-            display_name: "Scan QR-Codes",
-            icon: "🔍",
-            description: "Receive QR-Codes from peers",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    QrTestReceive,
+    "/receive",
+    "Scan QR-Codes",
+    "🔍",
+    "Receive QR-Codes from peers",
+    true
+);

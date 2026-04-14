@@ -25,7 +25,7 @@ use crate::public::{path_for_config, PublicInfo};
 use crate::server::state::subscribe_connection;
 use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
-use mcg_shared::{ClientMsg, ServerMsg};
+use mcg_shared::{ClientMsg, ServerMsg, PeerMsg};
 
 /// Public entrypoint spawned by server startup
 ///
@@ -90,7 +90,8 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     }
 
     // Start the accept loop which will spawn a handler per connection
-    start_iroh_accept_loop(endpoint, state.clone());
+    start_iroh_accept_loop(endpoint.clone(), state.clone());
+    start_iroh_connect_loop(endpoint.clone(), state.clone());
 
     tracing::info!(alpn = %std::str::from_utf8(ALPN).unwrap_or("mcg/iroh/1"), "iroh listener started");
     Ok(())
@@ -219,6 +220,53 @@ fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, state: AppState) {
     });
 }
 
+fn start_iroh_connect_loop(endpoint: iroh::endpoint::Endpoint, state: AppState){
+    let ep_connect = endpoint;
+    let state_clone = state.clone();
+    const ALPN: &[u8] = b"mcg/iroh/1";
+    use iroh_tickets::{Ticket, endpoint::EndpointTicket};
+
+    tokio::spawn(async move {
+        let mut last_seen: Option<String> = None;
+        loop {
+            let current = {
+                state_clone.remote_ticket.read().await.clone()
+            };
+            if let Some(ticket_str) = current{
+                if last_seen.as_ref() != Some(&ticket_str){
+                    let ticket = EndpointTicket::deserialize(ticket_str.as_str());
+                    match ticket {
+                        Ok(t) => {
+                            let addr = t.endpoint_addr().clone();
+                            let conn = ep_connect.connect(addr, ALPN).await;
+                            match conn {
+                                Ok(c) => {
+                                    tracing::info!(peer = %c.remote_id(), "Successfully connected");
+                                    let state_for_conn = state_clone.clone();
+                                    let ticket_str_clone = ticket_str.clone();
+                                    tokio::spawn(async move {
+                                        if let Err(e) = handle_iroh_connection(state_for_conn, c).await {
+                                            tracing::error!(error = %e, ticket_str = %ticket_str_clone, "iroh connection handler error");
+                                        }
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::error!(error = %e, ticket_str = %ticket_str, "Failed to connect to peer");
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, ticket_str = %ticket_str, "Failed to deserialize iroh ticket from remote_ticket");
+                        }
+                    }
+
+                    last_seen = Some(ticket_str.clone());
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    });
+}
 // Per-connection handler which speaks newline-delimited JSON over a
 // bi-directional iroh connection. Separated into smaller helpers to make
 // the flow easier to reason about and unit-test individual parts.

@@ -174,6 +174,12 @@ impl ScreenDef for QrTestTransmit {
             ServerMsg::Pong => {
                 sprintln!("Got a pong");
             }
+            ServerMsg::TicketValue(ticket) => {
+                sprintln!("Got a ticket value:\n\t- {:?}", ticket);
+            }
+            ServerMsg::IPValue(ip) => {
+                sprintln!("Got an IP value:\n\t- {:?}", ip);
+            }
         };
         let on_err = |e| {
             sprintln!("Got an error:\n\t- {:?}", e);

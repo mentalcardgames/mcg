@@ -67,3 +67,11 @@ pub enum ServerMsg {
     IPValue(String),
     QrRes(Box<[u8]>),
 }
+
+//Messages two peers send between eachother
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data")]
+pub enum PeerMsg {
+    Connect,
+    Disconnect,
+}

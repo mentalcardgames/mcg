@@ -9,29 +9,13 @@ use qrcode::QrCode;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-
+#[derive(Default)]
 pub struct QrScreen {
     input: String,
     scanner: QrScannerPopup,
     web_socket_connection: WebSocketConnection,
     qr_payload: Rc<RefCell<Option<String>>>,
-}
-
-impl QrScreen {
-    pub fn new() -> Self {
-        Self {
-            input: String::new(),
-            scanner: QrScannerPopup::new(),
-            web_socket_connection: WebSocketConnection::new(),
-            qr_payload: Rc::new(RefCell::new(None)),
-        }
-    }
-}
-
-impl Default for QrScreen {
-    fn default() -> Self {
-        Self::new()
-    }
+    raw: Vec<u8>,
 }
 
 impl ScreenWidget for QrScreen {
@@ -45,7 +29,7 @@ impl ScreenWidget for QrScreen {
         ui.heading("QR Scanner Demo");
         ui.add_space(12.0);
         ui.horizontal(|ui| {
-            self.scanner.button_and_popup(ui, &ctx, &mut self.input);
+            self.scanner.button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
             if ui.button("Generate Endpoint Ticket QR Code").clicked() {
                 let msg = ClientMsg::GetTicket;
                 self.web_socket_connection.send_msg(&msg);
@@ -120,6 +104,9 @@ impl ScreenDef for QrScreen {
             ServerMsg::IPValue(ip) => {
                 sprintln!("Got an IP value:\n\t- {:?}", ip);
                 *payload.borrow_mut() = Some(ip);
+            }
+            ServerMsg::QrRes(_) => {
+                todo!("Handle QR result from server");
             }
         };
         let on_err = |e| {

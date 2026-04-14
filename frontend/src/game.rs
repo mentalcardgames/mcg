@@ -7,7 +7,7 @@ pub mod websocket;
 use crate::router::Router;
 use crate::{
     game::{card::DirectoryCardType, screens::Game},
-    store::AppState,
+    store::ClientState,
 };
 use egui::Context;
 use screens::{AppInterface, MainMenu, ScreenWidget};
@@ -29,6 +29,13 @@ pub struct Settings {
     pub dark_mode: bool,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum GameType {
+    Poker,
+    Blackjack,
+    // Add more game types here
+}
+
 /// Application UI/Screen manager
 pub struct App {
     // current route path ("/", "/game-setup", etc.)
@@ -41,7 +48,7 @@ pub struct App {
     // Global settings UI state
     settings_open: bool,
     pending_settings: Settings,
-    app_state: AppState,
+    app_state: ClientState,
 
     // Router for URL handling
     #[allow(dead_code)]
@@ -82,7 +89,7 @@ impl App {
         #[cfg(not(target_arch = "wasm32"))]
         let current_path = "/".to_string();
 
-        let app_state = AppState::new();
+        let app_state = ClientState::new();
         Self {
             current_screen_path: current_path,
             screens: std::collections::HashMap::new(),
@@ -250,7 +257,7 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         // Process any pending messages from WebSocket callbacks
-        self.app_state.process_pending_messages();
+        self.app_state.dispatch_pending_messages();
 
         ctx.set_pixels_per_point(self.pending_settings.applied_dpi);
         if self.pending_settings.dark_mode {
