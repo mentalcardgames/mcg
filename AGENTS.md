@@ -7,7 +7,7 @@ MCG is a Rust Cargo workspace for a browser-based card game. The frontend crate 
 ## Key Commands (`just` recipes)
 
 - `just build [PROFILE]` – Run `wasm-pack` for the frontend (`release`, `profiling`, or `dev`). Output: `pkg/`.
-- `just start [PROFILE]` – Build the frontend then run the backend (uses `mcg-server.toml` for bot config).
+- `just start [PROFILE]` – Build the frontend then run the backend
 - `just backend` – Launch the `native_mcg` server; it binds to the first free port ≥3000 and serves `/`, `/pkg`, `/media`, and `/ws`.
 - `just backend-bg` / `just kill-backend` – Start or stop the backend in the background (useful for automation).
 - `just cli -- <args>` – Forward arguments to the `mcg-cli` binary (WebSocket client for state inspection and commands).
@@ -23,12 +23,9 @@ MCG is a Rust Cargo workspace for a browser-based card game. The frontend crate 
 
 ## Agent Conduct
 
-- Match existing code style and prefer existing abstractions/libraries in the workspace.
 - Do not modify documentation files (e.g., `README.md`) unless explicitly requested.
-- Before using external crates or tools, verify they are already part of the project.
 - Run available tests/lints relevant to your changes before reporting success, unless explicitly told otherwise.
 
-<!-- AGENT_COMMIT_POLICY -->
 ## Agent Git-Commit Policy (Extension)
 
 - Agents MUST NOT run `git add`, `git commit`, or `git push` without explicit human authorization (passphrase: `agent-commit-allowed`).
@@ -36,4 +33,3 @@ MCG is a Rust Cargo workspace for a browser-based card game. The frontend crate 
 - Provide diffs for review when suggesting commits.
 - Humans can inspect changes with `git status --porcelain` and `git diff`, then commit manually as needed.
 
-(End of agent commit policy extension)

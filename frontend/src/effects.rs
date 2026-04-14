@@ -1,5 +1,5 @@
 use crate::articles::{fetch_posts, Post};
-use crate::store::{ClientState, ArticlesLoading};
+use crate::store::{ArticlesLoading, ClientState};
 use wasm_bindgen_futures::spawn_local;
 
 pub fn fetch_articles_effect(

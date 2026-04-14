@@ -202,7 +202,7 @@ fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, state: AppState) {
                         tracing::info!(peer = %remote_node_id, "Accepted new iroh connection");
                         let state_for_conn = state_clone.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = handle_iroh_connection(state_for_conn, conn).await {
+                            if let Err(e) = manage_iroh_connection(state_for_conn, conn).await {
                                 tracing::error!(error = %e, "iroh connection handler error");
                             }
                         });
@@ -270,7 +270,7 @@ fn start_iroh_connect_loop(endpoint: iroh::endpoint::Endpoint, state: AppState){
 // Per-connection handler which speaks newline-delimited JSON over a
 // bi-directional iroh connection. Separated into smaller helpers to make
 // the flow easier to reason about and unit-test individual parts.
-async fn handle_iroh_connection(
+async fn manage_iroh_connection(
     state: AppState,
     connection: iroh::endpoint::Connection,
 ) -> Result<()> {
@@ -307,7 +307,7 @@ async fn handle_iroh_connection(
                     match res {
                         Ok(0) => break,
                         Ok(_) => {
-                            if !handle_client_line(&state, &mut send, &mut subscription, line.trim()).await? {
+                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim()).await? {
                                 break;
                             }
                         }
@@ -322,8 +322,7 @@ async fn handle_iroh_connection(
             match reader.read_line(&mut line).await {
                 Ok(0) => break,
                 Ok(_) => {
-                    if !handle_client_line(&state, &mut send, &mut subscription, line.trim())
-                        .await?
+                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim()).await?
                     {
                         break;
                     }
@@ -343,7 +342,7 @@ async fn handle_iroh_connection(
     Ok(())
 }
 
-async fn handle_client_line<W>(
+async fn process_iroh_line<W>(
     state: &AppState,
     send: &mut W,
     subscription: &mut Option<broadcast::Receiver<ServerMsg>>,
@@ -373,7 +372,7 @@ where
         }
         Ok(other) => {
             tracing::debug!(client_msg = ?other, "iroh received client message");
-            let resp = crate::server::handle_client_msg(state, other).await;
+            let resp = crate::server::dispatch_client_message(state, other).await;
             if let Err(e) = send_server_msg_to_writer(send, &resp).await {
                 tracing::error!(error = %e, "iroh send error while forwarding response");
                 return Err(e);

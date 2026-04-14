@@ -3,20 +3,9 @@ use egui::{vec2, FontId, RichText};
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenRegistry, ScreenWidget};
 
+#[derive(Default)]
 pub struct MainMenu {
     screen_registry: ScreenRegistry,
-}
-impl MainMenu {
-    pub fn new() -> Self {
-        Self {
-            screen_registry: ScreenRegistry::new(),
-        }
-    }
-}
-impl Default for MainMenu {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ScreenWidget for MainMenu {
@@ -68,24 +57,4 @@ impl ScreenWidget for MainMenu {
     }
 }
 
-impl ScreenDef for MainMenu {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/",
-            display_name: "Main",
-            icon: "🎮",
-            description: "Main menu",
-            show_in_menu: false,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(MainMenu, "/", "Main", "🎮", "Main menu", false);

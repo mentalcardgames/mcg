@@ -1,5 +1,5 @@
 use crate::game::screens::{ScreenDef, ScreenMetadata};
-use crate::game::websocket::WebSocketConnection;
+use crate::game::websocket::{MessageSender, WebSocketConnection};
 use crate::game::{AppInterface, ScreenWidget};
 use crate::store::ClientState;
 use eframe::Frame;
@@ -9,6 +9,15 @@ use mcg_shared::{PlayerAction, PlayerConfig};
 use super::betting_controls::BettingControls;
 use super::connection_manager::ConnectionManager;
 use super::player_manager::{render_player_setup, PlayerManager};
+
+#[derive(Default)]
+struct PlayerTableEdits {
+    bot_updates: Vec<(usize, bool)>,
+    to_remove: Option<usize>,
+    to_rename: Option<usize>,
+    apply_rename: bool,
+    cancel_rename: bool,
+}
 
 pub struct PokerOnlineScreen {
     conn: WebSocketConnection,
@@ -73,7 +82,12 @@ impl PokerOnlineScreen {
         self.conn.send_msg(msg);
     }
 
-    fn render_full_player_setup(&mut self, ui: &mut Ui, ctx: &Context, app_state: &mut ClientState) {
+    fn render_full_player_setup(
+        &mut self,
+        ui: &mut Ui,
+        ctx: &Context,
+        app_state: &mut ClientState,
+    ) {
         render_player_setup(ui, ctx);
 
         // Add the player table and controls
@@ -112,33 +126,14 @@ impl PokerOnlineScreen {
     }
 
     fn render_players_table_rows(&mut self, ui: &mut Ui) {
-        let mut to_remove = None;
-        let mut to_rename = None;
-        let mut bot_updates = Vec::new();
-        let mut apply_rename = false;
-        let mut cancel_rename = false;
+        let mut edits = PlayerTableEdits::default();
 
         let players_snapshot = self.player_manager.get_players().clone();
         for (idx, player) in players_snapshot.iter().enumerate() {
-            self.render_player_row(
-                ui,
-                player,
-                idx,
-                &mut bot_updates,
-                &mut to_remove,
-                &mut to_rename,
-                &mut apply_rename,
-                &mut cancel_rename,
-            );
+            self.render_player_row(ui, player, idx, &mut edits);
         }
 
-        self.apply_player_updates(
-            bot_updates,
-            to_remove,
-            to_rename,
-            apply_rename,
-            cancel_rename,
-        );
+        self.apply_player_updates(edits);
     }
 
     fn render_player_row(
@@ -146,11 +141,7 @@ impl PokerOnlineScreen {
         ui: &mut Ui,
         player: &PlayerConfig,
         idx: usize,
-        bot_updates: &mut Vec<(usize, bool)>,
-        to_remove: &mut Option<usize>,
-        to_rename: &mut Option<usize>,
-        apply_rename: &mut bool,
-        cancel_rename: &mut bool,
+        edits: &mut PlayerTableEdits,
     ) {
         ui.label(format!("{}", player.id));
 
@@ -164,9 +155,9 @@ impl PokerOnlineScreen {
 
             // Check for Enter key to confirm rename
             if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                *apply_rename = true;
+                edits.apply_rename = true;
             } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                *cancel_rename = true;
+                edits.cancel_rename = true;
             }
         } else {
             ui.label(&player.name);
@@ -174,19 +165,11 @@ impl PokerOnlineScreen {
 
         let mut is_bot = player.is_bot;
         if ui.checkbox(&mut is_bot, "").changed() {
-            bot_updates.push((idx, is_bot));
+            edits.bot_updates.push((idx, is_bot));
         }
 
         ui.horizontal(|ui| {
-            self.render_player_actions(
-                ui,
-                player,
-                idx,
-                to_remove,
-                to_rename,
-                apply_rename,
-                cancel_rename,
-            );
+            self.render_player_actions(ui, player, idx, edits);
         });
         ui.end_row();
     }
@@ -196,18 +179,15 @@ impl PokerOnlineScreen {
         ui: &mut Ui,
         player: &PlayerConfig,
         idx: usize,
-        to_remove: &mut Option<usize>,
-        to_rename: &mut Option<usize>,
-        apply_rename: &mut bool,
-        cancel_rename: &mut bool,
+        edits: &mut PlayerTableEdits,
     ) {
         // If this player is being renamed, show Save/Cancel buttons
         if self.player_manager.is_renaming(player.id) {
             if ui.button("Save").clicked() {
-                *apply_rename = true;
+                edits.apply_rename = true;
             }
             if ui.button("Cancel").clicked() {
-                *cancel_rename = true;
+                edits.cancel_rename = true;
             }
         } else {
             // Radio toggle to select which player the frontend would like to control.
@@ -224,49 +204,42 @@ impl PokerOnlineScreen {
             }
 
             if ui.button("✏").on_hover_text("Rename").clicked() {
-                *to_rename = Some(idx);
+                edits.to_rename = Some(idx);
             }
             if self.player_manager.get_players().len() > 1
                 && ui.button("🗑").on_hover_text("Remove").clicked()
             {
-                *to_remove = Some(idx);
+                edits.to_remove = Some(idx);
             }
         }
     }
 
-    fn apply_player_updates(
-        &mut self,
-        bot_updates: Vec<(usize, bool)>,
-        to_remove: Option<usize>,
-        to_rename: Option<usize>,
-        apply_rename: bool,
-        cancel_rename: bool,
-    ) {
+    fn apply_player_updates(&mut self, edits: PlayerTableEdits) {
         // Apply bot status updates after iteration
-        for (idx, is_bot) in bot_updates {
+        for (idx, is_bot) in edits.bot_updates {
             if let Some(p) = self.player_manager.get_players_mut().get_mut(idx) {
                 p.is_bot = is_bot;
             }
         }
 
         // Handle remove after iteration
-        if let Some(idx) = to_remove {
+        if let Some(idx) = edits.to_remove {
             if idx < self.player_manager.get_players().len() {
                 self.player_manager.get_players_mut().remove(idx);
             }
         }
 
         // Handle rename mode toggle
-        if let Some(idx) = to_rename {
+        if let Some(idx) = edits.to_rename {
             if let Some(player) = self.player_manager.get_players().get(idx) {
                 self.player_manager.start_renaming(player.id);
             }
         }
 
         // Apply or cancel rename
-        if apply_rename {
+        if edits.apply_rename {
             self.player_manager.apply_rename();
-        } else if cancel_rename {
+        } else if edits.cancel_rename {
             self.player_manager.cancel_rename();
         }
     }
@@ -287,7 +260,12 @@ impl PokerOnlineScreen {
         });
     }
 
-    fn render_start_game_button(&mut self, ui: &mut Ui, app_state: &mut ClientState, ctx: &Context) {
+    fn render_start_game_button(
+        &mut self,
+        ui: &mut Ui,
+        app_state: &mut ClientState,
+        ctx: &Context,
+    ) {
         let connected = self.conn.is_connected();
         let label = if connected {
             "Start New Game"
@@ -324,27 +302,14 @@ impl PokerOnlineScreen {
     }
 }
 
-impl ScreenDef for PokerOnlineScreen {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/poker-online",
-            display_name: "Poker Online",
-            icon: "♠",
-            description: "Play poker against bots or online",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    PokerOnlineScreen,
+    "/poker-online",
+    "Poker Online",
+    "♠",
+    "Play poker against bots or online",
+    true
+);
 
 impl Default for PokerOnlineScreen {
     fn default() -> Self {
@@ -418,8 +383,13 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                     self.betting_controls
                         .update_from_game_state(state, player_id);
 
-                    self.betting_controls
-                        .render_betting_controls(ui, state, player_id, player, &self.conn);
+                    self.betting_controls.render_betting_controls(
+                        ui,
+                        state,
+                        player_id,
+                        player,
+                        &self.conn as &dyn MessageSender,
+                    );
                 }
             });
         }
@@ -515,7 +485,6 @@ impl PokerOnlineScreen {
         connect_clicked: &mut bool,
         disconnect_clicked: &mut bool,
     ) {
-        // Title row with current stage badge
         ui.horizontal(|ui| {
             ui.heading("Poker Online");
             ui.add_space(16.0);
@@ -525,7 +494,6 @@ impl PokerOnlineScreen {
             }
         });
 
-        // Collapsible connection & session controls
         let default_open = app_state.session.game_state.is_none();
         egui::CollapsingHeader::new("Connection & session")
             .default_open(default_open)
@@ -539,7 +507,6 @@ impl PokerOnlineScreen {
                 );
             });
 
-        // Collapsible player setup section
         egui::CollapsingHeader::new("Player Setup")
             .default_open(false)
             .show(ui, |ui| {

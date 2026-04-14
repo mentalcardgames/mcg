@@ -1,5 +1,5 @@
 use eframe::Frame;
-use egui::{vec2, Align, UiBuilder, Layout};
+use egui::{vec2, Align, Layout, UiBuilder};
 use std::rc::Rc;
 
 use super::{AppInterface, DirectoryCardType, GameState, ScreenDef, ScreenMetadata, ScreenWidget};
@@ -67,90 +67,85 @@ impl ScreenWidget for GameSetupScreen {
         let width = rect.width() / 3.0;
         rect.set_left(width);
         rect.set_right(2.0 * width);
-        ui.scope_builder(UiBuilder::new().layout(Layout::top_down_justified(Align::Min)).max_rect(rect), |ui| {
-            ui.vertical_centered_justified(|ui| {
-                ui.add_space(20.0);
-                ui.horizontal(|ui| {
-                    ui.label("Card Pack:");
-                    match &self.card_config {
-                        None => ui.label("Deck not loaded"),
-                        Some(config) => ui.label(format!("Using {}", &config.path)),
-                    };
-                });
+        ui.scope_builder(
+            UiBuilder::new()
+                .layout(Layout::top_down_justified(Align::Min))
+                .max_rect(rect),
+            |ui| {
+                ui.vertical_centered_justified(|ui| {
+                    ui.add_space(20.0);
+                    ui.horizontal(|ui| {
+                        ui.label("Card Pack:");
+                        match &self.card_config {
+                            None => ui.label("Deck not loaded"),
+                            Some(config) => ui.label(format!("Using {}", &config.path)),
+                        };
+                    });
 
-                ui.add_space(5.0);
-                ui.horizontal(|ui| {
-                    ui.label("Theme:");
-                    egui::ComboBox::new("theme_selector", "Theme")
-                        .selected_text(crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index])
-                        .show_ui(ui, |ui| {
-                            for (i, theme) in crate::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate() {
-                                let theme_name = match *theme {
-                                    "img_cards" => "Standard Cards",
-                                    "alt_cards" => "Alternative Cards",
-                                    _ => theme,
-                                };
-                                if ui
-                                    .selectable_label(self.theme_index == i, theme_name)
-                                    .clicked()
+                    ui.add_space(5.0);
+                    ui.horizontal(|ui| {
+                        ui.label("Theme:");
+                        egui::ComboBox::new("theme_selector", "Theme")
+                            .selected_text(
+                                crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index],
+                            )
+                            .show_ui(ui, |ui| {
+                                for (i, theme) in
+                                    crate::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate()
                                 {
-                                    self.theme_index = i;
-                                    let theme_str =
-                                        crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index];
-                                    crate::hardcoded_cards::set_deck_by_theme(
-                                        &mut self.card_config,
-                                        theme_str,
-                                    );
+                                    let theme_name = match *theme {
+                                        "img_cards" => "Standard Cards",
+                                        "alt_cards" => "Alternative Cards",
+                                        _ => theme,
+                                    };
+                                    if ui
+                                        .selectable_label(self.theme_index == i, theme_name)
+                                        .clicked()
+                                    {
+                                        self.theme_index = i;
+                                        let theme_str = crate::hardcoded_cards::AVAILABLE_THEMES
+                                            [self.theme_index];
+                                        crate::hardcoded_cards::set_deck_by_theme(
+                                            &mut self.card_config,
+                                            theme_str,
+                                        );
+                                    }
                                 }
-                            }
-                        });
+                            });
+                    });
+
+                    ui.add_space(5.0);
+                    ui.horizontal(|ui| {
+                        ui.label("# Players");
+                        let drag = egui::DragValue::new(&mut self.players);
+                        ui.add(drag);
+                        let dec = egui::Button::new("-").min_size(vec2(30.0, 0.0));
+                        if ui.add(dec).clicked() && self.players > 1 {
+                            self.players = self.players.saturating_sub(1);
+                        }
+                        let inc = egui::Button::new("+").min_size(vec2(30.0, 0.0));
+                        if ui.add(inc).clicked() {
+                            self.players = self.players.saturating_add(1);
+                        }
+                    });
+
+                    ui.add_space(5.0);
+                    if ui.button("Start Game").clicked() {
+                        if let Some(config) = self.generate_config() {
+                            app_interface.queue_event(crate::game::AppEvent::StartGame(config));
+                        }
+                    }
                 });
-
-                ui.add_space(5.0);
-                ui.horizontal(|ui| {
-                    ui.label("# Players");
-                    let drag = egui::DragValue::new(&mut self.players);
-                    ui.add(drag);
-                    let dec = egui::Button::new("-").min_size(vec2(30.0, 0.0));
-                    if ui.add(dec).clicked() && self.players > 1 {
-                        self.players = self.players.saturating_sub(1);
-                    }
-                    let inc = egui::Button::new("+").min_size(vec2(30.0, 0.0));
-                    if ui.add(inc).clicked() {
-                        self.players = self.players.saturating_add(1);
-                    }
-                });
-
-                ui.add_space(5.0);
-                if ui.button("Start Game").clicked() {
-                    if let Some(config) = self.generate_config() {
-                        app_interface.queue_event(crate::game::AppEvent::StartGame(config));
-                    }
-                }
-
-            });
-        });
+            },
+        );
     }
 }
 
-impl ScreenDef for GameSetupScreen {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/game-setup",
-            display_name: "Game Setup",
-            icon: "⚙",
-            description: "Configure game and players",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    GameSetupScreen,
+    "/game-setup",
+    "Game Setup",
+    "⚙",
+    "Configure game and players",
+    true
+);

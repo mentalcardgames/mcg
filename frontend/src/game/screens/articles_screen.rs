@@ -4,22 +4,17 @@ use egui::{vec2, Color32, RichText, ScrollArea};
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::articles::Post;
 use crate::effects::fetch_articles_effect;
-use crate::store::{ClientState, ArticlesLoading};
+use crate::store::{ArticlesLoading, ClientState};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+#[derive(Default)]
 pub struct ArticlesScreen {
     #[allow(clippy::type_complexity)]
     pending_result: Rc<RefCell<Option<Result<Vec<Post>, String>>>>,
 }
 
 impl ArticlesScreen {
-    pub fn new() -> Self {
-        Self {
-            pending_result: Rc::new(RefCell::new(None)),
-        }
-    }
-
     fn render_loading_ui(&self, ui: &mut egui::Ui) {
         ui.spinner();
         ui.label("Loading posts...");
@@ -73,12 +68,6 @@ impl ArticlesScreen {
                 ui.add_space(15.0);
             }
         });
-    }
-}
-
-impl Default for ArticlesScreen {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -153,24 +142,11 @@ impl ScreenWidget for ArticlesScreen {
     }
 }
 
-impl ScreenDef for ArticlesScreen {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/articles",
-            display_name: "Articles",
-            icon: "📰",
-            description: "Fetch posts from a demo API",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    ArticlesScreen,
+    "/articles",
+    "Articles",
+    "📰",
+    "Fetch posts from a demo API",
+    true
+);

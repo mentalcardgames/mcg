@@ -9,4 +9,4 @@ pub mod ws;
 
 // Export commonly used types and functions
 pub use run::run_server;
-pub use state::{broadcast_state, current_state_public, handle_client_msg, AppState};
+pub use state::{broadcast_state, current_state_public, dispatch_client_message, AppState};

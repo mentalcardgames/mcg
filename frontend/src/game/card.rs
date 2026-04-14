@@ -6,8 +6,10 @@ use std::hash::Hash;
 #[allow(unused_imports)]
 use std::rc::Rc;
 use std::slice::Iter;
-#[cfg(target_arch = "wasm32")]
 use web_sys;
+
+/// Natural size for card display in the UI
+pub const CARD_NATURAL_SIZE: Vec2 = Vec2::new(140.0, 190.0);
 
 pub trait CardEncoding {
     fn t(&self) -> Option<usize>;
@@ -102,7 +104,7 @@ impl CardConfig for DirectoryCardType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 #[allow(non_snake_case)]
 pub struct DirectoryCardType {
     pub(crate) path: String,

@@ -287,98 +287,134 @@ fn format_pot_awarded_entry(
 pub fn log_entry_row(ui: &mut Ui, entry: &ActionEvent, players: &[PlayerPublic], you_id: PlayerId) {
     match entry {
         ActionEvent::PlayerAction { player_id, action } => {
-            let who_id = Some(*player_id);
-            let who_name = name_of(players, *player_id);
-            let (txt, color) = action_kind_text(action);
-            let is_you = who_id == Some(you_id);
-            let label = if is_you {
-                RichText::new(format!("{} {}", who_name, txt))
-                    .color(color)
-                    .strong()
-            } else {
-                RichText::new(format!("{} {}", who_name, txt)).color(color)
-            };
-            ui.label(label);
+            render_player_action_entry(ui, *player_id, action, players, you_id);
         }
         ActionEvent::GameAction(GameAction::StageChanged(s)) => {
-            ui.add_space(6.0);
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("🕒").strong());
-                ui.label(stage_badge(*s));
-            });
-            ui.separator();
-            ui.add_space(6.0);
+            render_stage_change_entry(ui, *s);
         }
         ActionEvent::GameAction(GameAction::DealtHole { player_id }) => {
-            let who = name_of(players, *player_id);
-            ui.colored_label(
-                Color32::from_rgb(150, 150, 150),
-                format!("🃏 Dealt hole cards to {}", who),
-            );
+            render_dealt_hole_entry(ui, *player_id, players);
         }
-        ActionEvent::GameAction(GameAction::DealtCommunity { cards }) => match cards.len() {
-            3 => {
-                ui.colored_label(
-                    Color32::from_rgb(100, 200, 120),
-                    format!(
-                        "🃏 Flop: {} {} {}",
-                        card_text(cards[0]),
-                        card_text(cards[1]),
-                        card_text(cards[2])
-                    ),
-                );
-            }
-            4 => {
-                ui.colored_label(
-                    Color32::from_rgb(230, 180, 80),
-                    format!("🃏 Turn: {}", card_text(cards[3])),
-                );
-            }
-            5 => {
-                ui.colored_label(
-                    Color32::from_rgb(220, 120, 120),
-                    format!("🃏 River: {}", card_text(cards[4])),
-                );
-            }
-            _ => {
-                ui.colored_label(
-                    Color32::from_rgb(120, 120, 120),
-                    format!(
-                        "🃏 Community: {}",
-                        cards
-                            .iter()
-                            .map(|&c| card_text(c))
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    ),
-                );
-            }
-        },
+        ActionEvent::GameAction(GameAction::DealtCommunity { cards }) => {
+            render_community_cards_entry(ui, cards);
+        }
         ActionEvent::GameAction(GameAction::Showdown { hand_results }) => {
-            let mut parts = Vec::new();
-            for hr in hand_results {
-                let who = name_of(players, hr.player_id);
-                let cat = hr.rank.category.to_str();
-                parts.push(format!("{}: {}", who, cat));
-            }
-            let text = if parts.is_empty() {
-                "🏁 Showdown".to_string()
-            } else {
-                format!("🏁 Showdown — {}", parts.join(", "))
-            };
-            ui.colored_label(Color32::from_rgb(180, 100, 220), text);
+            render_showdown_entry(ui, hand_results, players);
         }
         ActionEvent::GameAction(GameAction::PotAwarded { winners, amount }) => {
-            let names = winners
-                .iter()
-                .map(|&id| name_of(players, id))
-                .collect::<Vec<_>>()
-                .join(", ");
+            render_pot_awarded_entry(ui, winners, *amount, players);
+        }
+    }
+}
+
+fn render_player_action_entry(
+    ui: &mut Ui,
+    player_id: PlayerId,
+    action: &ActionKind,
+    players: &[PlayerPublic],
+    you_id: PlayerId,
+) {
+    let who_name = name_of(players, player_id);
+    let (txt, color) = action_kind_text(action);
+    let is_you = player_id == you_id;
+    let label = if is_you {
+        RichText::new(format!("{} {}", who_name, txt))
+            .color(color)
+            .strong()
+    } else {
+        RichText::new(format!("{} {}", who_name, txt)).color(color)
+    };
+    ui.label(label);
+}
+
+fn render_stage_change_entry(ui: &mut Ui, stage: Stage) {
+    ui.add_space(6.0);
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("🕒").strong());
+        ui.label(stage_badge(stage));
+    });
+    ui.separator();
+    ui.add_space(6.0);
+}
+
+fn render_dealt_hole_entry(ui: &mut Ui, player_id: PlayerId, players: &[PlayerPublic]) {
+    let who = name_of(players, player_id);
+    ui.colored_label(
+        Color32::from_rgb(150, 150, 150),
+        format!("🃏 Dealt hole cards to {}", who),
+    );
+}
+
+fn render_community_cards_entry(ui: &mut Ui, cards: &[Card]) {
+    match cards.len() {
+        3 => {
             ui.colored_label(
-                Color32::from_rgb(240, 200, 80),
-                format!("🏆 Pot {} awarded to {}", amount, names),
+                Color32::from_rgb(100, 200, 120),
+                format!(
+                    "🃏 Flop: {} {} {}",
+                    card_text(cards[0]),
+                    card_text(cards[1]),
+                    card_text(cards[2])
+                ),
+            );
+        }
+        4 => {
+            ui.colored_label(
+                Color32::from_rgb(230, 180, 80),
+                format!("🃏 Turn: {}", card_text(cards[3])),
+            );
+        }
+        5 => {
+            ui.colored_label(
+                Color32::from_rgb(220, 120, 120),
+                format!("🃏 River: {}", card_text(cards[4])),
+            );
+        }
+        _ => {
+            ui.colored_label(
+                Color32::from_rgb(120, 120, 120),
+                format!(
+                    "🃏 Community: {}",
+                    cards
+                        .iter()
+                        .map(|&c| card_text(c))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ),
             );
         }
     }
+}
+
+fn render_showdown_entry(ui: &mut Ui, hand_results: &[HandResult], players: &[PlayerPublic]) {
+    let mut parts = Vec::new();
+    for hr in hand_results {
+        let who = name_of(players, hr.player_id);
+        let cat = hr.rank.category.to_str();
+        parts.push(format!("{}: {}", who, cat));
+    }
+    let text = if parts.is_empty() {
+        "🏁 Showdown".to_string()
+    } else {
+        format!("🏁 Showdown — {}", parts.join(", "))
+    };
+    ui.colored_label(Color32::from_rgb(180, 100, 220), text);
+}
+
+fn render_pot_awarded_entry(
+    ui: &mut Ui,
+    winners: &[PlayerId],
+    amount: u32,
+    players: &[PlayerPublic],
+) {
+    let names = winners
+        .iter()
+        .map(|&id| name_of(players, id))
+        .collect::<Vec<_>>()
+        .join(", ");
+    ui.colored_label(
+        Color32::from_rgb(240, 200, 80),
+        format!("🏆 Pot {} awarded to {}", amount, names),
+    );
 }

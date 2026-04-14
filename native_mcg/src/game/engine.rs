@@ -156,9 +156,9 @@ impl Game {
                 id: p.id,
                 name: p.name.clone(),
                 stack: p.stack,
-                // For now, always expose all cards (insecure but allowed)
                 cards: Some(p.cards),
                 has_folded: p.has_folded,
+                all_in: p.all_in,
                 bet_this_round: self.round_bets[idx],
             })
             .collect();

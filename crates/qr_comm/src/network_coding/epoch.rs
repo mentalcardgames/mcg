@@ -488,7 +488,7 @@ mod tests {
                 println!("decoded after the {idx}. frame 🥳");
                 break;
             }
-            if idx >= 196 && idx % 25 == 0 {
+            if idx >= 196 && idx.is_multiple_of(25) {
                 println!("Working on frame {idx}");
             }
             e_in.push_frame(frame.unwrap());
@@ -540,7 +540,7 @@ mod tests {
             let mut img = rqrr::PreparedImage::prepare(img);
             let grids = img.detect_grids();
             let mut buf = Vec::new();
-            if let Some(grid) = grids.get(0)
+            if let Some(grid) = grids.first()
                 && let Ok(_) = grid.decode_to(&mut buf)
             {
                 let data: [u8; FRAME_SIZE_BYTES] = from_fn(|idx| *buf.get(idx).unwrap_or(&0));
@@ -556,11 +556,11 @@ mod tests {
             let maybe_ap = e.get_package(participant_idx, 0);
             assert!(maybe_ap.is_some());
             let Package {
-                mut data,
+                data,
                 size: _size,
             } = maybe_ap.unwrap();
             if let Ok(mut file) = File::create(format!("tests/out_dir/{}", file)) {
-                let _ = file.write_all(&mut data);
+                let _ = file.write_all(&data);
             }
         }
     }

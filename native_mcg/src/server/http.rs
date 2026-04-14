@@ -1,7 +1,7 @@
 // HTTP handlers for the MCG server API.
 //
 // Provides a single transport-agnostic endpoint that mirrors websocket actions.
-// Handlers reuse the centralized backend handler `handle_client_msg` to ensure
+// Handlers reuse the centralized backend handler `dispatch_client_message` to ensure
 // consistent behavior across transports (iroh, websocket, HTTP).
 
 use axum::{extract::State, Json};
@@ -14,5 +14,5 @@ pub async fn message_handler(
     State(state): State<AppState>,
     Json(cm): Json<ClientMsg>,
 ) -> Json<ServerMsg> {
-    Json(crate::server::handle_client_msg(&state, cm).await)
+    Json(crate::server::dispatch_client_message(&state, cm).await)
 }

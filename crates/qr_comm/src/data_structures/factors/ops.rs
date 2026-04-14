@@ -345,9 +345,7 @@ impl Div<u8> for Factor {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn add_wide() {
-
-    }
+    fn add_wide() {}
     #[test]
     fn add_sparse() {}
     #[test]

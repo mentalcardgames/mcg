@@ -3,14 +3,10 @@
 
 use super::state::AppState;
 
-/// Client session management
+#[derive(Default)]
 pub struct SessionManager;
 
 impl SessionManager {
-    /// Create a new session manager
-    pub fn new() -> Self {
-        Self
-    }
 
     /// Handle client connection
     pub async fn handle_connection(&self, _state: &AppState) {
@@ -20,11 +16,5 @@ impl SessionManager {
     /// Handle client disconnection
     pub async fn handle_disconnection(&self, _state: &AppState) {
         // Session cleanup logic would go here
-    }
-}
-
-impl Default for SessionManager {
-    fn default() -> Self {
-        Self::new()
     }
 }

@@ -3,25 +3,10 @@ use egui::{vec2, FontId, RichText};
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 
-/// Example screen to demonstrate the new generalized screen system
+#[derive(Default)]
 pub struct ExampleScreen {
     counter: i32,
     text_input: String,
-}
-
-impl ExampleScreen {
-    pub fn new() -> Self {
-        Self {
-            counter: 0,
-            text_input: String::new(),
-        }
-    }
-}
-
-impl Default for ExampleScreen {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ScreenWidget for ExampleScreen {
@@ -107,24 +92,11 @@ impl ScreenWidget for ExampleScreen {
     }
 }
 
-impl ScreenDef for ExampleScreen {
-    fn metadata() -> ScreenMetadata
-    where
-        Self: Sized,
-    {
-        ScreenMetadata {
-            path: "/example",
-            display_name: "Example",
-            icon: "📄",
-            description: "An example screen",
-            show_in_menu: true,
-        }
-    }
-
-    fn create() -> Box<dyn ScreenWidget>
-    where
-        Self: Sized,
-    {
-        Box::new(Self::new())
-    }
-}
+crate::impl_screen_def!(
+    ExampleScreen,
+    "/example",
+    "Example",
+    "📄",
+    "An example screen",
+    true
+);

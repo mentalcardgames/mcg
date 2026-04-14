@@ -15,6 +15,12 @@ pub struct PlayerManager {
     rename_buffer: String,
 }
 
+impl Default for PlayerManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PlayerManager {
     pub fn new() -> Self {
         Self {
