@@ -56,12 +56,12 @@ All three connection types, after successfully parsing incoming data as a `Clien
 
 ```rust
 // Defined in native_mcg/src/server/state.rs
-pub async fn dispatch_client_message(state: &AppState, cm: ClientMsg) -> ServerMsg
+pub async fn dispatch_client_message(state: &AppState, cm: ClientMsg) -> ServerMsg { ... }
 ```
 
 1. **Routing**: The transport layers receive byte/text data and deserialize it.
 2. **Processing**: The `ClientMsg` is passed to `dispatch_client_message`, which validates game logic, mutates the state (if it's an Action, NextHand, etc.), and triggers broadcasts.
-3. **Responding**: The function returns a `ServerMsg` (e.g., `ServerMsg::State` or `ServerMsg::Error`), which the transpoter then sends back to the client that initiated the request.
+3. **Responding**: The function returns a `ServerMsg` (e.g., `ServerMsg::State` or `ServerMsg::Error`), which the transporter then sends back to the client that initiated the request.
 
 ### State Synchronization & Push Updates
 
@@ -73,7 +73,7 @@ When the game state is modified (e.g., via `apply_action_to_game`), the server n
 
 ### Connections with other nodes
 
-There currently is no code supporting connections to other backend nodes or multi-server clustering. The Iroh transport functions functionally similarly to WebSocket, allowing remote "clients" to connect over a P2P protocol, but it does not synchronize distributed lobbies.
+There currently is no code supporting connections to other backend nodes or multiserver clustering. The Iroh transport functions functionally similarly to WebSocket, allowing remote "clients" to connect over a P2P protocol, but it does not synchronize distributed lobbies.
 
 ### Serving the Browser
 
@@ -81,9 +81,10 @@ Static files for the web frontend UI are served entirely by the Axum router buil
 
 The lines:
 ```rust
-        .nest_service("/pkg", serve_dir)
-        .nest_service("/media", serve_media)
-        .route("/", get(serve_index))
+Router::new()
+    .nest_service("/pkg", serve_dir)
+    .nest_service("/media", serve_media)
+    .route("/", get(serve_index))
 ```
 are the "work horse" that provides all static files for the UI.
 

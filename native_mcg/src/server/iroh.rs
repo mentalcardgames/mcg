@@ -25,7 +25,7 @@ use crate::public::{path_for_config, PublicInfo};
 use crate::server::state::subscribe_connection;
 use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
-use mcg_shared::{ClientMsg, ServerMsg};
+use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
 
 /// Public entrypoint spawned by server startup
 ///
@@ -221,7 +221,7 @@ async fn manage_iroh_connection(
 
     tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
 
-    let mut subscription: Option<broadcast::Receiver<ServerMsg>> = None;
+    let mut subscription: Option<broadcast::Receiver<Backend2FrontendMsg>> = None;
 
     let mut line = String::new();
     loop {
@@ -286,7 +286,7 @@ async fn manage_iroh_connection(
 async fn process_iroh_line<W>(
     state: &AppState,
     send: &mut W,
-    subscription: &mut Option<broadcast::Receiver<ServerMsg>>,
+    subscription: &mut Option<broadcast::Receiver<Backend2FrontendMsg>>,
     trimmed: &str,
 ) -> Result<bool>
 where
@@ -296,17 +296,17 @@ where
         return Ok(true);
     }
 
-    match serde_json::from_str::<ClientMsg>(trimmed) {
-        Ok(ClientMsg::Subscribe) => {
+    match serde_json::from_str::<Frontend2BackendMsg>(trimmed) {
+        Ok(Frontend2BackendMsg::Subscribe) => {
             if subscription.is_some() {
                 let _ =
-                    send_server_msg_to_writer(send, &ServerMsg::Error("already subscribed".into()))
+                    send_server_msg_to_writer(send, &Backend2FrontendMsg::Error("already subscribed".into()))
                         .await;
                 return Ok(true);
             }
             let sub = subscribe_connection(state).await;
             if let Some(gs) = sub.initial_state {
-                send_server_msg_to_writer(send, &ServerMsg::State(gs)).await?;
+                send_server_msg_to_writer(send, &Backend2FrontendMsg::State(gs)).await?;
             }
             *subscription = Some(sub.receiver);
             Ok(true)
@@ -321,7 +321,7 @@ where
             Ok(true)
         }
         Err(e) => {
-            let msg = ServerMsg::Error(format!("Invalid JSON message: {}", e));
+            let msg = Backend2FrontendMsg::Error(format!("Invalid JSON message: {}", e));
             let _ = send_server_msg_to_writer(send, &msg).await;
             Ok(true)
         }

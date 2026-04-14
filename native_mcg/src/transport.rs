@@ -4,14 +4,14 @@
 //! the same serialization logic and error handling.
 
 use anyhow::Result;
-use mcg_shared::ServerMsg;
+use mcg_shared::Backend2FrontendMsg;
 use tokio::io::AsyncWrite;
 use tokio::io::AsyncWriteExt;
 
 /// Send a ServerMsg to an AsyncWrite sink as a newline-delimited JSON line.
 ///
 /// Used by the iroh transport which exposes an AsyncWrite-like send handle.
-pub async fn send_server_msg_to_writer<W>(writer: &mut W, msg: &ServerMsg) -> Result<()>
+pub async fn send_server_msg_to_writer<W>(writer: &mut W, msg: &Backend2FrontendMsg) -> Result<()>
 where
     W: AsyncWrite + Unpin + Send,
 {

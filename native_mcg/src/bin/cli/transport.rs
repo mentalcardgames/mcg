@@ -5,7 +5,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
-use mcg_shared::{ClientMsg, ServerMsg};
+use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
 
 use super::utils::MessagePrinter;
 
@@ -31,7 +31,7 @@ pub fn build_ws_url(base: &str) -> anyhow::Result<Url> {
 /// Connect over websocket, send the provided ClientMsg and pass all responses to the printer until timeout.
 pub async fn run_once_ws(
     ws_addr: &str,
-    client_msg: ClientMsg,
+    client_msg: Frontend2BackendMsg,
     wait_ms: u64,
     printer: &mut MessagePrinter,
 ) -> anyhow::Result<()> {
@@ -49,7 +49,7 @@ pub async fn run_once_ws(
     loop {
         match tokio::time::timeout(Duration::from_millis(wait_ms), read.next()).await {
             Ok(Some(Ok(Message::Text(txt)))) => {
-                if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
+                if let Ok(sm) = serde_json::from_str::<Backend2FrontendMsg>(&txt) {
                     printer.handle(&sm);
                 }
             }
@@ -71,7 +71,7 @@ pub async fn run_once_ws(
 /// actually required by the build.
 pub async fn run_once_iroh(
     peer_uri: &str,
-    client_msg: ClientMsg,
+    client_msg: Frontend2BackendMsg,
     wait_ms: u64,
     printer: &mut MessagePrinter,
 ) -> anyhow::Result<()> {
@@ -118,7 +118,7 @@ pub async fn run_once_iroh(
 }
 
 /// Write the provided ClientMsg as newline-delimited JSON to the given writer.
-async fn send_client_msg_over_stream<W>(send: &mut W, client_msg: &ClientMsg) -> anyhow::Result<()>
+async fn send_client_msg_over_stream<W>(send: &mut W, client_msg: &Frontend2BackendMsg) -> anyhow::Result<()>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {
@@ -158,7 +158,7 @@ where
                 if trimmed.is_empty() {
                     continue;
                 }
-                match serde_json::from_str::<ServerMsg>(trimmed) {
+                match serde_json::from_str::<Backend2FrontendMsg>(trimmed) {
                     Ok(sm) => {
                         printer.handle(&sm);
                     }
@@ -181,7 +181,7 @@ where
 /// Run a single HTTP call against the unified message endpoint and forward the response to the printer.
 pub async fn run_once_http(
     base: &str,
-    client_msg: ClientMsg,
+    client_msg: Frontend2BackendMsg,
     wait_ms: u64,
     printer: &mut MessagePrinter,
 ) -> anyhow::Result<()> {
@@ -193,7 +193,7 @@ pub async fn run_once_http(
     })
     .await??;
 
-    let server_msg: ServerMsg = response.json().await?;
+    let server_msg: Backend2FrontendMsg = response.json().await?;
     printer.handle(&server_msg);
 
     Ok(())

@@ -7,7 +7,7 @@ use js_sys::Date;
 use mcg_qr_comm::data_structures::Package;
 use mcg_qr_comm::network_coding::Epoch;
 use mcg_qr_comm::MAX_PARTICIPANTS;
-use mcg_shared::{ClientMsg, PlayerConfig, PlayerId, ServerMsg};
+use mcg_shared::{Frontend2BackendMsg, PlayerConfig, PlayerId, Backend2FrontendMsg};
 use qrcode::QrCode;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -81,7 +81,7 @@ impl ScreenWidget for QrTestTransmit {
             if ui.button("Request next AP").clicked() {
                 if let Ok(epoch) = self.epoch.try_borrow_mut() {
                     if let Some(file) = self.file_list.get(epoch.header.participant as usize) {
-                        let message = ClientMsg::QrReq(file.clone());
+                        let message = Frontend2BackendMsg::QrReq(file.clone());
                         self.web_socket_connection.send_msg(&message);
                     }
                 }
@@ -155,13 +155,13 @@ impl ScreenDef for QrTestTransmit {
         me.file_list.push(String::from("dataset-card.png"));
         let epoch_copy = me.epoch.clone();
         let on_msg = move |x| match x {
-            ServerMsg::State(s) => {
+            Backend2FrontendMsg::State(s) => {
                 sprintln!("Got a message state:\n\t- {:?}", s);
             }
-            ServerMsg::Error(e) => {
+            Backend2FrontendMsg::Error(e) => {
                 sprintln!("Got a message error:\n\t- {:?}", e);
             }
-            ServerMsg::QrRes(content) => {
+            Backend2FrontendMsg::QrRes(content) => {
                 let s = String::from_utf8_lossy(&content);
                 sprintln!("Got a response:\n\t- {:?}", s);
                 if let Ok(mut epoch) = epoch_copy.try_borrow_mut() {
@@ -171,7 +171,7 @@ impl ScreenDef for QrTestTransmit {
                     epoch.header.participant %= MAX_PARTICIPANTS as u8;
                 }
             }
-            ServerMsg::Pong => {
+            Backend2FrontendMsg::Pong => {
                 sprintln!("Got a pong");
             }
         };

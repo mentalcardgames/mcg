@@ -21,7 +21,7 @@ E.g. the `cc` crate expects `cl.exe` to be available in `PATH` in case it is una
 For me, this binary is in the following path:
 `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\Llvm\ARM64\bin`
 
-Depending which architecture you are compiling for, you have to add the appropriate path
+Depending on which architecture you are compiling for, you have to add the appropriate path
 to the `PATH` environment variable.
 
 ## Sign Rust Binaries for Smart App Control
@@ -71,7 +71,7 @@ Furthermore, we also have to sign all binaries in the rustup toolchains director
 
 #### 3. Usage
 
-It may be nesessary to execute the script as Administrator for the certificate creation but signing can be done as a regular user.
+It may be necessary to execute the script as Administrator for the certificate creation but signing can be done as a regular user.
 Make also sure that the execution policy is allowing you to execute the script.
 You can check it with `Get-ExecutionPolicy` and set it with `Set-ExecutionPolicy`.
 

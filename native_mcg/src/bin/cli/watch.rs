@@ -2,7 +2,7 @@ use anyhow::Context;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
-use mcg_shared::{ClientMsg, ServerMsg};
+use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
 
 use super::utils::{DisplayMode, MessagePrinter};
 
@@ -21,7 +21,7 @@ pub async fn watch_ws(ws_addr: &str, json: bool) -> anyhow::Result<()> {
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
     let (mut write, mut read) = ws_stream.split();
 
-    let subscribe_txt = serde_json::to_string(&ClientMsg::Subscribe)?;
+    let subscribe_txt = serde_json::to_string(&Frontend2BackendMsg::Subscribe)?;
     write.send(Message::Text(subscribe_txt)).await?;
 
     announce_connection(json, &format!("Connected to WebSocket {}", ws_url));
@@ -30,7 +30,7 @@ pub async fn watch_ws(ws_addr: &str, json: bool) -> anyhow::Result<()> {
     loop {
         match read.next().await {
             Some(Ok(Message::Text(txt))) => {
-                if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
+                if let Ok(sm) = serde_json::from_str::<Backend2FrontendMsg>(&txt) {
                     printer.handle(&sm);
                 }
             }
@@ -57,13 +57,13 @@ pub async fn watch_http(base: &str, json: bool) -> anyhow::Result<()> {
             std::time::Duration::from_secs(30),
             client
                 .post(format!("{}/api/message", base))
-                .json(&ClientMsg::RequestState)
+                .json(&Frontend2BackendMsg::RequestState)
                 .send(),
         )
         .await
         {
             Ok(Ok(resp)) => {
-                if let Ok(sm) = resp.json::<ServerMsg>().await {
+                if let Ok(sm) = resp.json::<Backend2FrontendMsg>().await {
                     printer.handle(&sm);
                 }
             }
@@ -115,7 +115,7 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
     // Subscribe to broadcast updates
     {
         use tokio::io::AsyncWriteExt;
-        let txt = serde_json::to_string(&ClientMsg::Subscribe)?;
+        let txt = serde_json::to_string(&Frontend2BackendMsg::Subscribe)?;
         send.write_all(txt.as_bytes()).await?;
         send.write_all(b"\n").await?;
         send.flush().await?;
@@ -137,7 +137,7 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
                 if trimmed.is_empty() {
                     continue;
                 }
-                if let Ok(sm) = serde_json::from_str::<ServerMsg>(trimmed) {
+                if let Ok(sm) = serde_json::from_str::<Backend2FrontendMsg>(trimmed) {
                     printer.handle(&sm);
                 } else {
                     eprintln!("Invalid JSON from iroh peer: {}", trimmed);
