@@ -1,10 +1,10 @@
 .PHONY: docs diagrams
 
-DOC_OUT = ./docs/architecture/build
-DIAG_SRC = docs/architecture/diagrams
+DOC_OUT = ./architecture/build
+DIAG_SRC = architecture/diagrams
 
 docs: diagrams
-	latexmk -pdf -output-directory=$(DOC_OUT) docs/architecture/architecture.tex
+	latexmk -pdf -output-directory=$(DOC_OUT) architecture/architecture.tex
 
 # This outputs all .puml files directly into $(DOC_OUT)
 diagrams:
