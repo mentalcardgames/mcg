@@ -180,7 +180,11 @@ impl Ir<SpannedPayload> {
                             span: expr.span.clone(),
                         });
                     }
-                    Payload::EndCondition { expr, negated: _ } => {
+                    Payload::EndCondition {
+                        expr,
+                        negated: _,
+                        stage: _,
+                    } => {
                         errs.push(GameFlowError::FlowNotConnected {
                             span: expr.span.clone(),
                         });
@@ -253,6 +257,7 @@ pub enum Payload<Ctx: AstContext> {
     EndCondition {
         expr: Ctx::EndCondition,
         negated: bool,
+        stage: Ctx::Id,
     },
     Action(Ctx::GameRule),
     StageRoundCounter(Ctx::Id),
@@ -264,30 +269,33 @@ pub enum Payload<Ctx: AstContext> {
 
 impl<Ctx: AstContext> Payload<Ctx> {
     pub fn to_string(&self) -> String {
-        let result = match &self {
+        match &self {
             Payload::Condition { expr: _, negated } => {
                 if *negated {
-                    "Not Condition"
+                    String::from("Not Condition")
                 } else {
-                    "Condition"
+                    String::from("Condition")
                 }
             }
-            Payload::EndCondition { expr: _, negated } => {
+            Payload::EndCondition {
+                expr: _,
+                negated,
+                stage,
+            } => {
+                let stage_name = format!("{:?}", stage);
                 if *negated {
-                    "Not EndCondition"
+                    format!("Not EndCondition ({})", stage_name)
                 } else {
-                    "EndCondition"
+                    format!("EndCondition ({})", stage_name)
                 }
             }
-            Payload::Action(_) => "Action",
-            Payload::StageRoundCounter(_) => &format!("Stage Round Counter"),
-            Payload::EndStage(_) => &format!("End Counter"),
-            Payload::Choice => "Choice",
-            Payload::Optional => "Optional",
-            Payload::Trigger => "Trigger",
-        };
-
-        result.to_string()
+            Payload::Action(_) => String::from("Action"),
+            Payload::StageRoundCounter(_) => format!("Stage Round Counter"),
+            Payload::EndStage(_) => format!("End Counter"),
+            Payload::Choice => String::from("Choice"),
+            Payload::Optional => String::from("Optional"),
+            Payload::Trigger => String::from("Trigger"),
+        }
     }
 }
 
@@ -343,9 +351,14 @@ impl From<Ir<SpannedPayload>> for Ir<LoweredPayLoad> {
                             expr: expr.lower(),
                             negated: *negated,
                         },
-                        Payload::EndCondition { expr, negated } => Payload::EndCondition {
+                        Payload::EndCondition {
+                            expr,
+                            negated,
+                            stage,
+                        } => Payload::EndCondition {
                             expr: expr.lower(),
                             negated: *negated,
+                            stage: stage.lower(),
                         },
                         Payload::Action(a) => Payload::Action(a.lower()),
                         Payload::StageRoundCounter(s) => Payload::StageRoundCounter(s.lower()),
@@ -588,6 +601,7 @@ impl IrBuilder<SpannedPayload> {
                     Payload::EndCondition {
                         expr: end_condition.clone(),
                         negated: true,
+                        stage: stage_id.clone(),
                     },
                     None,
                 );
@@ -600,6 +614,7 @@ impl IrBuilder<SpannedPayload> {
                     Payload::EndCondition {
                         expr: end_condition.clone(),
                         negated: false,
+                        stage: stage_id.clone(),
                     },
                     None,
                 );
@@ -675,6 +690,7 @@ impl IrBuilder<SpannedPayload> {
                     Payload::EndCondition {
                         expr: end_condition.clone(),
                         negated: true,
+                        stage: stage_id.clone(),
                     },
                     None,
                 );
@@ -687,6 +703,7 @@ impl IrBuilder<SpannedPayload> {
                     Payload::EndCondition {
                         expr: end_condition.clone(),
                         negated: false,
+                        stage: stage_id.clone(),
                     },
                     None,
                 );
@@ -848,12 +865,10 @@ impl IrBuilder<SpannedPayload> {
             match &cond_rule.cases[i].node {
                 Case::NoBool { flows: spanneds } => {
                     self.build_flows(&spanneds, next_entry, exit);
-                    for j in i+1..cond_rule.cases.len() {
-                        self.diagnostics.push(
-                            GameFlowError::Unreachable { 
-                                span: cond_rule.cases[j].span.clone() 
-                            }
-                        )
+                    for j in i + 1..cond_rule.cases.len() {
+                        self.diagnostics.push(GameFlowError::Unreachable {
+                            span: cond_rule.cases[j].span.clone(),
+                        })
                     }
                 }
                 Case::Bool {

@@ -25,3 +25,7 @@ layout-rs = "0.1.1"
 [build-dependencies]
 # Dependencies EXCLUSIVELY for build.rs
 pest_meta = "2.7"
+
+[[bin]]
+name = "cgdsl2json"
+path = "src/main.rs"
