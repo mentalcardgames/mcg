@@ -245,7 +245,7 @@ fn start_iroh_connect_loop(endpoint: iroh::endpoint::Endpoint, state: AppState){
                                     let state_for_conn = state_clone.clone();
                                     let ticket_str_clone = ticket_str.clone();
                                     tokio::spawn(async move {
-                                        if let Err(e) = handle_iroh_connection(state_for_conn, c).await {
+                                        if let Err(e) = manage_iroh_connection(state_for_conn, c).await {
                                             tracing::error!(error = %e, ticket_str = %ticket_str_clone, "iroh connection handler error");
                                         }
                                     });

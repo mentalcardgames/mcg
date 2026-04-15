@@ -25,8 +25,6 @@ pub use pairing_screen::PairingScreen;
 pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
 pub use lobby_setup::LobbySelectionScreen;
-use crate::game::screens::qr_test_receive::QrTestReceive;
-use crate::game::screens::qr_test_transmit::QrTestTransmit;
 
 pub struct AppInterface<'a> {
     pub events: &'a mut Vec<crate::game::AppEvent>,
