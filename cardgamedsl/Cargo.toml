@@ -1,0 +1,11 @@
+[workspace]
+resolver = "3"
+members = [
+    "front_end",
+    "lsp_server", 
+    "code_gen",
+]
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
+authors = ["Till Hoffmann"]

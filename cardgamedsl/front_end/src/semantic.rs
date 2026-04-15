@@ -1,0 +1,717 @@
+/*
+  This is a prototype implementation for Semantic Checks.
+  It is checked if a Key corresponds to the correct Value, PointMap or Precedence.
+  It also checks if a Memory is initialized with the same Type and also used with
+  that Type.
+
+  Feel free to optimize and/or change anything that does not feel correct.
+*/
+
+use std::{collections::HashMap, fmt};
+
+use crate::{
+    ast::ast_spanned::{NodeKind, *},
+    spans::OwnedSpan,
+    symbols::Var,
+    walker::AstPass,
+};
+
+pub enum SemanticError {
+    KeyNotFoundForType { ty: String, key: Var },
+    NoCorrToType { ty: Var, key: Var },
+    MemoryMismatch { memory: Var },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct UsedCorrespondence {
+    pub ty: CorrespondanceType,
+    pub key: String,
+    pub span: OwnedSpan,
+}
+
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub enum CorrespondanceType {
+    // Key Correspondance
+    Precedence { node: String },
+    PointMap { node: String },
+    Value { node: String },
+    Key { node: String },
+}
+
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub enum MemType {
+    Int,
+    String,
+    Player,
+    Team,
+    PlayerCollection,
+    StringCollection,
+    IntCollection,
+    TeamCollection,
+    LocationCollection,
+    CardSet,
+}
+
+impl fmt::Display for MemType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            MemType::Int => "Int",
+            MemType::String => "String",
+            MemType::Player => "Player",
+            MemType::Team => "Team",
+            MemType::PlayerCollection => "PlayerCollection",
+            MemType::StringCollection => "StringCollection",
+            MemType::IntCollection => "IntCollection",
+            MemType::TeamCollection => "TeamCollection",
+            MemType::LocationCollection => "LocationCollection",
+            MemType::CardSet => "CardSet",
+        };
+        f.write_str(s)
+    }
+}
+
+impl CorrespondanceType {
+    pub fn get_node(&self) -> String {
+        match self {
+            CorrespondanceType::Precedence { node } => node.clone(),
+            CorrespondanceType::PointMap { node } => node.clone(),
+            CorrespondanceType::Value { node } => node.clone(),
+            CorrespondanceType::Key { node } => node.clone(),
+        }
+    }
+}
+
+pub struct SemanticVisitor {
+    init_corr: HashMap<CorrespondanceType, (String, OwnedSpan)>,
+    used_corr: Vec<UsedCorrespondence>,
+    // Resolving Memory Types
+    memories: Vec<(String, (MemType, OwnedSpan))>,
+}
+
+impl SemanticVisitor {
+    pub fn new() -> Self {
+        SemanticVisitor {
+            init_corr: HashMap::new(),
+            used_corr: Vec::new(),
+            memories: Vec::new(),
+        }
+    }
+
+    /// It iterates over all initialized correspondances (e.g. Precedence -> Key)
+    /// and gathers the used correspondances that do not allign with the initialized ones.
+    pub fn semantic_check(&self) -> Option<Vec<SemanticError>> {
+        let mut err = Vec::new();
+
+        for corr in self.used_corr.iter() {
+            match self.init_corr.get(&corr.ty) {
+                Some((key, span)) => {
+                    if corr.key != *key {
+                        err.push(SemanticError::NoCorrToType {
+                            ty: Var {
+                                id: corr.ty.get_node(),
+                                span: span.clone(),
+                            },
+                            key: Var {
+                                id: corr.key.clone(),
+                                span: corr.span.clone(),
+                            },
+                        });
+                    }
+                }
+                None => {
+                    err.push(SemanticError::KeyNotFoundForType {
+                        ty: corr.ty.get_node(),
+                        key: Var {
+                            id: corr.key.clone(),
+                            span: corr.span.clone(),
+                        },
+                    });
+                }
+            }
+        }
+
+        // The Memory checks are more complicated.
+        // Maybe not checking them at all is better.
+        let memory_errs = self.find_memory_mismatches();
+        err.extend(memory_errs);
+
+        if err.is_empty() {
+            return None;
+        }
+
+        return Some(err);
+    }
+
+    /// Finding Memory Mismatches is more complicated.
+    /// We have a Vector of < Tuple of (Name of Memory and (Memory-Type and Span)) >.
+    /// The first occurrence is the infered type of the Memory.
+    /// Afterwards we check if the Memory is used with other types and if so then
+    /// gather the information and convert them to SemanticErrors.
+    fn find_memory_mismatches(&self) -> Vec<SemanticError> {
+        let mut grouped: HashMap<String, Vec<(MemType, OwnedSpan)>> = HashMap::new();
+
+        // Group by variable name
+        for (name, (mem_type, span)) in self.memories.iter() {
+            grouped
+                .entry(name.clone())
+                .or_default()
+                .push((mem_type.clone(), span.clone()));
+        }
+
+        let mut mismatches: HashMap<String, Vec<OwnedSpan>> = HashMap::new();
+
+        // Check each group
+        for (name, occurrences) in grouped {
+            if occurrences.is_empty() {
+                continue;
+            }
+
+            // First occurrence defines the initialization type
+            let (initial_type, _) = &occurrences[0];
+
+            let mut wrong_spans = Vec::new();
+
+            for (mem_type, span) in occurrences.iter().skip(1) {
+                if mem_type != initial_type {
+                    wrong_spans.push(span.clone());
+                }
+            }
+
+            if !wrong_spans.is_empty() {
+                mismatches.insert(name, wrong_spans);
+            }
+        }
+
+        let mut errs = Vec::new();
+
+        for (name, spans) in mismatches.iter() {
+            for span in spans.iter() {
+                errs.push(SemanticError::MemoryMismatch {
+                    memory: Var {
+                        id: name.clone(),
+                        span: span.clone(),
+                    },
+                });
+            }
+        }
+
+        return errs;
+    }
+}
+
+/// Gathers the information needed for the Semantic Check and Memory Check.
+impl AstPass for SemanticVisitor {
+    fn enter_node<T: crate::walker::Walker>(&mut self, node: &T)
+    where
+        Self: Sized,
+    {
+        if let Some(unwrapped_node) = node.kind() {
+            match unwrapped_node {
+                NodeKind::SetUpRule(s) => {
+                    match s {
+                        SetUpRule::CreateMemoryWithMemoryType {
+                            memory,
+                            memory_type,
+                            owner: _,
+                        } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (
+                                    memory_type_to_mem_type(&memory_type.node),
+                                    memory.span.clone(),
+                                ),
+                            ));
+                        }
+                        SetUpRule::CreatePrecedence {
+                            precedence,
+                            kvs: key_value_pairs,
+                        } => {
+                            for (k, v) in key_value_pairs.iter() {
+                                self.init_corr.insert(
+                                    CorrespondanceType::Precedence {
+                                        node: precedence.node.clone(),
+                                    },
+                                    (k.node.clone(), precedence.span.clone()),
+                                );
+                                self.used_corr.push(UsedCorrespondence {
+                                    ty: CorrespondanceType::Value {
+                                        node: v.node.clone(),
+                                    },
+                                    key: k.node.clone(),
+                                    span: v.span.clone(),
+                                });
+                            }
+                        }
+                        SetUpRule::CreatePointMap {
+                            pointmap,
+                            kvis: key_value_int_triples,
+                        } => {
+                            for (k, v, _) in key_value_int_triples.iter() {
+                                self.init_corr.insert(
+                                    CorrespondanceType::PointMap {
+                                        node: pointmap.node.clone(),
+                                    },
+                                    (k.node.clone(), pointmap.span.clone()),
+                                );
+                                self.used_corr.push(UsedCorrespondence {
+                                    ty: CorrespondanceType::Value {
+                                        node: v.node.clone(),
+                                    },
+                                    key: k.node.clone(),
+                                    span: v.span.clone(),
+                                });
+                            }
+                        }
+                        SetUpRule::CreateCardOnLocation { location: _, cards } => {
+                            for types in cards.iter() {
+                                for (k, vs) in types.node.types.iter() {
+                                    for v in vs.iter() {
+                                        self.init_corr.insert(
+                                            CorrespondanceType::Value {
+                                                node: v.node.clone(),
+                                            },
+                                            (k.node.clone(), v.span.clone()),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                NodeKind::StringExpr(s) => {
+                    match s {
+                        StringExpr::Memory { memory } => {
+                            match &memory.node {
+                                UseSingleMemory::Memory { memory: mem } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::String, mem.span.clone()),
+                                    ));
+                                }
+                                UseSingleMemory::WithOwner {
+                                    memory: mem,
+                                    owner: _,
+                                } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::String, mem.span.clone()),
+                                    ));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                NodeKind::IntExpr(s) => {
+                    match s {
+                        IntExpr::Memory { memory } => {
+                            match &memory.node {
+                                UseSingleMemory::Memory { memory: mem } => {
+                                    self.memories
+                                        .push((mem.node.clone(), (MemType::Int, mem.span.clone())));
+                                }
+                                UseSingleMemory::WithOwner {
+                                    memory: mem,
+                                    owner: _,
+                                } => {
+                                    self.memories
+                                        .push((mem.node.clone(), (MemType::Int, mem.span.clone())));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                NodeKind::IntCollection(s) => {
+                    match s {
+                        IntCollection::Memory { memory } => {
+                            match &memory.node {
+                                UseMemory::Memory { memory: mem } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::IntCollection, mem.span.clone()),
+                                    ));
+                                }
+                                UseMemory::WithOwner { memory, owner: _ } => {
+                                    self.memories.push((
+                                        memory.node.clone(),
+                                        (MemType::IntCollection, memory.span.clone()),
+                                    ));
+                                }
+                            }
+                        },
+                        IntCollection::AggregateMemory { memory, multi: _ } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (MemType::Int, memory.span.clone()),
+                            ));
+                        },
+                        _ => {}
+                    }
+                }
+                NodeKind::StringCollection(s) => {
+                    match s {
+                        StringCollection::Memory { memory } => {
+                            match &memory.node {
+                                UseMemory::Memory { memory: mem } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::StringCollection, mem.span.clone()),
+                                    ));
+                                }
+                                UseMemory::WithOwner { memory: mem, owner: _ } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::StringCollection, mem.span.clone()),
+                                    ));
+                                }
+                            }
+                        },
+                        StringCollection::AggregateMemory { memory, multi: _ } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (MemType::String, memory.span.clone()),
+                            ));
+                        },
+                        _ => {}
+                    }
+                }
+                NodeKind::LocationCollection(s) => {
+                    match s {
+                        LocationCollection::Memory { memory } => {
+                            match &memory.node {
+                                UseMemory::Memory { memory: mem } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::LocationCollection, mem.span.clone()),
+                                    ));
+                                }
+                                UseMemory::WithOwner {
+                                    memory: mem,
+                                    owner: _,
+                                } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::LocationCollection, mem.span.clone()),
+                                    ));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                NodeKind::PlayerCollection(s) => {
+                    match s {
+                        PlayerCollection::Memory { memory } => {
+                            match &memory.node {
+                                UseMemory::Memory { memory: mem } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::PlayerCollection, mem.span.clone()),
+                                    ));
+                                }
+                                UseMemory::WithOwner {
+                                    memory: mem,
+                                    owner: _,
+                                } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::PlayerCollection, mem.span.clone()),
+                                    ));
+                                }
+                            }
+                        },
+                        PlayerCollection::AggregateMemory { memory, multi: _ } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (MemType::Player, memory.span.clone()),
+                            ));
+                        },
+                        _ => {}
+                    }
+                }
+                NodeKind::TeamCollection(s) => {
+                    match s {
+                        TeamCollection::Memory { memory } => {
+                            match &memory.node {
+                                UseMemory::Memory { memory: mem } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::TeamCollection, mem.span.clone()),
+                                    ));
+                                }
+                                UseMemory::WithOwner {
+                                    memory: mem,
+                                    owner: _,
+                                } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::TeamCollection, mem.span.clone()),
+                                    ));
+                                }
+                            }
+                        },
+                        TeamCollection::AggregateMemory { memory, multi: _ } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (MemType::Team, memory.span.clone()),
+                            ));
+                        },
+                        _ => {}
+                    }
+                }
+                NodeKind::CardSet(s) => {
+                    match s {
+                        CardSet::Memory { memory } => {
+                            match &memory.node {
+                                UseMemory::Memory { memory: mem } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::CardSet, mem.span.clone()),
+                                    ));
+                                }
+                                UseMemory::WithOwner {
+                                    memory: mem,
+                                    owner: _,
+                                } => {
+                                    self.memories.push((
+                                        mem.node.clone(),
+                                        (MemType::CardSet, mem.span.clone()),
+                                    ));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                NodeKind::AggregateFilter(a) => match a {
+                    AggregateFilter::Adjacent { key, precedence } => {
+                        self.used_corr.push(UsedCorrespondence {
+                            ty: CorrespondanceType::Precedence {
+                                node: precedence.node.clone(),
+                            },
+                            key: key.node.clone(),
+                            span: precedence.span.clone(),
+                        });
+                    }
+                    AggregateFilter::Higher {
+                        key,
+                        value,
+                        precedence,
+                    } => {
+                        self.used_corr.push(UsedCorrespondence {
+                            ty: CorrespondanceType::Precedence {
+                                node: precedence.node.clone(),
+                            },
+                            key: key.node.clone(),
+                            span: precedence.span.clone(),
+                        });
+                        match &value.node {
+                            StringExpr::Query { query: q } => match &q.node {
+                                QueryString::KeyOf {
+                                    key: k,
+                                    card_position: _,
+                                } => {
+                                    self.init_corr.insert(
+                                        CorrespondanceType::Key {
+                                            node: k.node.clone(),
+                                        },
+                                        (k.node.clone(), k.span.clone()),
+                                    );
+                                    self.used_corr.push(UsedCorrespondence {
+                                        ty: CorrespondanceType::Key {
+                                            node: k.node.clone(),
+                                        },
+                                        key: key.node.clone(),
+                                        span: k.span.clone(),
+                                    });
+                                }
+                                _ => {}
+                            },
+                            StringExpr::Literal { value } => {
+                                self.used_corr.push(UsedCorrespondence {
+                                    ty: CorrespondanceType::Value {
+                                        node: value.node.clone(),
+                                    },
+                                    key: key.node.clone(),
+                                    span: value.span.clone(),
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+                    AggregateFilter::Lower {
+                        key,
+                        value,
+                        precedence,
+                    } => {
+                        self.used_corr.push(UsedCorrespondence {
+                            ty: CorrespondanceType::Precedence {
+                                node: precedence.node.clone(),
+                            },
+                            key: key.node.clone(),
+                            span: precedence.span.clone(),
+                        });
+                        match &value.node {
+                            StringExpr::Query { query: q } => match &q.node {
+                                QueryString::KeyOf {
+                                    key: k,
+                                    card_position: _,
+                                } => {
+                                    self.init_corr.insert(
+                                        CorrespondanceType::Key {
+                                            node: k.node.clone(),
+                                        },
+                                        (k.node.clone(), k.span.clone()),
+                                    );
+                                    self.used_corr.push(UsedCorrespondence {
+                                        ty: CorrespondanceType::Key {
+                                            node: k.node.clone(),
+                                        },
+                                        key: key.node.clone(),
+                                        span: k.span.clone(),
+                                    });
+                                }
+                                _ => {}
+                            },
+                            StringExpr::Literal { value } => {
+                                self.used_corr.push(UsedCorrespondence {
+                                    ty: CorrespondanceType::Value {
+                                        node: value.node.clone(),
+                                    },
+                                    key: key.node.clone(),
+                                    span: value.span.clone(),
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+                    AggregateFilter::KeyIsString { key, string } => match &string.node {
+                        StringExpr::Query { query: q } => match &q.node {
+                            QueryString::KeyOf {
+                                key: k,
+                                card_position: _,
+                            } => {
+                                self.init_corr.insert(
+                                    CorrespondanceType::Key {
+                                        node: k.node.clone(),
+                                    },
+                                    (k.node.clone(), k.span.clone()),
+                                );
+                                self.used_corr.push(UsedCorrespondence {
+                                    ty: CorrespondanceType::Key {
+                                        node: k.node.clone(),
+                                    },
+                                    key: key.node.clone(),
+                                    span: k.span.clone(),
+                                });
+                            }
+                            _ => {}
+                        },
+                        StringExpr::Literal { value } => {
+                            self.used_corr.push(UsedCorrespondence {
+                                ty: CorrespondanceType::Value {
+                                    node: value.node.clone(),
+                                },
+                                key: key.node.clone(),
+                                span: value.span.clone(),
+                            });
+                        }
+                        _ => {}
+                    },
+                    AggregateFilter::KeyIsNotString { key, string } => match &string.node {
+                        StringExpr::Query { query: q } => match &q.node {
+                            QueryString::KeyOf {
+                                key: k,
+                                card_position: _,
+                            } => {
+                                self.init_corr.insert(
+                                    CorrespondanceType::Key {
+                                        node: k.node.clone(),
+                                    },
+                                    (k.node.clone(), k.span.clone()),
+                                );
+                                self.used_corr.push(UsedCorrespondence {
+                                    ty: CorrespondanceType::Key {
+                                        node: k.node.clone(),
+                                    },
+                                    key: key.node.clone(),
+                                    span: k.span.clone(),
+                                });
+                            }
+                            _ => {}
+                        },
+                        StringExpr::Literal { value } => {
+                            self.used_corr.push(UsedCorrespondence {
+                                ty: CorrespondanceType::Value {
+                                    node: value.node.clone(),
+                                },
+                                key: key.node.clone(),
+                                span: value.span.clone(),
+                            });
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                },
+                NodeKind::ActionRule(a) => match a {
+                    ActionRule::SetMemory {
+                        memory,
+                        memory_type,
+                    } => {
+                        self.memories.push((
+                            memory.node.clone(),
+                            (
+                                memory_type_to_mem_type(&memory_type.node),
+                                memory.span.clone(),
+                            ),
+                        ));
+                    }
+                    ActionRule::BidMemoryAction {
+                        memory,
+                        quantity: _,
+                        owner: _,
+                    } => {
+                        self.memories
+                            .push((memory.node.clone(), (MemType::Int, memory.span.clone())));
+                    }
+                    _ => {}
+                },
+                NodeKind::ScoreRule(s) => match s {
+                    ScoreRule::ScoreMemory {
+                        int: _,
+                        memory,
+                        players: _,
+                    } => {
+                        self.memories
+                            .push((memory.node.clone(), (MemType::Int, memory.span.clone())));
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+    }
+
+    fn exit_node<T: crate::walker::Walker>(&mut self, _: &T)
+    where
+        Self: Sized,
+    {
+    }
+}
+
+fn memory_type_to_mem_type(mt: &MemoryType) -> MemType {
+    match mt {
+        MemoryType::Int { int: _ } => MemType::Int,
+        MemoryType::String { string: _ } => MemType::String,
+        MemoryType::Player { player: _ } => MemType::Player,
+        MemoryType::Team { team: _ } => MemType::Team,
+        MemoryType::PlayerCollection { players: _ } => MemType::PlayerCollection,
+        MemoryType::StringCollection { strings: _ } => MemType::StringCollection,
+        MemoryType::TeamCollection { teams: _ } => MemType::TeamCollection,
+        MemoryType::IntCollection { ints: _ } => MemType::IntCollection,
+        MemoryType::LocationCollection { locations: _ } => MemType::LocationCollection,
+        MemoryType::CardSet { card_set: _ } => MemType::CardSet,
+    }
+}

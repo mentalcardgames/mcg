@@ -1,0 +1,807 @@
+\documentclass[a4paper,11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Highlighting for the dummy code
+\lstset{
+    language=Python,
+    backgroundcolor=\color{gray!10},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single
+}
+
+% Point this to your DOC_OUT directory
+\graphicspath{ {./docs/architecture/build/} }
+
+\geometry{margin=1in}
+
+\title{Architecture Documentation}
+\author{Till Hoffmann}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+This document describes the architecture of the front-end of the Card Game Description Language (CGDL).
+It serves as a formal specification of the system design, its core components, and its extension points.
+
+The front-end is responsible for parsing, validating, analyzing, and transforming source files into an intermediate representation suitable for further processing and execution. The implementation is written in Rust, emphasizing safety, maintainability, and performance.
+
+\section{Problem Statement}
+
+Many (card) games share similar rule structures, state transitions, and action patterns.
+Implementing each game independently leads to duplicated logic, repetitive structures, and increased maintenance effort.
+
+To address this, a Domain-Specific Language (DSL) is introduced to abstract common game mechanics and formalize them in a reusable, structured way. By capturing the core logic of card-based games within a dedicated language, the process of defining new games becomes significantly more efficient, less error-prone, and more expressive.
+
+Designing such a DSL requires a well-structured language front-end that provides:
+
+\begin{itemize}
+    \item Clear syntax and grammar rules
+    \item Strong validation and diagnostics
+    \item Extensibility for evolving language features
+    \item Tooling support for an improved user experience
+\end{itemize}
+
+The primary goal is to design and implement a robust language front-end in Rust that enables the formal description of card games.
+
+The language is specifically designed as a Card Game Description Language with actions that can later be verified or proven using cryptographic methods. This ensures that game logic can be validated in a trustworthy and formally verifiable manner.
+
+
+\section{Technical Decisions}
+
+\subsection{Why Pest Is the Right Choice for the Parser}
+
+The card game language is still in its early stages of development, and extending the grammar is currently the highest priority. Therefore, we require a parsing solution that makes grammar evolution simple and maintainable.
+
+\textit{Pest} fits this requirement particularly well. Grammar rules can be extended or modified by simply adding or adjusting rules in the \texttt{*.pest} grammar file. This allows rapid iteration without intrusive changes to the surrounding infrastructure.
+
+Additionally, Pest has strong community support and a rich ecosystem of supporting crates. For example, \textit{pest\_consume} enables concise and expressive mapping of grammar rules directly to Rust enums and structs, simplifying the transformation from parse tree to structured data.
+
+\subsection{Abstract Syntax Tree (AST)}
+
+Pest provides functionality to generate an Abstract Syntax Tree (AST) automatically from the grammar. However, this approach tightly couples the AST structure to the grammar definition. Since the grammar is expected to evolve frequently, automatically generated AST structures would change accordingly, forcing refactoring across all dependent components.
+
+To avoid this, we build the AST manually. The AST becomes the single source of truth, independent of the grammar. While extending the AST still requires corresponding updates in dependent systems, grammar changes alone do not automatically affect the AST structure. This decoupling improves maintainability and stability as the language evolves.
+
+\subsection{Validation and Diagnostics}
+
+For semantic highlighting and meaningful diagnostics, we require source spans associated with AST nodes. Pest already provides spans for each parsed rule. To preserve this information, we use a \emph{spanned AST} approach, wrapping each AST node in a structure that stores its corresponding span:
+
+\begin{verbatim}
+struct Spanned<T> {
+    node: T,
+    span: Span,
+}
+\end{verbatim}
+
+All validation logic operates on this spanned AST.
+
+To reduce boilerplate, a custom procedural macro generates:
+\begin{itemize}
+    \item A mirrored spanned AST
+    \item Walker/visitor logic
+    \item Lowering logic
+\end{itemize}
+
+Validation is performed after parsing. This allows us to collect and report multiple errors in a single run, instead of failing fast during parsing. The visitor pattern is used to gather relevant information from specific rules and perform semantic validation in a structured way.
+
+\subsection{Intermediate Representation (IR)}
+
+The AST is transformed into a Finite State Machine (FSM) that serves as the Intermediate Representation (IR). Additional validation is performed at this stage, including:
+\begin{itemize}
+    \item Detecting unreachable states or transitions
+    \item Verifying connectivity of the FSM
+    \item Ensuring logical consistency of the game flow
+\end{itemize}
+
+This separation allows semantic and structural validation at different abstraction levels.
+
+\subsection{Language Server Protocol (LSP)}
+
+The language server is implemented using \textit{tower-lsp}. This provides robust support for editor features such as diagnostics, semantic highlighting, and real-time feedback.
+
+\subsection{VS Code Extension}
+
+To ensure ease of use, a dedicated extension for Visual Studio Code is provided. Users can install the extension directly from the marketplace and immediately start writing game logic without additional setup.
+
+\subsection{Testing Strategy}
+
+Grammar development carries the risk of ambiguity, meaning that multiple parse trees may match the same input. Therefore, thorough parser testing is essential.
+
+We use property-based testing with \textit{Proptest} in combination with arbitrary AST generation.
+
+The testing workflow is as follows:
+\begin{enumerate}
+    \item Generate an arbitrary AST
+    \item Format it into valid input text
+    \item Parse the generated input
+    \item Compare the original AST with the parsed AST
+\end{enumerate}
+
+This round-trip testing approach helps uncover ambiguities and grammar inconsistencies without requiring an excessive number of hand-written unit tests.
+
+\subsection{Serialization and Deserialization}
+
+The Intermediate Representation must be serializable and deserializable to efficiently transmit and store game files. This enables portability and integration with external systems.
+
+\subsection{Output of the Extension}
+
+When running the extension, the following artifacts are generated:
+\begin{itemize}
+    \item A \texttt{*.png} file containing a visual representation of the game
+    \item A corresponding \texttt{*.dot} file
+    \item A serialized file (currently \texttt{*.json})
+\end{itemize}
+
+This ensures both human-readable visualization and serialization of the game logic.
+
+\section{Overall Architecture}
+
+The system follows a modular architecture:
+
+\begin{itemize}
+    \item Langauge front-end module
+    \item Code generation (helping with the language front-end)
+    \item Language Portocol Server (LSP)
+    \item VS-Code extension
+\end{itemize}
+
+\section{Front-End and Code Generation Architecture}
+
+This section describes the relationship between the \texttt{front\_end}
+crate and the \texttt{code\_gen} procedural macro crate. The design separates
+manual semantic definitions from automatically generated infrastructure,
+reducing boilerplate while preserving architectural clarity.
+
+\subsection{Overview}
+
+The system is composed of two main crates:
+
+\begin{itemize}
+    \item \textbf{code\_gen} — a procedural macro crate
+    \item \textbf{front\_end} — the language implementation crate
+\end{itemize}
+
+The \texttt{code\_gen} crate provides the attribute macro
+\texttt{\#[spanned\_ast]}, which reads the manually defined AST
+structures and generates additional supporting code.
+
+The \texttt{front\_end} crate contains the parser, semantic model,
+validation logic, and IR transformation.
+
+\subsection{Procedural Macro: \#[spanned\_ast]}
+
+The attribute macro \texttt{\#[spanned\_ast]} is defined in the
+\texttt{code\_gen} crate.
+
+Its responsibilities are:
+
+\begin{itemize}
+    \item Reading the manual AST definitions
+    \item Generating a mirrored \emph{Spanned AST}
+    \item Generating walker/visitor implementations
+    \item Generating lowering traits for Spanned AST to AST transformation
+\end{itemize}
+
+The macro does not define semantics itself; instead, it augments
+the manually defined AST with additional infrastructure.
+
+This design preserves manual control over the semantic model
+while automating repetitive structural code.
+
+\subsection{Generated Module}
+
+The generated code is placed in the \texttt{generated} module
+within the \texttt{front\_end} crate. It contains:
+
+\begin{itemize}
+    \item \textbf{Spanned AST} — AST nodes wrapped with source span information
+    \item \textbf{Generated Walkers} — visitor logic for traversal and validation
+    \item \textbf{Lowering Traits} — trait implementations for transforming
+          the Spanned AST into the (unspanned) AST
+\end{itemize}
+
+This separation ensures that generated code is clearly distinguished
+from manually written semantic definitions.
+
+\subsection{Processing Flow}
+
+The processing pipeline involving both crates proceeds as follows:
+
+\begin{enumerate}
+    \item The Pest parser builds the \textbf{Manual AST}.
+    \item The macro-generated infrastructure attaches spans,
+          producing the \textbf{Spanned AST}.
+    \item AST validation is performed using the generated walker logic.
+    \item The validated AST is transformed into the FSM-based IR.
+    \item The FSM Transformer produces the final FSM IR representation.
+\end{enumerate}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{code_gen} 
+    \caption{Overview of the Front-End and Code-Gen Relationship}
+    \label{fig:architecture}
+\end{figure}
+
+\section{Language Frontend Pipeline}
+
+This section describes the processing pipeline of the language front-end.
+The architecture follows a staged transformation model, where each phase
+has a clearly defined responsibility and output.
+
+\subsection{Overview}
+
+The front-end is implemented in Rust and processes source files through
+multiple transformation and validation phases before generating output
+artifacts.
+
+The pipeline consists of two primary stages:
+
+\begin{itemize}
+    \item AST Phase (syntactic and semantic modeling)
+    \item IR Phase (control-flow representation and structural validation)
+\end{itemize}
+
+The validated Intermediate Representation (IR) is then used to generate
+serialized version and visual artifacts.
+
+\subsection{Source Code}
+
+The pipeline begins with the user-provided source code written in the
+Card Game Description Language (CGDL). This source code defines the rules,
+actions, and structural components of a game.
+
+\subsection{Parsing Phase}
+
+\paragraph{Pest Parser}
+
+The source code is processed by the Pest-based parser. The parser is
+responsible for:
+
+\begin{itemize}
+    \item Lexical and syntactic analysis
+    \item Grammar rule matching
+    \item Producing a parse tree with span information
+\end{itemize}
+
+At this stage, only syntactic correctness is ensured. Semantic validation
+is intentionally deferred to later phases.
+
+\subsection{AST Phase}
+
+\subsubsection{AST Construction}
+
+The parse tree is transformed into a manually defined Abstract Syntax Tree (AST).
+This transformation decouples the grammar structure from the semantic model.
+
+The AST serves as the single source of truth for the language semantics.
+Each AST node may carry span information to enable diagnostics and
+semantic highlighting.
+
+\subsubsection{AST Validation}
+
+After construction, the AST undergoes semantic validation. This phase includes:
+
+\begin{itemize}
+    \item Symbol resolution
+    \item Structural consistency checks
+    \item Rule correctness validation
+    \item Early semantic diagnostics
+\end{itemize}
+
+Validation is designed to collect multiple errors in a single run rather
+than failing fast.
+
+\subsection{IR Phase}
+
+\subsubsection{FSM Transformer}
+
+The validated AST is transformed into a graph-based Intermediate Representation (IR),
+modeled as a state-transition system (Finite State Machine).
+
+In this representation:
+
+\begin{itemize}
+    \item States represent control-flow positions.
+    \item Transitions represent actions and rule applications.
+    \item Transitions reference semantic constructs defined in the AST.
+\end{itemize}
+
+The IR separates execution structure from semantic definition while
+preserving traceability to the original source.
+
+\subsubsection{IR Validation}
+
+The IR undergoes structural validation, including:
+
+\begin{itemize}
+    \item Reachability analysis
+    \item Connectivity checks
+    \item Detection of unreachable states
+\end{itemize}
+
+This phase ensures that the resulting game model is structurally sound
+and executable.
+
+\subsection{Output Generation}
+
+After successful IR validation, multiple output artifacts are generated.
+
+\subsubsection{JSON Exporter}
+
+The IR is serialized into a JSON file (\texttt{ir\_output.json}).  
+This artifact serves as the interface to the backend and enables:
+
+\begin{itemize}
+    \item Persistence
+    \item Transmission
+    \item Backend processing
+\end{itemize}
+
+\subsubsection{Graphviz Exporter}
+
+The IR is also exported as a Graphviz \texttt{.dot} file (\texttt{output.dot}).
+This file describes the state-transition graph.
+
+Using the Graphviz toolchain (e.g., \texttt{dot -Tpng}), the \texttt{.dot}
+file can be rendered into a visual representation (\texttt{output.png}).
+
+\subsection{6. Artifacts and Backend Integration}
+
+The pipeline produces the following artifacts:
+
+\begin{itemize}
+    \item \texttt{ir\_output.json} — IR representation
+    \item \texttt{output.dot} — graph description
+    \item \texttt{output.png} — visual representation of the game logic
+\end{itemize}
+
+The JSON artifact is forwarded to the backend, where further processing and
+execution may occur.
+
+\subsection{Design}
+
+The pipeline is intentionally layered:
+
+\begin{center}
+Source → Parse → AST → Validate → IR → Validate → Export
+\end{center}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{front_end} 
+    \caption{Overview of the Front-End}
+    \label{fig:architecture}
+\end{figure}
+
+\section{Run-Game Pipeline}
+
+This section describes the end-to-end execution pipeline for running a game/front-end
+from within the VS Code extension. The architecture integrates the editor,
+Language Server Protocol (LSP), front-end processing, and output generation.
+
+\subsection{Triggering Execution from VS Code}
+
+Users interact with the \textbf{Extension UI} in Visual Studio Code. When
+the user triggers the \texttt{Run} command:
+
+\begin{itemize}
+    \item The \texttt{LSP Client} in the extension sends a request to the Rust-based
+          language server via the JSON-RPC protocol.
+    \item This request includes the currently open source file or workspace state.
+\end{itemize}
+
+\subsection{Language Server Handling}
+
+Within the Rust language server (\texttt{tower-lsp}):
+
+\begin{itemize}
+    \item The \texttt{LSP Handler} receives the execution request and coordinates
+          diagnostics and custom commands.
+    \item Raw source code is forwarded to the parser in the \texttt{front\_end} module.
+\end{itemize}
+
+\subsection{Front-End Processing}
+
+The front-end processing consists of two main phases: AST Phase and IR Phase.
+
+\subsubsection{AST Phase}
+
+\begin{enumerate}
+    \item \textbf{Pest Parser} performs lexical and syntactic analysis.
+    \item \textbf{AST Construction} transforms the parse tree into the manually defined AST.
+    \item \textbf{AST Validation} checks for semantic correctness, including symbol resolution,
+          rule validation, and consistency checks.
+\end{enumerate}
+
+\subsubsection{IR Phase}
+
+\begin{enumerate}
+    \item The validated AST is transformed into a graph-based IR (Finite State Machine)
+          by the \textbf{FSM Transformer}.
+    \item \textbf{IR Validation} ensures structural correctness, including reachability and
+          connectivity.
+\end{enumerate}
+
+\subsubsection{Export Logic}
+
+After IR validation:
+
+\begin{itemize}
+    \item The \textbf{JSON Serializer} writes a serialized IR representation to \texttt{output.json}.
+    \item The \textbf{Dot Generator} produces a Graphviz \texttt{.dot} file (\texttt{output.dot})
+          describing the state-transition graph.
+    \item The \texttt{dot} command-line tool converts the \texttt{.dot} file into a visual
+          \texttt{output.png} representation.
+\end{itemize}
+
+\subsection{Output Artifacts}
+
+The pipeline generates:
+
+\begin{itemize}
+    \item \texttt{output.json} — used by external backends for execution or simulation.
+    \item \texttt{output.dot} — Graphviz description of the game logic.
+    \item \texttt{output.png} — visual representation of the state-transition graph.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{run_lang} 
+    \caption{Overview of the Front-End, VS-Extension and LSP}
+    \label{fig:architecture}
+\end{figure}
+
+\section{IR Builder: AST to FSM Transformation}
+
+This section describes the logic of the Intermediate Representation (IR) builder,
+which transforms the Abstract Syntax Tree (AST) into the graph-based
+Finite State Machine (FSM) IR used for execution, validation, and visualization.
+
+\subsection{Overview}
+
+The IR builder converts high-level game logic represented in the AST
+into a concrete FSM representation. Each AST node corresponds to one or
+more states and transitions in the FSM, while preserving source span
+information for diagnostics. 
+
+The builder maintains internal state to track:
+
+\begin{itemize}
+    \item \texttt{state\_counter} — monotonically increasing counter for generating new state IDs
+    \item \texttt{stage\_exits} — stack of exit states for sequential stages
+    \item \texttt{stage\_to\_exit} — mapping from stage IDs to their corresponding exit states
+    \item \texttt{fsm} — the FSM being constructed, storing states and edges with \texttt{SpannedPayload}
+\end{itemize}
+
+---
+
+\subsection{Transformation Logic}
+
+The AST is traversed by a set of builder functions:
+
+\begin{itemize}
+    \item \textbf{build\_flows} — iterates over the top-level components of the AST
+    \item \textbf{build\_flow} — processes individual flow components
+    \item \textbf{build\_seq\_stage} — handles sequential stages (\texttt{SeqStage} nodes)
+    \item \textbf{build\_choice\_rule} — handles choice rules (\texttt{ChoiceRule} nodes)
+    \item \textbf{build\_optional\_rule} — handles optional rules (\texttt{OptionalRule} nodes)
+    \item \textbf{build\_if\_rule} — handles if rules (\texttt{IfRule} nodes)
+    \item \textbf{build\_cond\_rule} — handles conditional rules (\texttt{Conditional} nodes)
+    \item \textbf{build\_rule} — handles game rules (\texttt{GameRule} nodes)
+    \item \textbf{build\_sim\_stage} — handles simultaneous stages (\texttt{SimStage} nodes) (still open for implementation)
+\end{itemize}
+
+\subsubsection{Game Rule Emission}
+
+Each \texttt{GameRule} can emit one of several control-flow changes:
+
+\begin{itemize}
+    \item \texttt{EndCurrentStage} — signals the end of the current stage
+    \item \texttt{EndStage} — signals the end of a sequential stage
+    \item \texttt{EndGame} — signals the termination of the game
+    \item \texttt{None} — No control flow changes 
+\end{itemize}
+
+These changes are reflected as transitions in the FSM.
+
+---
+
+\subsection{FSM Primitives}
+
+The IR builder uses a small set of primitives for constructing the FSM:
+
+\begin{itemize}
+    \item \texttt{new\_state()} — increments \texttt{state\_counter} and returns a fresh state ID
+    \item \texttt{add\_state()} — inserts a new state node into the FSM
+    \item \texttt{new\_edge()} — creates a transition between states and appends it to the FSM
+\end{itemize}
+
+Each transition carries a \texttt{SpannedPayload} that links back to the corresponding
+AST node, enabling diagnostics and semantic highlighting in the LSP which can later be lowered
+into an unspanned PayLoad.
+
+---
+
+\subsection{Stage and Exit Tracking}
+
+Sequential stages in the game are tracked with:
+
+\begin{itemize}
+    \item \texttt{stage\_exits (Stack)} — tracks exit IDs for nested stages
+    \item \texttt{stage\_to\_exit (Map)} — maps stage IDs to exit states
+\end{itemize}
+
+When building a \texttt{SeqStage}:
+
+\begin{enumerate}
+    \item Push the exit state onto the stack
+    \item Map the stage ID to the corresponding exit state
+    \item Process contained rules sequentially
+    \item Link each rule’s entry and exit states using the FSM primitives
+\end{enumerate}
+
+---
+
+\subsection{Diagnostics and Error Handling}
+
+The builder also performs structural checks during FSM construction:
+
+\begin{itemize}
+    \item \texttt{unreachable()} — detects unreachable states
+    \item \texttt{diagnostics()} — checks connectivity of the FSM and emits
+          \texttt{GameFlowError} for any structural violations
+\end{itemize}
+
+These diagnostics ensure that the generated FSM represents a valid,
+fully connected game flow, and provide detailed source span information
+for LSP feedback.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{ir_logic} 
+    \caption{Overview of the Intermediate Representation (IR)}
+    \label{fig:architecture}
+\end{figure}
+
+\section{Extension Points}
+
+The system is designed to be modular and extensible, allowing future
+enhancements without requiring major changes to the core architecture.
+Key extension points include:
+
+\begin{itemize}
+    \item \textbf{Extending the Parser and AST:}  
+          New syntax rules can be added to the \texttt{*.pest} grammar,
+          and corresponding AST nodes can be defined manually.  
+          The \texttt{\#[spanned\_ast]} macro will automatically
+          generate spanned nodes, walkers, and lowering traits for new constructs.
+
+    \item \textbf{Extending Validation:}  
+          Additional semantic checks can be introduced at the AST or IR level.
+          Custom rules, invariants, or cross-stage validations can be added
+          by extending the generated visitor logic or implementing new diagnostic
+          routines.
+
+    \item \textbf{Extending LSP and User Experience:}  
+          The LSP integration is modular. New commands, editor actions,
+          or richer semantic feedback (e.g., context-aware auto-completion,
+          hover documentation, or code lenses) can be implemented by extending
+          the \texttt{LSP Handler} and client logic in the VS Code extension.
+
+    \item \textbf{Extending the FSM / IR Representation:}  
+          The FSM-based IR is flexible and allows customization of states,
+          transitions, and payloads. For example, \texttt{StateID} can be
+          replaced with richer state types or metadata. Additional IR analysis
+          passes or alternative intermediate representations can be introduced
+          without affecting upstream parsing or validation.
+\end{itemize}
+
+These extension points ensure that the language front-end can evolve
+over time, support new features, and adapt to changing game semantics,
+while maintaining a clean separation of concerns.
+
+\subsection{Current Limitations and Future Improvements}
+
+The current implementation of auto-completion and semantic validation should be considered preliminary.
+While both features are functional and sufficient for development and testing purposes, their internal
+design prioritizes rapid prototyping over architectural completeness.
+
+In particular, parts of the auto-completion logic rely on simplified heuristics rather than a fully
+context-aware semantic model. Similarly, certain validation routines are implemented in a pragmatic
+manner and may not yet cover all edge cases or provide optimal diagnostic precision.
+
+These components are intended to be refactored and extended in future iterations. Planned improvements
+include a more structured semantic analysis phase, improved symbol resolution, and a more context-sensitive
+completion engine. The current design, however, provides a solid foundation for these enhancements.
+
+\subsection{Advanced Analysis and Game-Theoretic Validation}
+
+The current validation pipeline focuses primarily on structural and semantic correctness,
+such as reachability analysis, connectivity checks, and rule consistency.
+
+However, the graph-based Intermediate Representation (IR) also enables more advanced forms
+of analysis. Since the game logic is modeled as a state-transition system, it is in principle
+possible to apply formal methods inspired by game theory and automata theory.
+
+Potential extensions include:
+
+\begin{itemize}
+    \item Detection of dominant or unreachable strategies
+    \item Analysis of forced win or loss states
+    \item Verification of fairness properties
+    \item Detection of deadlocks or infinite cycles
+\end{itemize}
+
+\section{Conclusion}
+
+This document has described the architecture of the Card Game Description Language front-end, including its parsing, AST construction, validation, IR transformation, and output generation pipeline. The system is designed with modularity, traceability, and extensibility in mind, allowing each stage—from source code to FSM IR and visualizations—to be maintained and extended independently.
+
+Key design decisions, such as using a manual AST, a spanned AST for diagnostics, and a graph-based IR, provide a robust foundation for semantic validation, structural analysis, and advanced tooling such as LSP integration and VS Code support. The procedural macro infrastructure further reduces boilerplate while preserving semantic clarity.
+
+The architecture also anticipates future improvements, including more advanced semantic validation, game-theoretic analysis of FSMs, enhanced auto-completion, and flexible IR extensions. These features ensure that the language front-end can evolve with the needs of game designers and researchers, providing both a practical tool for game development and a platform for experimentation with formal verification and analysis techniques.
+
+
+\section{Appendix}
+
+\begin{lstlisting}
+player P1, P2, P3, P4, P5, P6, P7
+turnorder all random 
+location Hand, Trick, WonTricks on all
+location Stock on table
+card on Stock: 
+  Rank (Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace)
+    for Suit (Spades, Clubs)
+      for Color (Black),
+  Rank (Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace)
+    for Suit (Diamonds, Hearts)
+      for Color (Red)
+precedence Rankorder on Rank (Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace)
+memory Deals (7, 6, 5, 4, 3, 2, 1, 2, 3, 4, 5, 6, 7) on table
+memory Trump on table
+memory Lead on table
+memory Score on all
+memory IntermediateWinner on table 
+memory Bid 0 on all
+stage Play for current 13 times {
+  stage Preparation for current 1 times {
+    flip Stock to face down
+    shuffle Stock
+    deal &IC:Deals[stageroundcounter(Play)] from Stock private to Hand of all
+    cycle to next
+  }
+
+  stage Bidding for current until all out of Bidding {
+    conditional {
+      case size(playersin) == 1:
+        bid != (&IC:Deals[stageroundcounter(Play)] - sum((&I:Bid of all))) on Bid of current
+      case else:
+        bid <= &IC:Deals[stageroundcounter(Play)] on Bid of current
+    }
+
+    cycle to current
+    set current out of stage
+  }
+
+  stage Tricks for current until Hand of all empty {
+    stage PlayOneTrick for current until all out of stage {
+      conditional {
+        case Trick empty:
+          move any from Hand face up to Trick
+          Lead is Suit of top(Trick)
+        case (Trick not empty and &S:Lead not in Hand):
+          move any from Hand face up to top(Trick)
+        case (Trick not empty and &S:Lead in Hand):
+          move any from Hand where Suit is &S:Lead face up to top(Trick)
+      }
+
+      set current out of stage
+      cycle to next 
+    }
+
+    stage DeclareTrickWinner for current 1 times {
+      precedence TrickScore ( Rank Two, Rank Three, Rank Four, Rank Five, Rank Six, Rank Seven
+      , Rank Eight, Rank Nine, Rank Ten, Rank Jack, Rank Queen, Rank King, Rank Ace)
+      IntermediateWinner is ( owner of max of Trick of all using TrickScore )
+      move Trick of all face up to IntermediateWinner
+      cycle to &PC:IntermediateWinner[0]
+    } 
+  }
+
+  stage RoundScoring for current until all out of stage {
+    if (size(cards WonTricks) == &I:Bid) {
+      score (10 + &I:Bid) to Score of current
+    }
+
+    set current out of stage
+    cycle to next
+  }
+
+  stage Clearup for current 1 times {
+    move WonTricks of all face down to top(Stock)
+  }
+}
+
+winner is highest Score
+\end{lstlisting}
+
+\begin{lstlisting}
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand, LayDown, Trash on all
+location Stock, Discard on table
+card on Stock:
+Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King, Ace)
+    for Suite(Diamonds, Hearts, Spades, Clubs)
+precedence RankOrder on Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine , Ten, Jack, Queen, King)
+points Values on Rank(Ace: 1, Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7, Eight: 8, Nine: 9 , Ten: 10, Jack: 10, Queen: 10, King: 10)
+combo Sequence where ((size >= 3 and same Suite) and adjacent Rank using RankOrder)
+combo Set where ((size >= 3 and distinct Suite) and Rank is "Ace")
+combo Deadwood where (not Sequence and not Set)
+
+stage Preparation for current 1 times {
+    deal 12 from top(Stock) private to Hand of all
+}
+
+stage Collect for current until previous out of stage  {
+    choose {
+        move top(Discard) private to Hand
+        or
+        move top(Stock) private to Hand
+    }
+
+    move any from Hand face up to top(Discard)
+
+    if (sum of Deadwood in Hand using Values <= 10) {
+        optional {
+            move all from Set in Hand face up to top(LayDown)
+            move all from Sequence in Hand face up to top(LayDown)
+
+            if (Hand empty) {
+                move all from Set in Hand of next face up to top(LayDown) of next
+                move all from Sequence in Hand of next face up to top(LayDown) of next
+                move Hand of next face up to Trash of next
+
+                move Hand face up to Trash
+                set current out of stage
+            }
+        }
+    }
+
+    cycle to next
+}
+
+stage FinalLayDown for current 1 times {
+    move LayDown of previous face up to Hand of current
+    move all from Set in Hand face up to top(LayDown)
+    move all from Sequence in Hand face up to top(LayDown)
+
+    move Hand face up to Trash
+}
+
+memory LeftOver on all
+
+score sum of Trash using Values to LeftOver of all
+winner is lowest LeftOver
+\end{lstlisting}
+
+\end{document}

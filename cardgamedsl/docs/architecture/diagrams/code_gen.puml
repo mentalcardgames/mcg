@@ -1,0 +1,36 @@
+@startuml
+title Front-End & Code-Gen Relationship
+
+package "Crate: code_gen (proc-macro)" #LightBlue {
+    ' We add an alias "Macro" here
+    component "Attribute: #[spanned_ast]" as Macro
+}
+
+package "Crate: front_end" {
+    
+    package "Module: ast" #GhostWhite {
+        [Manual AST Definitions] as ManualAST
+    }
+
+    package "Module: generated" #HoneyDew {
+        [Spanned AST] as SpannedAST
+        [Generated Walkers] as Walkers
+        [Lowering Traits] as Traits
+    }
+
+    [Pest Parser] --> ManualAST : "Builds"
+    
+    node "Processing" {
+        ManualAST --> SpannedAST : "Attach Spans"
+        SpannedAST --> [AST Validation] : "via Generated Walkers"
+        [AST Validation] --> [FSM Transformer] : "via Lowering Traits"
+    }
+
+    [FSM Transformer] --> [FSM IR]
+}
+
+' The Macro relationship using the alias
+ManualAST <.up. Macro : "Reads"
+Macro .down.> [Module: generated] : "Generates"
+
+@enduml

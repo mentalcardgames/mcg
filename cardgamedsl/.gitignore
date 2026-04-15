@@ -1,0 +1,11 @@
+# Rust
+target/
+**/*.rs.bk
+docs/**/build
+Cargo.lock
+tests_out/
+
+# IDEs
+# .vscode is part of the extension
+# .vscode/
+.idea/

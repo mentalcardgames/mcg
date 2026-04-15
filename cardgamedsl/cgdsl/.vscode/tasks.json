@@ -1,0 +1,22 @@
+// See https://go.microsoft.com/fwlink/?LinkId=733558
+// for the documentation about the tasks.json format
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+				"label": "Full Build",
+				"dependsOn": ["Build Rust LSP", "npm compile"],
+				"group": { "kind": "build", "isDefault": true }
+		},
+		{
+				"label": "Build Rust LSP",
+				"type": "shell",
+				"command": "cargo build --manifest-path ../Cargo.toml -p lsp_server"
+		},
+		{
+				"label": "npm compile",
+				"type": "shell",
+				"command": "npm run compile"
+		}
+	],
+}

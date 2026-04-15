@@ -1,0 +1,45 @@
+@startuml
+title Language Frontend Pipeline
+
+' We define the components in the order we want them to appear
+package "Frontend (Rust)" {
+    [Source Code]
+    [Pest Parser]
+    
+    node "AST Phase" {
+        [AST Construction]
+        [AST Validation]
+    }
+    
+    node "IR Phase" {
+        [FSM Transformer]
+        [IR Validation]
+    }
+}
+
+' Use triple dashes (--->) to strongly suggest vertical rank
+[Source Code] ---> [Pest Parser]
+[Pest Parser] ---> [AST Construction]
+[AST Construction] ---> [AST Validation]
+[AST Validation] ---> [FSM Transformer]
+[FSM Transformer] ---> [IR Validation]
+
+package "Output Generation" {
+    [JSON Exporter]
+    [Graphviz Exporter]
+}
+
+[IR Validation] ---> [JSON Exporter]
+[IR Validation] ---> [Graphviz Exporter]
+
+database "Artifacts" {
+    [ir_output.json]
+    [output.dot]
+}
+
+[JSON Exporter] ---> [ir_output.json]
+[Graphviz Exporter] ---> [output.dot]
+[output.dot] .> [output.png] : "dot -Tpng"
+
+[ir_output.json] .> [Backend]
+@enduml
