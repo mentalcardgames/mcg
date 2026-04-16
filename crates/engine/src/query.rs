@@ -219,7 +219,7 @@ impl Evaluator {
                 Ok(!cards.is_empty())
             }
             AggregateBool::OutOfPlayer { .. } => {
-                Err("Evaluator::eval_aggregate OutOfPlayer not yet implemented".to_string())
+                unimplemented!("Evaluator::eval_aggregate OutOfPlayer")
             }
         }
     }
@@ -320,30 +320,30 @@ impl Evaluator {
     }
 
     pub fn eval_int(_expr: &IntExpr, _game_data: &GameData) -> Result<i32, String> {
-        Err("Evaluator::eval_int not yet implemented".to_string())
+        unimplemented!("Evaluator::eval_int")
     }
 
     pub fn eval_string(_expr: &StringExpr, _game_data: &GameData) -> Result<String, String> {
-        Err("Evaluator::eval_string not yet implemented".to_string())
+        unimplemented!("Evaluator::eval_string")
     }
 
     pub fn eval_player(_expr: &PlayerExpr, _game_data: &GameData) -> Result<String, String> {
-        Err("Evaluator::eval_player not yet implemented".to_string())
+        unimplemented!("Evaluator::eval_player")
     }
 
     pub fn eval_team(_expr: &TeamExpr, _game_data: &GameData) -> Result<String, String> {
-        Err("Evaluator::eval_team not yet implemented".to_string())
+        unimplemented!("Evaluator::eval_team")
     }
 
     pub fn eval_cardset(_expr: &CardSet, _game_data: &GameData) -> Result<Vec<usize>, String> {
-        Err("Evaluator::eval_cardset not yet implemented".to_string())
+        unimplemented!("Evaluator::eval_cardset")
     }
 
     pub fn eval_card_position(
         _expr: &CardPosition,
         _game_data: &GameData,
     ) -> Result<usize, String> {
-        Err("Evaluator::eval_card_position not yet implemented".to_string())
+        unimplemented!("Evaluator::eval_card_position")
     }
 
     pub fn check_attr_value_in_cardset(

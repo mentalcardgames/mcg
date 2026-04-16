@@ -110,10 +110,6 @@ impl GameData {
     }
 
     // setup stuff
-    pub fn add_card(&mut self, _location_id: usize, card: Card) -> usize {
-        self.cards.push(card);
-        self.cards.len() - 1
-    }
 
     pub fn add_location(&mut self, owner_name: String, location: Location) -> usize {
         self.locations.push(location);
@@ -147,6 +143,10 @@ impl GameData {
     }
 
     // card stuff
+    pub fn add_card(&mut self, _location_id: usize, card: Card) -> usize {
+        self.cards.push(card);
+        self.cards.len() - 1
+    }
 
     pub fn get_card(&self, card_id: usize) -> Option<&Card> {
         self.cards.get(card_id)
