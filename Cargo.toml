@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "frontend",
     "native_mcg",
     "shared",
     "crates/qr_comm",
@@ -10,7 +9,8 @@ members = [
     "crates/engine",
 ]
 default-members = ["native_mcg", "shared"]
-resolver = "2"
+resolver = "3"
+exclude = ["frontend"]
 
 [workspace.package]
 license = "MIT OR Apache-2.0"
