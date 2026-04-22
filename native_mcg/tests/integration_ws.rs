@@ -1,6 +1,6 @@
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
-use mcg_shared::{ClientMsg, PlayerConfig, PlayerId, ServerMsg};
+use mcg_shared::{Frontend2BackendMsg, PlayerConfig, PlayerId, Backend2FrontendMsg};
 use std::time::Duration;
 
 #[allow(clippy::collapsible_match)]
@@ -34,7 +34,7 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
     let (mut write1, mut read1) = ws1_stream.split();
     let (mut write2, mut read2) = ws2_stream.split();
 
-    let subscribe_txt = serde_json::to_string(&ClientMsg::Subscribe)?;
+    let subscribe_txt = serde_json::to_string(&Frontend2BackendMsg::Subscribe)?;
     write1
         .send(tokio_tungstenite::tungstenite::Message::Text(
             subscribe_txt.clone(),
@@ -85,7 +85,7 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
         },
     ];
 
-    let cm = ClientMsg::NewGame { players };
+    let cm = Frontend2BackendMsg::NewGame { players };
     let txt = serde_json::to_string(&cm)?;
     write1
         .send(tokio_tungstenite::tungstenite::Message::Text(txt))
@@ -99,8 +99,8 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
             tokio::time::timeout(Duration::from_millis(300), read2.next()).await
         {
             if let tokio_tungstenite::tungstenite::Message::Text(txt) = msg {
-                if let Ok(sm) = serde_json::from_str::<ServerMsg>(&txt) {
-                    if let ServerMsg::State(_) = sm {
+                if let Ok(sm) = serde_json::from_str::<Backend2FrontendMsg>(&txt) {
+                    if let Backend2FrontendMsg::State(_) = sm {
                         got_state = true;
                         break;
                     }

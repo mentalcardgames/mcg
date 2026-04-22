@@ -25,7 +25,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         // WebSocket endpoint (WASM GUI remains websocket-only)
         .route("/ws", get(crate::server::ws::ws_handler))
-        // HTTP API endpoint using unified ClientMsg/ServerMsg payloads
+        // HTTP API endpoint using unified Frontend2BackendMsg/Backend2FrontendMsg payloads
         .route("/api/message", post(crate::server::http::message_handler))
         .nest_service("/pkg", serve_dir)
         .nest_service("/media", serve_media)

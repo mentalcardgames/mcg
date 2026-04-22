@@ -28,8 +28,9 @@ pub struct Settings {
     pub dark_mode: bool,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy, Default)]
 pub enum GameType {
+    #[default]
     Poker,
     Blackjack,
     // Add more game types here

@@ -22,7 +22,7 @@ pub const CHANNEL_BUFFER_SIZE: usize = 256;
 #[derive(Clone)]
 pub struct AppState {
     pub(crate) lobby: Arc<RwLock<Lobby>>,
-    pub broadcaster: broadcast::Sender<mcg_shared::ServerMsg>,
+    pub broadcaster: broadcast::Sender<mcg_shared::Backend2FrontendMsg>,
     /// In-memory shared Config instance. Holds the authoritative configuration
     /// for the running server. Use tokio::sync::RwLock for concurrent access.
     pub config: std::sync::Arc<RwLock<crate::config::Config>>,
@@ -58,6 +58,9 @@ pub struct Lobby {
     pub(crate) bots: Vec<PlayerId>,
     /// Bot manager for AI decision making
     pub(crate) bot_manager: BotManager,
+
+    pub(crate) max_players: usize,
+    pub(crate) lobby_open: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -68,6 +71,8 @@ impl Default for Lobby {
             last_printed_log_len: 0,
             bots: Vec::new(),
             bot_manager: BotManager::default(),
+            max_players: 2,
+            lobby_open: false,
         }
     }
 }
@@ -88,7 +93,7 @@ impl Default for AppState {
 
 /// Represents a subscription to broadcast state updates.
 pub struct Subscription {
-    pub receiver: broadcast::Receiver<mcg_shared::ServerMsg>,
+    pub receiver: broadcast::Receiver<mcg_shared::Backend2FrontendMsg>,
     pub initial_state: Option<GameStatePublic>,
 }
 
@@ -157,7 +162,7 @@ pub async fn current_state_public(state: &AppState) -> Option<GameStatePublic> {
 
 /// Broadcast the current state (and print new events to server console) to all subscribers.
 ///
-/// Transports receive the same `ServerMsg::State` payload; the backend does not
+/// Transports receive the same `Backend2FrontendMsg::State` payload; the backend does not
 /// embed per-connection personalization in the broadcast. If transports or a
 /// future session manager needs to expose client-specific views, they should
 /// compute those on the transport/session layer.
@@ -187,7 +192,7 @@ pub async fn broadcast_state(state: &AppState) {
             gs.stage,
             current_player_name
         );
-        let _ = state.broadcaster.send(mcg_shared::ServerMsg::State(gs));
+        let _ = state.broadcaster.send(mcg_shared::Backend2FrontendMsg::State(gs));
     }
 }
 
@@ -248,37 +253,37 @@ async fn execute_player_action(
     state: &AppState,
     player_id: PlayerId,
     action: mcg_shared::PlayerAction,
-) -> mcg_shared::ServerMsg {
+) -> mcg_shared::Backend2FrontendMsg {
     match validate_and_apply_action(state, player_id, action.clone()).await {
         Ok(()) => {
             broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
-                mcg_shared::ServerMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::State(gs)
             } else {
-                mcg_shared::ServerMsg::Error("No active game after action".into())
+                mcg_shared::Backend2FrontendMsg::Error("No active game after action".into())
             }
         }
-        Err(e) => mcg_shared::ServerMsg::Error(e.to_string()),
+        Err(e) => mcg_shared::Backend2FrontendMsg::Error(e.to_string()),
     }
 }
 
 /// Handle a RequestState message from a client
-async fn fetch_current_state(state: &AppState) -> mcg_shared::ServerMsg {
+async fn fetch_current_state(state: &AppState) -> mcg_shared::Backend2FrontendMsg {
     if let Some(gs) = current_state_public(state).await {
         broadcast_state(state).await;
-        mcg_shared::ServerMsg::State(gs)
+        mcg_shared::Backend2FrontendMsg::State(gs)
     } else {
-        mcg_shared::ServerMsg::Error("No active game. Please start a new game first.".into())
+        mcg_shared::Backend2FrontendMsg::Error("No active game. Please start a new game first.".into())
     }
 }
 
 /// Handle a NextHand message from a client
-async fn advance_to_next_hand(state: &AppState) -> mcg_shared::ServerMsg {
+async fn advance_to_next_hand(state: &AppState) -> mcg_shared::Backend2FrontendMsg {
     // Ensure a game exists first
     {
         let lobby_r = state.lobby.read().await;
         if lobby_r.game.is_none() {
-            return mcg_shared::ServerMsg::Error(
+            return mcg_shared::Backend2FrontendMsg::Error(
                 "No active game. Please start a new game first.".into(),
             );
         }
@@ -288,12 +293,12 @@ async fn advance_to_next_hand(state: &AppState) -> mcg_shared::ServerMsg {
         Ok(()) => {
             broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
-                mcg_shared::ServerMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::State(gs)
             } else {
-                mcg_shared::ServerMsg::Error("No active game after starting next hand".into())
+                mcg_shared::Backend2FrontendMsg::Error("No active game after starting next hand".into())
             }
         }
-        Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to start new hand: {}", e)),
+        Err(e) => mcg_shared::Backend2FrontendMsg::Error(format!("Failed to start new hand: {}", e)),
     }
 }
 
@@ -301,19 +306,19 @@ async fn advance_to_next_hand(state: &AppState) -> mcg_shared::ServerMsg {
 async fn create_game_session(
     state: &AppState,
     players: Vec<mcg_shared::PlayerConfig>,
-) -> mcg_shared::ServerMsg {
+) -> mcg_shared::Backend2FrontendMsg {
     match create_new_game(state, players).await {
         Ok(()) => {
             broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
-                mcg_shared::ServerMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::State(gs)
             } else {
-                mcg_shared::ServerMsg::Error(
+                mcg_shared::Backend2FrontendMsg::Error(
                     "Failed to produce initial state after creating game".into(),
                 )
             }
         }
-        Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to create new game: {}", e)),
+        Err(e) => mcg_shared::Backend2FrontendMsg::Error(format!("Failed to create new game: {}", e)),
     }
 }
 
@@ -321,7 +326,7 @@ async fn create_game_session(
 async fn import_game_state(
     app_state: &AppState,
     game_state: serde_json::Value,
-) -> mcg_shared::ServerMsg {
+) -> mcg_shared::Backend2FrontendMsg {
     match serde_json::from_value::<Game>(game_state) {
         Ok(game) => {
             let mut lobby = app_state.lobby.write().await;
@@ -332,21 +337,21 @@ async fn import_game_state(
             broadcast_state(app_state).await;
             if let Some(gs) = current_state_public(app_state).await {
                 tracing::info!("Game state replaced via PushState from peer");
-                mcg_shared::ServerMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::State(gs)
             } else {
-                mcg_shared::ServerMsg::Error("Failed to produce state after PushState".into())
+                mcg_shared::Backend2FrontendMsg::Error("Failed to produce state after PushState".into())
             }
         }
-        Err(e) => mcg_shared::ServerMsg::Error(format!("Failed to deserialize game state: {}", e)),
+        Err(e) => mcg_shared::Backend2FrontendMsg::Error(format!("Failed to deserialize game state: {}", e)),
     }
 }
 
 ///Handle a GetTicket message from a client
-async fn handle_get_ticket(state: &AppState) -> mcg_shared::ServerMsg {
+async fn handle_get_ticket(state: &AppState) -> mcg_shared::Backend2FrontendMsg {
     let guard = state.ticket.read().await;
     match guard.as_ref() {
-        Some(ticket) => mcg_shared::ServerMsg::TicketValue(ticket.clone()),
-        None => mcg_shared::ServerMsg::Error("Iroh not initialized".into()),
+        Some(ticket) => mcg_shared::Backend2FrontendMsg::TicketValue(ticket.clone()),
+        None => mcg_shared::Backend2FrontendMsg::Error("Iroh not initialized".into()),
     }
 }
 
@@ -354,58 +359,64 @@ async fn handle_get_ip() -> Option<String>{
     local_ipaddress::get()
     }
 
-/// Unified handler for ClientMsg coming from any transport.
+/// Unified handler for Frontend2BackendMsg coming from any transport.
 ///
 /// Centralizes validation, state mutation, and side-effects (broadcasting and
-/// bot-driving). Returns a ServerMsg that the originating transport should send
+/// bot-driving). Returns a Backend2FrontendMsg that the originating transport should send
 /// back to the client. Transports should delegate to this function rather than
 /// duplicating handling logic to ensure consistent behavior across transports.
 pub async fn dispatch_client_message(
     state: &AppState,
-    cm: mcg_shared::ClientMsg,
-) -> mcg_shared::ServerMsg {
+    cm: mcg_shared::Frontend2BackendMsg,
+) -> mcg_shared::Backend2FrontendMsg {
     match cm {
-        mcg_shared::ClientMsg::Action { player_id, action } => {
+        mcg_shared::Frontend2BackendMsg::Action { player_id, action } => {
             execute_player_action(state, player_id, action).await
         }
-        mcg_shared::ClientMsg::Subscribe => mcg_shared::ServerMsg::Error("not supported".into()),
-        mcg_shared::ClientMsg::RequestState => fetch_current_state(state).await,
-        mcg_shared::ClientMsg::Ping => {
+        mcg_shared::Frontend2BackendMsg::Subscribe => mcg_shared::Backend2FrontendMsg::Error("not supported".into()),
+        mcg_shared::Frontend2BackendMsg::RequestState => fetch_current_state(state).await,
+        mcg_shared::Frontend2BackendMsg::Ping => {
             tracing::info!("received ping from client");
-            mcg_shared::ServerMsg::Pong
+            mcg_shared::Backend2FrontendMsg::Pong
         }
-        mcg_shared::ClientMsg::NextHand => advance_to_next_hand(state).await,
-        mcg_shared::ClientMsg::NewGame { players } => create_game_session(state, players).await,
-        mcg_shared::ClientMsg::PushState { state: game_state } => {
+        mcg_shared::Frontend2BackendMsg::NextHand => advance_to_next_hand(state).await,
+        mcg_shared::Frontend2BackendMsg::NewGame { players } => create_game_session(state, players).await,
+        mcg_shared::Frontend2BackendMsg::PushState { state: game_state } => {
             import_game_state(state, game_state).await
         }
-        mcg_shared::ClientMsg::QrValue(value) => {
+        mcg_shared::Frontend2BackendMsg::QrValue(value) => {
             tracing::info!("received QR value from client: {}", value);
             state.remote_ticket.write().await.replace(value);
-            mcg_shared::ServerMsg::Error("filler response".into())
+            mcg_shared::Backend2FrontendMsg::Error("filler response".into())
         }
-        mcg_shared::ClientMsg::GetTicket => handle_get_ticket(state).await,
-        mcg_shared::ClientMsg::GetIP => {
+        mcg_shared::Frontend2BackendMsg::GetTicket => handle_get_ticket(state).await,
+        mcg_shared::Frontend2BackendMsg::GetIP => {
             let ip = match handle_get_ip().await {
                 Some(ip_addr) => ip_addr,
-                None => return mcg_shared::ServerMsg::Error("Unable to determine local IP".into()),
+                None => return mcg_shared::Backend2FrontendMsg::Error("Unable to determine local IP".into()),
             };
-            mcg_shared::ServerMsg::IPValue(ip)
+            mcg_shared::Backend2FrontendMsg::IPValue(ip)
         }
-        mcg_shared::ClientMsg::QrReq(file) => {
+        mcg_shared::Frontend2BackendMsg::QrReq(file) => {
             match File::open(format!("media/qr_test/{}", file)).await {
                 Ok(mut file) => {
                     let mut buf = Vec::new();
                     match file.read_to_end(&mut buf).await {
                         Ok(_) => {
                             let content: Box<[u8]> = buf.into();
-                            mcg_shared::ServerMsg::QrRes(content)
+                            mcg_shared::Backend2FrontendMsg::QrRes(content)
                         }
-                        Err(e) => mcg_shared::ServerMsg::Error(e.to_string()),
+                        Err(e) => mcg_shared::Backend2FrontendMsg::Error(e.to_string()),
                     }
                 }
-                Err(e) => mcg_shared::ServerMsg::Error(e.to_string()),
+                Err(e) => mcg_shared::Backend2FrontendMsg::Error(e.to_string()),
             }
+        }
+        mcg_shared::Frontend2BackendMsg::PlayerCount(count) => {
+            let mut lobby = state.lobby.write().await;
+            lobby.max_players = count;
+            tracing::info!("Max player count set to {}", count);
+            mcg_shared::Backend2FrontendMsg::Error(format!("Max player count set to {}", count))
         }
     }
 }

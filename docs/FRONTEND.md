@@ -100,7 +100,7 @@ let mut ws = WebSocketConnection::new();
 ws.connect(
     "127.0.0.1:3000",
     players_config,
-    move |msg: ServerMsg| {
+    move |msg: Backend2FrontendMsg| {
         // Handle incoming message (e.g. queue it to ClientState)
     },
     move |err| { log(err); },
@@ -118,10 +118,10 @@ Currently you need to have the `WebSocketConnection` as a field in your screen.
 
 #### Sending Messages
 
-Sending is straightforward using the `WebSocketConnection::send_msg` method, which serializes `ClientMsg` to JSON.
+Sending is straightforward using the `WebSocketConnection::send_msg` method, which serializes `Frontend2BackendMsg` to JSON.
 
 ```rust
-ws.send_msg(&ClientMsg::Action { ... });
+ws.send_msg(&Frontend2BackendMsg::Action { ... });
 ```
 
 ### Drag & Drop (DnD)

@@ -3,7 +3,7 @@ mod cli;
 use anyhow::anyhow;
 use clap::Parser;
 use cli::{generate_demo_players, Cli, Commands, DisplayMode, MessagePrinter, TransportKind};
-use mcg_shared::{ClientMsg, PlayerAction};
+use mcg_shared::{Frontend2BackendMsg, PlayerAction};
 use native_mcg::public::PublicInfo;
 
 #[tokio::main]
@@ -25,15 +25,15 @@ async fn main() -> anyhow::Result<()> {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, ClientMsg::RequestState, cli.wait_ms, &mut printer)
+                    cli::run_once_iroh(peer, Frontend2BackendMsg::RequestState, cli.wait_ms, &mut printer)
                         .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(addr, ClientMsg::RequestState, cli.wait_ms, &mut printer)
+                    cli::run_once_http(addr, Frontend2BackendMsg::RequestState, cli.wait_ms, &mut printer)
                         .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(addr, ClientMsg::RequestState, cli.wait_ms, &mut printer)
+                    cli::run_once_ws(addr, Frontend2BackendMsg::RequestState, cli.wait_ms, &mut printer)
                         .await?
                 }
             };
@@ -52,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
                     cli::run_once_iroh(
                         peer,
-                        ClientMsg::Action {
+                        Frontend2BackendMsg::Action {
                             player_id: mcg_shared::PlayerId(0),
                             action: pa,
                         },
@@ -64,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::Http(addr) => {
                     cli::run_once_http(
                         addr,
-                        ClientMsg::Action {
+                        Frontend2BackendMsg::Action {
                             player_id: mcg_shared::PlayerId(0),
                             action: pa,
                         },
@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
                 TransportKind::WebSocket(addr) => {
                     cli::run_once_ws(
                         addr,
-                        ClientMsg::Action {
+                        Frontend2BackendMsg::Action {
                             player_id: mcg_shared::PlayerId(0),
                             action: pa,
                         },
@@ -94,19 +94,19 @@ async fn main() -> anyhow::Result<()> {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, ClientMsg::NextHand, cli.wait_ms, &mut printer).await?
+                    cli::run_once_iroh(peer, Frontend2BackendMsg::NextHand, cli.wait_ms, &mut printer).await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(addr, ClientMsg::NextHand, cli.wait_ms, &mut printer).await?
+                    cli::run_once_http(addr, Frontend2BackendMsg::NextHand, cli.wait_ms, &mut printer).await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(addr, ClientMsg::NextHand, cli.wait_ms, &mut printer).await?
+                    cli::run_once_ws(addr, Frontend2BackendMsg::NextHand, cli.wait_ms, &mut printer).await?
                 }
             };
         }
         Commands::NewGame => {
             let players = generate_demo_players(3);
-            let msg = ClientMsg::NewGame { players };
+            let msg = Frontend2BackendMsg::NewGame { players };
             let mut printer = MessagePrinter::new(cli.json, DisplayMode::FullState);
             match &transport {
                 TransportKind::Iroh { .. } => {
@@ -142,13 +142,13 @@ async fn main() -> anyhow::Result<()> {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, ClientMsg::Ping, cli.wait_ms, &mut printer).await?;
+                    cli::run_once_iroh(peer, Frontend2BackendMsg::Ping, cli.wait_ms, &mut printer).await?;
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(addr, ClientMsg::Ping, cli.wait_ms, &mut printer).await?;
+                    cli::run_once_http(addr, Frontend2BackendMsg::Ping, cli.wait_ms, &mut printer).await?;
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(addr, ClientMsg::Ping, cli.wait_ms, &mut printer).await?;
+                    cli::run_once_ws(addr, Frontend2BackendMsg::Ping, cli.wait_ms, &mut printer).await?;
                 }
             }
         }

@@ -1,4 +1,4 @@
-use mcg_shared::{ClientMsg, PlayerConfig, ServerMsg};
+use mcg_shared::{Frontend2BackendMsg, PlayerConfig, Backend2FrontendMsg};
 use std::rc::Rc;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
@@ -7,7 +7,7 @@ use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 /// Trait for sending messages to the server.
 /// Allows decoupling UI components from the concrete WebSocket implementation.
 pub trait MessageSender {
-    fn send(&self, msg: &ClientMsg);
+    fn send(&self, msg: &Frontend2BackendMsg);
 }
 
 /// A simplified WebSocket connection service with immediate message processing.
@@ -48,7 +48,7 @@ impl WebSocketConnection {
         &mut self,
         server_address: &str,
         players: Vec<PlayerConfig>,
-        on_message: impl Fn(ServerMsg) + 'static,
+        on_message: impl Fn(Backend2FrontendMsg) + 'static,
         on_error: impl Fn(String) + 'static,
         on_close: impl Fn(String) + 'static,
     ) {
@@ -64,14 +64,14 @@ impl WebSocketConnection {
         match WebSocket::new(&ws_url) {
             Ok(ws) => {
                 // Prepare the Subscribe and initial NewGame messages
-                let subscribe_json = match serde_json::to_string(&ClientMsg::Subscribe) {
+                let subscribe_json = match serde_json::to_string(&Frontend2BackendMsg::Subscribe) {
                     Ok(s) => s,
                     Err(e) => {
                         on_error(format!("Failed to serialize Subscribe message: {:?}", e));
                         return;
                     }
                 };
-                let newgame_msg = ClientMsg::NewGame {
+                let newgame_msg = Frontend2BackendMsg::NewGame {
                     players: players.clone(),
                 };
                 let newgame_json = match serde_json::to_string(&newgame_msg) {
@@ -97,11 +97,11 @@ impl WebSocketConnection {
                 });
                 ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
 
-                // onmessage: Parse ServerMsg and process immediately
+                // onmessage: Parse Backend2FrontendMsg and process immediately
                 let on_message_clone = on_message.clone();
                 let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
                     if let Some(txt) = e.data().as_string() {
-                        if let Ok(msg) = serde_json::from_str::<ServerMsg>(&txt) {
+                        if let Ok(msg) = serde_json::from_str::<Backend2FrontendMsg>(&txt) {
                             // Process the message immediately via callback
                             on_message_clone(msg);
                         }
@@ -143,8 +143,8 @@ impl WebSocketConnection {
         }
     }
 
-    /// Send a `ClientMsg` to the server if connected.
-    pub fn send_msg(&self, msg: &ClientMsg) {
+    /// Send a `Frontend2BackendMsg` to the server if connected.
+    pub fn send_msg(&self, msg: &Frontend2BackendMsg) {
         if let Some(ws) = &self.ws {
             if let Ok(txt) = serde_json::to_string(msg) {
                 if let Err(e) = ws.send_with_str(&txt) {
@@ -193,7 +193,7 @@ impl Drop for WebSocketConnection {
 }
 
 impl MessageSender for WebSocketConnection {
-    fn send(&self, msg: &ClientMsg) {
+    fn send(&self, msg: &Frontend2BackendMsg) {
         self.send_msg(msg);
     }
 }

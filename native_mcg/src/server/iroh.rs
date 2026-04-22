@@ -2,11 +2,11 @@
 //
 // This module accepts incoming iroh connections and speaks a simple
 // newline-delimited JSON protocol where each JSON object is a
-// ClientMsg or ServerMsg (the same types used over the WebSocket).
+// Frontend2BackendMsg or Backend2FrontendMsg (the same types used over the WebSocket).
 //
 // The implementation mirrors the WebSocket handler behaviour: clients send a
-// `ClientMsg::Subscribe` if they wish to receive broadcast state updates. After
-// subscribing they are sent the current `ServerMsg::State` (if one exists) and
+// `Frontend2BackendMsg::Subscribe` if they wish to receive broadcast state updates. After
+// subscribing they are sent the current `Backend2FrontendMsg::State` (if one exists) and
 // will receive future broadcasts. All other client messages delegate to shared
 // backend handlers to preserve transport-agnostic behavior.
 //
@@ -25,7 +25,7 @@ use crate::public::{path_for_config, PublicInfo};
 use crate::server::state::subscribe_connection;
 use crate::server::AppState;
 use crate::transport::send_server_msg_to_writer;
-use mcg_shared::{ClientMsg, ServerMsg, PeerMsg};
+use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg, Peer2PeerMsg};
 
 /// Public entrypoint spawned by server startup
 ///
@@ -202,7 +202,7 @@ fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, state: AppState) {
                         tracing::info!(peer = %remote_node_id, "Accepted new iroh connection");
                         let state_for_conn = state_clone.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = manage_iroh_connection(state_for_conn, conn).await {
+                            if let Err(e) = manage_incoming_iroh_connection(state_for_conn, conn).await {
                                 tracing::error!(error = %e, "iroh connection handler error");
                             }
                         });
@@ -245,7 +245,7 @@ fn start_iroh_connect_loop(endpoint: iroh::endpoint::Endpoint, state: AppState){
                                     let state_for_conn = state_clone.clone();
                                     let ticket_str_clone = ticket_str.clone();
                                     tokio::spawn(async move {
-                                        if let Err(e) = manage_iroh_connection(state_for_conn, c).await {
+                                        if let Err(e) = manage_outgoing_iroh_connection(state_for_conn, c).await {
                                             tracing::error!(error = %e, ticket_str = %ticket_str_clone, "iroh connection handler error");
                                         }
                                     });
@@ -270,7 +270,7 @@ fn start_iroh_connect_loop(endpoint: iroh::endpoint::Endpoint, state: AppState){
 // Per-connection handler which speaks newline-delimited JSON over a
 // bi-directional iroh connection. Separated into smaller helpers to make
 // the flow easier to reason about and unit-test individual parts.
-async fn manage_iroh_connection(
+async fn manage_incoming_iroh_connection(
     state: AppState,
     connection: iroh::endpoint::Connection,
 ) -> Result<()> {
@@ -280,7 +280,81 @@ async fn manage_iroh_connection(
 
     tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
 
-    let mut subscription: Option<broadcast::Receiver<ServerMsg>> = None;
+    let mut subscription: Option<broadcast::Receiver<Backend2FrontendMsg>> = None;
+
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if let Some(rx) = subscription.as_mut() {
+            tokio::select! {
+                recv = rx.recv() => {
+                    match recv {
+                        Ok(sm) => {
+                            if let Err(e) = send_server_msg_to_writer(&mut send, &sm).await {
+                                tracing::error!(error = %e, "iroh send error while forwarding broadcast");
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            break;
+                        }
+                    }
+                }
+                res = reader.read_line(&mut line) => {
+                    match res {
+                        Ok(0) => break,
+                        Ok(_) => {
+                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim()).await? {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "iroh read error");
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            match reader.read_line(&mut line).await {
+                Ok(0) => break,
+                Ok(_) => {
+                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim()).await?
+                    {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "iroh read error");
+                    break;
+                }
+            }
+        }
+    }
+
+    tracing::info!("[IROH DISCONNECT] Client");
+    // Close the send side politely if available
+    let _ = send.finish();
+    connection.closed().await;
+    Ok(())
+}
+
+//Split the original manage_iroh_connection into two seperate functions (logic is the same)
+// The reason for this is so that we can set up sending specific messages easier
+async fn manage_outgoing_iroh_connection(
+    state: AppState,
+    connection: iroh::endpoint::Connection,
+) -> Result<()> {
+    // Accept a bidirectional stream (send, recv) and wrap recv in a BufReader.
+    let (mut send, recv) = connection.accept_bi().await?;
+    let mut reader = BufReader::new(recv);
+
+    tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
+
+    let mut subscription: Option<broadcast::Receiver<Backend2FrontendMsg>> = None;
 
     let mut line = String::new();
     loop {
@@ -345,7 +419,7 @@ async fn manage_iroh_connection(
 async fn process_iroh_line<W>(
     state: &AppState,
     send: &mut W,
-    subscription: &mut Option<broadcast::Receiver<ServerMsg>>,
+    subscription: &mut Option<broadcast::Receiver<Backend2FrontendMsg>>,
     trimmed: &str,
 ) -> Result<bool>
 where
@@ -355,17 +429,17 @@ where
         return Ok(true);
     }
 
-    match serde_json::from_str::<ClientMsg>(trimmed) {
-        Ok(ClientMsg::Subscribe) => {
+    match serde_json::from_str::<Frontend2BackendMsg>(trimmed) {
+        Ok(Frontend2BackendMsg::Subscribe) => {
             if subscription.is_some() {
                 let _ =
-                    send_server_msg_to_writer(send, &ServerMsg::Error("already subscribed".into()))
+                    send_server_msg_to_writer(send, &Backend2FrontendMsg::Error("already subscribed".into()))
                         .await;
                 return Ok(true);
             }
             let sub = subscribe_connection(state).await;
             if let Some(gs) = sub.initial_state {
-                send_server_msg_to_writer(send, &ServerMsg::State(gs)).await?;
+                send_server_msg_to_writer(send, &Backend2FrontendMsg::State(gs)).await?;
             }
             *subscription = Some(sub.receiver);
             Ok(true)
@@ -380,7 +454,7 @@ where
             Ok(true)
         }
         Err(e) => {
-            let msg = ServerMsg::Error(format!("Invalid JSON message: {}", e));
+            let msg = Backend2FrontendMsg::Error(format!("Invalid JSON message: {}", e));
             let _ = send_server_msg_to_writer(send, &msg).await;
             Ok(true)
         }

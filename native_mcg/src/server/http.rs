@@ -7,12 +7,12 @@
 use axum::{extract::State, Json};
 
 use crate::server::AppState;
-use mcg_shared::{ClientMsg, ServerMsg};
+use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
 
-/// Unified handler for all ClientMsg variants. Returns the serialized ServerMsg response.
+/// Unified handler for all Frontend2BackendMsg variants. Returns the serialized Backend2FrontendMsg response.
 pub async fn message_handler(
     State(state): State<AppState>,
-    Json(cm): Json<ClientMsg>,
-) -> Json<ServerMsg> {
+    Json(cm): Json<Frontend2BackendMsg>,
+) -> Json<Backend2FrontendMsg> {
     Json(crate::server::dispatch_client_message(&state, cm).await)
 }

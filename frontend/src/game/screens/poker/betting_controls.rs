@@ -2,7 +2,7 @@
 
 use crate::game::websocket::MessageSender;
 use egui::{RichText, Ui};
-use mcg_shared::{ClientMsg, GameStatePublic, PlayerAction, PlayerId, PlayerPublic};
+use mcg_shared::{Frontend2BackendMsg, GameStatePublic, PlayerAction, PlayerId, PlayerPublic};
 
 /// Manages betting controls state for the poker interface
 #[derive(Clone, Debug, Default)]
@@ -109,7 +109,7 @@ impl BettingControls {
             }
 
             if ui.button("Bet").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(self.bet_amount),
                 });
@@ -122,7 +122,7 @@ impl BettingControls {
         // Quick bet buttons
         ui.horizontal(|ui| {
             if ui.button("Min Bet").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(state.bb),
                 });
@@ -130,7 +130,7 @@ impl BettingControls {
 
             let pot_third = (state.pot / 3).max(state.bb);
             if ui.button("1/3 Pot").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(pot_third.min(max_bet)),
                 });
@@ -138,7 +138,7 @@ impl BettingControls {
 
             let pot_half = (state.pot / 2).max(state.bb);
             if ui.button("1/2 Pot").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(pot_half.min(max_bet)),
                 });
@@ -147,14 +147,14 @@ impl BettingControls {
 
         ui.horizontal(|ui| {
             if ui.button("Pot Size").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(state.pot.max(state.bb).min(max_bet)),
                 });
             }
 
             if max_bet > 0 && ui.button("All-in").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(max_bet),
                 });
@@ -189,7 +189,7 @@ impl BettingControls {
             }
 
             if ui.button("Raise").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(self.raise_amount),
                 });
@@ -202,7 +202,7 @@ impl BettingControls {
         // Quick raise buttons
         ui.horizontal(|ui| {
             if min_bet <= max_bet && ui.button("Min Raise").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(min_bet),
                 });
@@ -210,7 +210,7 @@ impl BettingControls {
 
             let pot_third = (state.pot / 3).max(min_bet);
             if pot_third <= max_bet && ui.button("Raise 1/3 Pot").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(pot_third),
                 });
@@ -218,7 +218,7 @@ impl BettingControls {
 
             let pot_half = (state.pot / 2).max(min_bet);
             if pot_half <= max_bet && ui.button("Raise 1/2 Pot").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(pot_half),
                 });
@@ -228,14 +228,14 @@ impl BettingControls {
         ui.horizontal(|ui| {
             let pot_size = state.pot.max(min_bet);
             if pot_size <= max_bet && ui.button("Raise Pot").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(pot_size),
                 });
             }
 
             if max_bet > 0 && ui.button("All-in").clicked() {
-                conn.send(&ClientMsg::Action {
+                conn.send(&Frontend2BackendMsg::Action {
                     player_id,
                     action: PlayerAction::Bet(max_bet),
                 });

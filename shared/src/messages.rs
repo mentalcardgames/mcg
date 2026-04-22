@@ -32,7 +32,7 @@ pub struct GameStatePublic {
 /// Messages that clients can send to the server
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
-pub enum ClientMsg {
+pub enum Frontend2BackendMsg {
     /// Player-initiated action: gets applied to the game
     Action {
         player_id: PlayerId,
@@ -54,24 +54,27 @@ pub enum ClientMsg {
     QrValue(String),
     GetTicket,
     GetIP,
+    PlayerCount(usize),
 }
 
 /// Messages that the server can send to clients
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
-pub enum ServerMsg {
+pub enum Backend2FrontendMsg {
     State(GameStatePublic),
     Error(String),
     Pong,
     TicketValue(String),
     IPValue(String),
     QrRes(Box<[u8]>),
+    NewPlayer(String),
 }
 
 //Messages two peers send between eachother
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
-pub enum PeerMsg {
-    Connect,
-    Disconnect,
+pub enum Peer2PeerMsg {
+    Ping, 
+    Pong,
+    Payload(String),
 }

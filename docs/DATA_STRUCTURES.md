@@ -40,7 +40,7 @@ pub struct PlayerPublic {
 
 Communication happens via WebSockets using JSON serialization (`serde_json`).
 
-### Client -> Server (`ClientMsg`)
+### Client -> Server (`Frontend2BackendMsg`)
 | Variant | Data | Description |
 |:---|:---|:---|
 | `Action` | `{ player_id, action }` | Perform a game action (Fold, Check, Call, Bet). |
@@ -49,7 +49,7 @@ Communication happens via WebSockets using JSON serialization (`serde_json`).
 | `RequestState` | `null` | Ask server to resend the latest `State`. |
 | `QrReq` | `filename` | **(Dev/Test)** Request a test file content for QR generation. |
 
-### Server -> Client (`ServerMsg`)
+### Server -> Client (`Backend2FrontendMsg`)
 | Variant | Data | Description |
 |:---|:---|:---|
 | `State` | `GameStatePublic` | The new authoritative game state. Sent after any change. |

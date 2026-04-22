@@ -21,7 +21,7 @@ async fn manage_websocket(mut socket: WebSocket, state: AppState) {
     let hello = format!("{} {}", "[CONNECT]".bold().green(), "Client".bold());
     tracing::info!("{}", hello);
 
-    let mut subscription: Option<broadcast::Receiver<mcg_shared::ServerMsg>> = None;
+    let mut subscription: Option<broadcast::Receiver<mcg_shared::Backend2FrontendMsg>> = None;
 
     loop {
         if let Some(rx) = subscription.as_mut() {
@@ -56,13 +56,13 @@ async fn manage_websocket(mut socket: WebSocket, state: AppState) {
     tracing::info!("client disconnecting: websocket client");
 }
 
-async fn send_ws(socket: &mut WebSocket, msg: &mcg_shared::ServerMsg) {
+async fn send_ws(socket: &mut WebSocket, msg: &mcg_shared::Backend2FrontendMsg) {
     match serde_json::to_string(msg) {
         Ok(txt) => {
             let _ = socket.send(Message::Text(txt)).await;
         }
         Err(e) => {
-            tracing::error!(error = %e, "failed to serialize ServerMsg for websocket send");
+            tracing::error!(error = %e, "failed to serialize Backend2FrontendMsg for websocket send");
         }
     }
 }
@@ -70,7 +70,7 @@ async fn send_ws(socket: &mut WebSocket, msg: &mcg_shared::ServerMsg) {
 async fn process_websocket_frame(
     state: &AppState,
     socket: &mut WebSocket,
-    subscription: &mut Option<broadcast::Receiver<mcg_shared::ServerMsg>>,
+    subscription: &mut Option<broadcast::Receiver<mcg_shared::Backend2FrontendMsg>>,
     msg: Option<Result<Message, axum::Error>>,
 ) -> bool {
     match msg {
@@ -87,22 +87,22 @@ async fn process_websocket_frame(
 async fn process_websocket_text(
     state: &AppState,
     socket: &mut WebSocket,
-    subscription: &mut Option<broadcast::Receiver<mcg_shared::ServerMsg>>,
+    subscription: &mut Option<broadcast::Receiver<mcg_shared::Backend2FrontendMsg>>,
     txt: String,
 ) {
-    match serde_json::from_str::<mcg_shared::ClientMsg>(&txt) {
-        Ok(mcg_shared::ClientMsg::Subscribe) => {
+    match serde_json::from_str::<mcg_shared::Frontend2BackendMsg>(&txt) {
+        Ok(mcg_shared::Frontend2BackendMsg::Subscribe) => {
             if subscription.is_some() {
                 send_ws(
                     socket,
-                    &mcg_shared::ServerMsg::Error("already subscribed".into()),
+                    &mcg_shared::Backend2FrontendMsg::Error("already subscribed".into()),
                 )
                 .await;
                 return;
             }
             let sub = subscribe_connection(state).await;
             if let Some(gs) = sub.initial_state {
-                send_ws(socket, &mcg_shared::ServerMsg::State(gs)).await;
+                send_ws(socket, &mcg_shared::Backend2FrontendMsg::State(gs)).await;
             }
             *subscription = Some(sub.receiver);
         }
@@ -111,10 +111,10 @@ async fn process_websocket_text(
             send_ws(socket, &resp).await;
         }
         Err(err) => {
-            tracing::warn!(error = %err, "failed to parse incoming ClientMsg JSON");
+            tracing::warn!(error = %err, "failed to parse incoming Frontend2BackendMsg JSON");
             send_ws(
                 socket,
-                &mcg_shared::ServerMsg::Error("Malformed ClientMsg JSON".into()),
+                &mcg_shared::Backend2FrontendMsg::Error("Malformed Frontend2BackendMsg JSON".into()),
             )
             .await;
         }

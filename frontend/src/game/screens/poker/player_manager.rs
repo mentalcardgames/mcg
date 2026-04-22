@@ -30,23 +30,8 @@ impl PlayerManager {
                     name: "You".to_string(),
                     is_bot: false,
                 },
-                PlayerConfig {
-                    id: mcg_shared::PlayerId(1),
-                    name: "Bot 1".to_string(),
-                    is_bot: true,
-                },
-                PlayerConfig {
-                    id: mcg_shared::PlayerId(2),
-                    name: "Bot 2".to_string(),
-                    is_bot: true,
-                },
-                PlayerConfig {
-                    id: mcg_shared::PlayerId(3),
-                    name: "Bot 3".to_string(),
-                    is_bot: true,
-                },
             ],
-            next_player_id: 4,
+            next_player_id: 1,
             new_player_name: String::new(),
             preferred_player: PlayerId(0),
             renaming_player_id: None,
@@ -192,5 +177,22 @@ impl PlayerManager {
                 .unwrap_or_default()
                 .as_secs()
         )
+    }
+    // Logic for when we get a remote player connected to our lobby
+    pub fn handle_named_player(&mut self, player_name: String){
+        let mut name = player_name.clone();
+        for i in 2..100 {
+            let candidate = format!("{} {}", player_name, i);
+            if !self.get_existing_names().contains(candidate.as_str()) {
+                name = candidate.clone();
+                break;
+            }
+        }
+        self.players.push(PlayerConfig {
+            id: mcg_shared::PlayerId(self.next_player_id),
+            name: name,
+            is_bot: false,
+        });
+        self.next_player_id += 1;
     }
 }

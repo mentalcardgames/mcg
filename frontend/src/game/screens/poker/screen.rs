@@ -78,7 +78,7 @@ impl PokerOnlineScreen {
         self.conn.close();
     }
 
-    fn send(&self, msg: &mcg_shared::ClientMsg) {
+    fn send(&self, msg: &mcg_shared::Frontend2BackendMsg) {
         self.conn.send_msg(msg);
     }
 
@@ -284,7 +284,7 @@ impl PokerOnlineScreen {
 
         if button.clicked() {
             if connected {
-                self.send(&mcg_shared::ClientMsg::NewGame {
+                self.send(&mcg_shared::Frontend2BackendMsg::NewGame {
                     players: self.player_manager.get_players().clone(),
                 });
             } else {
@@ -346,7 +346,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                             )
                             .clicked()
                         {
-                            self.send(&mcg_shared::ClientMsg::Action {
+                            self.send(&mcg_shared::Frontend2BackendMsg::Action {
                                 player_id,
                                 action: PlayerAction::CheckCall,
                             });
@@ -364,7 +364,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                             .add(egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)))
                             .clicked()
                         {
-                            self.send(&mcg_shared::ClientMsg::Action {
+                            self.send(&mcg_shared::Frontend2BackendMsg::Action {
                                 player_id,
                                 action: PlayerAction::Fold,
                             });
@@ -411,7 +411,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                         .add(egui::Button::new(next_label).min_size(egui::vec2(140.0, 40.0)))
                         .clicked()
                     {
-                        self.send(&mcg_shared::ClientMsg::NextHand);
+                        self.send(&mcg_shared::Frontend2BackendMsg::NextHand);
                     }
                 });
                 ui.add_space(6.0);
@@ -421,7 +421,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
         });
     }
 
-    fn send(&self, msg: &mcg_shared::ClientMsg) {
+    fn send(&self, msg: &mcg_shared::Frontend2BackendMsg) {
         self.conn.send_msg(msg);
     }
 }
