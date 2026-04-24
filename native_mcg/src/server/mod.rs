@@ -1,9 +1,7 @@
 pub mod bot_driver;
 pub mod http;
 pub mod iroh;
-pub mod lobby;
 pub mod run;
-pub mod session;
 pub mod state;
 pub mod ws;
 
