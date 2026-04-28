@@ -59,8 +59,13 @@ pub struct Lobby {
     /// Bot manager for AI decision making
     pub(crate) bot_manager: BotManager,
 
+    //Variables used for managing connections to the lobby and enforcing max player count
+    //I don't know if these even belong here, or if they are needed at all, but It saves
+    //me a lot of work. If needed, we can move them later, but for now they are here and they work.
     pub(crate) max_players: usize,
     pub(crate) lobby_open: bool,
+    pub(crate) current_players:usize,
+    pub(crate) our_name: String,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -73,6 +78,8 @@ impl Default for Lobby {
             bot_manager: BotManager::default(),
             max_players: 2,
             lobby_open: false,
+            current_players: 0,
+            our_name: "You".to_string(),
         }
     }
 }
@@ -417,6 +424,31 @@ pub async fn dispatch_client_message(
             lobby.max_players = count;
             tracing::info!("Max player count set to {}", count);
             mcg_shared::Backend2FrontendMsg::Error(format!("Max player count set to {}", count))
+        }
+        mcg_shared::Frontend2BackendMsg::LobbyOpen => {
+            let mut lobby = state.lobby.write().await;
+            lobby.lobby_open = true;
+            lobby.current_players = 1; // set current player count to 1 - the host - when lobby is opened
+            tracing::info!("Lobby opened.");
+            mcg_shared::Backend2FrontendMsg::Error(format!("Lobby is now open"))
+        }
+        mcg_shared::Frontend2BackendMsg::LobbyClose => {
+            let mut lobby = state.lobby.write().await;
+            lobby.lobby_open = false;
+            lobby.current_players = 0; // reset current player count when lobby is closed
+            tracing::info!("Lobby closed.");
+            mcg_shared::Backend2FrontendMsg::Error(format!("Lobby is now closed"))
+        }
+        mcg_shared::Frontend2BackendMsg::PlayerName(name) => {
+            let mut lobby = state.lobby.write().await;
+            lobby.our_name = name.clone();
+            tracing::info!("Player name set to {}", name);
+            mcg_shared::Backend2FrontendMsg::Error(format!("Player name set to {}", name))
+        }
+        mcg_shared::Frontend2BackendMsg::GetOurName => {
+            let lobby = state.lobby.read().await;
+            let name = lobby.our_name.clone();
+            mcg_shared::Backend2FrontendMsg::OurName(name)
         }
     }
 }

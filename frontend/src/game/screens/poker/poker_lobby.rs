@@ -63,6 +63,12 @@ impl ScreenWidget for PokerLobbyScreen {
             }
         }
     }
+    fn on_exit(&mut self, _app_interface: &mut AppInterface) {
+        // Disconnect when leaving this screen
+        let msg = Frontend2BackendMsg::LobbyClose;
+        self.web_socket_connection.send_msg(&msg);
+        self.web_socket_connection.close();
+    }
 }
 
 impl ScreenDef for PokerLobbyScreen {
@@ -106,9 +112,13 @@ impl ScreenDef for PokerLobbyScreen {
             }
             Backend2FrontendMsg::QrRes(_) => {
                 todo!("Handle QR result from server");
-            }
+            }   
             Backend2FrontendMsg::NewPlayer(name) => {
                 pm.borrow_mut().handle_named_player(name);
+            }
+            Backend2FrontendMsg::OurName(name) => {
+                tracing::info!("Player name received: {}", name);
+                pm.borrow_mut().rename_player(PlayerId::from(0), name);
             }
         };
         let on_err = |e| {

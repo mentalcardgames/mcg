@@ -149,7 +149,13 @@ impl App {
                         |ui| {
                             ui.add_space(MARGIN_SM);
                             if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
-                                events.push(AppEvent::ChangeRoute("/".to_string()));
+                                if self.current_screen_path == "/lobbyselect/pokerlobby"{
+                                    events.push(AppEvent::ChangeRoute("/lobbyselect".to_string()));
+                                }
+                                else{
+                                    events.push(AppEvent::ChangeRoute("/".to_string()));
+                                }
+                                
                             }
                         },
                     );
@@ -285,6 +291,14 @@ impl eframe::App for App {
         for event in events {
             match event {
                 AppEvent::ChangeRoute(path) => {
+                    // Call on_exit for the current screen before changing routes
+                    if let Some(mut screen) = self.screens.remove(&self.current_screen_path) {
+                        let mut temp_interface = AppInterface {
+                            events: &mut Vec::new(),
+                            app_state: &mut self.app_state,
+                        };
+                        screen.on_exit(&mut temp_interface);
+                    }
                     self.change_route(&path);
                 }
                 AppEvent::StartGame(config) => {

@@ -178,7 +178,7 @@ impl PlayerManager {
                 .as_secs()
         )
     }
-    // Logic for when we get a remote player connected to our lobby
+    /// Logic for when we get a remote player connected to our lobby
     pub fn handle_named_player(&mut self, player_name: String){
         let mut name = player_name.clone();
         for i in 2..100 {
@@ -194,5 +194,12 @@ impl PlayerManager {
             is_bot: false,
         });
         self.next_player_id += 1;
+    }
+    pub fn rename_player(&mut self, player_id: PlayerId, new_name: String){
+        let trimmed = new_name.trim();
+
+        if let Some(player) = self.players.iter_mut().find(|p| p.id == player_id) {
+            player.name = trimmed.to_string();
+        }
     }
 }

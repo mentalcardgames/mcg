@@ -183,6 +183,9 @@ impl ScreenDef for QrTestTransmit {
             Backend2FrontendMsg::NewPlayer(_name) => {
                 sprintln!("Got a new player message");
             }
+            Backend2FrontendMsg::OurName(name) => {
+                sprintln!("Got our name:\n\t- {:?}", name);
+            }
         };
         let on_err = |e| {
             sprintln!("Got an error:\n\t- {:?}", e);

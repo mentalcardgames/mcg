@@ -24,7 +24,8 @@ use tokio::sync::broadcast;
 use crate::public::{path_for_config, PublicInfo};
 use crate::server::state::subscribe_connection;
 use crate::server::AppState;
-use crate::transport::send_server_msg_to_writer;
+use crate::transport::{send_server_msg_to_writer, send_peer_msg_to_writer};
+use crate::server::state::broadcast_state;
 use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg, Peer2PeerMsg};
 
 /// Public entrypoint spawned by server startup
@@ -354,6 +355,17 @@ async fn manage_outgoing_iroh_connection(
 
     tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
 
+    let lobby = state.lobby.read().await;
+    let name = lobby.our_name.clone();
+    let msg = Peer2PeerMsg::Connect(name);
+
+    if let Err(e) = send_peer_msg_to_writer(
+        &mut send,
+        &msg,
+    ).await{
+        tracing::error!(error = %e, "iroh send error while sending Connect message");
+    }
+
     let mut subscription: Option<broadcast::Receiver<Backend2FrontendMsg>> = None;
 
     let mut line = String::new();
@@ -429,6 +441,10 @@ where
         return Ok(true);
     }
 
+    if let Ok(_peer_msg) = serde_json::from_str::<Peer2PeerMsg>(trimmed) {
+        return process_iroh_peer_line(state, send, subscription, trimmed).await;
+    }
+
     match serde_json::from_str::<Frontend2BackendMsg>(trimmed) {
         Ok(Frontend2BackendMsg::Subscribe) => {
             if subscription.is_some() {
@@ -457,6 +473,64 @@ where
             let msg = Backend2FrontendMsg::Error(format!("Invalid JSON message: {}", e));
             let _ = send_server_msg_to_writer(send, &msg).await;
             Ok(true)
+        }
+    }
+}
+
+///Peer Message equivalent of process_iroh_line, not using the same dispatch_client_message 
+///function setup since it would cause an infinite send-receive loop of messages between peers
+async fn process_iroh_peer_line<W>(
+    state: &AppState,
+    send: &mut W,
+    subscription: &mut Option<broadcast::Receiver<Backend2FrontendMsg>>,
+    trimmed: &str,
+) -> Result<bool>
+where
+    W: tokio::io::AsyncWrite + Unpin + Send,
+{
+    if trimmed.is_empty() {
+        return Ok(true);
+    }
+
+    match serde_json::from_str::<Peer2PeerMsg>(trimmed){
+        Ok(Peer2PeerMsg::Connect(name)) => {
+            let mut lobby = state.lobby.write().await;
+            if !lobby.lobby_open || lobby.current_players >= lobby.max_players {
+                let msg = Peer2PeerMsg::Reject("Lobby is full or closed".into());
+                send_peer_msg_to_writer(
+                    send,
+                    &msg,
+                )
+                .await?;
+                return Ok(false);
+            }
+            lobby.current_players += 1;
+            drop(lobby);
+            let sub = subscribe_connection(state).await;
+            *subscription = Some(sub.receiver);
+            let _ = state.broadcaster.send(
+                Backend2FrontendMsg::NewPlayer(name.clone())
+            );
+            broadcast_state(&state).await;
+            return Ok(true);
+        }
+        Ok(Peer2PeerMsg::Disconnect) => {
+            let mut lobby = state.lobby.write().await;
+            if lobby.current_players > 0 {
+                lobby.current_players -= 1;
+            }
+            drop(lobby);
+            return Ok(false);
+        }
+        Ok(other) => {
+            tracing::debug!(client_msg = ?other, "iroh received peer message");
+            // No dispatch for the other peer messages yet; just log them.
+            return Ok(true);
+        }
+        Err(e) => {
+            let msg = Backend2FrontendMsg::Error(format!("Invalid JSON message: {}", e));
+            let _ = send_server_msg_to_writer(send, &msg).await;
+            return Ok(true);
         }
     }
 }

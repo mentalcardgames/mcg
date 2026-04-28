@@ -55,6 +55,10 @@ pub enum Frontend2BackendMsg {
     GetTicket,
     GetIP,
     PlayerCount(usize),
+    LobbyOpen,
+    LobbyClose,
+    PlayerName(String),
+    GetOurName,
 }
 
 /// Messages that the server can send to clients
@@ -68,13 +72,17 @@ pub enum Backend2FrontendMsg {
     IPValue(String),
     QrRes(Box<[u8]>),
     NewPlayer(String),
+    OurName(String),
 }
 
 //Messages two peers send between eachother
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Peer2PeerMsg {
-    Ping, 
+    Ping,
     Pong,
+    Connect(String),
+    Disconnect,
+    Reject(String),
     Payload(String),
 }

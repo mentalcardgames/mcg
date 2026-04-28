@@ -89,7 +89,11 @@ impl ScreenWidget for LobbySelectionScreen {
         ui.add_space(8.0);
         if ui.button("Host Game").clicked() {
             let msg = Frontend2BackendMsg::PlayerCount(self.players);
-                self.web_socket_connection.send_msg(&msg);
+            self.web_socket_connection.send_msg(&msg);
+            let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
+            self.web_socket_connection.send_msg(&msg);
+            let msg = Frontend2BackendMsg::LobbyOpen;
+            self.web_socket_connection.send_msg(&msg);
             match self.game_type {
                 GameType::Poker => {
                     // Transition to poker lobby setup
@@ -120,10 +124,16 @@ impl ScreenWidget for LobbySelectionScreen {
         if self.input.starts_with("endpoint"){
             tracing::info!("Sending endpoint ticket to server: {}", self.input);
             let ticket = self.input.clone();
+            let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
+            self.web_socket_connection.send_msg(&msg);
             let msg = Frontend2BackendMsg::QrValue(ticket);
             self.web_socket_connection.send_msg(&msg);
             self.input.clear();
         }
+    }
+    fn on_exit(&mut self, _app_interface: &mut AppInterface) {
+        // Disconnect when leaving this screen
+        self.web_socket_connection.close();
     }
 }
 
@@ -171,6 +181,9 @@ impl ScreenDef for LobbySelectionScreen {
             Backend2FrontendMsg::NewPlayer(_name) => {
                 sprintln!("Got a new player message");
             }
+            Backend2FrontendMsg::OurName(name) => {
+                sprintln!("Got our name message:\n\t- {:?}", name);
+            }
         };
         let on_err = |e| {
             sprintln!("Got an error:\n\t- {:?}", e);
@@ -181,7 +194,7 @@ impl ScreenDef for LobbySelectionScreen {
         let mut players = Vec::new();
         let p = PlayerConfig {
             id: PlayerId::from(1337),
-            name: "QR_Lobby".to_string(),
+            name: "Select_Lobby".to_string(),
             is_bot: false,
         };
         players.push(p);

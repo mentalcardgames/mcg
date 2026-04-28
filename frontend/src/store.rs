@@ -148,6 +148,9 @@ impl ClientState {
             Backend2FrontendMsg::IPValue(_string) => {}
             Backend2FrontendMsg::QrRes(_content) => {}
             Backend2FrontendMsg::NewPlayer(_string) => {}
+            Backend2FrontendMsg::OurName(string) => {
+                self.settings.name = string.clone();
+            }
         }
     }
 }

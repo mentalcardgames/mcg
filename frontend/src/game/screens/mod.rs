@@ -43,6 +43,8 @@ impl<'a> AppInterface<'a> {
 /// Object-safe runtime trait for drawing a screen
 pub trait ScreenWidget: Downcast {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, frame: &mut Frame);
+    /// Called when the screen is about to be exited. Implement to clean up resources.
+    fn on_exit(&mut self, _app_interface: &mut AppInterface) {}
 }
 impl_downcast!(ScreenWidget);
 

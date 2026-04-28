@@ -66,6 +66,10 @@ impl ScreenWidget for QrScreen {
             }
         }
     }
+    fn on_exit(&mut self, _app_interface: &mut AppInterface) {
+        // Disconnect when leaving this screen
+        self.web_socket_connection.close();
+    }
 }
 
 impl ScreenDef for QrScreen {
@@ -111,6 +115,9 @@ impl ScreenDef for QrScreen {
             }
             Backend2FrontendMsg::NewPlayer(_name) => {
                 sprintln!("Got a new player message");
+            }
+            Backend2FrontendMsg::OurName(name) => {
+                sprintln!("Got our name:\n\t- {:?}", name);
             }
         };
         let on_err = |e| {
