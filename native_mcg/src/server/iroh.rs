@@ -335,7 +335,10 @@ async fn manage_incoming_iroh_connection(
             }
         }
     }
-
+    // Try to notify the peer we are disconnecting
+    if let Err(e) = send_peer_msg_to_writer(&mut send, &Peer2PeerMsg::Disconnect).await {
+        tracing::warn!(error = %e, "failed to send peer Disconnect on incoming connection drop");
+    }
     tracing::info!("[IROH DISCONNECT] Client");
     // Close the send side politely if available
     let _ = send.finish();
@@ -350,7 +353,7 @@ async fn manage_outgoing_iroh_connection(
     connection: iroh::endpoint::Connection,
 ) -> Result<()> {
     // Accept a bidirectional stream (send, recv) and wrap recv in a BufReader.
-    let (mut send, recv) = connection.accept_bi().await?;
+    let (mut send, recv) = connection.open_bi().await?;
     let mut reader = BufReader::new(recv);
 
     tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
@@ -365,6 +368,7 @@ async fn manage_outgoing_iroh_connection(
     ).await{
         tracing::error!(error = %e, "iroh send error while sending Connect message");
     }
+    tracing::info!("Sent connect message to peer");
 
     let mut subscription: Option<broadcast::Receiver<Backend2FrontendMsg>> = None;
 
@@ -422,6 +426,10 @@ async fn manage_outgoing_iroh_connection(
     }
 
     tracing::info!("[IROH DISCONNECT] Client");
+    // Try to notify the peer we are disconnecting
+    if let Err(e) = send_peer_msg_to_writer(&mut send, &Peer2PeerMsg::Disconnect).await {
+        tracing::warn!(error = %e, "failed to send peer Disconnect on incoming connection drop");
+    }
     // Close the send side politely if available
     let _ = send.finish();
     connection.closed().await;
@@ -520,6 +528,11 @@ where
                 lobby.current_players -= 1;
             }
             drop(lobby);
+            return Ok(false);
+        }
+        Ok(Peer2PeerMsg::Reject(reason)) => {
+            tracing::warn!(reason = %reason, "peer rejected our connection");
+            // Return false to break the loop and disconnect
             return Ok(false);
         }
         Ok(other) => {

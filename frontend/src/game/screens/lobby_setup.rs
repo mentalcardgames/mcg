@@ -2,7 +2,7 @@ use eframe::Frame;
 use egui::{vec2, Align, UiBuilder, Layout, ComboBox, RichText};
 use std::rc::Rc;
 
-use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget, ScreenRegistry};
+use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::game::GameType;
 use crate::game::websocket::WebSocketConnection;
 use mcg_shared::{Frontend2BackendMsg, PlayerConfig, PlayerId, Backend2FrontendMsg};
@@ -20,6 +20,7 @@ pub struct LobbySelectionScreen {
     qr_payload: Rc<RefCell<Option<String>>>,
     raw: Vec<u8>,
     player_name: String,
+    initialized: bool,
 }
 
 impl Default for LobbySelectionScreen {
@@ -32,7 +33,8 @@ impl Default for LobbySelectionScreen {
             web_socket_connection: WebSocketConnection::default(),
             qr_payload: Rc::new(RefCell::new(None)),
             raw: Vec::new(),
-            player_name: "You".to_string(),
+            player_name: String::new(),
+            initialized: false,
         }
     }
 }
@@ -45,6 +47,14 @@ impl ScreenWidget for LobbySelectionScreen {
         _frame: &mut eframe::Frame,
     ) {
         let before = self.game_type;
+        // If user set a name in the previous screen, apply it to the local player entry once.
+        if !self.initialized {
+            let global = app_interface.state().settings.name.clone();
+            if !global.trim().is_empty() {
+                self.player_name = global;
+            }
+            self.initialized = true;
+        }
         ui.heading("Host or Join Game");
         ui.group(|ui| {
         // --- First dropdown: Game ---
@@ -76,7 +86,7 @@ impl ScreenWidget for LobbySelectionScreen {
                     }
                 });
             ui.add_space(8.0);
-            ui.label(RichText::new("Select Your Name (This is important for both hosting and joining, so do it!):").strong());
+            ui.label(RichText::new("Select Your Name (This is used for both hosting and joining):").strong());
             ui.add_space(4.0);
 
             ui.horizontal(|ui| {
@@ -88,12 +98,15 @@ impl ScreenWidget for LobbySelectionScreen {
         // Open lobby button
         ui.add_space(8.0);
         if ui.button("Host Game").clicked() {
+            // Set max players and player name on the server, then open the lobby
             let msg = Frontend2BackendMsg::PlayerCount(self.players);
             self.web_socket_connection.send_msg(&msg);
             let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
             self.web_socket_connection.send_msg(&msg);
             let msg = Frontend2BackendMsg::LobbyOpen;
             self.web_socket_connection.send_msg(&msg);
+            // Persist chosen name into global client state prior to join
+            app_interface.state().settings.name = self.player_name.clone();
             match self.game_type {
                 GameType::Poker => {
                     // Transition to poker lobby setup
@@ -123,6 +136,8 @@ impl ScreenWidget for LobbySelectionScreen {
         // If our input is an endpoint, send it to get a connection
         if self.input.starts_with("endpoint"){
             tracing::info!("Sending endpoint ticket to server: {}", self.input);
+            // Persist chosen name into global client state prior to join
+            app_interface.state().settings.name = self.player_name.clone();
             let ticket = self.input.clone();
             let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
             self.web_socket_connection.send_msg(&msg);
@@ -131,8 +146,9 @@ impl ScreenWidget for LobbySelectionScreen {
             self.input.clear();
         }
     }
-    fn on_exit(&mut self, _app_interface: &mut AppInterface) {
+    fn on_exit(&mut self, app_interface: &mut AppInterface) {
         // Disconnect when leaving this screen
+        app_interface.state().settings.name = self.player_name.clone();
         self.web_socket_connection.close();
     }
 }

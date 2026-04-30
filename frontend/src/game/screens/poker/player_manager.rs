@@ -181,11 +181,13 @@ impl PlayerManager {
     /// Logic for when we get a remote player connected to our lobby
     pub fn handle_named_player(&mut self, player_name: String){
         let mut name = player_name.clone();
-        for i in 2..100 {
-            let candidate = format!("{} {}", player_name, i);
-            if !self.get_existing_names().contains(candidate.as_str()) {
-                name = candidate.clone();
-                break;
+        if self.get_existing_names().contains(name.as_str()){
+            for i in 2..100 {
+                let candidate = format!("{} {}", player_name, i);
+                if !self.get_existing_names().contains(candidate.as_str()) {
+                    name = candidate.clone();
+                    break;
+                }
             }
         }
         self.players.push(PlayerConfig {

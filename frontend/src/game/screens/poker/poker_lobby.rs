@@ -12,20 +12,34 @@ use super::player_manager::PlayerManager;
 
 #[derive(Default)]
 pub struct PokerLobbyScreen {
-    input: String,
     web_socket_connection: WebSocketConnection,
     qr_payload: Rc<RefCell<Option<String>>>,
-    raw: Vec<u8>,
     player_manager: Rc<RefCell<PlayerManager>>,
 }
 
 impl ScreenWidget for PokerLobbyScreen {
     fn ui(
         &mut self,
-        _app_interface: &mut AppInterface,
+        app_interface: &mut AppInterface,
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
+        // If user set a name in the previous screen, apply it to the local player entry once.
+        let chosen_name = app_interface.state().settings.name.clone();
+        if !chosen_name.is_empty() {
+            // Inspect first player name (borrow immutably)
+            {
+                let pm_ref = self.player_manager.borrow();
+                if let Some(first) = pm_ref.get_players().first() {
+                    if first.name == "You" && chosen_name != "You" {
+                        drop(pm_ref);
+                        // rename the first player to the chosen name
+                        self.player_manager.borrow_mut().rename_player(PlayerId::from(0), chosen_name.clone());
+                    }
+                }
+            }
+        }
+
         ui.heading("Poker Lobby");
         ui.add_space(12.0);
         ui.group(|ui| {
