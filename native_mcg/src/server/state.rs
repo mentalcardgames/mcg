@@ -15,6 +15,8 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc;
+use std::collections::HashMap;
 
 pub const CHANNEL_BUFFER_SIZE: usize = 256;
 
@@ -31,6 +33,10 @@ pub struct AppState {
     pub config_path: Option<PathBuf>,
     pub ticket: Arc<RwLock<Option<String>>>,
     pub remote_ticket: Arc<RwLock<Option<String>>>,
+    pub peers: Arc<RwLock<HashMap<iroh::EndpointId, PeerInfo>>>,
+    /// Optional sender to the single local frontend connection (if present).
+    /// Use this for messages that should only go to the local UI, not to all subscribers.
+    pub local_frontend_tx: Arc<RwLock<Option<mpsc::Sender<mcg_shared::Backend2FrontendMsg>>>>,
 }
 
 impl AppState {
@@ -45,6 +51,23 @@ impl AppState {
             config_path,
             ticket: Arc::new(RwLock::new(None)),
             remote_ticket: Arc::new(RwLock::new(None)),
+            peers: Arc::new(RwLock::new(HashMap::new())),
+            local_frontend_tx: Arc::new(RwLock::new(None)),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct PeerInfo {
+    pub name: String,
+    pub ourselves: bool,
+}
+
+impl Default for PeerInfo {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            ourselves: false,
         }
     }
 }
@@ -64,7 +87,6 @@ pub struct Lobby {
     //me a lot of work. If needed, we can move them later, but for now they are here and they work.
     pub(crate) max_players: usize,
     pub(crate) lobby_open: bool,
-    pub(crate) current_players:usize,
     pub(crate) our_name: String,
 }
 
@@ -78,7 +100,6 @@ impl Default for Lobby {
             bot_manager: BotManager::default(),
             max_players: 2,
             lobby_open: false,
-            current_players: 0,
             our_name: "You".to_string(),
         }
     }
@@ -94,6 +115,8 @@ impl Default for AppState {
             config_path: None,
             ticket: Arc::new(RwLock::new(None)),
             remote_ticket: Arc::new(RwLock::new(None)),
+            peers: Arc::new(RwLock::new(HashMap::new())),
+            local_frontend_tx: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -313,6 +336,7 @@ async fn advance_to_next_hand(state: &AppState) -> mcg_shared::Backend2FrontendM
 async fn create_game_session(
     state: &AppState,
     players: Vec<mcg_shared::PlayerConfig>,
+
 ) -> mcg_shared::Backend2FrontendMsg {
     match create_new_game(state, players).await {
         Ok(()) => {
@@ -362,14 +386,27 @@ async fn handle_get_ticket(state: &AppState) -> mcg_shared::Backend2FrontendMsg 
     }
 }
 
-async fn handle_get_ip() -> Option<String>{
+async fn handle_get_ip() -> Option<String> {
     local_ipaddress::get()
+}
+/// Send a message to the local frontend (if a sender is registered)
+/// This is fire-and-forget; a failed send is just logged
+pub async fn send_local_frontend(state: &AppState, msg: mcg_shared::Backend2FrontendMsg) {
+    let guard = state.local_frontend_tx.read().await;
+    if let Some(tx) = &*guard {
+        let tx_clone = tx.clone();
+        if let Err(e) = tx_clone.send(msg).await {
+            tracing::warn!(error = %e, "failed to send to local frontend");
+        }
+    } else {
+        tracing::debug!("no local frontend sender registered; skipping local send");
     }
+}
 
 /// Unified handler for Frontend2BackendMsg coming from any transport.
 ///
-/// Centralizes validation, state mutation, and side-effects (broadcasting and
-/// bot-driving). Returns a Backend2FrontendMsg that the originating transport should send
+// Centralizes validation, state mutation, and side-effects (broadcasting and
+// bot-driving). Returns a Backend2FrontendMsg that the originating transport should send
 /// back to the client. Transports should delegate to this function rather than
 /// duplicating handling logic to ensure consistent behavior across transports.
 pub async fn dispatch_client_message(
@@ -428,20 +465,24 @@ pub async fn dispatch_client_message(
         mcg_shared::Frontend2BackendMsg::LobbyOpen => {
             let mut lobby = state.lobby.write().await;
             lobby.lobby_open = true;
-            lobby.current_players = 1; // set current player count to 1 - the host - when lobby is opened
             tracing::info!("Lobby opened.");
             mcg_shared::Backend2FrontendMsg::Error(format!("Lobby is now open"))
         }
         mcg_shared::Frontend2BackendMsg::LobbyClose => {
             let mut lobby = state.lobby.write().await;
             lobby.lobby_open = false;
-            lobby.current_players = 0; // reset current player count when lobby is closed
             tracing::info!("Lobby closed.");
             mcg_shared::Backend2FrontendMsg::Error(format!("Lobby is now closed"))
         }
         mcg_shared::Frontend2BackendMsg::PlayerName(name) => {
             let mut lobby = state.lobby.write().await;
             lobby.our_name = name.clone();
+            for peer in state.peers.write().await.values_mut() {
+                if peer.ourselves {
+                    peer.name = name.clone();
+                    break;
+                }
+            }
             tracing::info!("Player name set to {}", name);
             mcg_shared::Backend2FrontendMsg::Error(format!("Player name set to {}", name))
         }

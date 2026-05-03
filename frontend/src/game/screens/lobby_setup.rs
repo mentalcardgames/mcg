@@ -144,6 +144,8 @@ impl ScreenWidget for LobbySelectionScreen {
             let msg = Frontend2BackendMsg::QrValue(ticket);
             self.web_socket_connection.send_msg(&msg);
             self.input.clear();
+
+        
         }
     }
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
@@ -199,6 +201,9 @@ impl ScreenDef for LobbySelectionScreen {
             }
             Backend2FrontendMsg::OurName(name) => {
                 sprintln!("Got our name message:\n\t- {:?}", name);
+            }
+            Backend2FrontendMsg::RemovePlayer(_name) => {
+                sprintln!("Got a remove player message");
             }
         };
         let on_err = |e| {

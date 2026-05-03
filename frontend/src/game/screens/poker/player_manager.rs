@@ -204,4 +204,7 @@ impl PlayerManager {
             player.name = trimmed.to_string();
         }
     }
+    pub fn remove_player(&mut self, player_name: &str){
+        self.players.retain(|p| p.name != player_name);
+    }
 }

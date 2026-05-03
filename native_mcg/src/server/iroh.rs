@@ -22,10 +22,8 @@ use tokio::io::BufReader;
 use tokio::sync::broadcast;
 
 use crate::public::{path_for_config, PublicInfo};
-use crate::server::state::subscribe_connection;
-use crate::server::AppState;
 use crate::transport::{send_server_msg_to_writer, send_peer_msg_to_writer};
-use crate::server::state::broadcast_state;
+use crate::server::state::{broadcast_state, send_local_frontend, AppState, subscribe_connection, PeerInfo};
 use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg, Peer2PeerMsg};
 
 /// Public entrypoint spawned by server startup
@@ -66,6 +64,15 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     println!("\n\x1b[1;32m=== Iroh Endpoint Ready ===\x1b[0m");
     println!("\x1b[1mNode ID:\x1b[0m {}", pk);
     println!("\x1b[1;32m===========================\x1b[0m\n");
+
+    //Add ourselves to the peer list w/ empty name, we update it later
+    {
+        let us = PeerInfo{
+            name: "".to_string(),
+            ourselves: true,
+        };
+        state.peers.write().await.insert(pk.clone(), us);
+    }
 
     // Keep structured info for debug mode
     let addr = endpoint.addr();
@@ -280,7 +287,7 @@ async fn manage_incoming_iroh_connection(
     let mut reader = BufReader::new(recv);
 
     tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
-
+    let peer_id = connection.remote_id();
     let mut subscription: Option<broadcast::Receiver<Backend2FrontendMsg>> = None;
 
     let mut line = String::new();
@@ -308,7 +315,7 @@ async fn manage_incoming_iroh_connection(
                     match res {
                         Ok(0) => break,
                         Ok(_) => {
-                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim()).await? {
+                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(), peer_id.clone()).await? {
                                 break;
                             }
                         }
@@ -323,7 +330,7 @@ async fn manage_incoming_iroh_connection(
             match reader.read_line(&mut line).await {
                 Ok(0) => break,
                 Ok(_) => {
-                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim()).await?
+                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(),peer_id.clone()).await?
                     {
                         break;
                     }
@@ -335,13 +342,23 @@ async fn manage_incoming_iroh_connection(
             }
         }
     }
-    // Try to notify the peer we are disconnecting
-    if let Err(e) = send_peer_msg_to_writer(&mut send, &Peer2PeerMsg::Disconnect).await {
-        tracing::warn!(error = %e, "failed to send peer Disconnect on incoming connection drop");
-    }
+
     tracing::info!("[IROH DISCONNECT] Client");
     // Close the send side politely if available
     let _ = send.finish();
+    // Remove the peer in case they couldn't send a disconnect message or we hit an error
+    {
+        if let Some(peer) = state.peers.read().await.get(&peer_id) {
+            if !peer.ourselves {
+                let _ = state.broadcaster.send(
+                    Backend2FrontendMsg::RemovePlayer(peer.name.clone())
+                );
+            }
+        }
+    }
+    {
+        state.peers.write().await.remove(&peer_id);
+    }
     connection.closed().await;
     Ok(())
 }
@@ -357,6 +374,7 @@ async fn manage_outgoing_iroh_connection(
     let mut reader = BufReader::new(recv);
 
     tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
+    let peer_id = connection.remote_id();
 
     let lobby = state.lobby.read().await;
     let name = lobby.our_name.clone();
@@ -397,7 +415,7 @@ async fn manage_outgoing_iroh_connection(
                     match res {
                         Ok(0) => break,
                         Ok(_) => {
-                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim()).await? {
+                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(), peer_id.clone()).await? {
                                 break;
                             }
                         }
@@ -412,7 +430,7 @@ async fn manage_outgoing_iroh_connection(
             match reader.read_line(&mut line).await {
                 Ok(0) => break,
                 Ok(_) => {
-                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim()).await?
+                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(),peer_id.clone()).await?
                     {
                         break;
                     }
@@ -426,8 +444,14 @@ async fn manage_outgoing_iroh_connection(
     }
 
     tracing::info!("[IROH DISCONNECT] Client");
+    // Remove the peer from our local list, just in case (not even sure if this is relevant like it is for
+    // the accept side, but since i dont super get the architecture, better safe than sorry)
+    {
+        state.peers.write().await.remove(&peer_id);
+    }
     // Try to notify the peer we are disconnecting
-    if let Err(e) = send_peer_msg_to_writer(&mut send, &Peer2PeerMsg::Disconnect).await {
+    let our_name = state.lobby.read().await.our_name.clone();
+    if let Err(e) = send_peer_msg_to_writer(&mut send, &Peer2PeerMsg::Disconnect(our_name)).await {
         tracing::warn!(error = %e, "failed to send peer Disconnect on incoming connection drop");
     }
     // Close the send side politely if available
@@ -441,6 +465,7 @@ async fn process_iroh_line<W>(
     send: &mut W,
     subscription: &mut Option<broadcast::Receiver<Backend2FrontendMsg>>,
     trimmed: &str,
+    peer_id: iroh::EndpointId,
 ) -> Result<bool>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
@@ -450,7 +475,7 @@ where
     }
 
     if let Ok(_peer_msg) = serde_json::from_str::<Peer2PeerMsg>(trimmed) {
-        return process_iroh_peer_line(state, send, subscription, trimmed).await;
+        return process_iroh_peer_line(state, send, subscription, trimmed, peer_id.clone()).await;
     }
 
     match serde_json::from_str::<Frontend2BackendMsg>(trimmed) {
@@ -492,6 +517,7 @@ async fn process_iroh_peer_line<W>(
     send: &mut W,
     subscription: &mut Option<broadcast::Receiver<Backend2FrontendMsg>>,
     trimmed: &str,
+    peer_id: iroh::EndpointId,
 ) -> Result<bool>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
@@ -502,41 +528,152 @@ where
 
     match serde_json::from_str::<Peer2PeerMsg>(trimmed){
         Ok(Peer2PeerMsg::Connect(name)) => {
-            let mut lobby = state.lobby.write().await;
-            if !lobby.lobby_open || lobby.current_players >= lobby.max_players {
-                let msg = Peer2PeerMsg::Reject("Lobby is full or closed".into());
-                send_peer_msg_to_writer(
-                    send,
-                    &msg,
+            tracing::info!(peer = %peer_id, "Peer requested connect with name '{}'", name);
+            let mut name_clone = name.clone();
+            // Check if the lobby is open and has room for more players before accepting the connection
+            let (should_reject, lobby_open, current_players, max_players) = {
+                let lobby = state.lobby.read().await;
+                let peers = state.peers.read().await;
+                (
+                    !lobby.lobby_open || peers.len() >= lobby.max_players,
+                    lobby.lobby_open,
+                    peers.len(),
+                    lobby.max_players,
                 )
-                .await?;
+            };
+            // If we should reject the connection, send a Reject message and return false to disconnect
+            if should_reject {
+                let msg = Peer2PeerMsg::Reject(
+                    if !lobby_open {
+                        "Lobby is closed".into()
+                    } else {
+                        "Lobby is full".into()
+                    },
+                );
+
+                send_peer_msg_to_writer(send, &msg).await?;
                 return Ok(false);
             }
-            lobby.current_players += 1;
-            drop(lobby);
+            {
+                // Rename the player in case we have someone of that name already
+                let mut name_exists = false;
+                let peers = state.peers.read().await;
+                for peer in peers.values() {
+                    if peer.name == name {
+                        name_exists = true;
+                        break;
+                    }
+                }
+                if name_exists {
+                    let mut counter = 2;
+                    let mut new_name = format!("{} {}", name, counter);
+
+                    // Keep incrementing the counter until we find a name that isn't taken
+                    while peers.values().any(|peer| peer.name == new_name) {
+                        counter += 1;
+                        new_name = format!("{} {}", name, counter);
+                    }
+                    tracing::info!(peer = %peer_id, "Peer name '{}' already exists, renaming to '{}'", name, new_name);
+                    name_clone = new_name;
+                }
+            }
+            // If we had to rename the player, send them a NewName message so they know their assigned name
+            if name_clone != name {
+                let msg = Peer2PeerMsg::NewName(name_clone.clone());
+                send_peer_msg_to_writer(send, &msg).await?;
+            }
+            {
+                // Tell the new peer about all the existing peers so they can populate their peer list
+                let peers_snapshot = state.peers.read().await.clone();
+                let msg = Peer2PeerMsg::Peers(
+                    peers_snapshot.into_iter().map(|(id, info)| (id.to_string(), info.name)).collect()
+                );
+                send_peer_msg_to_writer(send, &msg).await?;
+            }
+            // Add the new player to our list of connected peers
+            let peer = PeerInfo{
+                name: name_clone.clone(),
+                ourselves: false,
+            };
+            state.peers.write().await.insert(peer_id.clone(), peer);
+            // Output how many peers are currently connected for debug purposes
+            tracing::info!("Now at {}/{} players", current_players, max_players);
+            // Subscribe to state updates and broadcast the new player to the frontend
             let sub = subscribe_connection(state).await;
             *subscription = Some(sub.receiver);
             let _ = state.broadcaster.send(
-                Backend2FrontendMsg::NewPlayer(name.clone())
+                Backend2FrontendMsg::NewPlayer(name_clone.clone())
             );
             broadcast_state(&state).await;
             return Ok(true);
         }
-        Ok(Peer2PeerMsg::Disconnect) => {
-            let mut lobby = state.lobby.write().await;
-            if lobby.current_players > 0 {
-                lobby.current_players -= 1;
+        Ok(Peer2PeerMsg::Disconnect(name)) => {
+            tracing::info!(peer = %peer_id, "Peer requested disconnect");
+            {
+                state.peers.write().await.remove(&peer_id);
             }
-            drop(lobby);
+            let _ = state.broadcaster.send(
+                Backend2FrontendMsg::RemovePlayer(name)
+            );
             return Ok(false);
+
+        }
+        Ok(Peer2PeerMsg::Peers(peers)) => {
+            tracing::info!(peer = %peer_id, "Received peer list from new connection: {:?}", peers);
+            // Add all the peers (that aren't already in our list) to our peer list.
+            let mut map = state.peers.write().await;
+
+            for peer in peers.into_iter() {
+                let Ok(new_id) = peer.0.parse() else {
+                    tracing::warn!("Invalid peer id received: {}", peer.0);
+                    continue;
+                };
+
+                if !map.contains_key(&new_id) {
+                    let peer_info = PeerInfo {
+                        name: peer.1,
+                        ourselves: false,
+                    };
+                    map.insert(new_id, peer_info);
+                }
+            }
+            return Ok(true);
+        }
+        Ok(Peer2PeerMsg::NewName(name)) => {
+            // If we receive a new name, we set it
+            state.lobby.write().await.our_name = name.clone();
+            tracing::info!(peer = %peer_id, "Peer informed us of our assigned name: '{}'", name);
+            // ... and also edit us in our peer list
+            {
+                let mut peers = state.peers.write().await;
+                for peer in peers.iter_mut() {
+                    if peer.1.ourselves {
+                        peer.1.name = name.clone();
+                        break;
+                    }
+                }
+            }
+            // Send the new name to the local frontend ONLY, so it can update just for us
+            let msg = Backend2FrontendMsg::OurName(name.clone());
+            send_local_frontend(&state, msg).await;
+            return Ok(true);
         }
         Ok(Peer2PeerMsg::Reject(reason)) => {
             tracing::warn!(reason = %reason, "peer rejected our connection");
+
+            let _ = state.broadcaster.send(
+                Backend2FrontendMsg::Error(format!("Peer rejected connection: {}", reason))
+            );
+
+            {
+            let mut guard = state.remote_ticket.write().await;
+                *guard = None;
+            }
             // Return false to break the loop and disconnect
             return Ok(false);
         }
         Ok(other) => {
-            tracing::debug!(client_msg = ?other, "iroh received peer message");
+            tracing::debug!(peer_msg = ?other, "iroh received peer message");
             // No dispatch for the other peer messages yet; just log them.
             return Ok(true);
         }

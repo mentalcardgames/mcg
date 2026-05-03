@@ -132,7 +132,10 @@ impl ScreenDef for PokerLobbyScreen {
             }
             Backend2FrontendMsg::OurName(name) => {
                 tracing::info!("Player name received: {}", name);
-                pm.borrow_mut().rename_player(PlayerId::from(0), name);
+            }
+            Backend2FrontendMsg::RemovePlayer(name) => {
+                sprintln!("Got a remove player message for: {}", name);
+                pm.borrow_mut().remove_player(&name);
             }
         };
         let on_err = |e| {

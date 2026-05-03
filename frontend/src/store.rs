@@ -150,7 +150,9 @@ impl ClientState {
             Backend2FrontendMsg::NewPlayer(_string) => {}
             Backend2FrontendMsg::OurName(string) => {
                 self.settings.name = string.clone();
+                tracing::info!("Player name set to: {}", string);
             }
+            Backend2FrontendMsg::RemovePlayer(_name) => {}
         }
     }
 }

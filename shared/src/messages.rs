@@ -6,6 +6,7 @@ use crate::cards::Card;
 use crate::game::PlayerAction;
 use crate::game::{ActionEvent, Stage};
 use crate::player::{PlayerConfig, PlayerId, PlayerPublic};
+use std::collections::HashMap;
 
 /// Complete public view of the game state
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -73,6 +74,7 @@ pub enum Backend2FrontendMsg {
     QrRes(Box<[u8]>),
     NewPlayer(String),
     OurName(String),
+    RemovePlayer(String),
 }
 
 //Messages two peers send between eachother
@@ -82,7 +84,9 @@ pub enum Peer2PeerMsg {
     Ping,
     Pong,
     Connect(String),
-    Disconnect,
+    Disconnect(String),
     Reject(String),
     Payload(String),
+    Peers(HashMap<String, String>), // EndpointId (as string) -> Peer's Name
+    NewName(String),
 }
