@@ -531,7 +531,7 @@ where
             tracing::info!(peer = %peer_id, "Peer requested connect with name '{}'", name);
             let mut name_clone = name.clone();
             // Check if the lobby is open and has room for more players before accepting the connection
-            let (should_reject, lobby_open, current_players, max_players) = {
+            let (should_reject, lobby_open, _current_players, max_players) = {
                 let lobby = state.lobby.read().await;
                 let peers = state.peers.read().await;
                 (
@@ -575,12 +575,11 @@ where
                     }
                     tracing::info!(peer = %peer_id, "Peer name '{}' already exists, renaming to '{}'", name, new_name);
                     name_clone = new_name;
+                    {
+                    let msg = Peer2PeerMsg::NewName(name_clone.clone());
+                    send_peer_msg_to_writer(send, &msg).await?;
+                    }
                 }
-            }
-            // If we had to rename the player, send them a NewName message so they know their assigned name
-            if name_clone != name {
-                let msg = Peer2PeerMsg::NewName(name_clone.clone());
-                send_peer_msg_to_writer(send, &msg).await?;
             }
             {
                 // Tell the new peer about all the existing peers so they can populate their peer list
@@ -597,6 +596,7 @@ where
             };
             state.peers.write().await.insert(peer_id.clone(), peer);
             // Output how many peers are currently connected for debug purposes
+            let current_players = state.peers.read().await.len();
             tracing::info!("Now at {}/{} players", current_players, max_players);
             // Subscribe to state updates and broadcast the new player to the frontend
             let sub = subscribe_connection(state).await;
