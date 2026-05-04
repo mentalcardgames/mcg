@@ -381,8 +381,10 @@ async fn manage_outgoing_iroh_connection(
     tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
     let peer_id = connection.remote_id();
 
-    let lobby = state.lobby.read().await;
-    let name = lobby.our_name.clone();
+    let name = {
+        let lobby = state.lobby.read().await;
+        lobby.our_name.clone()
+    };
     let msg = Peer2PeerMsg::Connect(name);
 
     if let Err(e) = send_peer_msg_to_writer(
@@ -645,6 +647,7 @@ where
                     map.insert(new_id, peer_info);
                 }
             }
+            tracing::info!("Peer list updated with new connections");
             return Ok(true);
         }
         Ok(Peer2PeerMsg::NewName(name)) => {
