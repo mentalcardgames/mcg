@@ -348,12 +348,17 @@ async fn manage_incoming_iroh_connection(
     let _ = send.finish();
     // Remove the peer in case they couldn't send a disconnect message or we hit an error
     {
-        if let Some(peer) = state.peers.read().await.get(&peer_id) {
-            if !peer.ourselves {
-                let _ = state.broadcaster.send(
-                    Backend2FrontendMsg::RemovePlayer(peer.name.clone())
-                );
-            }
+        let name_to_remove = {
+            let peers = state.peers.read().await;
+            peers.get(&peer_id)
+                .filter(|p| !p.ourselves)
+                .map(|p| p.name.clone())
+        };
+
+        if let Some(name) = name_to_remove {
+            let _ = state.broadcaster.send(
+                Backend2FrontendMsg::RemovePlayer(name)
+            );
         }
     }
     {
@@ -530,6 +535,7 @@ where
         Ok(Peer2PeerMsg::Connect(name)) => {
             tracing::info!(peer = %peer_id, "Peer requested connect with name '{}'", name);
             let mut name_clone = name.clone();
+            let mut new_name = None;
             // Check if the lobby is open and has room for more players before accepting the connection
             let (should_reject, lobby_open, _current_players, max_players) = {
                 let lobby = state.lobby.read().await;
@@ -566,20 +572,22 @@ where
                 }
                 if name_exists {
                     let mut counter = 2;
-                    let mut new_name = format!("{} {}", name, counter);
+                    let mut candidate = format!("{} {}", name, counter);
 
                     // Keep incrementing the counter until we find a name that isn't taken
-                    while peers.values().any(|peer| peer.name == new_name) {
+                    while peers.values().any(|peer| peer.name == candidate) {
                         counter += 1;
-                        new_name = format!("{} {}", name, counter);
+                        candidate = format!("{} {}", name, counter);
                     }
-                    tracing::info!(peer = %peer_id, "Peer name '{}' already exists, renaming to '{}'", name, new_name);
-                    name_clone = new_name;
-                    {
-                    let msg = Peer2PeerMsg::NewName(name_clone.clone());
-                    send_peer_msg_to_writer(send, &msg).await?;
-                    }
+                    new_name = Some(candidate);
                 }
+            }
+            if let Some(n) = new_name {
+                // Inform the peer of their new name if we had to change it
+                tracing::info!(peer = %peer_id, "Name '{}' already exists, renaming to '{}'", name, n);
+                name_clone = n.clone();
+                let msg = Peer2PeerMsg::NewName(n);
+                send_peer_msg_to_writer(send, &msg).await?;
             }
             {
                 // Tell the new peer about all the existing peers so they can populate their peer list
@@ -641,8 +649,8 @@ where
         }
         Ok(Peer2PeerMsg::NewName(name)) => {
             // If we receive a new name, we set it
-            state.lobby.write().await.our_name = name.clone();
             tracing::info!(peer = %peer_id, "Peer informed us of our assigned name: '{}'", name);
+            state.lobby.write().await.our_name = name.clone();
             // ... and also edit us in our peer list
             {
                 let mut peers = state.peers.write().await;
