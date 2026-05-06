@@ -23,7 +23,7 @@ use tokio::sync::broadcast;
 
 use crate::public::{path_for_config, PublicInfo};
 use crate::transport::{send_server_msg_to_writer, send_peer_msg_to_writer};
-use crate::server::state::{broadcast_state, send_local_frontend, AppState, subscribe_connection, PeerInfo};
+use crate::server::state::{broadcast_state, AppState, subscribe_connection, PeerInfo};
 use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg, Peer2PeerMsg};
 
 /// Public entrypoint spawned by server startup
@@ -653,7 +653,9 @@ where
         Ok(Peer2PeerMsg::NewName(name)) => {
             // If we receive a new name, we set it
             tracing::info!(peer = %peer_id, "Peer informed us of our assigned name: '{}'", name);
-            state.lobby.write().await.our_name = name.clone();
+            {
+                state.lobby.write().await.our_name = name.clone();
+            }
             // ... and also edit us in our peer list
             {
                 let mut peers = state.peers.write().await;
@@ -664,9 +666,9 @@ where
                     }
                 }
             }
-            // Send the new name to the local frontend ONLY, so it can update just for us
-            let msg = Backend2FrontendMsg::OurName(name.clone());
-            send_local_frontend(&state, msg).await;
+            let _ = state.broadcaster.send(
+                Backend2FrontendMsg::OurName(name)
+            );
             return Ok(true);
         }
         Ok(Peer2PeerMsg::Reject(reason)) => {

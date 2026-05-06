@@ -17,7 +17,7 @@ pub struct LobbySelectionScreen {
     input: String,
     scanner: QrScannerPopup,
     web_socket_connection: WebSocketConnection,
-    qr_payload: Rc<RefCell<Option<String>>>,
+    name_storage: Rc<RefCell<Option<String>>>,
     raw: Vec<u8>,
     player_name: String,
     initialized: bool,
@@ -31,7 +31,7 @@ impl Default for LobbySelectionScreen {
             input: String::new(),
             scanner: QrScannerPopup::default(),
             web_socket_connection: WebSocketConnection::default(),
-            qr_payload: Rc::new(RefCell::new(None)),
+            name_storage: Rc::new(RefCell::new(None)),
             raw: Vec::new(),
             player_name: String::new(),
             initialized: false,
@@ -147,6 +147,24 @@ impl ScreenWidget for LobbySelectionScreen {
 
         
         }
+        // If we received a new name, update our name both here and
+        // in the global state so it persists across screens
+        let name_opt = {
+            if let Ok(name_ref) = self.name_storage.try_borrow() {
+                name_ref.as_ref().cloned()
+            } else {
+                None
+            }
+        };
+
+        if let Some(name) = name_opt {
+            app_interface.state().settings.name = name.clone();
+            self.player_name = name.clone();
+
+            if let Ok(mut storage) = self.name_storage.try_borrow_mut() {
+                storage.take(); 
+            }
+        }
     }
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
         // Disconnect when leaving this screen
@@ -174,7 +192,7 @@ impl ScreenDef for LobbySelectionScreen {
         Self: Sized,
     {
         let mut me = Self::default();
-        let payload = me.qr_payload.clone();
+        let name_storage = me.name_storage.clone();
         let on_msg = move |x| match x {
             Backend2FrontendMsg::State(s) => {
                 sprintln!("Got a message state:\n\t- {:?}", s);
@@ -187,11 +205,9 @@ impl ScreenDef for LobbySelectionScreen {
             }
             Backend2FrontendMsg::TicketValue(ticket) => {
                 sprintln!("Got a ticket value:\n\t- {:?}", ticket);
-                *payload.borrow_mut() = Some(ticket);
             }
             Backend2FrontendMsg::IPValue(ip) => {
                 sprintln!("Got an IP value:\n\t- {:?}", ip);
-                *payload.borrow_mut() = Some(ip);
             }
             Backend2FrontendMsg::QrRes(_) => {
                 todo!("Handle QR result from server");
@@ -200,7 +216,8 @@ impl ScreenDef for LobbySelectionScreen {
                 sprintln!("Got a new player message");
             }
             Backend2FrontendMsg::OurName(name) => {
-                sprintln!("Got our name message:\n\t- {:?}", name);
+                sprintln!("Got our name from the server:\n\t- {:?}", name);
+                *name_storage.borrow_mut() = Some(name);
             }
             Backend2FrontendMsg::RemovePlayer(_name) => {
                 sprintln!("Got a remove player message");

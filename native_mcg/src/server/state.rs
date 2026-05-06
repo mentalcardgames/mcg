@@ -15,7 +15,6 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc;
 use std::collections::HashMap;
 
 pub const CHANNEL_BUFFER_SIZE: usize = 256;
@@ -34,9 +33,6 @@ pub struct AppState {
     pub ticket: Arc<RwLock<Option<String>>>,
     pub remote_ticket: Arc<RwLock<Option<String>>>,
     pub peers: Arc<RwLock<HashMap<iroh::EndpointId, PeerInfo>>>,
-    /// Optional sender to the single local frontend connection (if present).
-    /// Use this for messages that should only go to the local UI, not to all subscribers.
-    pub local_frontend_tx: Arc<RwLock<Option<mpsc::Sender<mcg_shared::Backend2FrontendMsg>>>>,
 }
 
 impl AppState {
@@ -52,7 +48,6 @@ impl AppState {
             ticket: Arc::new(RwLock::new(None)),
             remote_ticket: Arc::new(RwLock::new(None)),
             peers: Arc::new(RwLock::new(HashMap::new())),
-            local_frontend_tx: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -100,7 +95,7 @@ impl Default for Lobby {
             bot_manager: BotManager::default(),
             max_players: 2,
             lobby_open: false,
-            our_name: "You".to_string(),
+            our_name: String::new(),
         }
     }
 }
@@ -116,7 +111,6 @@ impl Default for AppState {
             ticket: Arc::new(RwLock::new(None)),
             remote_ticket: Arc::new(RwLock::new(None)),
             peers: Arc::new(RwLock::new(HashMap::new())),
-            local_frontend_tx: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -386,21 +380,9 @@ async fn handle_get_ticket(state: &AppState) -> mcg_shared::Backend2FrontendMsg 
     }
 }
 
+///Get our own IP address
 async fn handle_get_ip() -> Option<String> {
     local_ipaddress::get()
-}
-/// Send a message to the local frontend (if a sender is registered)
-/// This is fire-and-forget; a failed send is just logged
-pub async fn send_local_frontend(state: &AppState, msg: mcg_shared::Backend2FrontendMsg) {
-    let guard = state.local_frontend_tx.read().await;
-    if let Some(tx) = &*guard {
-        let tx_clone = tx.clone();
-        if let Err(e) = tx_clone.send(msg).await {
-            tracing::warn!(error = %e, "failed to send to local frontend");
-        }
-    } else {
-        tracing::debug!("no local frontend sender registered; skipping local send");
-    }
 }
 
 /// Unified handler for Frontend2BackendMsg coming from any transport.
