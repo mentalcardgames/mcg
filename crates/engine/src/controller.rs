@@ -9,3 +9,6 @@ In each of these cases, the controller forwards the step result to the Player In
 If the controller gets input back from the player interface, it feeds that input into the input buffer of the interpreter and the process repeats.
 
 */
+
+// TODO: define entry point in this module (eg. run_game()), which takes a game definition and a set of player interfaces
+// and runs the game until completion, forwarding step results to the local player interface or waiting for input from remote player interfaces as required.

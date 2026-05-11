@@ -31,25 +31,72 @@ Payload
 ├── EndStage(String)          ← NOT emitted by IrBuilder (only Action→EndAction creates it via jump)
 ├── Choice                    ← no data (edge index is implicit)
 ├── Optional                  ← no data (accept/decline is edge order)
-└── Trigger                   ← no data
+└── Trigger                   ← not implemented.
 
 Each of the leaves of this payload tree should be accounted for in the execute_edge function, which takes a Payload and modifies the game state accordingly.
 */
 
 use crate::game_data::GameData;
 use front_end::ir::LoweredPayLoad;
+use front_end::ast::SetUpRule;
 
 //TODO: write this module.
 
 pub fn execute(payload: LoweredPayLoad, _game_data: &mut GameData) {
     match payload {
-        LoweredPayLoad::Condition { .. } => {}
-        LoweredPayLoad::EndCondition { .. } => {}
-        LoweredPayLoad::Action(_) => {}
-        LoweredPayLoad::StageRoundCounter(_) => {}
-        LoweredPayLoad::EndStage(_) => {}
-        LoweredPayLoad::Choice => {}
-        LoweredPayLoad::Optional => {}
-        LoweredPayLoad::Trigger => {}
+        LoweredPayLoad::Action(_) => {
+            // TODO: evaluate action and modify game state accordingly.
+        }
+        LoweredPayLoad::StageRoundCounter(_) => {
+            // TODO: read id and increment counter in game data for that stage.
+        }
+        LoweredPayLoad::EndStage(_) => {
+            // TODO: update current stage.
+        }
+        _ => {}
+    }
+}
+
+pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
+    match payload {
+        SetUpRule::CreatePlayer { players } => {
+            for player in players {
+                game_data.add_player(player);
+            }
+            unimplemented!()
+        }
+        SetUpRule::CreateTeams { teams: _ } => {
+            // TODO
+        }
+        SetUpRule::CreateTurnorder { player_collection: _ } => {
+            // TODO
+        }
+        SetUpRule::CreateTurnorderRandom { player_collection: _ } => {
+            // TODO
+        }
+        SetUpRule::CreateLocation { owner: _, locations: _ } => {
+            // TODO
+        }
+        SetUpRule::CreateCardOnLocation { location: _, cards: _ } => {
+            // TODO
+        }
+        SetUpRule::CreateTokenOnLocation { location: _, int: _, token: _ } => {
+            // TODO
+        }
+        SetUpRule::CreateCombo { combo: _, filter: _ } => {
+            // TODO
+        }
+        SetUpRule::CreateMemory { memory: _, owner: _ } => {
+            // TODO
+        }
+        SetUpRule::CreateMemoryWithMemoryType { memory: _, owner: _, memory_type: _ } => {
+            // TODO
+        }
+        SetUpRule::CreatePrecedence { precedence: _, kvs: _ } => {
+            // TODO
+        }
+        SetUpRule::CreatePointMap { pointmap: _, kvis: _ } => {
+            // TODO
+        }
     }
 }

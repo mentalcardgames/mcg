@@ -298,8 +298,11 @@ impl Evaluator {
             EndCondition::UntilEnd => Ok(false),
             EndCondition::UntilRep { reps } => {
                 let current = game_data.get_stage_counter(stage_name.clone());
-                let target = Self::eval_int(&reps.times, game_data)? as u32;
-                Ok(current >= target)
+                // evaluate target and handle error propagation
+                match Self::eval_int(&reps.times, game_data) {
+                    Ok(target) => Ok(current >= target as u32),
+                    Err(e) => Err(e),
+                }
             }
             EndCondition::UntilBool { bool_expr } => Self::eval_bool(bool_expr, game_data),
             EndCondition::UntilBoolRep {
@@ -309,8 +312,11 @@ impl Evaluator {
             } => {
                 let bool_result = Self::eval_bool(bool_expr, game_data)?;
                 let current = game_data.get_stage_counter(stage_name.clone());
-                let target = Self::eval_int(&reps.times, game_data)? as u32;
-                let rep_result = current >= target;
+                // evaluate target and handle error propagation
+                let rep_result = match Self::eval_int(&reps.times, game_data) {
+                    Ok(target) => current >= target as u32,
+                    Err(e) => return Err(e),
+                };
                 match logic {
                     BoolOp::And => Ok(bool_result && rep_result),
                     BoolOp::Or => Ok(bool_result || rep_result),
@@ -320,29 +326,88 @@ impl Evaluator {
     }
 
     pub fn eval_int(_expr: &IntExpr, _game_data: &GameData) -> Result<i32, String> {
+        // TODO: implement this function, which evaluates an IntExpr to an integer value based on the current game data.
+        // This is the set of all possible IntExpr variants, all of which should be handled by this function:
+        // IntExpr
+        // ├── Literal { int: i32 }
+        // ├── Binary { int, op: Plus|Minus|Mul|Div|Mod, int1 }
+        // ├── Query { query: QueryInt }
+        // │   └── IntCollectionAt { int_collection, int_expr }
+        // ├── Aggregate { aggregate: AggregateInt }
+        // │   ├── SizeOf { collection: Collection }
+        // │   ├── SumOfIntCollection { int_collection }
+        // │   ├── SumOfCardSet { card_set, pointmap }
+        // │   ├── ExtremaCardset { extrema: Min|Max, card_set, pointmap }
+        // │   └── ExtremaIntCollection { extrema, int_collection }
+        // ├── Runtime { runtime: RuntimeInt }
+        // │   ├── CurrentStageRoundCounter
+        // │   └── StageRoundCounter { stage: String }
+        // └── Memory { memory: UseSingleMemory }
+        
         unimplemented!("Evaluator::eval_int")
     }
 
     pub fn eval_string(_expr: &StringExpr, _game_data: &GameData) -> Result<String, String> {
+        // TODO: implement this function, which evaluates a StringExpr to a string value based on the current game data.
+        // This is the set of all possible StringExpr variants, all of which should be handled by this function:
+        // StringExpr
+        // ├── Literal { value: String }
+        // ├── Query { query: QueryString }
+        // │   ├── KeyOf { key: String, card_position: CardPosition }
+        // │   └── StringCollectionAt { string_collection, int_expr }
+        // └── Memory { memory: UseSingleMemory }
         unimplemented!("Evaluator::eval_string")
     }
 
     pub fn eval_player(_expr: &PlayerExpr, _game_data: &GameData) -> Result<String, String> {
+        // TODO: implement this function, which evaluates a PlayerExpr to player name based on the current game data.
+        // This is the set of all possible PlayerExpr variants, all of which should be handled by this function:
+        // PlayerExpr
+        // ├── Literal { name: String }
+        // ├── Runtime { runtime: RuntimePlayer }
+        // │   └── Current | Next | Previous | Competitor
+        // ├── Aggregate { aggregate: AggregatePlayer }
+        // │   ├── OwnerOfCardPostion { card_position }
+        // │   └── OwnerOfMemory { extrema: Min|Max, memory: String }
+        // ├── Query { query: QueryPlayer }
+        // │   ├── Turnorder { int: IntExpr }
+        // │   └── CollectionAt { players: PlayerCollection, int: IntExpr }
+        // └── Memory { memory: UseSingleMemory }
         unimplemented!("Evaluator::eval_player")
     }
 
     pub fn eval_team(_expr: &TeamExpr, _game_data: &GameData) -> Result<String, String> {
+        // TODO: implement this function, which evaluates a TeamExpr to a team name value based on the current game data.
+        // This is the set of all possible TeamExpr variants, all of which should be handled by this function:
+        // TeamExpr
+        // ├── Literal { name: String }
+        // ├── Aggregate { aggregate: AggregateTeam }
+        // │   └── TeamOf { player: PlayerExpr }
+        // └── Memory { memory: UseSingleMemory }
         unimplemented!("Evaluator::eval_team")
     }
 
     pub fn eval_cardset(_expr: &CardSet, _game_data: &GameData) -> Result<Vec<usize>, String> {
+        // TODO: implement this function, which evaluates a CardSet to a vector of card indices based on the current game data.
+        // This is the set of all possible CardSet variants, all of which should be handled by this function:
+        // CardSet
+        // ├── Group { group: Group } (Group is a possibly filtered location, owner must be inferred)
+        // ├── GroupOwner { group: Group, owner: Owner } (a Group with an owner)
+        // └── Memory { memory: UseMemory }
         unimplemented!("Evaluator::eval_cardset")
     }
 
-    pub fn eval_card_position(
-        _expr: &CardPosition,
-        _game_data: &GameData,
-    ) -> Result<usize, String> {
+    pub fn eval_card_position(_expr: &CardPosition, _game_data: &GameData) -> Result<usize, String> {
+        // TODO: implement this function, which evaluates a CardPosition to a card index based on the current game data.
+        // This is the set of all possible CardPosition variants, all of which should be handled by this function:
+        // CardPosition
+        // ├── Query { query: QueryCardPosition }
+        // │   ├── At { location: String, int_expr: IntExpr }
+        // │   ├── Top { location: String }
+        // │   └── Bottom { location: String }
+        // └── Aggregate { aggregate: AggregateCardPosition }
+        //     ├── ExtremaPointMap { extrema, card_set, pointmap }
+        //     └── ExtremaPrecedence { extrema, card_set, precedence }
         unimplemented!("Evaluator::eval_card_position")
     }
 
