@@ -486,6 +486,12 @@ pub async fn dispatch_client_message(
             let name = lobby.our_name.clone();
             mcg_shared::Backend2FrontendMsg::OurName(name)
         }
+        mcg_shared::Frontend2BackendMsg::Disconnect => {
+            tracing::info!("Received disconnect message from client");
+            let msg = mcg_shared::Peer2PeerMsg::Disconnect(state.lobby.read().await.our_name.clone());
+            broadcast_peer_msg(state, msg);
+            mcg_shared::Backend2FrontendMsg::Error("Goodbye".into())
+        }
     }
 }
 

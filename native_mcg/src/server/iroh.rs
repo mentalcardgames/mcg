@@ -621,6 +621,11 @@ where
                 send_peer_msg_to_writer(send, &msg).await?;
                 return Ok(false);
             }
+            // Tell the peer they are now in the lobby, and what the max player count is
+            {
+                let msg = Peer2PeerMsg::LobbyAccept(max_players);
+                send_peer_msg_to_writer(send, &msg).await?;
+            }
             {
                 // Rename the player in case we have someone of that name already
                 let mut name_exists = false;
@@ -686,7 +691,7 @@ where
 
         }
         Ok(Peer2PeerMsg::Peers(peers)) => {
-            tracing::info!(peer = %peer_id, "Received peer list from new connection: {:?}", peers);
+            tracing::info!(peer = %peer_id, "Received peer list from new connection");
             // Add all the peers (that aren't already in our list) to our peer list.
             let mut map = state.peers.write().await;
 
@@ -702,6 +707,19 @@ where
                         ticket: peer.1.1,
                     };
                     map.insert(new_id, peer_info.clone());
+
+                    // Broadcast the new peer to our frontend so it can update its peer list
+                    let name = peer_info.name.clone();
+                    let ticket = peer_info.ticket.clone();
+                    tracing::info!(peer_id = %peer.0, peer_name = %peer_info.name, "Added peer from received peer list");
+                    let _ = state.broadcaster.send(
+                        Backend2FrontendMsg::NewPlayer(name)
+                    );
+                    // For all the peers in the list that aren't the one that just sent us the list,
+                    // update our remote_ticket so that we can attempt to connect to them if we aren't already connected
+                    if new_id != peer_id {
+                        state.remote_ticket.write().await.replace(ticket);
+                    }
                 }
             }
             tracing::info!("Peer list updated with new connections");
@@ -719,7 +737,6 @@ where
                 for peer in peers.iter_mut() {
                     if peer.1.ticket == state.ticket.read().await.clone().unwrap_or_default() {
                         peer.1.name = name.clone();
-                        tracing::info!("Updated our peer info with our assigned name");
                         break;
                     }
                 }
@@ -727,6 +744,12 @@ where
             let _ = state.broadcaster.send(
                 Backend2FrontendMsg::OurName(name)
             );
+            return Ok(true);
+        }
+        Ok(Peer2PeerMsg::LobbyAccept(max_players)) => {
+            tracing::info!(peer = %peer_id, "Peer accepted our connection; lobby max players: {}", max_players);
+            state.lobby.write().await.lobby_open = true;
+            state.lobby.write().await.max_players = max_players;
             return Ok(true);
         }
         Ok(Peer2PeerMsg::Reject(reason)) => {

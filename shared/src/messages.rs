@@ -60,6 +60,7 @@ pub enum Frontend2BackendMsg {
     LobbyClose,
     PlayerName(String),
     GetOurName,
+    Disconnect,
 }
 
 /// Messages that the server can send to clients
@@ -87,6 +88,7 @@ pub enum Peer2PeerMsg {
     Disconnect(String),
     Reject(String),
     Payload(String),
+    LobbyAccept(usize), // Number of max players in the lobby, and trigger to open lobby on the receiving peer
     Peers(HashMap<String, (String, String)>), // EndpointId (as string) -> Peer's Name and Ticket
     NewName(String),
 }

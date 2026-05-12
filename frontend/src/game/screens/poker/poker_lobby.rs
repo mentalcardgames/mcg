@@ -81,6 +81,8 @@ impl ScreenWidget for PokerLobbyScreen {
         // Disconnect when leaving this screen
         let msg = Frontend2BackendMsg::LobbyClose;
         self.web_socket_connection.send_msg(&msg);
+        let msg = Frontend2BackendMsg::Disconnect;
+        self.web_socket_connection.send_msg(&msg);
         self.web_socket_connection.close();
     }
 }
