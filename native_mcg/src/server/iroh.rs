@@ -23,7 +23,7 @@ use tokio::sync::broadcast;
 
 use crate::public::{path_for_config, PublicInfo};
 use crate::transport::{send_server_msg_to_writer, send_peer_msg_to_writer};
-use crate::server::state::{broadcast_state, AppState, subscribe_connection, PeerInfo};
+use crate::server::state::{broadcast_state, AppState, subscribe_connection, PeerInfo, broadcast_peer_msg};
 use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg, Peer2PeerMsg};
 
 /// Public entrypoint spawned by server startup
@@ -65,14 +65,6 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     println!("\x1b[1mNode ID:\x1b[0m {}", pk);
     println!("\x1b[1;32m===========================\x1b[0m\n");
 
-    //Add ourselves to the peer list w/ empty name, we update it later
-    {
-        let us = PeerInfo{
-            name: "".to_string(),
-            ourselves: true,
-        };
-        state.peers.write().await.insert(pk.clone(), us);
-    }
 
     // Keep structured info for debug mode
     let addr = endpoint.addr();
@@ -86,7 +78,16 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     let ticket_str = ticket.serialize();
     {
         let mut guard = state.ticket.write().await;
-        *guard = Some(ticket_str);
+        *guard = Some(ticket_str.clone());
+    }
+
+        //Add ourselves to the peer list w/ empty name, we update it later
+    {
+        let us = PeerInfo{
+            name: "".to_string(),
+            ticket: ticket_str.clone(),
+        };
+        state.peers.write().await.insert(pk.clone(), us);
     }
 
     let public_path = path_for_config(state.config_path.as_deref());
@@ -289,6 +290,8 @@ async fn manage_incoming_iroh_connection(
     tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
     let peer_id = connection.remote_id();
     let mut subscription: Option<broadcast::Receiver<Backend2FrontendMsg>> = None;
+    // Receiver for peer broadcasts
+    let mut peer_rx = state.peer_broadcaster.subscribe();
 
     let mut line = String::new();
     loop {
@@ -311,6 +314,18 @@ async fn manage_incoming_iroh_connection(
                         }
                     }
                 }
+                peer = peer_rx.recv() => {
+                    match peer {
+                        Ok(pm) => {
+                            if let Err(e) = send_peer_msg_to_writer(&mut send, &pm).await {
+                                tracing::error!(error = %e, "iroh send error while forwarding peer broadcast");
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    }
+                }
                 res = reader.read_line(&mut line) => {
                     match res {
                         Ok(0) => break,
@@ -327,17 +342,34 @@ async fn manage_incoming_iroh_connection(
                 }
             }
         } else {
-            match reader.read_line(&mut line).await {
-                Ok(0) => break,
-                Ok(_) => {
-                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(),peer_id.clone()).await?
-                    {
-                        break;
+            // subscription == None: still poll peer_rx so peer messages are forwarded
+            tokio::select! {
+                peer = peer_rx.recv() => {
+                    match peer {
+                        Ok(pm) => {
+                            if let Err(e) = send_peer_msg_to_writer(&mut send, &pm).await {
+                                tracing::error!(error = %e, "iroh send error while forwarding peer broadcast");
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(broadcast::error::RecvError::Closed) => break,
                     }
                 }
-                Err(e) => {
-                    tracing::error!(error = %e, "iroh read error");
-                    break;
+                res = reader.read_line(&mut line) => {
+                    match res {
+                        Ok(0) => break,
+                        Ok(_) => {
+                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(),peer_id.clone()).await?
+                            {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "iroh read error");
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -351,7 +383,6 @@ async fn manage_incoming_iroh_connection(
         let name_to_remove = {
             let peers = state.peers.read().await;
             peers.get(&peer_id)
-                .filter(|p| !p.ourselves)
                 .map(|p| p.name.clone())
         };
 
@@ -385,7 +416,11 @@ async fn manage_outgoing_iroh_connection(
         let lobby = state.lobby.read().await;
         lobby.our_name.clone()
     };
-    let msg = Peer2PeerMsg::Connect(name);
+    let ticket = {
+        let guard = state.ticket.read().await;
+        guard.clone()
+    };
+    let msg = Peer2PeerMsg::Connect(name, ticket);
 
     if let Err(e) = send_peer_msg_to_writer(
         &mut send,
@@ -396,6 +431,8 @@ async fn manage_outgoing_iroh_connection(
     tracing::info!("Sent connect message to peer");
 
     let mut subscription: Option<broadcast::Receiver<Backend2FrontendMsg>> = None;
+    // Receiver for peer broadcasts
+    let mut peer_rx = state.peer_broadcaster.subscribe();
 
     let mut line = String::new();
     loop {
@@ -418,6 +455,18 @@ async fn manage_outgoing_iroh_connection(
                         }
                     }
                 }
+                peer = peer_rx.recv() => {
+                    match peer {
+                        Ok(pm) => {
+                            if let Err(e) = send_peer_msg_to_writer(&mut send, &pm).await {
+                                tracing::error!(error = %e, "iroh send error while forwarding peer broadcast");
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    }
+                }
                 res = reader.read_line(&mut line) => {
                     match res {
                         Ok(0) => break,
@@ -434,17 +483,33 @@ async fn manage_outgoing_iroh_connection(
                 }
             }
         } else {
-            match reader.read_line(&mut line).await {
-                Ok(0) => break,
-                Ok(_) => {
-                    if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(),peer_id.clone()).await?
-                    {
-                        break;
+            // subscription == None: still poll peer_rx so peer messages are forwarded
+            tokio::select! {
+                peer = peer_rx.recv() => {
+                    match peer {
+                        Ok(pm) => {
+                            if let Err(e) = send_peer_msg_to_writer(&mut send, &pm).await {
+                                tracing::error!(error = %e, "iroh send error while forwarding peer broadcast");
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(broadcast::error::RecvError::Closed) => break,
                     }
                 }
-                Err(e) => {
-                    tracing::error!(error = %e, "iroh read error");
-                    break;
+                res = reader.read_line(&mut line) => {
+                    match res {
+                        Ok(0) => break,
+                        Ok(_) => {
+                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(),peer_id.clone()).await? {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "iroh read error");
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -455,11 +520,6 @@ async fn manage_outgoing_iroh_connection(
     // the accept side, but since i dont super get the architecture, better safe than sorry)
     {
         state.peers.write().await.remove(&peer_id);
-    }
-    // Try to notify the peer we are disconnecting
-    let our_name = state.lobby.read().await.our_name.clone();
-    if let Err(e) = send_peer_msg_to_writer(&mut send, &Peer2PeerMsg::Disconnect(our_name)).await {
-        tracing::warn!(error = %e, "failed to send peer Disconnect on incoming connection drop");
     }
     // Close the send side politely if available
     let _ = send.finish();
@@ -482,7 +542,7 @@ where
     }
 
     if let Ok(_peer_msg) = serde_json::from_str::<Peer2PeerMsg>(trimmed) {
-        return process_iroh_peer_line(state, send, subscription, trimmed, peer_id.clone()).await;
+        return process_iroh_peer_line(state, send, trimmed, peer_id.clone()).await;
     }
 
     match serde_json::from_str::<Frontend2BackendMsg>(trimmed) {
@@ -522,7 +582,6 @@ where
 async fn process_iroh_peer_line<W>(
     state: &AppState,
     send: &mut W,
-    subscription: &mut Option<broadcast::Receiver<Backend2FrontendMsg>>,
     trimmed: &str,
     peer_id: iroh::EndpointId,
 ) -> Result<bool>
@@ -534,7 +593,7 @@ where
     }
 
     match serde_json::from_str::<Peer2PeerMsg>(trimmed){
-        Ok(Peer2PeerMsg::Connect(name)) => {
+        Ok(Peer2PeerMsg::Connect(name, ticket)) => {
             tracing::info!(peer = %peer_id, "Peer requested connect with name '{}'", name);
             let mut name_clone = name.clone();
             let mut new_name = None;
@@ -595,22 +654,20 @@ where
                 // Tell the new peer about all the existing peers so they can populate their peer list
                 let peers_snapshot = state.peers.read().await.clone();
                 let msg = Peer2PeerMsg::Peers(
-                    peers_snapshot.into_iter().map(|(id, info)| (id.to_string(), info.name)).collect()
+                    peers_snapshot.into_iter().map(|(id, info)| (id.to_string(), (info.name, info.ticket))).collect()
                 );
                 send_peer_msg_to_writer(send, &msg).await?;
             }
             // Add the new player to our list of connected peers
             let peer = PeerInfo{
                 name: name_clone.clone(),
-                ourselves: false,
+                ticket: ticket.clone().unwrap_or_default(),
             };
             state.peers.write().await.insert(peer_id.clone(), peer);
             // Output how many peers are currently connected for debug purposes
             let current_players = state.peers.read().await.len();
             tracing::info!("Now at {}/{} players", current_players, max_players);
-            // Subscribe to state updates and broadcast the new player to the frontend
-            let sub = subscribe_connection(state).await;
-            *subscription = Some(sub.receiver);
+            // Broadcast the new player to our frontend
             let _ = state.broadcaster.send(
                 Backend2FrontendMsg::NewPlayer(name_clone.clone())
             );
@@ -641,10 +698,10 @@ where
 
                 if !map.contains_key(&new_id) {
                     let peer_info = PeerInfo {
-                        name: peer.1,
-                        ourselves: false,
+                        name: peer.1.0,
+                        ticket: peer.1.1,
                     };
-                    map.insert(new_id, peer_info);
+                    map.insert(new_id, peer_info.clone());
                 }
             }
             tracing::info!("Peer list updated with new connections");
@@ -652,16 +709,17 @@ where
         }
         Ok(Peer2PeerMsg::NewName(name)) => {
             // If we receive a new name, we set it
-            tracing::info!(peer = %peer_id, "Peer informed us of our assigned name: '{}'", name);
             {
                 state.lobby.write().await.our_name = name.clone();
             }
+            tracing::info!(peer = %peer_id, "Peer informed us of our assigned name: '{}'", name);
             // ... and also edit us in our peer list
             {
                 let mut peers = state.peers.write().await;
                 for peer in peers.iter_mut() {
-                    if peer.1.ourselves {
+                    if peer.1.ticket == state.ticket.read().await.clone().unwrap_or_default() {
                         peer.1.name = name.clone();
+                        tracing::info!("Updated our peer info with our assigned name");
                         break;
                     }
                 }
@@ -691,8 +749,6 @@ where
             return Ok(true);
         }
         Err(e) => {
-            let msg = Backend2FrontendMsg::Error(format!("Invalid JSON message: {}", e));
-            let _ = send_server_msg_to_writer(send, &msg).await;
             return Ok(true);
         }
     }

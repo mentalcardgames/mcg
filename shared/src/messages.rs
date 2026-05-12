@@ -83,10 +83,10 @@ pub enum Backend2FrontendMsg {
 pub enum Peer2PeerMsg {
     Ping,
     Pong,
-    Connect(String),
+    Connect(String, Option<String>),
     Disconnect(String),
     Reject(String),
     Payload(String),
-    Peers(HashMap<String, String>), // EndpointId (as string) -> Peer's Name
+    Peers(HashMap<String, (String, String)>), // EndpointId (as string) -> Peer's Name and Ticket
     NewName(String),
 }

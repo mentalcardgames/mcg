@@ -145,7 +145,9 @@ impl ScreenWidget for LobbySelectionScreen {
             self.web_socket_connection.send_msg(&msg);
             self.input.clear();
 
-        
+            //Currently hardcoded to go to the poker screen for testing, but in the future
+            //this should transition to a lobby screen based on the game type encoded in the QR code
+            app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/pokerlobby".to_string()));
         }
         // If we received a new name, update our name both here and
         // in the global state so it persists across screens

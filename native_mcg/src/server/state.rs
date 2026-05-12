@@ -24,6 +24,8 @@ pub const CHANNEL_BUFFER_SIZE: usize = 256;
 pub struct AppState {
     pub(crate) lobby: Arc<RwLock<Lobby>>,
     pub broadcaster: broadcast::Sender<mcg_shared::Backend2FrontendMsg>,
+    /// Broadcaster for sending messages to multiple peers at once
+    pub peer_broadcaster: broadcast::Sender<mcg_shared::Peer2PeerMsg>,
     /// In-memory shared Config instance. Holds the authoritative configuration
     /// for the running server. Use tokio::sync::RwLock for concurrent access.
     pub config: std::sync::Arc<RwLock<crate::config::Config>>,
@@ -40,9 +42,11 @@ impl AppState {
     // TODO: config path should not be optional
     pub fn new(config: crate::config::Config, config_path: Option<PathBuf>) -> Self {
         let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
+        let (p_tx, _p_rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
         Self {
             lobby: Arc::new(RwLock::new(Lobby::default())),
             broadcaster: tx,
+            peer_broadcaster: p_tx,
             config: std::sync::Arc::new(RwLock::new(config)),
             config_path,
             ticket: Arc::new(RwLock::new(None)),
@@ -55,14 +59,14 @@ impl AppState {
 #[derive(Clone)]
 pub struct PeerInfo {
     pub name: String,
-    pub ourselves: bool,
+    pub ticket: String,
 }
 
 impl Default for PeerInfo {
     fn default() -> Self {
         Self {
             name: String::new(),
-            ourselves: false,
+            ticket: String::new(),
         }
     }
 }
@@ -103,9 +107,11 @@ impl Default for Lobby {
 impl Default for AppState {
     fn default() -> Self {
         let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
+        let (p_tx, _p_rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
         AppState {
             lobby: Arc::new(RwLock::new(Lobby::default())),
             broadcaster: tx,
+            peer_broadcaster: p_tx,
             config: std::sync::Arc::new(RwLock::new(crate::config::Config::default())),
             config_path: None,
             ticket: Arc::new(RwLock::new(None)),
@@ -129,6 +135,13 @@ pub async fn subscribe_connection(state: &AppState) -> Subscription {
         receiver,
         initial_state,
     }
+}
+
+/// Broadcast a Peer2PeerMsg to all subscribers (transports).
+/// Transports must decide how to relay that to their connected peers and
+/// must avoid emitting the same message back into this function to prevent loops.
+pub fn broadcast_peer_msg(state: &AppState, msg: mcg_shared::Peer2PeerMsg) {
+    let _ = state.peer_broadcaster.send(msg);
 }
 
 /// Create a new game with the specified players.
@@ -458,13 +471,13 @@ pub async fn dispatch_client_message(
         }
         mcg_shared::Frontend2BackendMsg::PlayerName(name) => {
             let mut lobby = state.lobby.write().await;
-            lobby.our_name = name.clone();
             for peer in state.peers.write().await.values_mut() {
-                if peer.ourselves {
+                if peer.name == lobby.our_name {
                     peer.name = name.clone();
                     break;
                 }
             }
+            lobby.our_name = name.clone();
             tracing::info!("Player name set to {}", name);
             mcg_shared::Backend2FrontendMsg::Error(format!("Player name set to {}", name))
         }
