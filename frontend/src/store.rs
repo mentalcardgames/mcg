@@ -153,6 +153,7 @@ impl ClientState {
                 tracing::info!("Player name set to: {}", string);
             }
             Backend2FrontendMsg::RemovePlayer(_name) => {}
+            Backend2FrontendMsg::GameType(_game) => {}
         }
     }
 }

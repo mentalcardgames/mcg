@@ -56,8 +56,7 @@ pub enum Frontend2BackendMsg {
     GetTicket,
     GetIP,
     PlayerCount(usize),
-    LobbyOpen,
-    LobbyClose,
+    LobbyOpen(String),
     PlayerName(String),
     GetOurName,
     Disconnect,
@@ -76,6 +75,7 @@ pub enum Backend2FrontendMsg {
     NewPlayer(String),
     OurName(String),
     RemovePlayer(String),
+    GameType(String),
 }
 
 //Messages two peers send between eachother
@@ -88,7 +88,7 @@ pub enum Peer2PeerMsg {
     Disconnect(String),
     Reject(String),
     Payload(String),
-    LobbyAccept(usize), // Number of max players in the lobby, and trigger to open lobby on the receiving peer
+    LobbyAccept(usize, String), // Number of max players in the lobby, gametype, and trigger to open lobby on the receiving peer
     Peers(HashMap<String, (String, String)>), // EndpointId (as string) -> Peer's Name and Ticket
     NewName(String),
 }

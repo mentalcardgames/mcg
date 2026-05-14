@@ -27,7 +27,7 @@ impl PlayerManager {
             players: vec![
                 PlayerConfig {
                     id: mcg_shared::PlayerId(0),
-                    name: "You".to_string(),
+                    name: " ".to_string(),
                     is_bot: false,
                 },
             ],

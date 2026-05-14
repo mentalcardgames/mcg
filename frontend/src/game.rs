@@ -31,6 +31,7 @@ pub struct Settings {
 #[derive(PartialEq, Debug, Clone, Copy, Default)]
 pub enum GameType {
     #[default]
+    None,
     Poker,
     Blackjack,
     // Add more game types here
@@ -149,7 +150,7 @@ impl App {
                         |ui| {
                             ui.add_space(MARGIN_SM);
                             if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
-                                if self.current_screen_path == "/lobbyselect/pokerlobby"{
+                                if self.current_screen_path == "/lobbyselect/pokerlobby" || self.current_screen_path == "/lobbyselect/blackjacklobby" {
                                     events.push(AppEvent::ChangeRoute("/lobbyselect".to_string()));
                                 }
                                 else{

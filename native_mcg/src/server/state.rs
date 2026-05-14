@@ -83,10 +83,12 @@ pub struct Lobby {
 
     //Variables used for managing connections to the lobby and enforcing max player count
     //I don't know if these even belong here, or if they are needed at all, but It saves
-    //me a lot of work. If needed, we can move them later, but for now they are here and they work.
+    //me a lot of work. If needed, we can remove some later.
     pub(crate) max_players: usize,
     pub(crate) lobby_open: bool,
     pub(crate) our_name: String,
+    pub(crate) game_type: String,
+    pub(crate) game_running: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -100,6 +102,8 @@ impl Default for Lobby {
             max_players: 2,
             lobby_open: false,
             our_name: String::new(),
+            game_type: String::new(),
+            game_running: false,
         }
     }
 }
@@ -419,7 +423,10 @@ pub async fn dispatch_client_message(
             mcg_shared::Backend2FrontendMsg::Pong
         }
         mcg_shared::Frontend2BackendMsg::NextHand => advance_to_next_hand(state).await,
-        mcg_shared::Frontend2BackendMsg::NewGame { players } => create_game_session(state, players).await,
+        mcg_shared::Frontend2BackendMsg::NewGame { players } => {
+            state.lobby.write().await.game_running = true;
+            create_game_session(state, players).await
+        }
         mcg_shared::Frontend2BackendMsg::PushState { state: game_state } => {
             import_game_state(state, game_state).await
         }
@@ -457,17 +464,12 @@ pub async fn dispatch_client_message(
             tracing::info!("Max player count set to {}", count);
             mcg_shared::Backend2FrontendMsg::Error(format!("Max player count set to {}", count))
         }
-        mcg_shared::Frontend2BackendMsg::LobbyOpen => {
+        mcg_shared::Frontend2BackendMsg::LobbyOpen(game_type) => {
             let mut lobby = state.lobby.write().await;
             lobby.lobby_open = true;
-            tracing::info!("Lobby opened.");
+            lobby.game_type = game_type.clone();
+            tracing::info!("Lobby opened for game type: {}", game_type);
             mcg_shared::Backend2FrontendMsg::Error(format!("Lobby is now open"))
-        }
-        mcg_shared::Frontend2BackendMsg::LobbyClose => {
-            let mut lobby = state.lobby.write().await;
-            lobby.lobby_open = false;
-            tracing::info!("Lobby closed.");
-            mcg_shared::Backend2FrontendMsg::Error(format!("Lobby is now closed"))
         }
         mcg_shared::Frontend2BackendMsg::PlayerName(name) => {
             let mut lobby = state.lobby.write().await;
@@ -488,8 +490,17 @@ pub async fn dispatch_client_message(
         }
         mcg_shared::Frontend2BackendMsg::Disconnect => {
             tracing::info!("Received disconnect message from client");
+            {
             let msg = mcg_shared::Peer2PeerMsg::Disconnect(state.lobby.read().await.our_name.clone());
             broadcast_peer_msg(state, msg);
+            }
+
+            let mut lobby = state.lobby.write().await;
+            lobby.lobby_open = false;
+            lobby.game_running = false;
+            lobby.game_type = String::new();
+            tracing::info!("Lobby closed.");
+
             mcg_shared::Backend2FrontendMsg::Error("Goodbye".into())
         }
     }

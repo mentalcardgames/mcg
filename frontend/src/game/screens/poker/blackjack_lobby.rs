@@ -10,14 +10,18 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use super::player_manager::PlayerManager;
 
+// Dummy file which shares the exact same code as the poker lobby, used solely for testing.
+// In the future, if we add other games, we would move it to it to a proper blackjack folder/module,
+// and add blackjack-specific logic to it. For now, it's just a copy of the poker lobby with the name changed.
+
 #[derive(Default)]
-pub struct PokerLobbyScreen {
+pub struct BlackjackLobbyScreen {
     web_socket_connection: WebSocketConnection,
     qr_payload: Rc<RefCell<Option<String>>>,
     player_manager: Rc<RefCell<PlayerManager>>,
 }
 
-impl ScreenWidget for PokerLobbyScreen {
+impl ScreenWidget for BlackjackLobbyScreen {
     fn ui(
         &mut self,
         app_interface: &mut AppInterface,
@@ -40,7 +44,7 @@ impl ScreenWidget for PokerLobbyScreen {
             }
         }
 
-        ui.heading("Poker Lobby");
+        ui.heading("Blackjack Lobby");
         ui.add_space(12.0);
         ui.group(|ui| {
             ui.label(RichText::new("Current Players:").strong());
@@ -85,16 +89,16 @@ impl ScreenWidget for PokerLobbyScreen {
     }
 }
 
-impl ScreenDef for PokerLobbyScreen {
+impl ScreenDef for BlackjackLobbyScreen {
     fn metadata() -> ScreenMetadata
     where
         Self: Sized,
     {
         ScreenMetadata {
-            path: "/lobbyselect/pokerlobby",
-            display_name: "Poker Lobby",
+            path: "/lobbyselect/blackjacklobby",
+            display_name: "Blackjack Lobby",
             icon: "🂱",
-            description: "Lobby for online Poker",
+            description: "Lobby for online Blackjack",
             show_in_menu: false,
         }
     }
@@ -150,7 +154,7 @@ impl ScreenDef for PokerLobbyScreen {
         let mut players = Vec::new();
         let p = PlayerConfig {
             id: PlayerId::from(1337),
-            name: "Poker_Lobby".to_string(),
+            name: "Blackjack_Lobby".to_string(),
             is_bot: false,
         };
         players.push(p);

@@ -598,14 +598,15 @@ where
             let mut name_clone = name.clone();
             let mut new_name = None;
             // Check if the lobby is open and has room for more players before accepting the connection
-            let (should_reject, lobby_open, _current_players, max_players) = {
+            let (should_reject, lobby_open, _current_players, max_players, game_running) = {
                 let lobby = state.lobby.read().await;
                 let peers = state.peers.read().await;
                 (
-                    !lobby.lobby_open || peers.len() >= lobby.max_players,
+                    !lobby.lobby_open || peers.len() >= lobby.max_players || lobby.game_running,
                     lobby.lobby_open,
                     peers.len(),
                     lobby.max_players,
+                    lobby.game_running,
                 )
             };
             // If we should reject the connection, send a Reject message and return false to disconnect
@@ -613,6 +614,8 @@ where
                 let msg = Peer2PeerMsg::Reject(
                     if !lobby_open {
                         "Lobby is closed".into()
+                    } else if game_running {
+                        "Game is already running, wait until it finishes and try again".into()
                     } else {
                         "Lobby is full".into()
                     },
@@ -621,9 +624,10 @@ where
                 send_peer_msg_to_writer(send, &msg).await?;
                 return Ok(false);
             }
-            // Tell the peer they are now in the lobby, and what the max player count is
+            // Tell the peer they are now in the lobby, and what the max player count and game type is
             {
-                let msg = Peer2PeerMsg::LobbyAccept(max_players);
+                let lobby = state.lobby.read().await;
+                let msg = Peer2PeerMsg::LobbyAccept(max_players, lobby.game_type.clone());
                 send_peer_msg_to_writer(send, &msg).await?;
             }
             {
@@ -746,10 +750,16 @@ where
             );
             return Ok(true);
         }
-        Ok(Peer2PeerMsg::LobbyAccept(max_players)) => {
-            tracing::info!(peer = %peer_id, "Peer accepted our connection; lobby max players: {}", max_players);
-            state.lobby.write().await.lobby_open = true;
-            state.lobby.write().await.max_players = max_players;
+        Ok(Peer2PeerMsg::LobbyAccept(max_players, game_type)) => {
+            tracing::info!(peer = %peer_id, "Peer accepted our connection; lobby max players: {}, game type: {}", max_players, game_type);
+            let mut lobby = state.lobby.write().await;
+            lobby.lobby_open = true;
+            lobby.max_players = max_players;
+            lobby.game_type = game_type;
+
+            let _ = state.broadcaster.send(
+                Backend2FrontendMsg::GameType(lobby.game_type.clone())
+            );
             return Ok(true);
         }
         Ok(Peer2PeerMsg::Reject(reason)) => {
@@ -772,6 +782,7 @@ where
             return Ok(true);
         }
         Err(e) => {
+            tracing::error!(error = %e, "Failed to deserialize peer message");
             return Ok(true);
         }
     }

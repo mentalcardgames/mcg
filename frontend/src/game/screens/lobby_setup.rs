@@ -14,6 +14,7 @@ use crate::qr_scanner::QrScannerPopup;
 pub struct LobbySelectionScreen {
     pub players: usize,
     pub game_type: GameType,
+    game_type_storage: Rc<RefCell<GameType>>,
     input: String,
     scanner: QrScannerPopup,
     web_socket_connection: WebSocketConnection,
@@ -28,6 +29,7 @@ impl Default for LobbySelectionScreen {
         Self {
             players: 2,
             game_type: GameType::default(),
+            game_type_storage: Rc::new(RefCell::new(GameType::default())),
             input: String::new(),
             scanner: QrScannerPopup::default(),
             web_socket_connection: WebSocketConnection::default(),
@@ -46,6 +48,14 @@ impl ScreenWidget for LobbySelectionScreen {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
+        // Get gametype from backend if it was sent, and update local gametype to match   
+        if let Ok(gt_ref) = self.game_type_storage.try_borrow() {
+            let server_gt = *gt_ref;
+            if server_gt != self.game_type {
+                self.game_type = server_gt;
+            }
+        }
+
         let before = self.game_type;
         // If user set a name in the previous screen, apply it to the local player entry once.
         if !self.initialized {
@@ -70,12 +80,14 @@ impl ScreenWidget for LobbySelectionScreen {
                 self.players = match self.game_type {
                     GameType::Poker => 2,
                     GameType::Blackjack => 2,
+                    GameType::None => 0,
                 };
             }
         // Define valid player counts based on selected game
             let valid_counts: &[usize] = match self.game_type {
                 GameType::Poker => &[2, 4, 8],
                 GameType::Blackjack => &[2, 3, 4],
+                GameType::None => &[],
             };
         // --- Second dropdown: Players ---
             ComboBox::from_label("Select Player Count")
@@ -103,24 +115,27 @@ impl ScreenWidget for LobbySelectionScreen {
             self.web_socket_connection.send_msg(&msg);
             let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
             self.web_socket_connection.send_msg(&msg);
-            let msg = Frontend2BackendMsg::LobbyOpen;
-            self.web_socket_connection.send_msg(&msg);
             // Persist chosen name into global client state prior to join
             app_interface.state().settings.name = self.player_name.clone();
             match self.game_type {
                 GameType::Poker => {
                     // Transition to poker lobby setup
                     eprintln!("Hosting Poker game with max {} players", self.players);
-                    //TODO: Make a new poker screen that takes players as a param and transitions to it here
-                    //based on the PokerOnlineScreen with the QR code generation thing? To use later when I
-                    //add the actual online multiplayer functionality
+                    let msg = Frontend2BackendMsg::LobbyOpen("Poker".to_string());
+                    self.web_socket_connection.send_msg(&msg);
                     app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/pokerlobby".to_string()));
                 }
                 GameType::Blackjack => {
                     // Transition to blackjack lobby setup
                     eprintln!("Hosting Blackjack game with max {} players", self.players);
                     // We dont have blackjack implemented, so this is just a dummy for testing's sake.
-                    // In the future, this would change to a screen like the Poker one.
+                    let msg = Frontend2BackendMsg::LobbyOpen("Blackjack".to_string());
+                    self.web_socket_connection.send_msg(&msg);
+                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/blackjacklobby".to_string()));
+                }
+                GameType::None => {
+                    // This should never happen since the dropdown forces a valid game selection, but handle it just in case
+                    eprintln!("Error: Tried to host game with no game type selected");
                 }
             }
         }
@@ -145,9 +160,23 @@ impl ScreenWidget for LobbySelectionScreen {
             self.web_socket_connection.send_msg(&msg);
             self.input.clear();
 
-            //Currently hardcoded to go to the poker screen for testing, but in the future
-            //this should transition to a lobby screen based on the game type encoded in the QR code
-            app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/pokerlobby".to_string()));
+            match self.game_type {
+                GameType::Poker => {
+                    // Transition to poker lobby setup
+                    eprintln!("Joining Poker game with name {}", self.player_name);
+                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/pokerlobby".to_string()));
+                }
+                GameType::Blackjack => {
+                    // Transition to blackjack lobby setup
+                    eprintln!("Joining Blackjack game with name {}", self.player_name);
+                    // We dont have blackjack implemented, so this is just a dummy screen for testing's sake.
+                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/blackjacklobby".to_string()));
+                }
+                GameType::None => {
+                    // This should never happen since we should get a valid game selection, but handle it just in case
+                    eprintln!("Error: Tried to join game with no game type selected");
+                }
+            }
         }
         // If we received a new name, update our name both here and
         // in the global state so it persists across screens
@@ -195,6 +224,7 @@ impl ScreenDef for LobbySelectionScreen {
     {
         let mut me = Self::default();
         let name_storage = me.name_storage.clone();
+        let game_type_storage = me.game_type_storage.clone();
         let on_msg = move |x| match x {
             Backend2FrontendMsg::State(s) => {
                 sprintln!("Got a message state:\n\t- {:?}", s);
@@ -223,6 +253,21 @@ impl ScreenDef for LobbySelectionScreen {
             }
             Backend2FrontendMsg::RemovePlayer(_name) => {
                 sprintln!("Got a remove player message");
+            }
+            Backend2FrontendMsg::GameType(game) => {
+                match game.as_str() {
+                    "Poker" => {
+                        sprintln!("Server indicated game type Poker");
+                        *game_type_storage.borrow_mut() = GameType::Poker;
+                    }
+                    "Blackjack" => {
+                        sprintln!("Server indicated game type Blackjack");
+                        *game_type_storage.borrow_mut() = GameType::Blackjack;
+                    }
+                    _ => {
+                        sprintln!("Server indicated unknown game type: {}", game);
+                    }
+                }
             }
         };
         let on_err = |e| {

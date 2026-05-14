@@ -122,6 +122,9 @@ impl ScreenDef for QrScreen {
             Backend2FrontendMsg::RemovePlayer(_name) => {
                 sprintln!("Got a remove player message");
             }
+            Backend2FrontendMsg::GameType(_game) => {
+                sprintln!("Got a game type message");
+            }
         };
         let on_err = |e| {
             sprintln!("Got an error:\n\t- {:?}", e);
