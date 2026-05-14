@@ -424,7 +424,6 @@ pub async fn dispatch_client_message(
         }
         mcg_shared::Frontend2BackendMsg::NextHand => advance_to_next_hand(state).await,
         mcg_shared::Frontend2BackendMsg::NewGame { players } => {
-            state.lobby.write().await.game_running = true;
             create_game_session(state, players).await
         }
         mcg_shared::Frontend2BackendMsg::PushState { state: game_state } => {
