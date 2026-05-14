@@ -31,7 +31,6 @@ pub struct Settings {
 #[derive(PartialEq, Debug, Clone, Copy, Default)]
 pub enum GameType {
     #[default]
-    None,
     Poker,
     Blackjack,
     // Add more game types here
