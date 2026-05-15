@@ -137,9 +137,6 @@ impl ScreenDef for PokerLobbyScreen {
                 sprintln!("Got a remove player message for: {}", name);
                 pm.borrow_mut().remove_player(&name);
             }
-            Backend2FrontendMsg::GameType(_game) => {
-                sprintln!("Got a game type message");
-            }
         };
         let on_err = |e| {
             sprintln!("Got an error:\n\t- {:?}", e);

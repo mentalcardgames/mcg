@@ -75,7 +75,6 @@ pub enum Backend2FrontendMsg {
     NewPlayer(String),
     OurName(String),
     RemovePlayer(String),
-    GameType(String),
 }
 
 //Messages two peers send between eachother

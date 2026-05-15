@@ -149,7 +149,7 @@ impl App {
                         |ui| {
                             ui.add_space(MARGIN_SM);
                             if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
-                                if self.current_screen_path == "/lobbyselect/pokerlobby" || self.current_screen_path == "/lobbyselect/blackjacklobby" {
+                                if self.current_screen_path.starts_with("/lobbyselect/") {
                                     events.push(AppEvent::ChangeRoute("/lobbyselect".to_string()));
                                 }
                                 else{

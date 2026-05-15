@@ -26,7 +26,6 @@ pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
 pub use lobby_setup::LobbySelectionScreen;
 pub use poker::PokerLobbyScreen;
-pub use poker::BlackjackLobbyScreen;
 
 pub struct AppInterface<'a> {
     pub events: &'a mut Vec<crate::game::AppEvent>,
@@ -116,7 +115,6 @@ impl ScreenRegistry {
         reg.register::<ExampleScreen>();
         reg.register::<LobbySelectionScreen>();
         reg.register::<PokerLobbyScreen>();
-        reg.register::<BlackjackLobbyScreen>();
         reg
     }
 

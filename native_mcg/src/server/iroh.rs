@@ -756,10 +756,6 @@ where
             lobby.lobby_open = true;
             lobby.max_players = max_players;
             lobby.game_type = game_type;
-
-            let _ = state.broadcaster.send(
-                Backend2FrontendMsg::GameType(lobby.game_type.clone())
-            );
             return Ok(true);
         }
         Ok(Peer2PeerMsg::Reject(reason)) => {
