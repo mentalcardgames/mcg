@@ -112,7 +112,7 @@ impl ScreenWidget for LobbySelectionScreen {
                     eprintln!("Hosting Poker game with max {} players", self.players);
                     let msg = Frontend2BackendMsg::LobbyOpen("Poker".to_string());
                     self.web_socket_connection.send_msg(&msg);
-                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/pokerlobby".to_string()));
+                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/lobby".to_string()));
                 }
                 GameType::Blackjack => {
                     // Transition to blackjack lobby setup
@@ -143,7 +143,7 @@ impl ScreenWidget for LobbySelectionScreen {
             self.input.clear();
 
             // Switch to the next screen, only "Poker" for now
-            app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/pokerlobby".to_string()));
+            app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/lobby".to_string()));
         }
         // If we received a new name, update our name both here and
         // in the global state so it persists across screens
