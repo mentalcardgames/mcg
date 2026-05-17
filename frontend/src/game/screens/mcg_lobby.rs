@@ -1,23 +1,32 @@
 use crate::game::{AppInterface, ScreenWidget};
-use crate::game::screens::{ScreenDef, ScreenMetadata};
+use super::{ScreenDef, ScreenMetadata};
 use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions, RichText};
 use image::{ImageBuffer, Luma};
 use crate::game::websocket::WebSocketConnection;
-use mcg_shared::{Frontend2BackendMsg, PlayerConfig, PlayerId, Backend2FrontendMsg};
+use mcg_shared::{Frontend2BackendMsg, PlayerConfig, Backend2FrontendMsg};
 use crate::sprintln;
 use qrcode::QrCode;
 use std::cell::RefCell;
 use std::rc::Rc;
-use super::player_manager::PlayerManager;
 
-#[derive(Default)]
-pub struct PokerLobbyScreen {
+pub struct LobbyScreen {
     web_socket_connection: WebSocketConnection,
     qr_payload: Rc<RefCell<Option<String>>>,
-    player_manager: Rc<RefCell<PlayerManager>>,
+    player_names: Rc<RefCell<Vec<String>>>,
 }
 
-impl ScreenWidget for PokerLobbyScreen {
+impl Default for LobbyScreen {
+    fn default() -> Self {
+        let initial_names: Vec<String> = Vec::new(); // start empty, will push local name once
+        Self {
+            web_socket_connection: WebSocketConnection::default(),
+            qr_payload: Rc::new(RefCell::new(None)),
+            player_names: Rc::new(RefCell::new(initial_names)),
+        }
+    }
+}
+
+impl ScreenWidget for LobbyScreen {
     fn ui(
         &mut self,
         app_interface: &mut AppInterface,
@@ -27,25 +36,19 @@ impl ScreenWidget for PokerLobbyScreen {
         // If user set a name in the previous screen, apply it to the local player entry once.
         let chosen_name = app_interface.state().settings.name.clone();
         if !chosen_name.is_empty() {
-            // Inspect first player name (borrow immutably)
-            {
-                let pm_ref = self.player_manager.borrow();
-                if let Some(first) = pm_ref.get_players().first() {
-                    if first.name == " " && chosen_name != " " {
-                        drop(pm_ref);
-                        // rename the first player to the chosen name
-                        self.player_manager.borrow_mut().rename_player(PlayerId::from(0), chosen_name.clone());
-                    }
-                }
+            // Only add the chosen name once at the start if the list is currently empty
+            let mut names_b = self.player_names.borrow_mut();
+            if names_b.is_empty(){
+                names_b.insert(0, chosen_name.clone());
             }
         }
 
-        ui.heading("Poker Lobby");
+        ui.heading("Card Game Lobby");
         ui.add_space(12.0);
         ui.group(|ui| {
             ui.label(RichText::new("Current Players:").strong());
-            for player in self.player_manager.borrow().get_players() {
-                ui.label(&player.name);
+            for name in self.player_names.borrow().iter() {
+                ui.label(name);
             }
         });
         ui.add_space(12.0);
@@ -77,6 +80,7 @@ impl ScreenWidget for PokerLobbyScreen {
             }
         }
     }
+
     fn on_exit(&mut self, _app_interface: &mut AppInterface) {
         // Disconnect when leaving this screen
         let msg = Frontend2BackendMsg::Disconnect;
@@ -85,16 +89,16 @@ impl ScreenWidget for PokerLobbyScreen {
     }
 }
 
-impl ScreenDef for PokerLobbyScreen {
+impl ScreenDef for LobbyScreen {
     fn metadata() -> ScreenMetadata
     where
         Self: Sized,
     {
         ScreenMetadata {
-            path: "/lobbyselect/pokerlobby",
-            display_name: "Poker Lobby",
+            path: "/lobbyselect/lobby",
+            display_name: "Card Game Lobby",
             icon: "🂱",
-            description: "Lobby for online Poker",
+            description: "Lobby for online card games",
             show_in_menu: false,
         }
     }
@@ -105,7 +109,8 @@ impl ScreenDef for PokerLobbyScreen {
     {
         let mut me = Self::default();
         let payload = me.qr_payload.clone();
-        let pm = me.player_manager.clone();
+        let names = me.player_names.clone();
+
         let on_msg = move |x| match x {
             Backend2FrontendMsg::State(s) => {
                 sprintln!("Got a message state:\n\t- {:?}", s);
@@ -126,16 +131,16 @@ impl ScreenDef for PokerLobbyScreen {
             }
             Backend2FrontendMsg::QrRes(_) => {
                 todo!("Handle QR result from server");
-            }   
+            }
             Backend2FrontendMsg::NewPlayer(name) => {
-                pm.borrow_mut().handle_named_player(name);
+                names.borrow_mut().push(name);
             }
             Backend2FrontendMsg::OurName(name) => {
                 tracing::info!("Player name received: {}", name);
             }
             Backend2FrontendMsg::RemovePlayer(name) => {
                 sprintln!("Got a remove player message for: {}", name);
-                pm.borrow_mut().remove_player(&name);
+                names.borrow_mut().retain(|n| n != &name);
             }
         };
         let on_err = |e| {
@@ -144,10 +149,13 @@ impl ScreenDef for PokerLobbyScreen {
         let on_cls = |c| {
             sprintln!("Got a close:\n\t- {:?}", c);
         };
+
+        // initial connection data still uses PlayerConfig for the websocket API,
+        // but internal state keeps only names.
         let mut players = Vec::new();
         let p = PlayerConfig {
-            id: PlayerId::from(1337),
-            name: "Poker_Lobby".to_string(),
+            id: mcg_shared::PlayerId::from(1337),
+            name: "Lobby".to_string(),
             is_bot: false,
         };
         players.push(p);

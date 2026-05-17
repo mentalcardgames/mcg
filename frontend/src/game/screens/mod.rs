@@ -7,6 +7,7 @@ pub mod game_setup_screen;
 pub mod main_menu;
 pub mod pairing_screen;
 pub mod lobby_setup;
+pub mod mcg_lobby;
 
 pub mod poker;
 pub mod qr_test;
@@ -25,7 +26,7 @@ pub use pairing_screen::PairingScreen;
 pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
 pub use lobby_setup::LobbySelectionScreen;
-pub use poker::PokerLobbyScreen;
+pub use mcg_lobby::LobbyScreen;
 
 pub struct AppInterface<'a> {
     pub events: &'a mut Vec<crate::game::AppEvent>,
@@ -114,7 +115,7 @@ impl ScreenRegistry {
         reg.register::<PokerOnlineScreen>();
         reg.register::<ExampleScreen>();
         reg.register::<LobbySelectionScreen>();
-        reg.register::<PokerLobbyScreen>();
+        reg.register::<LobbyScreen>();
         reg
     }
 
