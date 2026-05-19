@@ -502,6 +502,12 @@ pub async fn dispatch_client_message(
 
             mcg_shared::Backend2FrontendMsg::Error("Goodbye".into())
         }
+        mcg_shared::Frontend2BackendMsg::ReadyUpdate(ready) => {
+            let lobby = state.lobby.read().await;
+            let msg = mcg_shared::Peer2PeerMsg::PeerReady(lobby.our_name.clone(), ready);
+            broadcast_peer_msg(state, msg);
+            mcg_shared::Backend2FrontendMsg::Error(format!("Ready status updated: {}", ready))
+        }
     }
 }
 

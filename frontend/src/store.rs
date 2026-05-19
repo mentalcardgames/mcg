@@ -143,16 +143,10 @@ impl ClientState {
             Backend2FrontendMsg::Error(e) => {
                 self.ui.last_error = Some(e.clone());
             }
-            Backend2FrontendMsg::Pong => {}
-            Backend2FrontendMsg::TicketValue(_string) => {}
-            Backend2FrontendMsg::IPValue(_string) => {}
-            Backend2FrontendMsg::QrRes(_content) => {}
-            Backend2FrontendMsg::NewPlayer(_string) => {}
             Backend2FrontendMsg::OurName(string) => {
                 self.settings.name = string.clone();
-                tracing::info!("Player name set to: {}", string);
             }
-            Backend2FrontendMsg::RemovePlayer(_name) => {}
+            _ => {}
         }
     }
 }

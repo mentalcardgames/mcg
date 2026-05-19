@@ -12,16 +12,15 @@ use std::rc::Rc;
 pub struct LobbyScreen {
     web_socket_connection: WebSocketConnection,
     qr_payload: Rc<RefCell<Option<String>>>,
-    player_names: Rc<RefCell<Vec<String>>>,
+    players: Rc<RefCell<Vec<(String, bool)>>>, // (name, ready)
 }
 
 impl Default for LobbyScreen {
     fn default() -> Self {
-        let initial_names: Vec<String> = Vec::new(); // start empty, will push local name once
         Self {
             web_socket_connection: WebSocketConnection::default(),
             qr_payload: Rc::new(RefCell::new(None)),
-            player_names: Rc::new(RefCell::new(initial_names)),
+            players: Rc::new(RefCell::new(Vec::new())),
         }
     }
 }
@@ -37,9 +36,10 @@ impl ScreenWidget for LobbyScreen {
         let chosen_name = app_interface.state().settings.name.clone();
         if !chosen_name.is_empty() {
             // Only add the chosen name once at the start if the list is currently empty
-            let mut names_b = self.player_names.borrow_mut();
-            if names_b.is_empty(){
-                names_b.insert(0, chosen_name.clone());
+            let mut players_b = self.players.borrow_mut();
+
+            if players_b.is_empty() {
+                players_b.push((chosen_name.clone(), false));
             }
         }
 
@@ -47,14 +47,58 @@ impl ScreenWidget for LobbyScreen {
         ui.add_space(12.0);
         ui.group(|ui| {
             ui.label(RichText::new("Current Players:").strong());
-            for name in self.player_names.borrow().iter() {
-                ui.label(name);
+
+            for (name, ready) in self.players.borrow().iter() {
+                ui.horizontal(|ui| {
+                    ui.label(name);
+                    ui.label(
+                        if *ready {
+                            RichText::new("Ready").color(egui::Color32::GREEN)
+                        } else {
+                            RichText::new("Not Ready").color(egui::Color32::RED)
+                        }
+                    );
+                });
             }
         });
+        ui.add_space(12.0);
+        {
+            let is_ready = self.players
+                .borrow()
+                .iter()
+                .find(|(name, _)| *name == chosen_name)
+                .map(|(_, ready)| *ready)
+                .unwrap_or(false);
+            if ui.button(if is_ready { "Unready" } else { "Ready Up" }).clicked() {
+                // Toggle ready state for the local player
+                let mut players_b = self.players.borrow_mut();
+                if let Some((_, ready)) = players_b.iter_mut().find(|(name, _)| *name == chosen_name) {
+                    *ready = !*ready;
+                    // Send ready state to backend so we can tell the other players
+                    let msg = Frontend2BackendMsg::ReadyUpdate(*ready);
+                    self.web_socket_connection.send_msg(&msg);
+                }
+            }
+        }
         ui.add_space(12.0);
         if ui.button("Start Game").clicked() {
             //TODO
         }
+        if self.players.borrow().len() < 2 {
+            // Not enough players to start
+            ui.add_space(4.0);
+            ui.label(RichText::new("Need at least 2 players to start!").color(egui::Color32::RED));
+        }
+        else if self.players.borrow().iter().any(|(_, ready)| !*ready) {
+            // Not all players are ready
+            ui.add_space(4.0);
+            ui.label(RichText::new("Waiting for all players to be ready...").color(egui::Color32::YELLOW));
+        }
+        else {
+            // All players are ready, can start the game
+            ui.add_space(4.0);
+            ui.label(RichText::new("All players are ready! You can start the game.").color(egui::Color32::GREEN));
+        }}
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             if ui.button("Generate QR Code and let others scan it to join!").clicked() {
@@ -109,18 +153,9 @@ impl ScreenDef for LobbyScreen {
     {
         let mut me = Self::default();
         let payload = me.qr_payload.clone();
-        let names = me.player_names.clone();
+        let players = me.players.clone();
 
         let on_msg = move |x| match x {
-            Backend2FrontendMsg::State(s) => {
-                sprintln!("Got a message state:\n\t- {:?}", s);
-            }
-            Backend2FrontendMsg::Error(e) => {
-                sprintln!("Got a message error:\n\t- {:?}", e);
-            }
-            Backend2FrontendMsg::Pong => {
-                sprintln!("Got a pong message");
-            }
             Backend2FrontendMsg::TicketValue(ticket) => {
                 sprintln!("Got a ticket value:\n\t- {:?}", ticket);
                 *payload.borrow_mut() = Some(ticket);
@@ -129,18 +164,23 @@ impl ScreenDef for LobbyScreen {
                 sprintln!("Got an IP value:\n\t- {:?}", ip);
                 *payload.borrow_mut() = Some(ip);
             }
-            Backend2FrontendMsg::QrRes(_) => {
-                todo!("Handle QR result from server");
-            }
             Backend2FrontendMsg::NewPlayer(name) => {
-                names.borrow_mut().push(name);
-            }
-            Backend2FrontendMsg::OurName(name) => {
-                tracing::info!("Player name received: {}", name);
+                players.borrow_mut().push((name, false));
             }
             Backend2FrontendMsg::RemovePlayer(name) => {
                 sprintln!("Got a remove player message for: {}", name);
-                names.borrow_mut().retain(|n| n != &name);
+                players
+                .borrow_mut()
+                .retain(|(n, _)| n != &name);
+            }
+            Backend2FrontendMsg::PlayerReady(name, ready) => {
+                sprintln!("Got a ready update for player {}: {}", name, ready);
+                if let Some((_, r)) = players.borrow_mut().iter_mut().find(|(n, _)| n == &name) {
+                    *r = ready;
+                }
+            }
+            _ => {
+                sprintln!("Got an unhandled message:\n\t- {:?}", x);
             }
         };
         let on_err = |e| {

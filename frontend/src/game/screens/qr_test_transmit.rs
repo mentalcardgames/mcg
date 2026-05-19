@@ -155,12 +155,6 @@ impl ScreenDef for QrTestTransmit {
         me.file_list.push(String::from("dataset-card.png"));
         let epoch_copy = me.epoch.clone();
         let on_msg = move |x| match x {
-            Backend2FrontendMsg::State(s) => {
-                sprintln!("Got a message state:\n\t- {:?}", s);
-            }
-            Backend2FrontendMsg::Error(e) => {
-                sprintln!("Got a message error:\n\t- {:?}", e);
-            }
             Backend2FrontendMsg::QrRes(content) => {
                 let s = String::from_utf8_lossy(&content);
                 sprintln!("Got a response:\n\t- {:?}", s);
@@ -171,23 +165,8 @@ impl ScreenDef for QrTestTransmit {
                     epoch.header.participant %= MAX_PARTICIPANTS as u8;
                 }
             }
-            Backend2FrontendMsg::Pong => {
-                sprintln!("Got a pong");
-            }
-            Backend2FrontendMsg::TicketValue(ticket) => {
-                sprintln!("Got a ticket value:\n\t- {:?}", ticket);
-            }
-            Backend2FrontendMsg::IPValue(ip) => {
-                sprintln!("Got an IP value:\n\t- {:?}", ip);
-            }
-            Backend2FrontendMsg::NewPlayer(_name) => {
-                sprintln!("Got a new player message");
-            }
-            Backend2FrontendMsg::OurName(name) => {
-                sprintln!("Got our name:\n\t- {:?}", name);
-            }
-            Backend2FrontendMsg::RemovePlayer(_name) => {
-                sprintln!("Got a remove player message");
+            _ => {
+                sprintln!("Got an unhandled message:\n\t- {:?}", x);
             }
         };
         let on_err = |e| {

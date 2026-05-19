@@ -192,33 +192,12 @@ impl ScreenDef for LobbySelectionScreen {
         let mut me = Self::default();
         let name_storage = me.name_storage.clone();
         let on_msg = move |x| match x {
-            Backend2FrontendMsg::State(s) => {
-                sprintln!("Got a message state:\n\t- {:?}", s);
-            }
-            Backend2FrontendMsg::Error(e) => {
-                sprintln!("Got a message error:\n\t- {:?}", e);
-            }
-            Backend2FrontendMsg::Pong => {
-                sprintln!("Got a pong message");
-            }
-            Backend2FrontendMsg::TicketValue(ticket) => {
-                sprintln!("Got a ticket value:\n\t- {:?}", ticket);
-            }
-            Backend2FrontendMsg::IPValue(ip) => {
-                sprintln!("Got an IP value:\n\t- {:?}", ip);
-            }
-            Backend2FrontendMsg::QrRes(_) => {
-                todo!("Handle QR result from server");
-            }
-            Backend2FrontendMsg::NewPlayer(_name) => {
-                sprintln!("Got a new player message");
-            }
             Backend2FrontendMsg::OurName(name) => {
                 sprintln!("Got our name from the server:\n\t- {:?}", name);
                 *name_storage.borrow_mut() = Some(name);
             }
-            Backend2FrontendMsg::RemovePlayer(_name) => {
-                sprintln!("Got a remove player message");
+            _ => {
+                sprintln!("Got an unhandled message:\n\t- {:?}", x);
             }
         };
         let on_err = |e| {

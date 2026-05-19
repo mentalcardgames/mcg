@@ -93,15 +93,6 @@ impl ScreenDef for QrScreen {
         let mut me = Self::default();
         let payload = me.qr_payload.clone();
         let on_msg = move |x| match x {
-            Backend2FrontendMsg::State(s) => {
-                sprintln!("Got a message state:\n\t- {:?}", s);
-            }
-            Backend2FrontendMsg::Error(e) => {
-                sprintln!("Got a message error:\n\t- {:?}", e);
-            }
-            Backend2FrontendMsg::Pong => {
-                sprintln!("Got a pong message");
-            }
             Backend2FrontendMsg::TicketValue(ticket) => {
                 sprintln!("Got a ticket value:\n\t- {:?}", ticket);
                 *payload.borrow_mut() = Some(ticket);
@@ -109,18 +100,9 @@ impl ScreenDef for QrScreen {
             Backend2FrontendMsg::IPValue(ip) => {
                 sprintln!("Got an IP value:\n\t- {:?}", ip);
                 *payload.borrow_mut() = Some(ip);
-            }
-            Backend2FrontendMsg::QrRes(_) => {
-                todo!("Handle QR result from server");
-            }
-            Backend2FrontendMsg::NewPlayer(_name) => {
-                sprintln!("Got a new player message");
-            }
-            Backend2FrontendMsg::OurName(name) => {
-                sprintln!("Got our name:\n\t- {:?}", name);
-            }
-            Backend2FrontendMsg::RemovePlayer(_name) => {
-                sprintln!("Got a remove player message");
+            } 
+            _ => {
+                sprintln!("Got an unhandled message:\n\t- {:?}", x);
             }
         };
         let on_err = |e| {

@@ -23,7 +23,7 @@ use tokio::sync::broadcast;
 
 use crate::public::{path_for_config, PublicInfo};
 use crate::transport::{send_server_msg_to_writer, send_peer_msg_to_writer};
-use crate::server::state::{broadcast_state, AppState, subscribe_connection, PeerInfo, broadcast_peer_msg};
+use crate::server::state::{broadcast_state, AppState, subscribe_connection, PeerInfo};
 use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg, Peer2PeerMsg};
 
 /// Public entrypoint spawned by server startup
@@ -756,6 +756,13 @@ where
             lobby.lobby_open = true;
             lobby.max_players = max_players;
             lobby.game_type = game_type;
+            return Ok(true);
+        }
+        Ok(Peer2PeerMsg::PeerReady(name, ready) ) => {
+            tracing::info!(peer = %peer_id, "Peer '{}' is now {}", name, if ready { "ready" } else { "not ready" });
+            let _ = state.broadcaster.send(
+                Backend2FrontendMsg::PlayerReady(name, ready)
+            );
             return Ok(true);
         }
         Ok(Peer2PeerMsg::Reject(reason)) => {
