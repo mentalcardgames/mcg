@@ -7,11 +7,19 @@ use front_end::ir::{Ir, LoweredPayLoad};
 use crate::game_data::GameData;
 use crate::interpreter::{Input, InputType, Interpreter, StepResult};
 
+/// Where the game engine gets its player input from.
+///
+/// - [`Player`](InputSource::Player) — a closure that maps each [`InputType`] request to an [`Input`].
+/// - [`TestFile`](InputSource::TestFile) — a file containing pre-recorded responses (one per line).
 pub enum InputSource {
     Player(Box<dyn Fn(InputType) -> Input + Send + Sync>),
     TestFile(PathBuf),
 }
 
+/// Create an [`Interpreter`] from the lowered IR and drive it to completion.
+///
+/// `entry` is saved *before* ownership of `ir` moves into the interpreter so the
+/// starting state handle can be supplied separately.
 pub fn run_game(
     ir: Ir<LoweredPayLoad>,
     game_data: GameData,
@@ -34,15 +42,24 @@ pub fn run_game(
     controller.run()
 }
 
+/// Drives the [`Interpreter`] forward, supplying external input when required.
 struct Controller {
+    /// The core interpreter that executes the state machine.
     interpreter: Interpreter,
+    /// Where to obtain player decisions when the interpreter asks for one.
     input_source: InputSource,
+    /// Optional callback invoked after every interpreter step so callers can
+    /// react to the evolving game state (e.g. push a UI update).
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
+    /// Lines read from a test file, consumed in LIFO order (stack).
     line_buffer: Vec<String>,
+    /// Whether the test file has already been read into `line_buffer`.
     file_loaded: bool,
 }
 
 impl Controller {
+    /// Main event loop: emit the current state, advance the interpreter, and
+    /// either continue, supply input, return on game-over, or propagate an error.
     fn run(&mut self) -> Result<GameData, String> {
         loop {
             self.emit_event();
@@ -62,6 +79,7 @@ impl Controller {
         }
     }
 
+    /// Route an input request to the active [`InputSource`].
     fn get_input(&mut self, input_type: InputType) -> Result<Input, String> {
         match &self.input_source {
             InputSource::Player(callback) => Ok(callback(input_type)),
@@ -72,6 +90,16 @@ impl Controller {
         }
     }
 
+    /// Read a test input file into `line_buffer` on first call, then pop lines
+    /// one-by-one and parse them as [`Input`] values.
+    ///
+    /// Lines are consumed in **reverse** order (LIFO) because the buffer is used
+    /// as a stack. Blank lines and lines starting with `#` are ignored.
+    ///
+    /// Accepted line formats:
+    /// - `y`, `yes` → `Input::OptionalAccept`
+    /// - `n`, `no`  → `Input::OptionalDecline`
+    /// - `<N>`      → `Input::Choice { idx: N-1 }` (1-based choice index)
     fn read_test_file(&mut self, path: &PathBuf) -> Result<Input, String> {
         if self.line_buffer.is_empty() && !self.file_loaded {
             let file = File::open(path).map_err(|e| format!("Failed to open test file: {}", e))?;
@@ -114,6 +142,10 @@ impl Controller {
         }
     }
 
+    /// Invoke the optional event callback with the current [`GameData`].
+    ///
+    /// This allows front-ends (GUI, CLI logging, etc.) to react to every
+    /// interpreter step without polling.
     fn emit_event(&self) {
         if let Some(sender) = &self.event_sender {
             sender(&self.interpreter.game_data);
@@ -125,6 +157,8 @@ impl Controller {
 mod tests {
     use super::*;
 
+    /// Verify that [`read_test_file`] correctly parses `y`, `n`, and numeric
+    /// lines into the corresponding [`Input`] variants (LIFO order).
     #[test]
     fn test_input_parsing() {
         let default_ir = Ir::<LoweredPayLoad>::default();
@@ -169,6 +203,8 @@ mod tests {
         );
     }
 
+    /// Ensure that popping from an empty `line_buffer` produces the expected
+    /// `"Test input file exhausted"` error.
     #[test]
     fn test_input_exhausted_error() {
         let default_ir = Ir::<LoweredPayLoad>::default();

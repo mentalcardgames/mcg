@@ -343,7 +343,7 @@ impl Evaluator {
         // │   ├── CurrentStageRoundCounter
         // │   └── StageRoundCounter { stage: String }
         // └── Memory { memory: UseSingleMemory }
-        
+
         unimplemented!("Evaluator::eval_int")
     }
 
@@ -397,7 +397,10 @@ impl Evaluator {
         unimplemented!("Evaluator::eval_cardset")
     }
 
-    pub fn eval_card_position(_expr: &CardPosition, _game_data: &GameData) -> Result<usize, String> {
+    pub fn eval_card_position(
+        _expr: &CardPosition,
+        _game_data: &GameData,
+    ) -> Result<usize, String> {
         // TODO: implement this function, which evaluates a CardPosition to a card index based on the current game data.
         // This is the set of all possible CardPosition variants, all of which should be handled by this function:
         // CardPosition
