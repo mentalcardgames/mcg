@@ -98,7 +98,7 @@ impl ScreenWidget for LobbyScreen {
             // All players are ready, can start the game
             ui.add_space(4.0);
             ui.label(RichText::new("All players are ready! You can start the game.").color(egui::Color32::GREEN));
-        }}
+        }
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             if ui.button("Generate QR Code and let others scan it to join!").clicked() {
