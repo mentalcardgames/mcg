@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct LobbyScreen {
-    web_socket_connection: WebSocketConnection,
+    web_socket_connection: Rc<RefCell<WebSocketConnection>>,
     qr_payload: Rc<RefCell<Option<String>>>,
     players: Rc<RefCell<Vec<(String, bool)>>>, // (name, ready)
 }
@@ -18,7 +18,7 @@ pub struct LobbyScreen {
 impl Default for LobbyScreen {
     fn default() -> Self {
         Self {
-            web_socket_connection: WebSocketConnection::default(),
+            web_socket_connection: Rc::new(RefCell::new(WebSocketConnection::default())),
             qr_payload: Rc::new(RefCell::new(None)),
             players: Rc::new(RefCell::new(Vec::new())),
         }
@@ -76,7 +76,7 @@ impl ScreenWidget for LobbyScreen {
                     *ready = !*ready;
                     // Send ready state to backend so we can tell the other players
                     let msg = Frontend2BackendMsg::ReadyUpdate(*ready);
-                    self.web_socket_connection.send_msg(&msg);
+                    self.web_socket_connection.borrow().send_msg(&msg);
                 }
             }
         }
@@ -103,7 +103,7 @@ impl ScreenWidget for LobbyScreen {
         ui.horizontal(|ui| {
             if ui.button("Generate QR Code and let others scan it to join!").clicked() {
                 let msg = Frontend2BackendMsg::GetTicket;
-                self.web_socket_connection.send_msg(&msg);
+                self.web_socket_connection.borrow().send_msg(&msg);
             }
         });
         ui.add_space(8.0);
@@ -128,8 +128,8 @@ impl ScreenWidget for LobbyScreen {
     fn on_exit(&mut self, _app_interface: &mut AppInterface) {
         // Disconnect when leaving this screen
         let msg = Frontend2BackendMsg::Disconnect;
-        self.web_socket_connection.send_msg(&msg);
-        self.web_socket_connection.close();
+        self.web_socket_connection.borrow().send_msg(&msg);
+        self.web_socket_connection.borrow_mut().close();
     }
 }
 
@@ -154,6 +154,7 @@ impl ScreenDef for LobbyScreen {
         let mut me = Self::default();
         let payload = me.qr_payload.clone();
         let players = me.players.clone();
+        let ws_clone = me.web_socket_connection.clone();
 
         let on_msg = move |x| match x {
             Backend2FrontendMsg::TicketValue(ticket) => {
@@ -165,7 +166,15 @@ impl ScreenDef for LobbyScreen {
                 *payload.borrow_mut() = Some(ip);
             }
             Backend2FrontendMsg::NewPlayer(name) => {
-                players.borrow_mut().push((name, false));
+                // add player
+                {
+                    let mut p = players.borrow_mut();
+                    p.push((name.clone(), false));
+                }
+                // Immediately inform backend about our current ready state (first entry = local)
+                let local_ready = players.borrow().first().map(|(_, r)| *r).unwrap_or(false);
+                let msg = Frontend2BackendMsg::ReadyUpdate(local_ready);
+                ws_clone.borrow().send_msg(&msg);
             }
             Backend2FrontendMsg::RemovePlayer(name) => {
                 sprintln!("Got a remove player message for: {}", name);
@@ -200,6 +209,7 @@ impl ScreenDef for LobbyScreen {
         };
         players.push(p);
         me.web_socket_connection
+            .borrow_mut()
             .connect("127.0.0.1:3000", players, on_msg, on_err, on_cls);
         Box::new(me)
     }
