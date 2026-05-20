@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -36,8 +37,9 @@ pub fn run_game(
         },
         input_source,
         event_sender,
-        line_buffer: Vec::new(),
+        line_buffer: VecDeque::new(),
         file_loaded: false,
+        loaded_line_count: 0,
     };
     controller.run()
 }
@@ -51,10 +53,13 @@ struct Controller {
     /// Optional callback invoked after every interpreter step so callers can
     /// react to the evolving game state (e.g. push a UI update).
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
-    /// Lines read from a test file, consumed in LIFO order (stack).
-    line_buffer: Vec<String>,
+    /// Lines read from a test file, consumed in FIFO order (queue).
+    line_buffer: VecDeque<String>,
     /// Whether the test file has already been read into `line_buffer`.
     file_loaded: bool,
+    /// Total number of non-empty, non-comment lines loaded from the test file.
+    /// Used to compute 1-based line numbers in error messages.
+    loaded_line_count: usize,
 }
 
 impl Controller {
@@ -90,11 +95,11 @@ impl Controller {
         }
     }
 
-    /// Read a test input file into `line_buffer` on first call, then pop lines
-    /// one-by-one and parse them as [`Input`] values.
+    /// Read a test input file into `line_buffer` on first call, then consume
+    /// lines one-by-one (FIFO) and parse them as [`Input`] values.
     ///
-    /// Lines are consumed in **reverse** order (LIFO) because the buffer is used
-    /// as a stack. Blank lines and lines starting with `#` are ignored.
+    /// The first non-blank, non-comment line in the file supplies the first input.
+    /// Blank lines and lines starting with `#` are ignored.
     ///
     /// Accepted line formats:
     /// - `y`, `yes` → `Input::OptionalAccept`
@@ -108,18 +113,19 @@ impl Controller {
                 let line = line.map_err(|e| format!("Failed to read test file: {}", e))?;
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                    self.line_buffer.push(trimmed.to_string());
+                    self.line_buffer.push_back(trimmed.to_string());
                 }
             }
+            self.loaded_line_count = self.line_buffer.len();
             self.file_loaded = true;
         }
 
         let line = self
             .line_buffer
-            .pop()
+            .pop_front()
             .ok_or_else(|| "Test input file exhausted".to_string())?;
 
-        let consumed_lines = self.line_buffer.len() + 1;
+        let consumed_lines = self.loaded_line_count - self.line_buffer.len();
 
         match line.to_lowercase().as_str() {
             "y" | "yes" => Ok(Input::OptionalAccept),
@@ -158,7 +164,7 @@ mod tests {
     use super::*;
 
     /// Verify that [`read_test_file`] correctly parses `y`, `n`, and numeric
-    /// lines into the corresponding [`Input`] variants (LIFO order).
+    /// lines in FIFO order into the corresponding [`Input`] variants.
     #[test]
     fn test_input_parsing() {
         let default_ir = Ir::<LoweredPayLoad>::default();
@@ -175,13 +181,14 @@ mod tests {
             },
             input_source: InputSource::TestFile(PathBuf::from("/nonexistent")),
             event_sender: None,
-            line_buffer: vec![
-                "n".to_string(),
-                "2".to_string(),
-                "y".to_string(),
+            line_buffer: VecDeque::from([
                 "1".to_string(),
-            ],
+                "y".to_string(),
+                "2".to_string(),
+                "n".to_string(),
+            ]),
             file_loaded: true,
+            loaded_line_count: 4,
         };
 
         let path = PathBuf::from("/nonexistent");
@@ -221,8 +228,9 @@ mod tests {
             },
             input_source: InputSource::TestFile(PathBuf::from("test_input.txt")),
             event_sender: None,
-            line_buffer: vec!["1".to_string()],
+            line_buffer: VecDeque::from(["1".to_string()]),
             file_loaded: true,
+            loaded_line_count: 1,
         };
 
         let path = PathBuf::from("test_input.txt");
