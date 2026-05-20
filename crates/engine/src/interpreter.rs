@@ -152,7 +152,7 @@ impl Interpreter {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Input {
     Choice { idx: usize },
     OptionalAccept,
