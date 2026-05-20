@@ -11,4 +11,4 @@ If the controller gets input back from the player interface, it feeds that input
 */
 
 // TODO: define entry point in this module (eg. run_game()), which takes a game definition and a set of player interfaces
-// and runs the game until completion, forwarding step results to the local player interface or waiting for input from remote player interfaces as required.
+// and runs the game until completion, forwarding step results to the local player interface or waiting for input from local/remote player interfaces as required.

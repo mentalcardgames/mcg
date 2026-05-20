@@ -37,8 +37,8 @@ Each of the leaves of this payload tree should be accounted for in the execute_e
 */
 
 use crate::game_data::GameData;
-use front_end::ir::LoweredPayLoad;
 use front_end::ast::SetUpRule;
+use front_end::ir::LoweredPayLoad;
 
 //TODO: write this module.
 
@@ -48,10 +48,10 @@ pub fn execute(payload: LoweredPayLoad, _game_data: &mut GameData) {
             // TODO: evaluate action and modify game state accordingly.
         }
         LoweredPayLoad::StageRoundCounter(_) => {
-            // TODO: read id and increment counter in game data for that stage.
+            // TODO: read stage id and increment stage round counter in game data for that stage.
         }
         LoweredPayLoad::EndStage(_) => {
-            // TODO: update current stage.
+            // TODO: update current stage in game data
         }
         _ => {}
     }
@@ -66,37 +66,67 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
             unimplemented!()
         }
         SetUpRule::CreateTeams { teams: _ } => {
+            // TODO: create given teams in game data
+        }
+        SetUpRule::CreateTurnorder {
+            player_collection: _,
+        } => {
+            // TODO: initalize turn order in game data
+        }
+        SetUpRule::CreateTurnorderRandom {
+            player_collection: _,
+        } => {
+            // TODO: randomize order of player collection and initialze turn ordeer in game data
+        }
+        SetUpRule::CreateLocation {
+            owner: _,
+            locations: _,
+        } => {
+            // TODO: create locations in game data, use string names from locations argument only, ignore the Global part - this is handled differently in game data.
+        }
+        SetUpRule::CreateCardOnLocation {
+            location: _,
+            cards: _,
+        } => {
+            // TODO: create cards defined by adding them to the CardDB and then assigning their DB indices to the given location. Be careful here since cards: Vec<Types, Global> contains ast::Types, which should be unwrapped and expanded.
+        }
+        SetUpRule::CreateTokenOnLocation {
+            location: _,
+            int: _,
+            token: _,
+        } => {
             // TODO
         }
-        SetUpRule::CreateTurnorder { player_collection: _ } => {
-            // TODO
+        SetUpRule::CreateCombo {
+            combo: _,
+            filter: _,
+        } => {
+            // TODO: add to game data
         }
-        SetUpRule::CreateTurnorderRandom { player_collection: _ } => {
-            // TODO
+        SetUpRule::CreateMemory {
+            memory: _,
+            owner: _,
+        } => {
+            // TODO: do not implement yet, Memory not implemented in current engine
         }
-        SetUpRule::CreateLocation { owner: _, locations: _ } => {
-            // TODO
+        SetUpRule::CreateMemoryWithMemoryType {
+            memory: _,
+            owner: _,
+            memory_type: _,
+        } => {
+            // TODO: do not implement yet
         }
-        SetUpRule::CreateCardOnLocation { location: _, cards: _ } => {
-            // TODO
+        SetUpRule::CreatePrecedence {
+            precedence: _,
+            kvs: _,
+        } => {
+            // TODO: create the precedence (just an ordered list of <attribute, value> pairs) in game data
         }
-        SetUpRule::CreateTokenOnLocation { location: _, int: _, token: _ } => {
-            // TODO
-        }
-        SetUpRule::CreateCombo { combo: _, filter: _ } => {
-            // TODO
-        }
-        SetUpRule::CreateMemory { memory: _, owner: _ } => {
-            // TODO
-        }
-        SetUpRule::CreateMemoryWithMemoryType { memory: _, owner: _, memory_type: _ } => {
-            // TODO
-        }
-        SetUpRule::CreatePrecedence { precedence: _, kvs: _ } => {
-            // TODO
-        }
-        SetUpRule::CreatePointMap { pointmap: _, kvis: _ } => {
-            // TODO
+        SetUpRule::CreatePointMap {
+            pointmap: _,
+            kvis: _,
+        } => {
+            // TODO: create PointMap in game data using name pointmap and data kvis
         }
     }
 }
