@@ -69,7 +69,8 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
         }
         SetUpRule::CreateTeams { teams } => {
             for (team_name, player_collection) in teams {
-                let player_indices = resolve_player_collection(&player_collection, game_data);
+                let player_indices =
+                    crate::query::Evaluator::resolve_player_collection(&player_collection, game_data);
                 game_data.teams.push(Team {
                     name: team_name,
                     players: player_indices,
@@ -77,17 +78,19 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
             }
         }
         SetUpRule::CreateTurnorder { player_collection } => {
-            let indices = resolve_player_collection(&player_collection, game_data);
+            let indices =
+                crate::query::Evaluator::resolve_player_collection(&player_collection, game_data);
             game_data.turn_order = indices;
         }
         SetUpRule::CreateTurnorderRandom { player_collection } => {
             use rand::seq::SliceRandom;
-            let mut indices = resolve_player_collection(&player_collection, game_data);
+            let mut indices =
+                crate::query::Evaluator::resolve_player_collection(&player_collection, game_data);
             indices.shuffle(&mut rand::thread_rng());
             game_data.turn_order = indices;
         }
         SetUpRule::CreateLocation { locations, owner } => {
-            let owner_name = resolve_owner_to_name(&owner, game_data);
+            let owner_name = crate::query::Evaluator::resolve_owner_to_name(&owner, game_data);
             for loc_name in locations {
                 game_data.add_location(
                     owner_name.clone(),
@@ -105,7 +108,7 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
                 .position(|l| l.name == location)
                 .expect("Location not found");
             for type_expr in cards {
-                let expanded_cards = expand_types(&type_expr);
+                let expanded_cards = crate::query::Evaluator::expand_types(&type_expr);
                 for card in expanded_cards {
                     let card_id = game_data.add_card(loc_idx, card);
                     game_data.locations[loc_idx].cards.push(card_id);
@@ -160,7 +163,7 @@ fn execute_action_rule(action: ActionRule, game_data: &mut GameData) {
             //TODO: implement card set shuffling
         }
         ActionRule::OutAction { players, out_of } => {
-            let player_indices = resolve_players(&players, game_data);
+            let player_indices = crate::query::Evaluator::resolve_players(&players, game_data);
             let current_stage = game_data.get_current_stage().unwrap_or_default();
             for pid in player_indices {
                 match out_of {
@@ -314,7 +317,7 @@ fn execute_cardset_move(
         .expect("Failed to eval cardset")
         .1; // get only the indices, we don't care about the location for from
     let count = match quantity {
-        Some(qty) => resolve_quantity(&qty, card_indices.len()),
+        Some(qty) => crate::query::Evaluator::resolve_quantity(&qty, card_indices.len()),
         None => card_indices.len(),
     };
 
@@ -341,118 +344,4 @@ fn execute_cardset_move(
         // add the card to the new location
         game_data.locations[dest_loc_idx].cards.push(card_id);
     }
-}
-
-fn resolve_quantity(qty: &Quantity, available: usize) -> usize {
-    match qty {
-        Quantity::Int { int } => {
-            let val =
-                crate::query::Evaluator::eval_int(int, &GameData::new()).unwrap_or(1) as usize;
-            val.min(available)
-        }
-
-        // TODO: this doesn't work and needs to be extracted to some Choice for the player.
-        Quantity::Quantifier { quantifier } => match quantifier {
-            front_end::ast::Quantifier::All => available,
-            front_end::ast::Quantifier::Any => 1,
-        },
-        Quantity::IntRange { int_range: _ } => available,
-    }
-}
-
-fn resolve_players(players: &front_end::ast::Players, game_data: &GameData) -> Vec<usize> {
-    match players {
-        front_end::ast::Players::Player { player } => {
-            let name = crate::query::Evaluator::eval_player(player, game_data)
-                .expect("Failed to eval player");
-            vec![game_data
-                .players
-                .iter()
-                .position(|p| p.name == name)
-                .expect("Player not found")]
-        }
-        front_end::ast::Players::PlayerCollection { player_collection } => {
-            resolve_player_collection(player_collection, game_data)
-        }
-    }
-}
-
-fn resolve_player_collection(
-    pc: &front_end::ast::PlayerCollection,
-    game_data: &GameData,
-) -> Vec<usize> {
-    match pc {
-        front_end::ast::PlayerCollection::Literal { players } => {
-            let mut indices = vec![];
-            for player_expr in players {
-                let name = crate::query::Evaluator::eval_player(player_expr, game_data)
-                    .expect("Failed to eval player");
-                if let Some(idx) = game_data.players.iter().position(|p| p.name == name) {
-                    indices.push(idx);
-                }
-            }
-            indices
-        }
-        front_end::ast::PlayerCollection::Aggregate { aggregate } => match aggregate {
-            front_end::ast::AggregatePlayerCollection::Quantifier { quantifier } => {
-                match quantifier {
-                    front_end::ast::Quantifier::All => (0..game_data.players.len()).collect(),
-                    front_end::ast::Quantifier::Any => vec![],
-                }
-            }
-        },
-        front_end::ast::PlayerCollection::Runtime { runtime } => match runtime {
-            front_end::ast::RuntimePlayerCollection::PlayersOut => game_data
-                .players
-                .iter()
-                .enumerate()
-                .filter(|(_, p)| !p.in_game)
-                .map(|(i, _)| i)
-                .collect(),
-            front_end::ast::RuntimePlayerCollection::PlayersIn => game_data
-                .players
-                .iter()
-                .enumerate()
-                .filter(|(_, p)| p.in_game)
-                .map(|(i, _)| i)
-                .collect(),
-            front_end::ast::RuntimePlayerCollection::Others => {
-                vec![]
-            }
-        },
-        front_end::ast::PlayerCollection::AggregateMemory {
-            memory: _,
-            multi: _,
-        } => vec![],
-        front_end::ast::PlayerCollection::Memory { memory: _ } => vec![],
-    }
-}
-
-fn resolve_owner_to_name(owner: &front_end::ast::Owner, game_data: &GameData) -> String {
-    match owner {
-        front_end::ast::Owner::Table => "Table".to_string(),
-        front_end::ast::Owner::Player { player } => {
-            crate::query::Evaluator::eval_player(player, game_data).expect("Failed to eval player")
-        }
-        front_end::ast::Owner::Team { team } => {
-            crate::query::Evaluator::eval_team(team, game_data).expect("Failed to eval team")
-        }
-        _ => "Table".to_string(),
-    }
-}
-
-fn expand_types(types: &front_end::ast::Types) -> Vec<Card> {
-    let mut result = vec![Card::new()];
-    for (attr, values) in &types.types {
-        let mut new_result = vec![];
-        for card in result.clone() {
-            for value in values {
-                let mut new_card = card.clone();
-                new_card.insert(attr.clone(), value.clone());
-                new_result.push(new_card);
-            }
-        }
-        result = new_result;
-    }
-    result
 }

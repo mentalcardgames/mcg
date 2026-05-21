@@ -164,10 +164,10 @@ SingleOwner
 └── Table
  */
 
-use crate::game_data::GameData;
+use crate::game_data::{Card, GameData};
 use front_end::ast::{
     AggregateBool, BoolExpr, BoolOp, CardPosition, CardSet, CompareBool, EndCondition, IntExpr,
-    PlayerExpr, StringExpr, TeamExpr, UnaryOp,
+    Owner, PlayerCollection, PlayerExpr, Players, Quantity, StringExpr, TeamExpr, Types, UnaryOp,
 };
 
 pub struct Evaluator;
@@ -435,5 +435,112 @@ impl Evaluator {
         }
 
         false
+    }
+
+    pub fn resolve_quantity(qty: &Quantity, available: usize) -> usize {
+        match qty {
+            Quantity::Int { int } => {
+                let val = Self::eval_int(int, &GameData::new()).unwrap_or(1) as usize;
+                val.min(available)
+            }
+
+            // TODO: this doesn't work and needs to be extracted to some Choice for the player.
+            Quantity::Quantifier { quantifier } => match quantifier {
+                front_end::ast::Quantifier::All => available,
+                front_end::ast::Quantifier::Any => 1,
+            },
+            Quantity::IntRange { int_range: _ } => available,
+        }
+    }
+
+    pub fn resolve_players(players: &Players, game_data: &GameData) -> Vec<usize> {
+        match players {
+            Players::Player { player } => {
+                let name = Self::eval_player(player, game_data).expect("Failed to eval player");
+                vec![game_data
+                    .players
+                    .iter()
+                    .position(|p| p.name == name)
+                    .expect("Player not found")]
+            }
+            Players::PlayerCollection { player_collection } => {
+                Self::resolve_player_collection(player_collection, game_data)
+            }
+        }
+    }
+
+    pub fn resolve_player_collection(pc: &PlayerCollection, game_data: &GameData) -> Vec<usize> {
+        match pc {
+            PlayerCollection::Literal { players } => {
+                let mut indices = vec![];
+                for player_expr in players {
+                    let name =
+                        Self::eval_player(player_expr, game_data).expect("Failed to eval player");
+                    if let Some(idx) = game_data.players.iter().position(|p| p.name == name) {
+                        indices.push(idx);
+                    }
+                }
+                indices
+            }
+
+            // TODO: rework aggregate since this does not work with current input model
+            PlayerCollection::Aggregate { aggregate } => match aggregate {
+                front_end::ast::AggregatePlayerCollection::Quantifier { quantifier: _ } => {
+                    unimplemented!()
+                }
+            },
+            PlayerCollection::Runtime { runtime } => match runtime {
+                front_end::ast::RuntimePlayerCollection::PlayersOut => game_data
+                    .players
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| !p.in_game)
+                    .map(|(i, _)| i)
+                    .collect(),
+                front_end::ast::RuntimePlayerCollection::PlayersIn => game_data
+                    .players
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| p.in_game)
+                    .map(|(i, _)| i)
+                    .collect(),
+                front_end::ast::RuntimePlayerCollection::Others => {
+                    vec![]
+                }
+            },
+            // TODO: memory not implemented
+            PlayerCollection::AggregateMemory {
+                memory: _,
+                multi: _,
+            } => vec![],
+            PlayerCollection::Memory { memory: _ } => vec![],
+        }
+    }
+
+    pub fn resolve_owner_to_name(owner: &Owner, game_data: &GameData) -> String {
+        match owner {
+            Owner::Table => "Table".to_string(),
+            Owner::Player { player } => {
+                Self::eval_player(player, game_data).expect("Failed to eval player")
+            }
+            Owner::Team { team } => Self::eval_team(team, game_data).expect("Failed to eval team"),
+            _ => "Table".to_string(),
+        }
+    }
+
+    pub fn expand_types(types: &Types) -> Vec<Card> {
+        let mut result = vec![Card::new()];
+        for (attr, values) in &types.types {
+            let mut new_result = vec![];
+            for card in result.clone() {
+                for value in values {
+                    let mut new_card = card.clone();
+                    new_card.insert(attr.clone(), value.clone());
+                    new_result.push(new_card);
+                }
+            }
+            result = new_result;
+        }
+        result
     }
 }
