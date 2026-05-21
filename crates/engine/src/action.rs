@@ -69,8 +69,10 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
         }
         SetUpRule::CreateTeams { teams } => {
             for (team_name, player_collection) in teams {
-                let player_indices =
-                    crate::query::Evaluator::resolve_player_collection(&player_collection, game_data);
+                let player_indices = crate::query::Evaluator::resolve_player_collection(
+                    &player_collection,
+                    game_data,
+                );
                 game_data.teams.push(Team {
                     name: team_name,
                     players: player_indices,
@@ -159,8 +161,20 @@ fn execute_action_rule(action: ActionRule, game_data: &mut GameData) {
             card_set: _,
             status: _,
         } => {}
-        ActionRule::ShuffleAction { card_set: _ } => {
-            //TODO: implement card set shuffling
+        ActionRule::ShuffleAction { card_set } => {
+            use rand::seq::SliceRandom;
+
+            let card_set_clone = card_set.clone();
+            let result = crate::query::Evaluator::eval_cardset(&card_set_clone, game_data);
+            match result {
+                Ok((location_idx, mut card_ids)) => {
+                    card_ids.shuffle(&mut rand::thread_rng());
+                    game_data.locations[location_idx].cards = card_ids;
+                }
+                Err(e) => {
+                    eprintln!("ShuffleAction failed: {}", e);
+                }
+            }
         }
         ActionRule::OutAction { players, out_of } => {
             let player_indices = crate::query::Evaluator::resolve_players(&players, game_data);
