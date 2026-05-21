@@ -92,7 +92,8 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
             game_data.turn_order = indices;
         }
         SetUpRule::CreateLocation { locations, owner } => {
-            let owner_name = crate::query::Evaluator::resolve_owner_to_name(&owner, game_data);
+            let owner_name = crate::query::Evaluator::resolve_owner_to_name(&owner, game_data)
+                .expect("Failed to resolve owner to name");
             for loc_name in locations {
                 game_data.add_location(
                     owner_name.clone(),
@@ -331,7 +332,8 @@ fn execute_cardset_move(
         .expect("Failed to eval cardset")
         .1; // get only the indices, we don't care about the location for from
     let count = match quantity {
-        Some(qty) => crate::query::Evaluator::resolve_quantity(&qty, card_indices.len()),
+        Some(qty) => crate::query::Evaluator::resolve_quantity(&qty, card_indices.len())
+            .unwrap_or(1),
         None => card_indices.len(),
     };
 

@@ -44,6 +44,10 @@ pub enum MemoryValue {
     String(String),
     CardSet(Vec<usize>),
     PlayerCollection(Vec<usize>),
+    Team(String),
+    IntCollection(Vec<i32>),
+    StringCollection(Vec<String>),
+    LocationCollection(Vec<usize>),
 }
 
 #[derive(Clone)]
@@ -244,8 +248,21 @@ impl GameData {
         None
     }
 
-    pub fn add_memory(&mut self, key: String, _owner: Owner, _memory_type: Option<MemoryType>) {
-        self.memories.insert(key, MemoryValue::Int(0));
+    pub fn add_memory(&mut self, key: String, _owner: Owner, memory_type: Option<MemoryType>) {
+        let value = match memory_type {
+            Some(MemoryType::Int { .. }) => MemoryValue::Int(0),
+            Some(MemoryType::String { .. }) => MemoryValue::String(String::new()),
+            Some(MemoryType::Player { .. }) => MemoryValue::Int(0),
+            Some(MemoryType::PlayerCollection { .. }) => MemoryValue::PlayerCollection(vec![]),
+            Some(MemoryType::CardSet { .. }) => MemoryValue::CardSet(vec![]),
+            Some(MemoryType::Team { .. }) => MemoryValue::Team(String::new()),
+            Some(MemoryType::IntCollection { .. }) => MemoryValue::IntCollection(vec![]),
+            Some(MemoryType::StringCollection { .. }) => MemoryValue::StringCollection(vec![]),
+            Some(MemoryType::TeamCollection { .. }) => MemoryValue::Int(0),
+            Some(MemoryType::LocationCollection { .. }) => MemoryValue::LocationCollection(vec![]),
+            None => MemoryValue::Int(0),
+        };
+        self.memories.insert(key, value);
     }
 
     pub fn get_memory(&self, key: &str) -> Option<&MemoryValue> {
