@@ -202,20 +202,20 @@ impl Evaluator {
             AggregateBool::Compare { cmp_bool } => Self::eval_compare(cmp_bool, game_data),
             AggregateBool::StringInCardSet { string, card_set } => {
                 let s = Self::eval_string(string, game_data)?;
-                let cards = Self::eval_cardset(card_set, game_data)?;
+                let cards = Self::eval_cardset(card_set, game_data)?.1;
                 Ok(Self::check_attr_value_in_cardset(&s, &cards, game_data))
             }
             AggregateBool::StringNotInCardSet { string, card_set } => {
                 let s = Self::eval_string(string, game_data)?;
-                let cards = Self::eval_cardset(card_set, game_data)?;
+                let cards = Self::eval_cardset(card_set, game_data)?.1;
                 Ok(!Self::check_attr_value_in_cardset(&s, &cards, game_data))
             }
             AggregateBool::CardSetEmpty { card_set } => {
-                let cards = Self::eval_cardset(card_set, game_data)?;
+                let cards = Self::eval_cardset(card_set, game_data)?.1;
                 Ok(cards.is_empty())
             }
             AggregateBool::CardSetNotEmpty { card_set } => {
-                let cards = Self::eval_cardset(card_set, game_data)?;
+                let cards = Self::eval_cardset(card_set, game_data)?.1;
                 Ok(!cards.is_empty())
             }
             AggregateBool::OutOfPlayer { .. } => {
@@ -387,8 +387,11 @@ impl Evaluator {
         unimplemented!("Evaluator::eval_team")
     }
 
-    pub fn eval_cardset(_expr: &CardSet, _game_data: &GameData) -> Result<Vec<usize>, String> {
-        // TODO: implement this function, which evaluates a CardSet to a vector of card indices based on the current game data.
+    pub fn eval_cardset(
+        _expr: &CardSet,
+        _game_data: &GameData,
+    ) -> Result<(usize, Vec<usize>), String> {
+        // TODO: implement this function, which evaluates a CardSet to a location index and a vector of card indices based on the current game data.
         // This is the set of all possible CardSet variants, all of which should be handled by this function:
         // CardSet
         // ├── Group { group: Group } (Group is a possibly filtered location, owner must be inferred)

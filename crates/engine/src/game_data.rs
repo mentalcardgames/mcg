@@ -15,7 +15,7 @@ This includes:
  - stage counters
 */
 
-use front_end::ast::FilterExpr;
+use front_end::ast::{FilterExpr, MemoryType, Owner};
 use std::collections::HashMap;
 
 // while we don't need any auxiliary functions on Cards, we can just use a type rather than a struct.
@@ -26,21 +26,24 @@ pub struct GameData {
     pub table: OwnerData,
     pub players: Vec<Player>,
     pub teams: Vec<Team>,
-    /// A list of indices into self::players, representing the turn order of the game.
     pub turn_order: Vec<usize>,
     pub locations: Vec<Location>,
     pub cards: Vec<Card>,
     pub combos: Vec<Combo>,
     pub precedences: Vec<Precedence>,
     pub point_maps: Vec<PointMap>,
-
-    /// An index into self::turn_order, representing the current player.
     pub current_player: Option<usize>,
-    /// A dictionary
     pub stage_counters: HashMap<String, u32>,
-
-    /// A stack of stage names - this is used to keep track of which stages we're currently in, for the purposes of stage-specific flags and turn resolution. The top of the stack is the current stage.
     pub stage_stack: Vec<String>,
+    pub memories: HashMap<String, MemoryValue>,
+}
+
+#[derive(Clone)]
+pub enum MemoryValue {
+    Int(i32),
+    String(String),
+    CardSet(Vec<usize>),
+    PlayerCollection(Vec<usize>),
 }
 
 #[derive(Clone)]
@@ -88,7 +91,7 @@ pub struct Precedence {
 #[derive(Clone)]
 pub struct PointMap {
     pub name: String,
-    pub map: HashMap<Card, i32>,
+    pub map: HashMap<String, i32>,
 }
 
 impl GameData {
@@ -106,6 +109,7 @@ impl GameData {
             current_player: Some(0),
             stage_counters: HashMap::new(),
             stage_stack: vec![],
+            memories: HashMap::new(),
         }
     }
 
@@ -226,7 +230,6 @@ impl GameData {
     }
 
     pub fn resolve_turn(&mut self) -> Option<usize> {
-        // find the next player in turn order who is still in both the game and the current stage
         if let Some(current_idx) = self.current_player {
             let current_stage = self.get_current_stage()?;
             for i in 1..self.turn_order.len() {
@@ -239,5 +242,29 @@ impl GameData {
             }
         }
         None
+    }
+
+    pub fn add_memory(&mut self, key: String, _owner: Owner, _memory_type: Option<MemoryType>) {
+        self.memories.insert(key, MemoryValue::Int(0));
+    }
+
+    pub fn get_memory(&self, key: &str) -> Option<&MemoryValue> {
+        self.memories.get(key)
+    }
+
+    pub fn set_memory(&mut self, key: String, _memory_type: MemoryType) {
+        if let Some(memory) = self.memories.get_mut(&key) {
+            if let MemoryValue::Int(ref mut v) = *memory {
+                *v += 1;
+            }
+        }
+    }
+
+    pub fn reset_memory(&mut self, key: &str) {
+        if let Some(memory) = self.memories.get_mut(key) {
+            if let MemoryValue::Int(ref mut v) = *memory {
+                *v = 0;
+            }
+        }
     }
 }
