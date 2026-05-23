@@ -23,7 +23,7 @@ use tokio::sync::broadcast;
 
 use crate::public::{path_for_config, PublicInfo};
 use crate::transport::{send_server_msg_to_writer, send_peer_msg_to_writer};
-use crate::server::state::{broadcast_state, AppState, subscribe_connection, PeerInfo};
+use crate::server::state::{AppState, subscribe_connection, PeerInfo};
 use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg, Peer2PeerMsg};
 
 /// Public entrypoint spawned by server startup
@@ -236,42 +236,41 @@ fn start_iroh_connect_loop(endpoint: iroh::endpoint::Endpoint, state: AppState){
     use iroh_tickets::{Ticket, endpoint::EndpointTicket};
 
     tokio::spawn(async move {
-        let mut last_seen: Option<String> = None;
         loop {
-            let current = {
-                state_clone.remote_ticket.read().await.clone()
+            // Consume the remote_ticket immediately if present.
+            // We take a write lock and remove the ticket (so we won't re-process it).
+            let ticket_opt = {
+                let mut guard = state_clone.remote_ticket.write().await;
+                guard.take()
             };
-            if let Some(ticket_str) = current{
-                if last_seen.as_ref() != Some(&ticket_str){
-                    let ticket = EndpointTicket::deserialize(ticket_str.as_str());
-                    match ticket {
-                        Ok(t) => {
-                            let addr = t.endpoint_addr().clone();
-                            let conn = ep_connect.connect(addr, ALPN).await;
-                            match conn {
-                                Ok(c) => {
-                                    tracing::info!(peer = %c.remote_id(), "Successfully connected");
-                                    let state_for_conn = state_clone.clone();
-                                    let ticket_str_clone = ticket_str.clone();
-                                    tokio::spawn(async move {
-                                        if let Err(e) = manage_outgoing_iroh_connection(state_for_conn, c).await {
-                                            tracing::error!(error = %e, ticket_str = %ticket_str_clone, "iroh connection handler error");
-                                        }
-                                    });
-                                }
-                                Err(e) => {
-                                    tracing::error!(error = %e, ticket_str = %ticket_str, "Failed to connect to peer");
-                                }
+
+            if let Some(ticket_str) = ticket_opt {
+                match EndpointTicket::deserialize(ticket_str.as_str()) {
+                    Ok(t) => {
+                        let addr = t.endpoint_addr().clone();
+                        let conn = ep_connect.connect(addr, ALPN).await;
+                        match conn {
+                            Ok(c) => {
+                                tracing::info!(peer = %c.remote_id(), "Successfully connected");
+                                let state_for_conn = state_clone.clone();
+                                let ticket_str_clone = ticket_str.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) = manage_outgoing_iroh_connection(state_for_conn, c).await {
+                                        tracing::error!(error = %e, ticket_str = %ticket_str_clone, "iroh connection handler error");
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!(error = %e, ticket_str = %ticket_str, "Failed to connect to peer");
                             }
                         }
-                        Err(e) => {
-                            tracing::error!(error = %e, ticket_str = %ticket_str, "Failed to deserialize iroh ticket from remote_ticket");
-                        }
                     }
-
-                    last_seen = Some(ticket_str.clone());
+                    Err(e) => {
+                        tracing::error!(error = %e, ticket_str = %ticket_str, "Failed to deserialize iroh ticket from remote_ticket");
+                    }
                 }
             }
+
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     });
@@ -519,6 +518,19 @@ async fn manage_outgoing_iroh_connection(
     // Remove the peer from our local list, just in case (not even sure if this is relevant like it is for
     // the accept side, but since i dont super get the architecture, better safe than sorry)
     {
+        let name_to_remove = {
+            let peers = state.peers.read().await;
+            peers.get(&peer_id)
+                .map(|p| p.name.clone())
+        };
+
+        if let Some(name) = name_to_remove {
+            let _ = state.broadcaster.send(
+                Backend2FrontendMsg::RemovePlayer(name)
+            );
+        }
+    }
+    {
         state.peers.write().await.remove(&peer_id);
     }
     // Close the send side politely if available
@@ -680,7 +692,6 @@ where
             let _ = state.broadcaster.send(
                 Backend2FrontendMsg::NewPlayer(name_clone.clone())
             );
-            broadcast_state(&state).await;
             return Ok(true);
         }
         Ok(Peer2PeerMsg::Disconnect(name)) => {
@@ -772,10 +783,6 @@ where
                 Backend2FrontendMsg::Error(format!("Peer rejected connection: {}", reason))
             );
 
-            {
-            let mut guard = state.remote_ticket.write().await;
-                *guard = None;
-            }
             // Return false to break the loop and disconnect
             return Ok(false);
         }

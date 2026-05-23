@@ -13,6 +13,7 @@ pub struct LobbyScreen {
     web_socket_connection: Rc<RefCell<WebSocketConnection>>,
     qr_payload: Rc<RefCell<Option<String>>>,
     players: Rc<RefCell<Vec<(String, bool)>>>, // (name, ready)
+    our_name_pending: Rc<RefCell<Option<String>>>,
 }
 
 impl Default for LobbyScreen {
@@ -21,6 +22,7 @@ impl Default for LobbyScreen {
             web_socket_connection: Rc::new(RefCell::new(WebSocketConnection::default())),
             qr_payload: Rc::new(RefCell::new(None)),
             players: Rc::new(RefCell::new(Vec::new())),
+            our_name_pending: Rc::new(RefCell::new(None)),
         }
     }
 }
@@ -32,6 +34,12 @@ impl ScreenWidget for LobbyScreen {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
+        // If we got a name from the backend, apply it to our local player entry and settings. 
+        // This can happen if we were renamed by a peer
+        if let Some(new_name) = self.our_name_pending.borrow_mut().take() {
+            app_interface.state().settings.name = new_name;
+        }
+
         // If user set a name in the previous screen, apply it to the local player entry once.
         let chosen_name = app_interface.state().settings.name.clone();
         if !chosen_name.is_empty() {
@@ -80,10 +88,6 @@ impl ScreenWidget for LobbyScreen {
                 }
             }
         }
-        ui.add_space(12.0);
-        if ui.button("Start Game").clicked() {
-            //TODO
-        }
         if self.players.borrow().len() < 2 {
             // Not enough players to start
             ui.add_space(4.0);
@@ -96,6 +100,10 @@ impl ScreenWidget for LobbyScreen {
         }
         else {
             // All players are ready, can start the game
+            ui.add_space(12.0);
+            if ui.button("Start Game").clicked() {
+                //TODO
+            }
             ui.add_space(4.0);
             ui.label(RichText::new("All players are ready! You can start the game.").color(egui::Color32::GREEN));
         }
@@ -155,6 +163,7 @@ impl ScreenDef for LobbyScreen {
         let payload = me.qr_payload.clone();
         let players = me.players.clone();
         let ws_clone = me.web_socket_connection.clone();
+        let our_name_pending = me.our_name_pending.clone();
 
         let on_msg = move |x| match x {
             Backend2FrontendMsg::TicketValue(ticket) => {
@@ -187,6 +196,16 @@ impl ScreenDef for LobbyScreen {
                 if let Some((_, r)) = players.borrow_mut().iter_mut().find(|(n, _)| n == &name) {
                     *r = ready;
                 }
+            }
+            Backend2FrontendMsg::OurName(name) => {
+                sprintln!("Got our player name from backend: {}", name);
+                // Update ourname if we got it from the backend (e.g. after being renamed by a peer)
+                // Only update the first entry which is reserved for the local player
+                if let Some((n, _)) = players.borrow_mut().first_mut() {
+                    *n = name.clone();
+                }
+
+                *our_name_pending.borrow_mut() = Some(name);
             }
             _ => {
                 sprintln!("Got an unhandled message:\n\t- {:?}", x);

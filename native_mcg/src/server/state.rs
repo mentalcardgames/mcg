@@ -498,6 +498,11 @@ pub async fn dispatch_client_message(
             lobby.lobby_open = false;
             lobby.game_running = false;
             lobby.game_type = String::new();
+            //Clear all peers except us from the peer list on disconnect
+            {
+                let mut peers = state.peers.write().await;
+                peers.retain(|_, p| p.name == lobby.our_name);
+            }
             tracing::info!("Lobby closed.");
 
             mcg_shared::Backend2FrontendMsg::Error("Goodbye".into())
