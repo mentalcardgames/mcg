@@ -513,6 +513,15 @@ pub async fn dispatch_client_message(
             broadcast_peer_msg(state, msg);
             mcg_shared::Backend2FrontendMsg::Error(format!("Ready status updated: {}", ready))
         }
+        mcg_shared::Frontend2BackendMsg::GetPlayers => {
+            let peers = state.peers.read().await;
+            for peer in peers.values() {
+                let _ = state.broadcaster.send(mcg_shared::Backend2FrontendMsg::NewPlayer(peer.name.clone()));
+            }
+            let msg = mcg_shared::Peer2PeerMsg::RequestReady;
+            broadcast_peer_msg(state, msg);
+            mcg_shared::Backend2FrontendMsg::Error("Player list sent".into())
+        }
     }
 }
 

@@ -14,6 +14,7 @@ pub struct LobbyScreen {
     qr_payload: Rc<RefCell<Option<String>>>,
     players: Rc<RefCell<Vec<(String, bool)>>>, // (name, ready)
     our_name_pending: Rc<RefCell<Option<String>>>,
+    initialized: bool,
 }
 
 impl Default for LobbyScreen {
@@ -23,6 +24,7 @@ impl Default for LobbyScreen {
             qr_payload: Rc::new(RefCell::new(None)),
             players: Rc::new(RefCell::new(Vec::new())),
             our_name_pending: Rc::new(RefCell::new(None)),
+            initialized: false,
         }
     }
 }
@@ -34,6 +36,17 @@ impl ScreenWidget for LobbyScreen {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
+        if !self.initialized {
+            // Request our player name and our peers' data from the backend when we first initialize the screen
+            // This is redundancy to fight against race conditions where we might get the relevant
+            // Backend2FrontendMsgs before we enter this screen and thus miss them. By requesting the
+            // data again here, we should always have the correct display.
+            let msg = Frontend2BackendMsg::GetOurName;
+            self.web_socket_connection.borrow().send_msg(&msg);
+            let msg = Frontend2BackendMsg::GetPlayers;
+            self.web_socket_connection.borrow().send_msg(&msg);
+            self.initialized = true;
+        }
         // If we got a name from the backend, apply it to our local player entry and settings. 
         // This can happen if we were renamed by a peer
         if let Some(new_name) = self.our_name_pending.borrow_mut().take() {
@@ -176,14 +189,16 @@ impl ScreenDef for LobbyScreen {
             }
             Backend2FrontendMsg::NewPlayer(name) => {
                 // add player
-                {
-                    let mut p = players.borrow_mut();
-                    p.push((name.clone(), false));
+                if !players.borrow().iter().any(|(n, _)| n == &name){
+                    {
+                        let mut p = players.borrow_mut();
+                        p.push((name.clone(), false));
+                    }
+                    // Immediately inform backend about our current ready state (first entry = local)
+                    let local_ready = players.borrow().first().map(|(_, r)| *r).unwrap_or(false);
+                    let msg = Frontend2BackendMsg::ReadyUpdate(local_ready);
+                    ws_clone.borrow().send_msg(&msg);
                 }
-                // Immediately inform backend about our current ready state (first entry = local)
-                let local_ready = players.borrow().first().map(|(_, r)| *r).unwrap_or(false);
-                let msg = Frontend2BackendMsg::ReadyUpdate(local_ready);
-                ws_clone.borrow().send_msg(&msg);
             }
             Backend2FrontendMsg::RemovePlayer(name) => {
                 sprintln!("Got a remove player message for: {}", name);

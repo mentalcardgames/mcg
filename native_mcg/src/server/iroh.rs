@@ -730,6 +730,7 @@ where
                     let _ = state.broadcaster.send(
                         Backend2FrontendMsg::NewPlayer(name)
                     );
+
                     // For all the peers in the list that aren't the one that just sent us the list,
                     // update our remote_ticket so that we can attempt to connect to them if we aren't already connected
                     if new_id != peer_id {
@@ -767,6 +768,15 @@ where
             lobby.lobby_open = true;
             lobby.max_players = max_players;
             lobby.game_type = game_type;
+            return Ok(true);
+        }
+        Ok(Peer2PeerMsg::RequestReady) => {
+            tracing::info!(peer = %peer_id, "Peer requested ready status");
+            let msg = {
+                let lobby = state.lobby.read().await;
+                Peer2PeerMsg::PeerReady(lobby.our_name.clone(), lobby.ready)
+            };
+            send_peer_msg_to_writer(send, &msg).await?;
             return Ok(true);
         }
         Ok(Peer2PeerMsg::PeerReady(name, ready) ) => {

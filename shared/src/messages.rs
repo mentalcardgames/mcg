@@ -59,6 +59,7 @@ pub enum Frontend2BackendMsg {
     LobbyOpen(String),
     PlayerName(String),
     GetOurName,
+    GetPlayers,
     Disconnect,
     ReadyUpdate(bool),
 }
@@ -93,4 +94,5 @@ pub enum Peer2PeerMsg {
     Peers(HashMap<String, (String, String)>), // EndpointId (as string) -> Peer's Name and Ticket
     NewName(String), // New name for the peer (after a rename due to being a duplicated name)
     PeerReady(String, bool), // Peer name and ready status
+    RequestReady, // Request the peer's ready status for the anti-race condition redundancy code when we scan a QR code
 }
