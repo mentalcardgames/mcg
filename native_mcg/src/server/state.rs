@@ -87,6 +87,7 @@ pub struct Lobby {
     pub(crate) max_players: usize,
     pub(crate) lobby_open: bool,
     pub(crate) our_name: String,
+    pub(crate) ready: bool,
     pub(crate) game_type: String,
     pub(crate) game_running: bool,
 }
@@ -508,9 +509,10 @@ pub async fn dispatch_client_message(
             mcg_shared::Backend2FrontendMsg::Error("Goodbye".into())
         }
         mcg_shared::Frontend2BackendMsg::ReadyUpdate(ready) => {
-            let lobby = state.lobby.read().await;
+            let mut lobby = state.lobby.write().await;
             let msg = mcg_shared::Peer2PeerMsg::PeerReady(lobby.our_name.clone(), ready);
             broadcast_peer_msg(state, msg);
+            lobby.ready = ready;
             mcg_shared::Backend2FrontendMsg::Error(format!("Ready status updated: {}", ready))
         }
         mcg_shared::Frontend2BackendMsg::GetPlayers => {
