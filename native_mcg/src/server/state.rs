@@ -103,6 +103,7 @@ impl Default for Lobby {
             max_players: 2,
             lobby_open: false,
             our_name: String::new(),
+            ready: false,
             game_type: String::new(),
             game_running: false,
         }
