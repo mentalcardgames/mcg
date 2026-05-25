@@ -36,7 +36,7 @@ impl ScreenWidget for LobbyScreen {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
-        if !self.initialized {
+        if !self.initialized && self.web_socket_connection.borrow().is_connected() {
             // Request our player name and our peers' data from the backend when we first initialize the screen
             // This is redundancy to fight against race conditions where we might get the relevant
             // Backend2FrontendMsgs before we enter this screen and thus miss them. By requesting the
