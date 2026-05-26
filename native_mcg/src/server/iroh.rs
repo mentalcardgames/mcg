@@ -768,6 +768,9 @@ where
             lobby.lobby_open = true;
             lobby.max_players = max_players;
             lobby.game_type = game_type;
+            //Use pong as a generic message to switch screens on the frontend without needing to make a new message type just for that
+            let msg = Backend2FrontendMsg::Pong;
+            let _ = state.broadcaster.send(msg);
             return Ok(true);
         }
         Ok(Peer2PeerMsg::RequestReady) => {

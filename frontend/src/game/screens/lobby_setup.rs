@@ -21,6 +21,7 @@ pub struct LobbySelectionScreen {
     raw: Vec<u8>,
     player_name: String,
     initialized: bool,
+    switch: Rc<RefCell<bool>>,
 }
 
 impl Default for LobbySelectionScreen {
@@ -35,6 +36,7 @@ impl Default for LobbySelectionScreen {
             raw: Vec::new(),
             player_name: String::new(),
             initialized: false,
+            switch: Rc::new(RefCell::new(false)),
         }
     }
 }
@@ -141,8 +143,9 @@ impl ScreenWidget for LobbySelectionScreen {
             let msg = Frontend2BackendMsg::QrValue(ticket);
             self.web_socket_connection.send_msg(&msg);
             self.input.clear();
-
-            // Switch to the next screen, only "Poker" for now
+        }
+        // Only switch screens if we got accepted into the lobby
+        if *self.switch.borrow() {
             app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/lobby".to_string()));
         }
         // If we received a new name, update our name both here and
@@ -191,10 +194,14 @@ impl ScreenDef for LobbySelectionScreen {
     {
         let mut me = Self::default();
         let name_storage = me.name_storage.clone();
+        let switch = me.switch.clone();
         let on_msg = move |x| match x {
             Backend2FrontendMsg::OurName(name) => {
                 sprintln!("Got our name from the server:\n\t- {:?}", name);
                 *name_storage.borrow_mut() = Some(name);
+            }
+            Backend2FrontendMsg::Pong => {
+                *switch.borrow_mut() = true;
             }
             _ => {
                 sprintln!("Got an unhandled message:\n\t- {:?}", x);
