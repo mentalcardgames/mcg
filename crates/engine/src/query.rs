@@ -504,7 +504,7 @@ impl Evaluator {
                     UseSingleMemory::WithOwner { memory: m, .. } => m.clone(),
                 };
                 match game_data.get_memory(&key) {
-                    Some(MemoryValue::Int(v)) => Ok(*v),
+                    Some(MemoryValue::Int(v)) => Ok(v.clone()),
                     Some(_) => Err("Memory value is not an Int".to_string()),
                     None => Err(format!("Memory {} not found", key)),
                 }
