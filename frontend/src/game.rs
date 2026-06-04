@@ -52,6 +52,8 @@ pub struct App {
 
     // Router for URL handling
     router: Option<Router>,
+
+    ws_connection: websocket::WebSocketConnection,
 }
 
 impl Default for App {
@@ -90,6 +92,7 @@ impl App {
             },
             app_state,
             router,
+            ws_connection: websocket::WebSocketConnection::new(),
         }
     }
 
@@ -155,7 +158,7 @@ impl App {
                                 else{
                                     events.push(AppEvent::ChangeRoute("/".to_string()));
                                 }
-                                
+
                             }
                         },
                     );
@@ -266,6 +269,7 @@ impl eframe::App for App {
         let mut app_interface = AppInterface {
             events: &mut events,
             app_state: &mut self.app_state,
+            ws: &mut self.ws_connection,
         };
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -296,6 +300,7 @@ impl eframe::App for App {
                         let mut temp_interface = AppInterface {
                             events: &mut Vec::new(),
                             app_state: &mut self.app_state,
+                            ws: &mut self.ws_connection,
                         };
                         screen.on_exit(&mut temp_interface);
                     }

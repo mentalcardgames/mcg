@@ -1,4 +1,5 @@
 use eframe::Frame;
+use crate::game::websocket::WebSocketConnection;
 
 pub mod articles_screen;
 pub mod example_screen;
@@ -31,6 +32,8 @@ pub use mcg_lobby::LobbyScreen;
 pub struct AppInterface<'a> {
     pub events: &'a mut Vec<crate::game::AppEvent>,
     pub app_state: &'a mut crate::store::ClientState,
+
+    pub ws: &'a mut WebSocketConnection,
 }
 impl<'a> AppInterface<'a> {
     pub fn queue_event(&mut self, event: crate::game::AppEvent) {

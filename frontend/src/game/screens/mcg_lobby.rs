@@ -2,7 +2,6 @@ use crate::game::{AppInterface, ScreenWidget};
 use super::{ScreenDef, ScreenMetadata};
 use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions, RichText};
 use image::{ImageBuffer, Luma};
-use crate::game::websocket::WebSocketConnection;
 use mcg_shared::{Frontend2BackendMsg, PlayerConfig, Backend2FrontendMsg};
 use crate::sprintln;
 use qrcode::QrCode;
@@ -10,21 +9,21 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct LobbyScreen {
-    web_socket_connection: Rc<RefCell<WebSocketConnection>>,
     qr_payload: Rc<RefCell<Option<String>>>,
     players: Rc<RefCell<Vec<(String, bool)>>>, // (name, ready)
     our_name_pending: Rc<RefCell<Option<String>>>,
     initialized: bool,
+    setup: bool,
 }
 
 impl Default for LobbyScreen {
     fn default() -> Self {
         Self {
-            web_socket_connection: Rc::new(RefCell::new(WebSocketConnection::default())),
             qr_payload: Rc::new(RefCell::new(None)),
             players: Rc::new(RefCell::new(Vec::new())),
             our_name_pending: Rc::new(RefCell::new(None)),
             initialized: false,
+            setup: false,
         }
     }
 }
@@ -36,19 +35,93 @@ impl ScreenWidget for LobbyScreen {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
-        if !self.initialized && self.web_socket_connection.borrow().is_connected() {
-            // Request our player name and our peers' data from the backend when we first initialize the screen
-            // This is redundancy to fight against race conditions where we might get the relevant
-            // Backend2FrontendMsgs before we enter this screen and thus miss them. By requesting the
-            // data again here, we should always have the correct display.
-            let msg = Frontend2BackendMsg::GetOurName;
-            self.web_socket_connection.borrow().send_msg(&msg);
-            let msg = Frontend2BackendMsg::GetPlayers;
-            self.web_socket_connection.borrow().send_msg(&msg);
+        // Lazy connect / initialization: if not initialized, attempt to connect using central ws
+        if !self.initialized {
+            // Prepare closure state clones
+            let payload = self.qr_payload.clone();
+            let players = self.players.clone();
+            let our_name_pending = self.our_name_pending.clone();
+
+            let on_msg = move |x: Backend2FrontendMsg| match x {
+                Backend2FrontendMsg::TicketValue(ticket) => {
+                    sprintln!("Got a ticket value:\n\t- {:?}", ticket);
+                    *payload.borrow_mut() = Some(ticket);
+                }
+                Backend2FrontendMsg::IPValue(ip) => {
+                    sprintln!("Got an IP value:\n\t- {:?}", ip);
+                    *payload.borrow_mut() = Some(ip);
+                }
+                Backend2FrontendMsg::NewPlayer(name) => {
+                    // add player
+                    if !players.borrow().iter().any(|(n, _)| n == &name) {
+                        {
+                            let mut p = players.borrow_mut();
+                            p.push((name.clone(), false));
+                        }
+                        // Immediately inform backend about our current ready state (first entry = local)
+                        let local_ready = players.borrow().first().map(|(_, r)| *r).unwrap_or(false);
+                        let msg = Frontend2BackendMsg::ReadyUpdate(local_ready);
+                        // send through central ws (can't access it here) -> rely on server behavior:
+                        // clients typically send ReadyUpdate after connecting; we'll send explicitly below if already connected
+                        sprintln!("Queued ready update after NewPlayer: {}", local_ready);
+                    }
+                }
+                Backend2FrontendMsg::RemovePlayer(name) => {
+                    sprintln!("Got a remove player message for: {}", name);
+                    players.borrow_mut().retain(|(n, _)| n != &name);
+                }
+                Backend2FrontendMsg::PlayerReady(name, ready) => {
+                    sprintln!("Got a ready update for player {}: {}", name, ready);
+                    if let Some((_, r)) = players.borrow_mut().iter_mut().find(|(n, _)| n == &name) {
+                        *r = ready;
+                    }
+                }
+                Backend2FrontendMsg::OurName(name) => {
+                    sprintln!("Got our player name from backend: {}", name);
+                    // Update ourname if we got it from the backend (e.g. after being renamed by a peer)
+                    // Only update the first entry which is reserved for the local player
+                    if let Some((n, _)) = players.borrow_mut().first_mut() {
+                        *n = name.clone();
+                    }
+                    *our_name_pending.borrow_mut() = Some(name);
+                }
+                _ => {
+                    sprintln!("Got an unhandled message:\n\t- {:?}", x);
+                }
+            };
+
+            let on_err = move |e: String| {
+                sprintln!("Got an error:\n\t- {:?}", e);
+            };
+            let on_cls = move |c: String| {
+                sprintln!("Got a close:\n\t- {:?}", c);
+            };
+
+            // attempt to connect using central connection
+            {
+                let mut players_cfg = Vec::new();
+                let p = PlayerConfig {
+                    id: mcg_shared::PlayerId::from(1337),
+                    name: "Lobby".to_string(),
+                    is_bot: false,
+                };
+                players_cfg.push(p);
+
+                let server = app_interface.state().settings.server_address.clone();
+                app_interface.ws.connect(&server, players_cfg, on_msg, on_err, on_cls);
+            }
             self.initialized = true;
         }
-        // If we got a name from the backend, apply it to our local player entry and settings. 
-        // This can happen if we were renamed by a peer
+        if !self.setup && app_interface.ws.is_connected() {
+            // now connected: request our name and players explicitly
+            let msg = Frontend2BackendMsg::GetOurName;
+            app_interface.ws.send_msg(&msg);
+            let msg = Frontend2BackendMsg::GetPlayers;
+            app_interface.ws.send_msg(&msg);
+            self.setup = true;
+        }
+
+        // If we got a name from the backend, apply it to our local player entry and settings.
         if let Some(new_name) = self.our_name_pending.borrow_mut().take() {
             app_interface.state().settings.name = new_name;
         }
@@ -58,7 +131,6 @@ impl ScreenWidget for LobbyScreen {
         if !chosen_name.is_empty() {
             // Only add the chosen name once at the start if the list is currently empty
             let mut players_b = self.players.borrow_mut();
-
             if players_b.is_empty() {
                 players_b.push((chosen_name.clone(), false));
             }
@@ -97,7 +169,7 @@ impl ScreenWidget for LobbyScreen {
                     *ready = !*ready;
                     // Send ready state to backend so we can tell the other players
                     let msg = Frontend2BackendMsg::ReadyUpdate(*ready);
-                    self.web_socket_connection.borrow().send_msg(&msg);
+                    app_interface.ws.send_msg(&msg);
                 }
             }
         }
@@ -124,7 +196,7 @@ impl ScreenWidget for LobbyScreen {
         ui.horizontal(|ui| {
             if ui.button("Generate QR Code and let others scan it to join!").clicked() {
                 let msg = Frontend2BackendMsg::GetTicket;
-                self.web_socket_connection.borrow().send_msg(&msg);
+                app_interface.ws.send_msg(&msg);
             }
         });
         ui.add_space(8.0);
@@ -146,11 +218,10 @@ impl ScreenWidget for LobbyScreen {
         }
     }
 
-    fn on_exit(&mut self, _app_interface: &mut AppInterface) {
+    fn on_exit(&mut self, app_interface: &mut AppInterface) {
         // Disconnect when leaving this screen
         let msg = Frontend2BackendMsg::Disconnect;
-        self.web_socket_connection.borrow().send_msg(&msg);
-        self.web_socket_connection.borrow_mut().close();
+        app_interface.ws.send_msg(&msg);
     }
 }
 
@@ -172,79 +243,8 @@ impl ScreenDef for LobbyScreen {
     where
         Self: Sized,
     {
-        let mut me = Self::default();
-        let payload = me.qr_payload.clone();
-        let players = me.players.clone();
-        let ws_clone = me.web_socket_connection.clone();
-        let our_name_pending = me.our_name_pending.clone();
-
-        let on_msg = move |x| match x {
-            Backend2FrontendMsg::TicketValue(ticket) => {
-                sprintln!("Got a ticket value:\n\t- {:?}", ticket);
-                *payload.borrow_mut() = Some(ticket);
-            }
-            Backend2FrontendMsg::IPValue(ip) => {
-                sprintln!("Got an IP value:\n\t- {:?}", ip);
-                *payload.borrow_mut() = Some(ip);
-            }
-            Backend2FrontendMsg::NewPlayer(name) => {
-                // add player
-                if !players.borrow().iter().any(|(n, _)| n == &name){
-                    {
-                        let mut p = players.borrow_mut();
-                        p.push((name.clone(), false));
-                    }
-                    // Immediately inform backend about our current ready state (first entry = local)
-                    let local_ready = players.borrow().first().map(|(_, r)| *r).unwrap_or(false);
-                    let msg = Frontend2BackendMsg::ReadyUpdate(local_ready);
-                    ws_clone.borrow().send_msg(&msg);
-                }
-            }
-            Backend2FrontendMsg::RemovePlayer(name) => {
-                sprintln!("Got a remove player message for: {}", name);
-                players
-                .borrow_mut()
-                .retain(|(n, _)| n != &name);
-            }
-            Backend2FrontendMsg::PlayerReady(name, ready) => {
-                sprintln!("Got a ready update for player {}: {}", name, ready);
-                if let Some((_, r)) = players.borrow_mut().iter_mut().find(|(n, _)| n == &name) {
-                    *r = ready;
-                }
-            }
-            Backend2FrontendMsg::OurName(name) => {
-                sprintln!("Got our player name from backend: {}", name);
-                // Update ourname if we got it from the backend (e.g. after being renamed by a peer)
-                // Only update the first entry which is reserved for the local player
-                if let Some((n, _)) = players.borrow_mut().first_mut() {
-                    *n = name.clone();
-                }
-
-                *our_name_pending.borrow_mut() = Some(name);
-            }
-            _ => {
-                sprintln!("Got an unhandled message:\n\t- {:?}", x);
-            }
-        };
-        let on_err = |e| {
-            sprintln!("Got an error:\n\t- {:?}", e);
-        };
-        let on_cls = |c| {
-            sprintln!("Got a close:\n\t- {:?}", c);
-        };
-
-        // initial connection data still uses PlayerConfig for the websocket API,
-        // but internal state keeps only names.
-        let mut players = Vec::new();
-        let p = PlayerConfig {
-            id: mcg_shared::PlayerId::from(1337),
-            name: "Lobby".to_string(),
-            is_bot: false,
-        };
-        players.push(p);
-        me.web_socket_connection
-            .borrow_mut()
-            .connect("127.0.0.1:3000", players, on_msg, on_err, on_cls);
+        let me = Self::default();
+        // Do not connect here — connection is created lazily in ui() via AppInterface.ws
         Box::new(me)
     }
 }

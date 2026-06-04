@@ -4,7 +4,6 @@ use std::rc::Rc;
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::game::GameType;
-use crate::game::websocket::WebSocketConnection;
 use mcg_shared::{Frontend2BackendMsg, PlayerConfig, PlayerId, Backend2FrontendMsg};
 use crate::sprintln;
 use std::cell::RefCell;
@@ -16,7 +15,6 @@ pub struct LobbySelectionScreen {
     pub game_type: GameType,
     input: String,
     scanner: QrScannerPopup,
-    web_socket_connection: WebSocketConnection,
     name_storage: Rc<RefCell<Option<String>>>, 
     raw: Vec<u8>,
     player_name: String,
@@ -31,7 +29,6 @@ impl Default for LobbySelectionScreen {
             game_type: GameType::default(),
             input: String::new(),
             scanner: QrScannerPopup::default(),
-            web_socket_connection: WebSocketConnection::default(),
             name_storage: Rc::new(RefCell::new(None)),
             raw: Vec::new(),
             player_name: String::new(),
@@ -56,8 +53,51 @@ impl ScreenWidget for LobbySelectionScreen {
             if !global.trim().is_empty() {
                 self.player_name = global;
             }
+
+            // connect using the central connection from AppInterface
+            // (same code as before, but moved here so we have access to the connection established in the interface)
+            {
+                let server = app_interface.state().settings.server_address.clone();
+
+                let name_storage = self.name_storage.clone();
+                let switch = self.switch.clone();
+                let mut players = Vec::new();
+                let p = PlayerConfig {
+                    id: PlayerId::from(1337),
+                    name: "Select_Lobby".to_string(),
+                    is_bot: false,
+                };
+                players.push(p);
+
+                let on_msg = move |x: Backend2FrontendMsg| {
+                    match x {
+                        Backend2FrontendMsg::OurName(name) => {
+                            sprintln!("Got our name from the server:\n\t- {:?}", name);
+                            *name_storage.borrow_mut() = Some(name);
+                        }
+                        Backend2FrontendMsg::Pong => {
+                            *switch.borrow_mut() = true;
+                        }
+                        _ => {
+                            sprintln!("Got an unhandled message:\n\t- {:?}", x);
+                        }
+                    }
+                };
+                let on_err = move |e: String| {
+                    sprintln!("Got an error:\n\t- {:?}", e);
+                };
+                let on_cls = move |c: String| {
+                    sprintln!("Got a close:\n\t- {:?}", c);
+                };
+
+                app_interface
+                    .ws
+                    .connect(&server, players, on_msg, on_err, on_cls);
+            }
+
             self.initialized = true;
         }
+
         ui.heading("Host or Join Game");
         ui.group(|ui| {
         // --- First dropdown: Game ---
@@ -103,9 +143,9 @@ impl ScreenWidget for LobbySelectionScreen {
         if ui.button("Host Game").clicked() {
             // Set max players and player name on the server, then open the lobby
             let msg = Frontend2BackendMsg::PlayerCount(self.players);
-            self.web_socket_connection.send_msg(&msg);
+            app_interface.ws.send_msg(&msg);
             let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
-            self.web_socket_connection.send_msg(&msg);
+            app_interface.ws.send_msg(&msg);
             // Persist chosen name into global client state prior to join
             app_interface.state().settings.name = self.player_name.clone();
             match self.game_type {
@@ -113,7 +153,7 @@ impl ScreenWidget for LobbySelectionScreen {
                     // Transition to poker lobby setup
                     eprintln!("Hosting Poker game with max {} players", self.players);
                     let msg = Frontend2BackendMsg::LobbyOpen("Poker".to_string());
-                    self.web_socket_connection.send_msg(&msg);
+                    app_interface.ws.send_msg(&msg);
                     app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/lobby".to_string()));
                 }
                 GameType::Blackjack => {
@@ -139,9 +179,9 @@ impl ScreenWidget for LobbySelectionScreen {
             app_interface.state().settings.name = self.player_name.clone();
             let ticket = self.input.clone();
             let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
-            self.web_socket_connection.send_msg(&msg);
+            app_interface.ws.send_msg(&msg);
             let msg = Frontend2BackendMsg::QrValue(ticket);
-            self.web_socket_connection.send_msg(&msg);
+            app_interface.ws.send_msg(&msg);
             self.input.clear();
         }
         // Only switch screens if we got accepted into the lobby
@@ -168,9 +208,8 @@ impl ScreenWidget for LobbySelectionScreen {
         }
     }
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
-        // Disconnect when leaving this screen
+        // Persist name when leaving this screen
         app_interface.state().settings.name = self.player_name.clone();
-        self.web_socket_connection.close();
     }
 }
 
@@ -192,36 +231,8 @@ impl ScreenDef for LobbySelectionScreen {
     where
         Self: Sized,
     {
-        let mut me = Self::default();
-        let name_storage = me.name_storage.clone();
-        let switch = me.switch.clone();
-        let on_msg = move |x| match x {
-            Backend2FrontendMsg::OurName(name) => {
-                sprintln!("Got our name from the server:\n\t- {:?}", name);
-                *name_storage.borrow_mut() = Some(name);
-            }
-            Backend2FrontendMsg::Pong => {
-                *switch.borrow_mut() = true;
-            }
-            _ => {
-                sprintln!("Got an unhandled message:\n\t- {:?}", x);
-            }
-        };
-        let on_err = |e| {
-            sprintln!("Got an error:\n\t- {:?}", e);
-        };
-        let on_cls = |c| {
-            sprintln!("Got a close:\n\t- {:?}", c);
-        };
-        let mut players = Vec::new();
-        let p = PlayerConfig {
-            id: PlayerId::from(1337),
-            name: "Select_Lobby".to_string(),
-            is_bot: false,
-        };
-        players.push(p);
-        me.web_socket_connection
-            .connect("127.0.0.1:3000", players, on_msg, on_err, on_cls);
+        let me = Self::default();
+        // do not connect here — connect in ui() where AppInterface.ws is available
         Box::new(me)
     }
 }
