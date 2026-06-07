@@ -59,9 +59,13 @@ impl ScreenWidget for QrScreen {
             players.push(p);
 
             let server = app_interface.state().settings.server_address.clone();
-            app_interface
-                .ws
-                .connect(&server, players, on_msg, on_err, on_cls);
+            if !app_interface.ws.is_connected() {
+                    app_interface.ws.connect(&server, players);
+            }
+
+            // Register listener once and activate it
+            app_interface.ws.register_listener_once("/qr", on_msg, on_err, on_cls);
+            app_interface.ws.set_active_listener(Some("/qr"));
 
             self.initialized = true;
         }
@@ -103,6 +107,10 @@ impl ScreenWidget for QrScreen {
         }
     }
 
+    fn on_exit(&mut self, app_interface: &mut AppInterface) {
+        // Deactivate this screen's listener, keep it registered
+        app_interface.ws.set_active_listener(None);
+    }
 }
 
 impl ScreenDef for QrScreen {

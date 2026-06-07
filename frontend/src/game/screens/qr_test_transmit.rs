@@ -100,9 +100,13 @@ impl ScreenWidget for QrTestTransmit {
             players.push(p);
 
             let server = app_interface.state().settings.server_address.clone();
-            app_interface
-                .ws
-                .connect(&server, players, on_msg, on_err, on_cls);
+            if !app_interface.ws.is_connected() {
+                    app_interface.ws.connect(&server, players);
+            }
+
+            // Register listener once and activate it
+            app_interface.ws.register_listener_once("/transmit", on_msg, on_err, on_cls);
+            app_interface.ws.set_active_listener(Some("/transmit"));
 
             self.initialized = true;
         }
@@ -176,6 +180,11 @@ impl ScreenWidget for QrTestTransmit {
             let image = Image::from_texture(handle).fit_to_exact_size(vec2(size, size));
             ui.add(image);
         }
+    }
+
+    fn on_exit(&mut self, app_interface: &mut AppInterface) {
+        // Deactivate this screen's listener, keep it registered
+        app_interface.ws.set_active_listener(None);
     }
 }
 

@@ -14,6 +14,7 @@ pub struct LobbyScreen {
     our_name_pending: Rc<RefCell<Option<String>>>,
     initialized: bool,
     setup: bool,
+    ready_sync: Rc<RefCell<bool>>,
 }
 
 impl Default for LobbyScreen {
@@ -24,6 +25,7 @@ impl Default for LobbyScreen {
             our_name_pending: Rc::new(RefCell::new(None)),
             initialized: false,
             setup: false,
+            ready_sync: Rc::new(RefCell::new(false)),
         }
     }
 }
@@ -35,7 +37,8 @@ impl ScreenWidget for LobbyScreen {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
-        // Lazy connect / initialization: if not initialized, attempt to connect using central ws
+        let ready_sync = self.ready_sync.clone();
+        // Lazy init: register persistent listeners once and activate them for this screen
         if !self.initialized {
             // Prepare closure state clones
             let payload = self.qr_payload.clone();
@@ -58,12 +61,8 @@ impl ScreenWidget for LobbyScreen {
                             let mut p = players.borrow_mut();
                             p.push((name.clone(), false));
                         }
-                        // Immediately inform backend about our current ready state (first entry = local)
-                        let local_ready = players.borrow().first().map(|(_, r)| *r).unwrap_or(false);
-                        let msg = Frontend2BackendMsg::ReadyUpdate(local_ready);
-                        // send through central ws (can't access it here) -> rely on server behavior:
-                        // clients typically send ReadyUpdate after connecting; we'll send explicitly below if already connected
-                        sprintln!("Queued ready update after NewPlayer: {}", local_ready);
+                        *ready_sync.borrow_mut() = true;; // Set this flag to indicate that we are syncing ready state for a new player
+                        
                     }
                 }
                 Backend2FrontendMsg::RemovePlayer(name) => {
@@ -108,10 +107,23 @@ impl ScreenWidget for LobbyScreen {
                 players_cfg.push(p);
 
                 let server = app_interface.state().settings.server_address.clone();
-                app_interface.ws.connect(&server, players_cfg, on_msg, on_err, on_cls);
+                if !app_interface.ws.is_connected() {
+                    app_interface.ws.connect(&server, players_cfg);
+                }
+
+                // Register the lobby listener exactly once (idempotent)
+                app_interface
+                    .ws
+                    .register_listener_once("/lobbyselect/lobby", on_msg, on_err, on_cls);
+
+                // Activate this listener so incoming messages are routed to it
+                app_interface.ws.set_active_listener(Some("/lobbyselect/lobby"));
             }
+
             self.initialized = true;
         }
+
+        // When the screen is visible and connected, ensure we have requested initial state
         if !self.setup && app_interface.ws.is_connected() {
             // now connected: request our name and players explicitly
             let msg = Frontend2BackendMsg::GetOurName;
@@ -119,6 +131,13 @@ impl ScreenWidget for LobbyScreen {
             let msg = Frontend2BackendMsg::GetPlayers;
             app_interface.ws.send_msg(&msg);
             self.setup = true;
+        }
+        if *self.ready_sync.borrow() && app_interface.ws.is_connected() {
+            // If we just got a new player and are syncing ready state, send our current ready state to backend
+            let local_ready = self.players.borrow().first().map(|(_, r)| *r).unwrap_or(false);
+            let msg = Frontend2BackendMsg::ReadyUpdate(local_ready);
+            app_interface.ws.send_msg(&msg);
+            *self.ready_sync.borrow_mut() = false; // Reset the flag after syncing
         }
 
         // If we got a name from the backend, apply it to our local player entry and settings.
@@ -219,7 +238,10 @@ impl ScreenWidget for LobbyScreen {
     }
 
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
-        // Disconnect when leaving this screen
+        // Deactivate the lobby listener but keep it registered (idempotent registration elsewhere)
+        app_interface.ws.set_active_listener(None);
+
+        // Tell others we wish to disconnect
         let msg = Frontend2BackendMsg::Disconnect;
         app_interface.ws.send_msg(&msg);
     }

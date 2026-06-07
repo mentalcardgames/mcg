@@ -55,7 +55,6 @@ impl ScreenWidget for LobbySelectionScreen {
             }
 
             // connect using the central connection from AppInterface
-            // (same code as before, but moved here so we have access to the connection established in the interface)
             {
                 let server = app_interface.state().settings.server_address.clone();
 
@@ -90,9 +89,12 @@ impl ScreenWidget for LobbySelectionScreen {
                     sprintln!("Got a close:\n\t- {:?}", c);
                 };
 
-                app_interface
-                    .ws
-                    .connect(&server, players, on_msg, on_err, on_cls);
+                if !app_interface.ws.is_connected() {
+                    app_interface.ws.connect(&server, players);
+                }
+                app_interface.ws.register_listener_once("/lobbyselect", on_msg, on_err, on_cls);
+                // activate this screen's listener
+                app_interface.ws.set_active_listener(Some("/lobbyselect"));
             }
 
             self.initialized = true;
@@ -210,6 +212,8 @@ impl ScreenWidget for LobbySelectionScreen {
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
         // Persist name when leaving this screen
         app_interface.state().settings.name = self.player_name.clone();
+        // Deactivate this screen's listener
+        app_interface.ws.set_active_listener(None);
     }
 }
 
