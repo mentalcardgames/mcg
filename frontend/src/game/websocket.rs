@@ -166,7 +166,7 @@ impl WebSocketConnection {
         }
     }
 
-    /// Register a named listener set once. If `key` already exists, registration is ignored.
+    /// Register a named listener set once. If `key` already exists, just updates the callbacks without adding a new entry.
     /// Use a unique key per screen (e.g. screen path).
     pub fn register_listener_once(
         &mut self,
@@ -178,10 +178,6 @@ impl WebSocketConnection {
         let key_str = key.to_string();
         {
             let mut msgs = self.message_listeners.borrow_mut();
-            if msgs.contains_key(&key_str) {
-                // already registered -> noop
-                return;
-            }
             msgs.insert(key_str.clone(), Rc::new(on_message));
         }
         {

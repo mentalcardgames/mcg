@@ -238,12 +238,11 @@ impl ScreenWidget for LobbyScreen {
     }
 
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
-        // Deactivate the lobby listener but keep it registered (idempotent registration elsewhere)
-        app_interface.ws.set_active_listener(None);
-
         // Tell others we wish to disconnect
         let msg = Frontend2BackendMsg::Disconnect;
         app_interface.ws.send_msg(&msg);
+        // Deactivate the lobby listener but keep it registered (idempotent registration elsewhere)
+        app_interface.ws.set_active_listener(None);
     }
 }
 
