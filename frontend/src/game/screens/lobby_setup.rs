@@ -20,6 +20,7 @@ pub struct LobbySelectionScreen {
     player_name: String,
     initialized: bool,
     switch: Rc<RefCell<bool>>,
+    manual_ticket: String,
 }
 
 impl Default for LobbySelectionScreen {
@@ -34,6 +35,7 @@ impl Default for LobbySelectionScreen {
             player_name: String::new(),
             initialized: false,
             switch: Rc::new(RefCell::new(false)),
+            manual_ticket: String::new(),
         }
     }
 }
@@ -174,6 +176,18 @@ impl ScreenWidget for LobbySelectionScreen {
 
         ui.add_space(8.0);
         ui.label("Click 'Scan QR' to connect to another player's lobby by scanning a QR code!");
+
+        // Manually enter a ticket (in case scanner doesn't work).
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            ui.label("Manually enter ticket in case the scanner doesn't work:");
+            // keep the text edit compact; let it expand horizontally
+            ui.add(egui::TextEdit::singleline(&mut self.manual_ticket).desired_width(360.0));
+            if ui.button("Connect").clicked() {
+                self.input = self.manual_ticket.trim().to_string();
+            }
+        });
+
         // If our input is an endpoint, send it to get a connection
         if self.input.starts_with("endpoint"){
             tracing::info!("Sending endpoint ticket to server: {}", self.input);
@@ -186,6 +200,7 @@ impl ScreenWidget for LobbySelectionScreen {
             app_interface.ws.send_msg(&msg);
             self.input.clear();
         }
+
         // Only switch screens if we got accepted into the lobby
         if *self.switch.borrow() {
             app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/lobby".to_string()));
