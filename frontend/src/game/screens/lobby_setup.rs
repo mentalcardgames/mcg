@@ -163,7 +163,9 @@ impl ScreenWidget for LobbySelectionScreen {
                 GameType::Blackjack => {
                     // Transition to blackjack lobby setup
                     eprintln!("Hosting Blackjack game with max {} players", self.players);
-                    // We dont have blackjack implemented, so this is just a dummy for testing's sake.
+                    let msg = Frontend2BackendMsg::LobbyOpen("Blackjack".to_string());
+                    app_interface.ws.send_msg(&msg);
+                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/lobby".to_string()));
                 }
             }
         }
