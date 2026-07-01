@@ -52,12 +52,12 @@ fn interactive_input(input_type: InputType) -> Input {
     let mut handle = stdin.lock();
     loop {
         match &input_type {
-            InputType::Choice(options) => {
+            InputType::Choice { options, max_index } => {
                 println!("\n--- Choice ---");
                 for (i, opt) in options.iter().enumerate() {
                     println!("  {}. {opt}", i + 1);
                 }
-                print!("Enter 1-{}: ", options.len());
+                print!("Enter 1-{}: ", max_index + 1);
                 io::stdout().flush().ok();
                 let mut line = String::new();
                 match handle.read_line(&mut line) {
@@ -68,7 +68,7 @@ fn interactive_input(input_type: InputType) -> Input {
                     }
                 }
                 match line.trim().parse::<usize>() {
-                    Ok(n) if n >= 1 && n <= options.len() => return Input::Choice { idx: n - 1 },
+                    Ok(n) if n >= 1 && n <= max_index + 1 => return Input::Choice { idx: n - 1 },
                     _ => {
                         println!("Invalid choice, try again.");
                         continue;

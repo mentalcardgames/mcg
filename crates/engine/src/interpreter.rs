@@ -52,7 +52,8 @@ impl Interpreter {
                             .enumerate()
                             .map(|(i, _)| format!("Option {}", i + 1))
                             .collect();
-                        StepResult::NeedsInput(InputType::Choice(options))
+                        let max_index = options.len().saturating_sub(1);
+                        StepResult::NeedsInput(InputType::Choice { options, max_index })
                     }
                 }
                 Payload::Optional => {
@@ -176,7 +177,11 @@ pub enum StepResult {
     Error(String),
 }
 
+#[derive(Clone)]
 pub enum InputType {
-    Choice(Vec<String>),
+    Choice {
+        options: Vec<String>,
+        max_index: usize,
+    },
     Optional(String),
 }

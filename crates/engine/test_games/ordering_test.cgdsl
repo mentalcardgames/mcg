@@ -1,0 +1,31 @@
+player P1, P2
+team T1 with (P:P1, P:P2)
+turnorder (P:P1, P:P2)
+location Table on table
+location Stock on table
+
+card on Stock:
+  Rank(Ace, Two, Three, Four)
+    for Suite(Diamonds, Hearts)
+
+stage Setup for current 1 times {
+  deal 1 from top(Stock) private to Hand
+}
+
+stage Play for current 2 times {
+  choose {
+    move top(Hand) face down to Table
+    or
+    move top(Hand) face up to Table
+  }
+
+  optional {
+    deal 1 from top(Stock) private to Hand
+  }
+
+  cycle to next
+}
+
+stage End for current 1 times {
+  end Play
+}

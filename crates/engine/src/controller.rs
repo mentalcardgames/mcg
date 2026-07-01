@@ -40,26 +40,20 @@ pub fn run_game(
         line_buffer: VecDeque::new(),
         file_loaded: false,
         loaded_line_count: 0,
+        input_sequence: 0,
     };
     controller.run()
 }
 
 /// Drives the [`Interpreter`] forward, supplying external input when required.
 struct Controller {
-    /// The core interpreter that executes the state machine.
     interpreter: Interpreter,
-    /// Where to obtain player decisions when the interpreter asks for one.
     input_source: InputSource,
-    /// Optional callback invoked after every interpreter step so callers can
-    /// react to the evolving game state (e.g. push a UI update).
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
-    /// Lines read from a test file, consumed in FIFO order (queue).
     line_buffer: VecDeque<String>,
-    /// Whether the test file has already been read into `line_buffer`.
     file_loaded: bool,
-    /// Total number of non-empty, non-comment lines loaded from the test file.
-    /// Used to compute 1-based line numbers in error messages.
     loaded_line_count: usize,
+    input_sequence: usize,
 }
 
 impl Controller {
@@ -86,13 +80,27 @@ impl Controller {
 
     /// Route an input request to the active [`InputSource`].
     fn get_input(&mut self, input_type: InputType) -> Result<Input, String> {
-        match &self.input_source {
-            InputSource::Player(callback) => Ok(callback(input_type)),
+        self.input_sequence += 1;
+
+        let input = match &self.input_source {
+            InputSource::Player(callback) => loop {
+                let raw = callback(input_type.clone());
+                if let Input::Choice { idx } = &raw {
+                    if let InputType::Choice { max_index, .. } = &input_type {
+                        if idx > max_index {
+                            continue;
+                        }
+                    }
+                }
+                break raw;
+            },
             InputSource::TestFile(path) => {
                 let path = path.clone();
-                self.read_test_file(&path)
+                self.read_test_file(&path)?
             }
-        }
+        };
+
+        Ok(input)
     }
 
     /// Read a test input file into `line_buffer` on first call, then consume
@@ -125,22 +133,20 @@ impl Controller {
             .pop_front()
             .ok_or_else(|| "Test input file exhausted".to_string())?;
 
-        let consumed_lines = self.loaded_line_count - self.line_buffer.len();
-
         match line.to_lowercase().as_str() {
             "y" | "yes" => Ok(Input::OptionalAccept),
             "n" | "no" => Ok(Input::OptionalDecline),
             _ => {
                 let idx: usize = line.parse().map_err(|_| {
                     format!(
-                        "Invalid test input at line {}: expected number, 'y', or 'n', got '{}'",
-                        consumed_lines, line
+                        "Invalid test input #{}: expected number, 'y', or 'n', got '{}'",
+                        self.input_sequence, line
                     )
                 })?;
                 if idx == 0 {
                     return Err(format!(
-                        "Invalid test input at line {}: choice indices start at 1, got 0",
-                        consumed_lines
+                        "Invalid test input #{}: choice indices start at 1, got 0",
+                        self.input_sequence
                     ));
                 }
                 Ok(Input::Choice { idx: idx - 1 })
@@ -189,6 +195,7 @@ mod tests {
             ]),
             file_loaded: true,
             loaded_line_count: 4,
+            input_sequence: 0,
         };
 
         let path = PathBuf::from("/nonexistent");
@@ -231,6 +238,7 @@ mod tests {
             line_buffer: VecDeque::from(["1".to_string()]),
             file_loaded: true,
             loaded_line_count: 1,
+            input_sequence: 0,
         };
 
         let path = PathBuf::from("test_input.txt");
@@ -238,5 +246,23 @@ mod tests {
         let result = controller.read_test_file(&path);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Test input file exhausted");
+    }
+
+    #[test]
+    fn test_input_file_ordering_and_validation() {
+        use front_end::validation::parse_document;
+
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let game_path = manifest_dir.join("test_games/ordering_test.cgdsl");
+        let input_path = manifest_dir.join("test_games/ordering_test.txt");
+
+        let source = std::fs::read_to_string(&game_path).expect("Failed to read test game file");
+        let game = parse_document(&source).expect("Failed to parse game");
+        let ir = game.to_lowered_graph();
+
+        let game_data = GameData::new();
+        let result = run_game(ir, game_data, InputSource::TestFile(input_path), None);
+
+        assert!(result.is_ok(), "Game should complete successfully");
     }
 }
