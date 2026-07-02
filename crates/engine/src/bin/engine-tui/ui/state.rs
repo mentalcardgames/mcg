@@ -3,7 +3,7 @@
 use crossbeam_channel::Sender;
 
 use crate::trace::{DisplayTraceEntry, TraceDetail};
-use cgdsl_engine::{DebugLevel, Input, InputType, TraceEntry};
+use cgdsl_engine::{DebugLevel, GameData, Input, InputType, TraceEntry};
 
 pub struct TuiState {
     pub trace_entries: Vec<DisplayTraceEntry>,
@@ -14,6 +14,7 @@ pub struct TuiState {
     pub pending_input: Option<InputType>,
     pub waiting_for_input: bool,
     pub input_tx: Option<Sender<Input>>,
+    pub current_state: Option<GameData>,
 }
 
 impl TuiState {
@@ -27,6 +28,7 @@ impl TuiState {
             pending_input: None,
             waiting_for_input: false,
             input_tx: None,
+            current_state: None,
         }
     }
 

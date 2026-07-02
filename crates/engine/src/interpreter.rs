@@ -281,7 +281,7 @@ impl Interpreter {
                         Ok(r) => r,
                         Err(e) => return StepResult::Error(e),
                     };
-                    let should_exit = result != *negated;
+                    let should_exit = result == *negated;
                     if let Some(ref sender) = self.trace_sender {
                         (sender)(TraceEntry::Step {
                             from,
@@ -307,6 +307,10 @@ impl Interpreter {
                     }
                 }
                 Payload::StageRoundCounter(stage) => {
+                    if self.game_data.get_stage_counter(stage.clone()) == 0 {
+                        let all_player_names: Vec<String> = self.game_data.players.iter().map(|p| p.name.clone()).collect();
+                        self.game_data.enter_stage(stage.clone(), all_player_names);
+                    }
                     self.game_data.increment_stage_counter(stage.clone());
                     let new_count = self.game_data.get_stage_counter(stage.clone());
                     if let Some(ref sender) = self.trace_sender {

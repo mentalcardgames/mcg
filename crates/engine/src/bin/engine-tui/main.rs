@@ -84,13 +84,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             tui_state.waiting_for_input = true;
         }
 
-        let current_state = state_rx.try_recv().ok();
+        while let Ok(gd) = state_rx.try_recv() {
+            tui_state.current_state = Some(gd);
+        }
 
         terminal.draw(|f| {
             let size = f.area();
             let layout = AppLayout::new(size);
 
-            if let Some(ref gd) = current_state {
+            if let Some(ref gd) = tui_state.current_state {
                 let panel = GameStatePanel::new(tui_state.state_detail);
                 panel.render(f, gd, layout.game_state_area);
 
@@ -115,72 +117,70 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             controls_panel.render(f, layout.controls_area);
         })?;
 
-        match crossterm::event::read() {
-            Ok(crossterm::event::Event::Key(key)) => match key.code {
-                crossterm::event::KeyCode::Char('q') => break,
-                crossterm::event::KeyCode::F(10) => break,
-                crossterm::event::KeyCode::Char('l') => {
-                    tui_state.cycle_state_detail();
-                }
-                crossterm::event::KeyCode::Char('t') => {
-                    tui_state.cycle_trace_detail();
-                }
-                crossterm::event::KeyCode::Char('p') => {
-                    if let Some(ref gd) = current_state {
-                        let player_count = gd.players.len();
-                        if player_count > 0 {
-                            tui_state.perspective_idx =
-                                (tui_state.perspective_idx + 1) % player_count;
+        if crossterm::event::poll(Duration::from_millis(50))? {
+            match crossterm::event::read() {
+                Ok(crossterm::event::Event::Key(key)) => match key.code {
+                    crossterm::event::KeyCode::Char('q') => break,
+                    crossterm::event::KeyCode::F(10) => break,
+                    crossterm::event::KeyCode::Char('l') => {
+                        tui_state.cycle_state_detail();
+                    }
+                    crossterm::event::KeyCode::Char('t') => {
+                        tui_state.cycle_trace_detail();
+                    }
+                    crossterm::event::KeyCode::Char('p') => {
+                        if let Some(ref gd) = tui_state.current_state {
+                            let player_count = gd.players.len();
+                            if player_count > 0 {
+                                tui_state.perspective_idx =
+                                    (tui_state.perspective_idx + 1) % player_count;
+                            }
                         }
                     }
-                }
-                crossterm::event::KeyCode::Char(n) => {
-                    if n == 'y' || n == 'Y' {
-                        if tui_state.waiting_for_input {
-                            if let Some(ref tx) = tui_state.input_tx {
-                                let _ = tx.send(Input::OptionalAccept);
-                                tui_state.waiting_for_input = false;
-                                tui_state.pending_input = None;
-                            }
-                        }
-                    } else if n == 'n' || n == 'N' {
-                        if tui_state.waiting_for_input {
-                            if let Some(ref tx) = tui_state.input_tx {
-                                let _ = tx.send(Input::OptionalDecline);
-                                tui_state.waiting_for_input = false;
-                                tui_state.pending_input = None;
-                            }
-                        }
-                    } else if let Some(digit) = n.to_digit(10) {
-                        if digit >= 1 && digit <= 9 {
+                    crossterm::event::KeyCode::Char(n) => {
+                        if n == 'y' || n == 'Y' {
                             if tui_state.waiting_for_input {
-                                let idx = digit as usize - 1;
                                 if let Some(ref tx) = tui_state.input_tx {
-                                    let _ = tx.send(Input::Choice { idx });
+                                    let _ = tx.send(Input::OptionalAccept);
                                     tui_state.waiting_for_input = false;
                                     tui_state.pending_input = None;
                                 }
                             }
+                        } else if n == 'n' || n == 'N' {
+                            if tui_state.waiting_for_input {
+                                if let Some(ref tx) = tui_state.input_tx {
+                                    let _ = tx.send(Input::OptionalDecline);
+                                    tui_state.waiting_for_input = false;
+                                    tui_state.pending_input = None;
+                                }
+                            }
+                        } else if let Some(digit) = n.to_digit(10) {
+                            if digit >= 1 && digit <= 9 {
+                                if tui_state.waiting_for_input {
+                                    let idx = digit as usize - 1;
+                                    if let Some(ref tx) = tui_state.input_tx {
+                                        let _ = tx.send(Input::Choice { idx });
+                                        tui_state.waiting_for_input = false;
+                                        tui_state.pending_input = None;
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-                crossterm::event::KeyCode::Enter => {
-                    if tui_state.waiting_for_input {
-                        if let Some(ref tx) = tui_state.input_tx {
-                            let _ = tx.send(Input::Choice { idx: 0 });
-                            tui_state.waiting_for_input = false;
-                            tui_state.pending_input = None;
+                    crossterm::event::KeyCode::Enter => {
+                        if tui_state.waiting_for_input {
+                            if let Some(ref tx) = tui_state.input_tx {
+                                let _ = tx.send(Input::Choice { idx: 0 });
+                                tui_state.waiting_for_input = false;
+                                tui_state.pending_input = None;
+                            }
                         }
                     }
-                }
+                    _ => {}
+                },
+                Err(_) => {}
                 _ => {}
-            },
-            Err(_) => {}
-            _ => {}
-        }
-
-        if engine_handle.is_finished() {
-            break;
+            }
         }
 
         thread::sleep(Duration::from_millis(16));
