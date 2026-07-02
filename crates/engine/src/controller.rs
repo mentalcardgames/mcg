@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use front_end::ir::{Ir, LoweredPayLoad};
 
 use crate::game_data::GameData;
-use crate::interpreter::{Input, InputType, Interpreter, StepResult};
+use crate::interpreter::{Input, InputType, Interpreter, StepResult, TraceEntry};
 
 /// Where the game engine gets its player input from.
 ///
@@ -26,15 +26,12 @@ pub fn run_game(
     game_data: GameData,
     input_source: InputSource,
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
+    trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
 ) -> Result<GameData, String> {
     let entry = ir.entry;
+    let interpreter = Interpreter::new(ir, game_data, trace_sender);
     let mut controller = Controller {
-        interpreter: Interpreter {
-            ir,
-            game_data,
-            input_buffer: Vec::new(),
-            current_state: entry,
-        },
+        interpreter,
         input_source,
         event_sender,
         line_buffer: VecDeque::new(),
@@ -184,6 +181,7 @@ mod tests {
                 game_data: GameData::new(),
                 input_buffer: Vec::new(),
                 current_state: default_ir.entry,
+                trace_sender: None,
             },
             input_source: InputSource::TestFile(PathBuf::from("/nonexistent")),
             event_sender: None,
@@ -232,6 +230,7 @@ mod tests {
                 game_data: GameData::new(),
                 input_buffer: Vec::new(),
                 current_state: default_ir.entry,
+                trace_sender: None,
             },
             input_source: InputSource::TestFile(PathBuf::from("test_input.txt")),
             event_sender: None,
@@ -261,7 +260,7 @@ mod tests {
         let ir = game.to_lowered_graph();
 
         let game_data = GameData::new();
-        let result = run_game(ir, game_data, InputSource::TestFile(input_path), None);
+        let result = run_game(ir, game_data, InputSource::TestFile(input_path), None, None);
 
         assert!(result.is_ok(), "Game should complete successfully");
     }
@@ -291,6 +290,7 @@ mod tests {
             Some(Box::new(move |gd| {
                 snapshots_clone.write().unwrap().push(gd.clone());
             })),
+            None,
         );
 
         assert!(result.is_ok());
@@ -334,6 +334,7 @@ mod tests {
             Some(Box::new(move |gd| {
                 snapshots_clone.write().unwrap().push(gd.clone());
             })),
+            None,
         );
 
         assert!(result.is_ok());

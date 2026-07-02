@@ -12,14 +12,37 @@ use front_end::ir::{Edge, Ir, LoweredPayLoad, Payload, StateID};
 
 use crate::game_data::GameData;
 
+#[derive(Clone, Debug)]
+pub enum TraceEntry {
+    Step { state_id: u32, payload_type: String },
+    ChoiceMade { chosen_idx: usize },
+    OptionalAccepted,
+    OptionalDeclined,
+    ConditionEvaluated { expr: String, result: bool, negated: bool, took_else: bool },
+    EndConditionEvaluated { expr: String, result: bool, stage: String, exited: bool },
+    ActionExecuted { action_name: String },
+}
+
 pub struct Interpreter {
     pub ir: Ir<LoweredPayLoad>,
     pub game_data: GameData,
     pub input_buffer: Vec<Input>,
     pub current_state: StateID,
+    pub trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
 }
 
 impl Interpreter {
+    pub fn new(ir: Ir<LoweredPayLoad>, game_data: GameData, trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>) -> Self {
+        let current_state = ir.entry;
+        Self {
+            ir,
+            game_data,
+            input_buffer: Vec::new(),
+            current_state,
+            trace_sender,
+        }
+    }
+
     pub fn step(&mut self) -> StepResult {
         let edges: &Vec<Edge<LoweredPayLoad>> = match self.ir.states.get(&self.current_state) {
             Some(e) => e,
@@ -36,11 +59,17 @@ impl Interpreter {
         if let Some(edge) = edges.first() {
             match &edge.payload {
                 Payload::Action(_) => {
+                    if let Some(ref sender) = self.trace_sender {
+                        (sender)(TraceEntry::ActionExecuted { action_name: edge.payload.to_string() });
+                    }
                     self.execute_edge(edge.clone());
                     StepResult::Ok
                 }
                 Payload::Choice => {
                     if let Some(input) = self.input_buffer.pop() {
+                        if let Some(ref sender) = self.trace_sender {
+                            (sender)(TraceEntry::ChoiceMade { chosen_idx: input.idx() });
+                        }
                         if let Some(choice_edge) = edges.get(input.idx()) {
                             self.execute_edge(choice_edge.clone());
                         }
@@ -58,6 +87,13 @@ impl Interpreter {
                 }
                 Payload::Optional => {
                     if let Some(input) = self.input_buffer.pop() {
+                        if let Some(ref sender) = self.trace_sender {
+                            match input {
+                                Input::OptionalAccept => (sender)(TraceEntry::OptionalAccepted),
+                                Input::OptionalDecline => (sender)(TraceEntry::OptionalDeclined),
+                                Input::Choice { .. } => {}
+                            }
+                        }
                         if let Some(opt_edge) = edges.get(input.idx()) {
                             self.execute_edge(opt_edge.clone());
                         }
@@ -79,6 +115,14 @@ impl Interpreter {
                         Err(e) => return StepResult::Error(e),
                     };
                     let should_take_else = result != *negated;
+                    if let Some(ref sender) = self.trace_sender {
+                        (sender)(TraceEntry::ConditionEvaluated {
+                            expr: format!("{:?}", expr),
+                            result,
+                            negated: *negated,
+                            took_else: should_take_else,
+                        });
+                    }
                     let edge = if should_take_else {
                         edges.get(1)
                     } else {
@@ -110,6 +154,14 @@ impl Interpreter {
                         Err(e) => return StepResult::Error(e),
                     };
                     let should_exit = result != *negated;
+                    if let Some(ref sender) = self.trace_sender {
+                        (sender)(TraceEntry::EndConditionEvaluated {
+                            expr: format!("{:?}", expr),
+                            result,
+                            stage: stage.clone(),
+                            exited: should_exit,
+                        });
+                    }
                     let edge = if should_exit {
                         edges.get(0)
                     } else {
@@ -150,6 +202,47 @@ impl Interpreter {
     /// Pushes input to the input buffer.
     pub fn provide_input(&mut self, input: Input) {
         self.input_buffer.push(input);
+    }
+}
+
+pub trait IrExt {
+    fn edge_labels(&self, state: StateID) -> Vec<String>;
+}
+
+impl IrExt for Ir<LoweredPayLoad> {
+    fn edge_labels(&self, state: StateID) -> Vec<String> {
+        let edges = match self.states.get(&state) {
+            Some(e) => e,
+            None => return Vec::new(),
+        };
+        edges
+            .iter()
+            .enumerate()
+            .map(|(i, edge)| {
+                let action_label = if let Some(target_edges) = self.states.get(&edge.to) {
+                    if let Some(first_edge) = target_edges.first() {
+                        if let Payload::Action(game_rule) = &first_edge.payload {
+                            Some(format_action_name(game_rule))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                action_label.unwrap_or_else(|| format!("Option {}", i + 1))
+            })
+            .collect()
+    }
+}
+
+fn format_action_name(rule: &front_end::ast::GameRule) -> String {
+    match rule {
+        front_end::ast::GameRule::Action { action } => format!("{:?}", action),
+        front_end::ast::GameRule::SetUp { setup: _ } => "SetUp".to_string(),
+        front_end::ast::GameRule::Scoring { scoring: _ } => "Scoring".to_string(),
     }
 }
 

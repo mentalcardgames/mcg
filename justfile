@@ -1,7 +1,4 @@
-set shell := ["zsh", "-uc"]
-
-# Ensure `wasm-pack` exists in PATH, aborts if missing
-wasm_pack := require("wasm-pack")
+set shell := ["bash", "-uc"]
 
 # List available recipes by default
 default:
@@ -14,8 +11,12 @@ default:
 build PROFILE="release":
     #!/usr/bin/env bash
     set -euo pipefail
-    wasm_pack="{{wasm_pack}}"
+    wasm_pack="${WASM_PACK:-wasm-pack}"
     profile="{{PROFILE}}"
+    if ! command -v "$wasm_pack" > /dev/null; then
+        echo "Error: wasm-pack is required but not installed. See https://rustwasm.github.io/wasm-pack/installer/"
+        exit 1
+    fi
     case "$profile" in
       release)
         CARGO_PROFILE_RELEASE_OPT_LEVEL=3 "$wasm_pack" build --target web --out-dir ../pkg --features wasm
@@ -68,4 +69,12 @@ agents:
     cp AGENTS.md CLAUDE.md
     cp AGENTS.md CRUSH.md
     cp AGENTS.md WARP.md
+
+# Run the engine TUI for interactive testing
+# Usage: just tui [GAME]
+# Examples:
+#   just tui                        # Run with default test game
+#   just tui my_game.cgdsl         # Run with specific game (relative to cwd)
+tui GAME="crates/engine/test_games/ordering_test.cgdsl":
+    cargo run -p cgdsl-engine --bin engine-tui -- {{GAME}}
 

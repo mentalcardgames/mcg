@@ -38,7 +38,7 @@ fn main() {
     };
 
     let game_data = GameData::new();
-    match run_game(ir, game_data, input_source, None) {
+    match run_game(ir, game_data, input_source, None, None) {
         Ok(state) => print_summary(&state),
         Err(e) => {
             eprintln!("Game error: {e}");
