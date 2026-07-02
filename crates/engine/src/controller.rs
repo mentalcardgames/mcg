@@ -265,4 +265,97 @@ mod tests {
 
         assert!(result.is_ok(), "Game should complete successfully");
     }
+
+    #[test]
+    fn test_debug_integration_game_snapshots() {
+        use crate::debug::{format_game_data, DebugLevel};
+        use front_end::validation::parse_document;
+        use std::sync::{Arc, RwLock};
+
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let game_path = manifest_dir.join("test_games/ordering_test.cgdsl");
+        let input_path = manifest_dir.join("test_games/ordering_test.txt");
+
+        let source = std::fs::read_to_string(&game_path).expect("Failed to read test game file");
+        let game = parse_document(&source).expect("Failed to parse game");
+        let ir = game.to_lowered_graph();
+
+        let snapshots = Arc::new(RwLock::new(Vec::new()));
+        let snapshots_clone = snapshots.clone();
+        let game_data = GameData::new();
+
+        let result = run_game(
+            ir,
+            game_data,
+            InputSource::TestFile(input_path),
+            Some(Box::new(move |gd| {
+                snapshots_clone.write().unwrap().push(gd.clone());
+            })),
+        );
+
+        assert!(result.is_ok());
+        assert!(!snapshots.read().unwrap().is_empty());
+
+        let output_low = format_game_data(&snapshots.read().unwrap()[0], DebugLevel::Low);
+        assert!(!output_low.is_empty());
+        assert!(output_low.contains("GAME DATA (LOW)"));
+
+        let output_medium = format_game_data(&snapshots.read().unwrap()[0], DebugLevel::Medium);
+        assert!(!output_medium.is_empty());
+        assert!(output_medium.contains("GAME DATA (MEDIUM)"));
+
+        let output_high = format_game_data(&snapshots.read().unwrap()[0], DebugLevel::High);
+        assert!(!output_high.is_empty());
+        assert!(output_high.contains("GAME DATA (HIGH)"));
+    }
+
+    #[test]
+    fn test_debug_integration_verify_game_progression() {
+        use crate::debug::{format_game_data, DebugLevel};
+        use front_end::validation::parse_document;
+        use std::sync::{Arc, RwLock};
+
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let game_path = manifest_dir.join("test_games/ordering_test.cgdsl");
+        let input_path = manifest_dir.join("test_games/ordering_test.txt");
+
+        let source = std::fs::read_to_string(&game_path).expect("Failed to read test game file");
+        let game = parse_document(&source).expect("Failed to parse game");
+        let ir = game.to_lowered_graph();
+
+        let snapshots = Arc::new(RwLock::new(Vec::new()));
+        let snapshots_clone = snapshots.clone();
+        let game_data = GameData::new();
+
+        let result = run_game(
+            ir,
+            game_data,
+            InputSource::TestFile(input_path),
+            Some(Box::new(move |gd| {
+                snapshots_clone.write().unwrap().push(gd.clone());
+            })),
+        );
+
+        assert!(result.is_ok());
+
+        let first_snapshot = &snapshots.read().unwrap()[0];
+        let first_output = format_game_data(first_snapshot, DebugLevel::Low);
+
+        assert!(first_output.contains("Players:"));
+
+        if snapshots.read().unwrap().len() > 1 {
+            let second_snapshot = &snapshots.read().unwrap()[1];
+            let second_output = format_game_data(second_snapshot, DebugLevel::Low);
+
+            assert!(
+                second_output.contains("Players:"),
+                "All snapshots should contain player info"
+            );
+
+            assert!(
+                first_output != second_output,
+                "Snapshots should show different game states"
+            );
+        }
+    }
 }
