@@ -332,8 +332,9 @@ fn execute_cardset_move(
         .expect("Failed to eval cardset")
         .1; // get only the indices, we don't care about the location for from
     let count = match quantity {
-        Some(qty) => crate::query::Evaluator::resolve_quantity(&qty, card_indices.len())
-            .unwrap_or(1),
+        Some(qty) => {
+            crate::query::Evaluator::resolve_quantity(&qty, card_indices.len()).unwrap_or(1)
+        }
         None => card_indices.len(),
     };
 

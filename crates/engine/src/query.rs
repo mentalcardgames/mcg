@@ -166,13 +166,12 @@ SingleOwner
 
 use crate::game_data::{Card, GameData, MemoryValue};
 use front_end::ast::{
-    AggregateBool, AggregateFilter, AggregateInt, AggregatePlayer, AggregateTeam, BoolExpr,
-    BoolOp, CardPosition, CardSet, Collection, CompareBool, EndCondition, Extrema,
-    FilterExpr, Group, Groupable, IntCollection, IntExpr, IntOp, LocationCollection,
-    Owner, PlayerCollection, PlayerExpr, Players, Quantity, QueryCardPosition,
-    QueryInt, QueryPlayer, QueryString, RuntimeInt, RuntimePlayer, RuntimeTeamCollection,
-    SingleOwner, StringCollection, StringExpr, TeamCollection, TeamExpr, Types, UnaryOp,
-    UseMemory, UseSingleMemory,
+    AggregateBool, AggregateFilter, AggregateInt, AggregatePlayer, AggregateTeam, BoolExpr, BoolOp,
+    CardPosition, CardSet, Collection, CompareBool, EndCondition, Extrema, FilterExpr, Group,
+    Groupable, IntCollection, IntExpr, IntOp, LocationCollection, Owner, PlayerCollection,
+    PlayerExpr, Players, Quantity, QueryCardPosition, QueryInt, QueryPlayer, QueryString,
+    RuntimeInt, RuntimePlayer, RuntimeTeamCollection, SingleOwner, StringCollection, StringExpr,
+    TeamCollection, TeamExpr, Types, UnaryOp, UseMemory, UseSingleMemory,
 };
 
 pub struct Evaluator;
@@ -393,111 +392,126 @@ impl Evaluator {
                     IntOp::Mod => Ok(left % right),
                 }
             }
-            IntExpr::Query { query } => {
-                match query {
-                    QueryInt::IntCollectionAt { int_collection, int_expr } => {
-                        let ints = Self::eval_int_collection(int_collection, game_data)?;
-                        let idx = Self::eval_int(int_expr, game_data)? as usize;
-                        ints.get(idx).copied().ok_or(format!("No int at index {}", idx))
-                    }
+            IntExpr::Query { query } => match query {
+                QueryInt::IntCollectionAt {
+                    int_collection,
+                    int_expr,
+                } => {
+                    let ints = Self::eval_int_collection(int_collection, game_data)?;
+                    let idx = Self::eval_int(int_expr, game_data)? as usize;
+                    ints.get(idx)
+                        .copied()
+                        .ok_or(format!("No int at index {}", idx))
                 }
-            }
-            IntExpr::Aggregate { aggregate } => {
-                match aggregate {
-                    AggregateInt::SizeOf { collection } => {
-                        Self::eval_collection_size(collection, game_data)
-                    }
-                    AggregateInt::SumOfIntCollection { int_collection } => {
-                        let ints = Self::eval_int_collection(int_collection, game_data)?;
-                        Ok(ints.iter().sum())
-                    }
-                    AggregateInt::SumOfCardSet { card_set, pointmap } => {
-                        let (_, card_ids) = Self::eval_cardset(card_set, game_data)?;
-                        let point_map = game_data.point_maps.iter()
-                            .find(|pm| pm.name == *pointmap)
-                            .ok_or(format!("PointMap {} not found", pointmap))?;
-                        let mut sum = 0;
-                        for card_id in &card_ids {
-                            if let Some(card) = game_data.get_card(*card_id) {
-                                for (key, value) in card.iter() {
-                                    let map_key = format!("{}:{}", key, value);
-                                    if let Some(&points) = point_map.map.get(&map_key) {
-                                        sum += points;
-                                        break;
-                                    }
+            },
+            IntExpr::Aggregate { aggregate } => match aggregate {
+                AggregateInt::SizeOf { collection } => {
+                    Self::eval_collection_size(collection, game_data)
+                }
+                AggregateInt::SumOfIntCollection { int_collection } => {
+                    let ints = Self::eval_int_collection(int_collection, game_data)?;
+                    Ok(ints.iter().sum())
+                }
+                AggregateInt::SumOfCardSet { card_set, pointmap } => {
+                    let (_, card_ids) = Self::eval_cardset(card_set, game_data)?;
+                    let point_map = game_data
+                        .point_maps
+                        .iter()
+                        .find(|pm| pm.name == *pointmap)
+                        .ok_or(format!("PointMap {} not found", pointmap))?;
+                    let mut sum = 0;
+                    for card_id in &card_ids {
+                        if let Some(card) = game_data.get_card(*card_id) {
+                            for (key, value) in card.iter() {
+                                let map_key = format!("{}:{}", key, value);
+                                if let Some(&points) = point_map.map.get(&map_key) {
+                                    sum += points;
+                                    break;
                                 }
                             }
                         }
-                        Ok(sum)
                     }
-                    AggregateInt::ExtremaCardset { extrema, card_set, pointmap } => {
-                        let (_, card_ids) = Self::eval_cardset(card_set, game_data)?;
-                        let point_map = game_data.point_maps.iter()
-                            .find(|pm| pm.name == *pointmap)
-                            .ok_or(format!("PointMap {} not found", pointmap))?;
-                        let mut best_card_id = None;
-                        let mut best_value = None;
-                        for card_id in &card_ids {
-                            if let Some(card) = game_data.get_card(*card_id) {
-                                let mut card_value = 0;
-                                for (key, value) in card.iter() {
-                                    let map_key = format!("{}:{}", key, value);
-                                    if let Some(&points) = point_map.map.get(&map_key) {
-                                        card_value = points;
-                                        break;
-                                    }
-                                }
-                                match extrema {
-                                    Extrema::Min => {
-                                        if best_value.is_none() || card_value < *best_value.as_ref().unwrap() {
-                                            best_value = Some(card_value);
-                                            best_card_id = Some(*card_id);
-                                        }
-                                    }
-                                    Extrema::Max => {
-                                        if best_value.is_none() || card_value > *best_value.as_ref().unwrap() {
-                                            best_value = Some(card_value);
-                                            best_card_id = Some(*card_id);
-                                        }
-                                    }
+                    Ok(sum)
+                }
+                AggregateInt::ExtremaCardset {
+                    extrema,
+                    card_set,
+                    pointmap,
+                } => {
+                    let (_, card_ids) = Self::eval_cardset(card_set, game_data)?;
+                    let point_map = game_data
+                        .point_maps
+                        .iter()
+                        .find(|pm| pm.name == *pointmap)
+                        .ok_or(format!("PointMap {} not found", pointmap))?;
+                    let mut best_card_id = None;
+                    let mut best_value = None;
+                    for card_id in &card_ids {
+                        if let Some(card) = game_data.get_card(*card_id) {
+                            let mut card_value = 0;
+                            for (key, value) in card.iter() {
+                                let map_key = format!("{}:{}", key, value);
+                                if let Some(&points) = point_map.map.get(&map_key) {
+                                    card_value = points;
+                                    break;
                                 }
                             }
-                        }
-                        best_card_id.map(|id| id as i32).ok_or("No card found for extrema".to_string())
-                    }
-                    AggregateInt::ExtremaIntCollection { extrema, int_collection } => {
-                        let ints = Self::eval_int_collection(int_collection, game_data)?;
-                        let mut best_value = None;
-                        for &v in &ints {
                             match extrema {
                                 Extrema::Min => {
-                                    if best_value.is_none() || v < *best_value.as_ref().unwrap() {
-                                        best_value = Some(v);
+                                    if best_value.is_none()
+                                        || card_value < *best_value.as_ref().unwrap()
+                                    {
+                                        best_value = Some(card_value);
+                                        best_card_id = Some(*card_id);
                                     }
                                 }
                                 Extrema::Max => {
-                                    if best_value.is_none() || v > *best_value.as_ref().unwrap() {
-                                        best_value = Some(v);
+                                    if best_value.is_none()
+                                        || card_value > *best_value.as_ref().unwrap()
+                                    {
+                                        best_value = Some(card_value);
+                                        best_card_id = Some(*card_id);
                                     }
                                 }
                             }
                         }
-                        best_value.ok_or("No value found in IntCollection".to_string())
                     }
+                    best_card_id
+                        .map(|id| id as i32)
+                        .ok_or("No card found for extrema".to_string())
                 }
-            }
-            IntExpr::Runtime { runtime } => {
-                match runtime {
-                    RuntimeInt::CurrentStageRoundCounter => {
-                        let stage = game_data.get_current_stage()
-                            .ok_or("No current stage")?;
-                        Ok(game_data.get_stage_counter(stage) as i32)
+                AggregateInt::ExtremaIntCollection {
+                    extrema,
+                    int_collection,
+                } => {
+                    let ints = Self::eval_int_collection(int_collection, game_data)?;
+                    let mut best_value = None;
+                    for &v in &ints {
+                        match extrema {
+                            Extrema::Min => {
+                                if best_value.is_none() || v < *best_value.as_ref().unwrap() {
+                                    best_value = Some(v);
+                                }
+                            }
+                            Extrema::Max => {
+                                if best_value.is_none() || v > *best_value.as_ref().unwrap() {
+                                    best_value = Some(v);
+                                }
+                            }
+                        }
                     }
-                    RuntimeInt::StageRoundCounter { stage } => {
-                        Ok(game_data.get_stage_counter(stage.clone()) as i32)
-                    }
+                    best_value.ok_or("No value found in IntCollection".to_string())
                 }
-            }
+            },
+            IntExpr::Runtime { runtime } => match runtime {
+                RuntimeInt::CurrentStageRoundCounter => {
+                    let stage = game_data.get_current_stage().ok_or("No current stage")?;
+                    Ok(game_data.get_stage_counter(stage) as i32)
+                }
+                RuntimeInt::StageRoundCounter { stage } => {
+                    Ok(game_data.get_stage_counter(stage.clone()) as i32)
+                }
+            },
             IntExpr::Memory { memory } => {
                 let key = match memory {
                     UseSingleMemory::Memory { memory: m } => m.clone(),
@@ -521,7 +535,10 @@ impl Evaluator {
                 }
                 Ok(result)
             }
-            IntCollection::AggregateMemory { memory: _, multi: _ } => {
+            IntCollection::AggregateMemory {
+                memory: _,
+                multi: _,
+            } => {
                 todo!("IntCollection::AggregateMemory not yet implemented")
             }
             IntCollection::Memory { memory } => {
@@ -561,7 +578,10 @@ impl Evaluator {
         }
     }
 
-    fn eval_location_collection(col: &LocationCollection, game_data: &GameData) -> Result<Vec<String>, String> {
+    fn eval_location_collection(
+        col: &LocationCollection,
+        game_data: &GameData,
+    ) -> Result<Vec<String>, String> {
         match col {
             LocationCollection::Literal { locations } => Ok(locations.clone()),
             LocationCollection::Memory { memory } => {
@@ -570,9 +590,16 @@ impl Evaluator {
                     UseMemory::WithOwner { memory: m, .. } => m.clone(),
                 };
                 match game_data.get_memory(&key) {
-                    Some(MemoryValue::LocationCollection(v)) => Ok(v.iter().map(|&idx| {
-                        game_data.locations.get(idx).map(|l| l.name.clone()).unwrap_or_default()
-                    }).collect()),
+                    Some(MemoryValue::LocationCollection(v)) => Ok(v
+                        .iter()
+                        .map(|&idx| {
+                            game_data
+                                .locations
+                                .get(idx)
+                                .map(|l| l.name.clone())
+                                .unwrap_or_default()
+                        })
+                        .collect()),
                     Some(_) => Err("Memory value is not a LocationCollection".to_string()),
                     None => Err(format!("Memory {} not found", key)),
                 }
@@ -580,7 +607,10 @@ impl Evaluator {
         }
     }
 
-    fn eval_team_collection(col: &TeamCollection, game_data: &GameData) -> Result<Vec<String>, String> {
+    fn eval_team_collection(
+        col: &TeamCollection,
+        game_data: &GameData,
+    ) -> Result<Vec<String>, String> {
         match col {
             TeamCollection::Literal { teams } => {
                 let mut result = vec![];
@@ -589,18 +619,19 @@ impl Evaluator {
                 }
                 Ok(result)
             }
-            TeamCollection::Runtime { runtime } => {
-                match runtime {
-                    RuntimeTeamCollection::OtherTeams => {
-                        let mut result = vec![];
-                        for team in &game_data.teams {
-                            result.push(team.name.clone());
-                        }
-                        Ok(result)
+            TeamCollection::Runtime { runtime } => match runtime {
+                RuntimeTeamCollection::OtherTeams => {
+                    let mut result = vec![];
+                    for team in &game_data.teams {
+                        result.push(team.name.clone());
                     }
+                    Ok(result)
                 }
-            }
-            TeamCollection::AggregateMemory { memory: _, multi: _ } => {
+            },
+            TeamCollection::AggregateMemory {
+                memory: _,
+                multi: _,
+            } => {
                 todo!("TeamCollection::AggregateMemory not yet implemented")
             }
             TeamCollection::Memory { memory } => {
@@ -620,25 +651,28 @@ impl Evaluator {
     pub fn eval_string(expr: &StringExpr, game_data: &GameData) -> Result<String, String> {
         match expr {
             StringExpr::Literal { value } => Ok(value.clone()),
-            StringExpr::Query { query } => {
-                match query {
-                    QueryString::KeyOf { key, card_position } => {
-                        let card_id = Self::eval_card_position(card_position, game_data)?;
-                        let card = game_data.get_card(card_id)
-                            .ok_or(format!("Card {} not found", card_id))?;
-                        card.get(key)
-                            .cloned()
-                            .ok_or(format!("Key {} not found in card {}", key, card_id))
-                    }
-                    QueryString::StringCollectionAt { string_collection, int_expr } => {
-                        let strings = Self::eval_string_collection(string_collection, game_data)?;
-                        let idx = Self::eval_int(int_expr, game_data)? as usize;
-                        strings.get(idx)
-                            .cloned()
-                            .ok_or(format!("No string at index {}", idx))
-                    }
+            StringExpr::Query { query } => match query {
+                QueryString::KeyOf { key, card_position } => {
+                    let card_id = Self::eval_card_position(card_position, game_data)?;
+                    let card = game_data
+                        .get_card(card_id)
+                        .ok_or(format!("Card {} not found", card_id))?;
+                    card.get(key)
+                        .cloned()
+                        .ok_or(format!("Key {} not found in card {}", key, card_id))
                 }
-            }
+                QueryString::StringCollectionAt {
+                    string_collection,
+                    int_expr,
+                } => {
+                    let strings = Self::eval_string_collection(string_collection, game_data)?;
+                    let idx = Self::eval_int(int_expr, game_data)? as usize;
+                    strings
+                        .get(idx)
+                        .cloned()
+                        .ok_or(format!("No string at index {}", idx))
+                }
+            },
             StringExpr::Memory { memory } => {
                 let key = match memory {
                     UseSingleMemory::Memory { memory: m } => m.clone(),
@@ -653,7 +687,10 @@ impl Evaluator {
         }
     }
 
-    fn eval_string_collection(col: &StringCollection, game_data: &GameData) -> Result<Vec<String>, String> {
+    fn eval_string_collection(
+        col: &StringCollection,
+        game_data: &GameData,
+    ) -> Result<Vec<String>, String> {
         match col {
             StringCollection::Literal { strings } => {
                 let mut result = vec![];
@@ -662,7 +699,10 @@ impl Evaluator {
                 }
                 Ok(result)
             }
-            StringCollection::AggregateMemory { memory: _, multi: _ } => {
+            StringCollection::AggregateMemory {
+                memory: _,
+                multi: _,
+            } => {
                 todo!("StringCollection::AggregateMemory not yet implemented")
             }
             StringCollection::Memory { memory } => {
@@ -682,131 +722,144 @@ impl Evaluator {
     pub fn eval_player(expr: &PlayerExpr, game_data: &GameData) -> Result<String, String> {
         match expr {
             PlayerExpr::Literal { name } => Ok(name.clone()),
-            PlayerExpr::Runtime { runtime } => {
-                match runtime {
-                    RuntimePlayer::Current => {
-                        game_data.get_current_player()
-                            .map(|p| p.name.clone())
-                            .ok_or("No current player".to_string())
+            PlayerExpr::Runtime { runtime } => match runtime {
+                RuntimePlayer::Current => game_data
+                    .get_current_player()
+                    .map(|p| p.name.clone())
+                    .ok_or("No current player".to_string()),
+                RuntimePlayer::Next => {
+                    let current_idx = game_data.current_player.ok_or("No current player")?;
+                    let current_stage = game_data.get_current_stage().ok_or("No current stage")?;
+                    let turn_len = game_data.turn_order.len();
+                    for i in 1..turn_len {
+                        let player_idx = game_data.turn_order[(current_idx + i) % turn_len];
+                        if let Some(player) = game_data.players.get(player_idx) {
+                            if player.in_game
+                                && *player.in_stage.get(&current_stage).unwrap_or(&false)
+                            {
+                                return Ok(player.name.clone());
+                            }
+                        }
                     }
-                    RuntimePlayer::Next => {
-                        let current_idx = game_data.current_player
-                            .ok_or("No current player")?;
-                        let current_stage = game_data.get_current_stage()
-                            .ok_or("No current stage")?;
-                        let turn_len = game_data.turn_order.len();
-                        for i in 1..turn_len {
-                            let player_idx = game_data.turn_order[(current_idx + i) % turn_len];
-                            if let Some(player) = game_data.players.get(player_idx) {
-                                if player.in_game && *player.in_stage.get(&current_stage).unwrap_or(&false) {
+                    Err("No next player available".to_string())
+                }
+                RuntimePlayer::Previous => {
+                    let current_idx = game_data.current_player.ok_or("No current player")?;
+                    let turn_len = game_data.turn_order.len();
+                    let prev_idx = (current_idx + turn_len - 1) % turn_len;
+                    let player_idx = *game_data
+                        .turn_order
+                        .get(prev_idx)
+                        .ok_or("Previous player not found")?;
+                    game_data
+                        .players
+                        .get(player_idx)
+                        .map(|p| p.name.clone())
+                        .ok_or("Previous player not found".to_string())
+                }
+                RuntimePlayer::Competitor => {
+                    let current = game_data.get_current_player().ok_or("No current player")?;
+                    for team in &game_data.teams {
+                        if team.players.iter().any(|&idx| {
+                            game_data.players.get(idx).map(|p| p.name.clone())
+                                == Some(current.name.clone())
+                        }) {
+                            for &player_idx in &team.players {
+                                if game_data.players.get(player_idx).map(|p| &p.name)
+                                    != Some(&current.name)
+                                {
+                                    return Ok(game_data.players[player_idx].name.clone());
+                                }
+                            }
+                        }
+                    }
+                    Err("No competitor found".to_string())
+                }
+            },
+            PlayerExpr::Aggregate { aggregate } => match aggregate {
+                AggregatePlayer::OwnerOfCardPostion { card_position } => {
+                    let card_id = Self::eval_card_position(card_position, game_data)?;
+                    for (loc_idx, loc) in game_data.locations.iter().enumerate() {
+                        if loc.cards.contains(&card_id) {
+                            if let Some(owner_loc_idx) =
+                                game_data.table.locations.iter().find(|&&l| l == loc_idx)
+                            {
+                                return Ok("Table".to_string());
+                            }
+                            for (player_idx, player) in game_data.players.iter().enumerate() {
+                                if player.owner.locations.contains(&loc_idx) {
                                     return Ok(player.name.clone());
                                 }
                             }
                         }
-                        Err("No next player available".to_string())
                     }
-                    RuntimePlayer::Previous => {
-                        let current_idx = game_data.current_player
-                            .ok_or("No current player")?;
-                        let turn_len = game_data.turn_order.len();
-                        let prev_idx = (current_idx + turn_len - 1) % turn_len;
-                        let player_idx = *game_data.turn_order.get(prev_idx)
-                            .ok_or("Previous player not found")?;
-                        game_data.players.get(player_idx)
-                            .map(|p| p.name.clone())
-                            .ok_or("Previous player not found".to_string())
-                    }
-                    RuntimePlayer::Competitor => {
-                        let current = game_data.get_current_player()
-                            .ok_or("No current player")?;
-                        for team in &game_data.teams {
-                            if team.players.iter().any(|&idx| {
-                                game_data.players.get(idx).map(|p| p.name.clone()) == Some(current.name.clone())
-                            }) {
-                                for &player_idx in &team.players {
-                                    if game_data.players.get(player_idx).map(|p| &p.name) != Some(&current.name) {
-                                        return Ok(game_data.players[player_idx].name.clone());
-                                    }
-                                }
-                            }
-                        }
-                        Err("No competitor found".to_string())
-                    }
+                    Err("Owner of card position not found".to_string())
                 }
-            }
-            PlayerExpr::Aggregate { aggregate } => {
-                match aggregate {
-                    AggregatePlayer::OwnerOfCardPostion { card_position } => {
-                        let card_id = Self::eval_card_position(card_position, game_data)?;
-                        for (loc_idx, loc) in game_data.locations.iter().enumerate() {
-                            if loc.cards.contains(&card_id) {
-                                if let Some(owner_loc_idx) = game_data.table.locations.iter().find(|&&l| l == loc_idx) {
-                                    return Ok("Table".to_string());
-                                }
-                                for (player_idx, player) in game_data.players.iter().enumerate() {
-                                    if player.owner.locations.contains(&loc_idx) {
-                                        return Ok(player.name.clone());
-                                    }
-                                }
-                            }
-                        }
-                        Err("Owner of card position not found".to_string())
-                    }
-                    AggregatePlayer::OwnerOfMemory { extrema, memory } => {
-                        let mem_key = memory;
-                        let mut best_player: Option<String> = None;
-                        let mut best_value: Option<i32> = None;
-                        let mut found = false;
-                        for player in &game_data.players {
-                            if player.in_game {
-                                found = true;
-                                let mem_key_with_owner = format!("{}_{}", mem_key, player.name);
-                                if let Some(MemoryValue::Int(v)) = game_data.get_memory(&mem_key_with_owner) {
-                                    match extrema {
-                                        Extrema::Min => {
-                                            if best_value.is_none() || *v < *best_value.as_ref().unwrap() {
-                                                best_value = Some(*v);
-                                                best_player = Some(player.name.clone());
-                                            }
+                AggregatePlayer::OwnerOfMemory { extrema, memory } => {
+                    let mem_key = memory;
+                    let mut best_player: Option<String> = None;
+                    let mut best_value: Option<i32> = None;
+                    let mut found = false;
+                    for player in &game_data.players {
+                        if player.in_game {
+                            found = true;
+                            let mem_key_with_owner = format!("{}_{}", mem_key, player.name);
+                            if let Some(MemoryValue::Int(v)) =
+                                game_data.get_memory(&mem_key_with_owner)
+                            {
+                                match extrema {
+                                    Extrema::Min => {
+                                        if best_value.is_none()
+                                            || *v < *best_value.as_ref().unwrap()
+                                        {
+                                            best_value = Some(*v);
+                                            best_player = Some(player.name.clone());
                                         }
-                                        Extrema::Max => {
-                                            if best_value.is_none() || *v > *best_value.as_ref().unwrap() {
-                                                best_value = Some(*v);
-                                                best_player = Some(player.name.clone());
-                                            }
+                                    }
+                                    Extrema::Max => {
+                                        if best_value.is_none()
+                                            || *v > *best_value.as_ref().unwrap()
+                                        {
+                                            best_value = Some(*v);
+                                            best_player = Some(player.name.clone());
                                         }
                                     }
                                 }
                             }
                         }
-                        if !found {
-                            best_player = game_data.get_current_player().map(|p| p.name.clone());
-                        }
-                        best_player.ok_or("No player found for OwnerOfMemory".to_string())
                     }
+                    if !found {
+                        best_player = game_data.get_current_player().map(|p| p.name.clone());
+                    }
+                    best_player.ok_or("No player found for OwnerOfMemory".to_string())
                 }
-            }
-            PlayerExpr::Query { query } => {
-                match query {
-                    QueryPlayer::Turnorder { int } => {
-                        let idx = Self::eval_int(int, game_data)? as usize;
-                        let player_idx = *game_data.turn_order.get(idx)
-                            .ok_or(format!("No player at turn order index {}", idx))?;
-                        game_data.players.get(player_idx)
-                            .map(|p| p.name.clone())
-                            .ok_or(format!("Player at index {} not found", idx))
-                    }
-                    QueryPlayer::CollectionAt { players: pc, int } => {
-                        let indices = Self::resolve_player_collection(pc, game_data);
-                        let idx = Self::eval_int(int, game_data)? as usize;
-                        let player_idx = *indices.get(idx)
-                            .ok_or(format!("No player at index {} in player collection", idx))?;
-                        game_data.players.get(player_idx)
-                            .map(|p| p.name.clone())
-                            .ok_or(format!("Player at collection index {} not found", idx))
-                    }
+            },
+            PlayerExpr::Query { query } => match query {
+                QueryPlayer::Turnorder { int } => {
+                    let idx = Self::eval_int(int, game_data)? as usize;
+                    let player_idx = *game_data
+                        .turn_order
+                        .get(idx)
+                        .ok_or(format!("No player at turn order index {}", idx))?;
+                    game_data
+                        .players
+                        .get(player_idx)
+                        .map(|p| p.name.clone())
+                        .ok_or(format!("Player at index {} not found", idx))
                 }
-            }
+                QueryPlayer::CollectionAt { players: pc, int } => {
+                    let indices = Self::resolve_player_collection(pc, game_data);
+                    let idx = Self::eval_int(int, game_data)? as usize;
+                    let player_idx = *indices
+                        .get(idx)
+                        .ok_or(format!("No player at index {} in player collection", idx))?;
+                    game_data
+                        .players
+                        .get(player_idx)
+                        .map(|p| p.name.clone())
+                        .ok_or(format!("Player at collection index {} not found", idx))
+                }
+            },
             PlayerExpr::Memory { memory } => {
                 let key = match memory {
                     UseSingleMemory::Memory { memory: m } => m.clone(),
@@ -815,7 +868,9 @@ impl Evaluator {
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::PlayerCollection(indices)) => {
                         if let Some(&idx) = indices.first() {
-                            game_data.players.get(idx)
+                            game_data
+                                .players
+                                .get(idx)
                                 .map(|p| p.name.clone())
                                 .ok_or(format!("Player at index {} not found", idx))
                         } else {
@@ -833,21 +888,21 @@ impl Evaluator {
     pub fn eval_team(expr: &TeamExpr, game_data: &GameData) -> Result<String, String> {
         match expr {
             TeamExpr::Literal { name } => Ok(name.clone()),
-            TeamExpr::Aggregate { aggregate } => {
-                match aggregate {
-                    AggregateTeam::TeamOf { player } => {
-                        let player_name = Self::eval_player(player, game_data)?;
-                        for team in &game_data.teams {
-                            for &player_idx in &team.players {
-                                if game_data.players.get(player_idx).map(|p| &p.name) == Some(&player_name) {
-                                    return Ok(team.name.clone());
-                                }
+            TeamExpr::Aggregate { aggregate } => match aggregate {
+                AggregateTeam::TeamOf { player } => {
+                    let player_name = Self::eval_player(player, game_data)?;
+                    for team in &game_data.teams {
+                        for &player_idx in &team.players {
+                            if game_data.players.get(player_idx).map(|p| &p.name)
+                                == Some(&player_name)
+                            {
+                                return Ok(team.name.clone());
                             }
                         }
-                        Err(format!("Player {} not found in any team", player_name))
                     }
+                    Err(format!("Player {} not found in any team", player_name))
                 }
-            }
+            },
             TeamExpr::Memory { memory } => {
                 let key = match memory {
                     UseSingleMemory::Memory { memory: m } => m.clone(),
@@ -871,22 +926,31 @@ impl Evaluator {
             CardSet::GroupOwner { group, owner } => {
                 let (loc_idx, card_ids) = Self::eval_group(group, game_data)?;
                 let owner_name = Self::resolve_owner_to_name(owner, game_data)?;
-                let owner_idx = game_data.players.iter()
+                let owner_idx = game_data
+                    .players
+                    .iter()
                     .position(|p| p.name == owner_name)
                     .unwrap_or(usize::MAX);
-                let filtered: Vec<usize> = card_ids.into_iter().filter(|&card_id| {
-                    for (loc_i, loc) in game_data.locations.iter().enumerate() {
-                        if loc.cards.contains(&card_id) {
-                            if game_data.table.locations.contains(&loc_i) {
-                                return owner_name == "Table";
-                            }
-                            if game_data.players[owner_idx].owner.locations.contains(&loc_i) {
-                                return true;
+                let filtered: Vec<usize> = card_ids
+                    .into_iter()
+                    .filter(|&card_id| {
+                        for (loc_i, loc) in game_data.locations.iter().enumerate() {
+                            if loc.cards.contains(&card_id) {
+                                if game_data.table.locations.contains(&loc_i) {
+                                    return owner_name == "Table";
+                                }
+                                if game_data.players[owner_idx]
+                                    .owner
+                                    .locations
+                                    .contains(&loc_i)
+                                {
+                                    return true;
+                                }
                             }
                         }
-                    }
-                    false
-                }).collect();
+                        false
+                    })
+                    .collect();
                 Ok((loc_idx, filtered))
             }
             CardSet::Memory { memory } => {
@@ -914,9 +978,7 @@ impl Evaluator {
 
     fn eval_group(group: &Group, game_data: &GameData) -> Result<(usize, Vec<usize>), String> {
         match group {
-            Group::Groupable { groupable } => {
-                Self::eval_groupable(groupable, game_data)
-            }
+            Group::Groupable { groupable } => Self::eval_groupable(groupable, game_data),
             Group::Where { groupable, filter } => {
                 let (_, card_ids) = Self::eval_groupable(groupable, game_data)?;
                 let filtered = Self::apply_filter(filter, &card_ids, game_data)?;
@@ -925,24 +987,32 @@ impl Evaluator {
             }
             Group::NotCombo { combo, groupable } => {
                 let (loc_idx, card_ids) = Self::eval_groupable(groupable, game_data)?;
-                let combo_filter = game_data.combos.iter()
+                let combo_filter = game_data
+                    .combos
+                    .iter()
                     .find(|c| c.name == *combo)
                     .map(|c| c.filter.clone())
                     .ok_or(format!("Combo {} not found", combo))?;
-                let filtered: Vec<usize> = card_ids.into_iter().filter(|&card_id| {
-                    !Self::card_matches_filter(card_id, &combo_filter, game_data)
-                }).collect();
+                let filtered: Vec<usize> = card_ids
+                    .into_iter()
+                    .filter(|&card_id| {
+                        !Self::card_matches_filter(card_id, &combo_filter, game_data)
+                    })
+                    .collect();
                 Ok((loc_idx, filtered))
             }
             Group::Combo { combo, groupable } => {
                 let (loc_idx, card_ids) = Self::eval_groupable(groupable, game_data)?;
-                let combo_filter = game_data.combos.iter()
+                let combo_filter = game_data
+                    .combos
+                    .iter()
                     .find(|c| c.name == *combo)
                     .map(|c| c.filter.clone())
                     .ok_or(format!("Combo {} not found", combo))?;
-                let filtered: Vec<usize> = card_ids.into_iter().filter(|&card_id| {
-                    Self::card_matches_filter(card_id, &combo_filter, game_data)
-                }).collect();
+                let filtered: Vec<usize> = card_ids
+                    .into_iter()
+                    .filter(|&card_id| Self::card_matches_filter(card_id, &combo_filter, game_data))
+                    .collect();
                 Ok((loc_idx, filtered))
             }
             Group::CardPosition { card_position } => {
@@ -957,18 +1027,27 @@ impl Evaluator {
         }
     }
 
-    fn eval_groupable(groupable: &Groupable, game_data: &GameData) -> Result<(usize, Vec<usize>), String> {
+    fn eval_groupable(
+        groupable: &Groupable,
+        game_data: &GameData,
+    ) -> Result<(usize, Vec<usize>), String> {
         match groupable {
             Groupable::Location { name } => {
-                let loc_idx = game_data.locations.iter()
+                let loc_idx = game_data
+                    .locations
+                    .iter()
                     .position(|l| l.name == *name)
                     .ok_or(format!("Location {} not found", name))?;
-                let card_ids = game_data.locations.get(loc_idx)
+                let card_ids = game_data
+                    .locations
+                    .get(loc_idx)
                     .map(|l| l.cards.clone())
                     .unwrap_or_default();
                 Ok((loc_idx, card_ids))
             }
-            Groupable::LocationCollection { location_collection } => {
+            Groupable::LocationCollection {
+                location_collection,
+            } => {
                 let loc_names = Self::eval_location_collection(location_collection, game_data)?;
                 let mut all_cards = vec![];
                 let mut location_idx = 0;
@@ -983,7 +1062,9 @@ impl Evaluator {
                     }
                 }
                 if location_idx == 0 && !loc_names.is_empty() {
-                    location_idx = game_data.locations.iter()
+                    location_idx = game_data
+                        .locations
+                        .iter()
                         .position(|l| l.name == loc_names[0])
                         .unwrap_or(0);
                 }
@@ -992,179 +1073,232 @@ impl Evaluator {
         }
     }
 
-    fn apply_filter(filter: &FilterExpr, card_ids: &[usize], game_data: &GameData) -> Result<Vec<usize>, String> {
+    fn apply_filter(
+        filter: &FilterExpr,
+        card_ids: &[usize],
+        game_data: &GameData,
+    ) -> Result<Vec<usize>, String> {
         match filter {
-            FilterExpr::Aggregate { aggregate } => {
-                match aggregate {
-                    AggregateFilter::Size { cmp, int_expr } => {
-                        let target = Self::eval_int(int_expr, game_data)?;
-                        let size = card_ids.len() as i32;
-                        if Self::eval_int_compare(size, cmp, target) {
-                            Ok(card_ids.to_vec())
-                        } else {
-                            Ok(vec![])
-                        }
-                    }
-                    AggregateFilter::Same { key } => {
-                        let mut groups: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
-                        for &card_id in card_ids {
-                            if let Some(card) = game_data.get_card(card_id) {
-                                if let Some(value) = card.get(key) {
-                                    groups.entry(value.clone()).or_default().push(card_id);
-                                }
-                            }
-                        }
-                        let mut result = vec![];
-                        for (_, mut ids) in groups {
-                            if ids.len() > 1 {
-                                result.append(&mut ids);
-                            }
-                        }
-                        Ok(result)
-                    }
-                    AggregateFilter::Distinct { key } => {
-                        let mut groups: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
-                        for &card_id in card_ids {
-                            if let Some(card) = game_data.get_card(card_id) {
-                                if let Some(value) = card.get(key) {
-                                    groups.entry(value.clone()).or_default().push(card_id);
-                                }
-                            }
-                        }
-                        let mut result = vec![];
-                        for (_, mut ids) in groups {
-                            if ids.len() == 1 {
-                                result.append(&mut ids);
-                            }
-                        }
-                        Ok(result)
-                    }
-                    AggregateFilter::Adjacent { key, precedence } => {
-                        let prec = game_data.precedences.iter()
-                            .find(|p| p.name == *precedence)
-                            .ok_or(format!("Precedence {} not found", precedence))?;
-                        let mut cards_with_values: Vec<(usize, i32, String)> = vec![];
-                        for &card_id in card_ids {
-                            if let Some(card) = game_data.get_card(card_id) {
-                                if let Some(value) = card.get(key) {
-                                    if let Some(idx) = prec.values.iter().position(|v| v == value) {
-                                        cards_with_values.push((card_id, idx as i32, value.clone()));
-                                    }
-                                }
-                            }
-                        }
-                        cards_with_values.sort_by_key(|&(_, idx, _)| idx);
-                        let mut result = vec![];
-                        for window in cards_with_values.windows(2) {
-                            let (id1, idx1, _) = window[0];
-                            let (id2, idx2, _) = window[1];
-                            if idx2 - idx1 == 1 {
-                                if !result.contains(&id1) { result.push(id1); }
-                                if !result.contains(&id2) { result.push(id2); }
-                            }
-                        }
-                        Ok(result)
-                    }
-                    AggregateFilter::Higher { key, value, precedence } => {
-                        let prec = game_data.precedences.iter()
-                            .find(|p| p.name == *precedence)
-                            .ok_or(format!("Precedence {} not found", precedence))?;
-                        let target_value = Self::eval_string(value, game_data)?;
-                        let target_idx = prec.values.iter()
-                            .position(|v| v == &target_value)
-                            .ok_or(format!("Value {} not found in precedence {}", target_value, precedence))?;
-                        let mut result = vec![];
-                        for &card_id in card_ids {
-                            if let Some(card) = game_data.get_card(card_id) {
-                                if let Some(card_value) = card.get(key) {
-                                    if let Some(idx) = prec.values.iter().position(|v| v == card_value) {
-                                        if idx as i32 > target_idx as i32 {
-                                            result.push(card_id);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Ok(result)
-                    }
-                    AggregateFilter::Lower { key, value, precedence } => {
-                        let prec = game_data.precedences.iter()
-                            .find(|p| p.name == *precedence)
-                            .ok_or(format!("Precedence {} not found", precedence))?;
-                        let target_value = Self::eval_string(value, game_data)?;
-                        let target_idx = prec.values.iter()
-                            .position(|v| v == &target_value)
-                            .ok_or(format!("Value {} not found in precedence {}", target_value, precedence))?;
-                        let mut result = vec![];
-                        for &card_id in card_ids {
-                            if let Some(card) = game_data.get_card(card_id) {
-                                if let Some(card_value) = card.get(key) {
-                                    if let Some(idx) = prec.values.iter().position(|v| v == card_value) {
-                                        if (idx as i32) < (target_idx as i32) {
-                                            result.push(card_id);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Ok(result)
-                    }
-                    AggregateFilter::KeyIsString { key, string } => {
-                        let target = Self::eval_string(string, game_data)?;
-                        let result: Vec<usize> = card_ids.iter()
-                            .filter(|&&card_id| {
-                                game_data.get_card(card_id)
-                                    .and_then(|c| c.get(key))
-                                    .map(|v| v == &target)
-                                    .unwrap_or(false)
-                            })
-                            .copied()
-                            .collect();
-                        Ok(result)
-                    }
-                    AggregateFilter::KeyIsNotString { key, string } => {
-                        let target = Self::eval_string(string, game_data)?;
-                        let result: Vec<usize> = card_ids.iter()
-                            .filter(|&&card_id| {
-                                game_data.get_card(card_id)
-                                    .and_then(|c| c.get(key))
-                                    .map(|v| v != &target)
-                                    .unwrap_or(true)
-                            })
-                            .copied()
-                            .collect();
-                        Ok(result)
-                    }
-                    AggregateFilter::Combo { combo } => {
-                        let combo_filter = game_data.combos.iter()
-                            .find(|c| c.name == *combo)
-                            .map(|c| c.filter.clone())
-                            .ok_or(format!("Combo {} not found", combo))?;
-                        let result: Vec<usize> = card_ids.iter()
-                            .filter(|&&card_id| Self::card_matches_filter(card_id, &combo_filter, game_data))
-                            .copied()
-                            .collect();
-                        Ok(result)
-                    }
-                    AggregateFilter::NotCombo { combo } => {
-                        let combo_filter = game_data.combos.iter()
-                            .find(|c| c.name == *combo)
-                            .map(|c| c.filter.clone())
-                            .ok_or(format!("Combo {} not found", combo))?;
-                        let result: Vec<usize> = card_ids.iter()
-                            .filter(|&&card_id| !Self::card_matches_filter(card_id, &combo_filter, game_data))
-                            .copied()
-                            .collect();
-                        Ok(result)
+            FilterExpr::Aggregate { aggregate } => match aggregate {
+                AggregateFilter::Size { cmp, int_expr } => {
+                    let target = Self::eval_int(int_expr, game_data)?;
+                    let size = card_ids.len() as i32;
+                    if Self::eval_int_compare(size, cmp, target) {
+                        Ok(card_ids.to_vec())
+                    } else {
+                        Ok(vec![])
                     }
                 }
-            }
-            FilterExpr::Binary { filter: f1, op, filter1: f2 } => {
+                AggregateFilter::Same { key } => {
+                    let mut groups: std::collections::HashMap<String, Vec<usize>> =
+                        std::collections::HashMap::new();
+                    for &card_id in card_ids {
+                        if let Some(card) = game_data.get_card(card_id) {
+                            if let Some(value) = card.get(key) {
+                                groups.entry(value.clone()).or_default().push(card_id);
+                            }
+                        }
+                    }
+                    let mut result = vec![];
+                    for (_, mut ids) in groups {
+                        if ids.len() > 1 {
+                            result.append(&mut ids);
+                        }
+                    }
+                    Ok(result)
+                }
+                AggregateFilter::Distinct { key } => {
+                    let mut groups: std::collections::HashMap<String, Vec<usize>> =
+                        std::collections::HashMap::new();
+                    for &card_id in card_ids {
+                        if let Some(card) = game_data.get_card(card_id) {
+                            if let Some(value) = card.get(key) {
+                                groups.entry(value.clone()).or_default().push(card_id);
+                            }
+                        }
+                    }
+                    let mut result = vec![];
+                    for (_, mut ids) in groups {
+                        if ids.len() == 1 {
+                            result.append(&mut ids);
+                        }
+                    }
+                    Ok(result)
+                }
+                AggregateFilter::Adjacent { key, precedence } => {
+                    let prec = game_data
+                        .precedences
+                        .iter()
+                        .find(|p| p.name == *precedence)
+                        .ok_or(format!("Precedence {} not found", precedence))?;
+                    let mut cards_with_values: Vec<(usize, i32, String)> = vec![];
+                    for &card_id in card_ids {
+                        if let Some(card) = game_data.get_card(card_id) {
+                            if let Some(value) = card.get(key) {
+                                if let Some(idx) = prec.values.iter().position(|v| v == value) {
+                                    cards_with_values.push((card_id, idx as i32, value.clone()));
+                                }
+                            }
+                        }
+                    }
+                    cards_with_values.sort_by_key(|&(_, idx, _)| idx);
+                    let mut result = vec![];
+                    for window in cards_with_values.windows(2) {
+                        let (id1, idx1, _) = window[0];
+                        let (id2, idx2, _) = window[1];
+                        if idx2 - idx1 == 1 {
+                            if !result.contains(&id1) {
+                                result.push(id1);
+                            }
+                            if !result.contains(&id2) {
+                                result.push(id2);
+                            }
+                        }
+                    }
+                    Ok(result)
+                }
+                AggregateFilter::Higher {
+                    key,
+                    value,
+                    precedence,
+                } => {
+                    let prec = game_data
+                        .precedences
+                        .iter()
+                        .find(|p| p.name == *precedence)
+                        .ok_or(format!("Precedence {} not found", precedence))?;
+                    let target_value = Self::eval_string(value, game_data)?;
+                    let target_idx =
+                        prec.values
+                            .iter()
+                            .position(|v| v == &target_value)
+                            .ok_or(format!(
+                                "Value {} not found in precedence {}",
+                                target_value, precedence
+                            ))?;
+                    let mut result = vec![];
+                    for &card_id in card_ids {
+                        if let Some(card) = game_data.get_card(card_id) {
+                            if let Some(card_value) = card.get(key) {
+                                if let Some(idx) = prec.values.iter().position(|v| v == card_value)
+                                {
+                                    if idx as i32 > target_idx as i32 {
+                                        result.push(card_id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(result)
+                }
+                AggregateFilter::Lower {
+                    key,
+                    value,
+                    precedence,
+                } => {
+                    let prec = game_data
+                        .precedences
+                        .iter()
+                        .find(|p| p.name == *precedence)
+                        .ok_or(format!("Precedence {} not found", precedence))?;
+                    let target_value = Self::eval_string(value, game_data)?;
+                    let target_idx =
+                        prec.values
+                            .iter()
+                            .position(|v| v == &target_value)
+                            .ok_or(format!(
+                                "Value {} not found in precedence {}",
+                                target_value, precedence
+                            ))?;
+                    let mut result = vec![];
+                    for &card_id in card_ids {
+                        if let Some(card) = game_data.get_card(card_id) {
+                            if let Some(card_value) = card.get(key) {
+                                if let Some(idx) = prec.values.iter().position(|v| v == card_value)
+                                {
+                                    if (idx as i32) < (target_idx as i32) {
+                                        result.push(card_id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(result)
+                }
+                AggregateFilter::KeyIsString { key, string } => {
+                    let target = Self::eval_string(string, game_data)?;
+                    let result: Vec<usize> = card_ids
+                        .iter()
+                        .filter(|&&card_id| {
+                            game_data
+                                .get_card(card_id)
+                                .and_then(|c| c.get(key))
+                                .map(|v| v == &target)
+                                .unwrap_or(false)
+                        })
+                        .copied()
+                        .collect();
+                    Ok(result)
+                }
+                AggregateFilter::KeyIsNotString { key, string } => {
+                    let target = Self::eval_string(string, game_data)?;
+                    let result: Vec<usize> = card_ids
+                        .iter()
+                        .filter(|&&card_id| {
+                            game_data
+                                .get_card(card_id)
+                                .and_then(|c| c.get(key))
+                                .map(|v| v != &target)
+                                .unwrap_or(true)
+                        })
+                        .copied()
+                        .collect();
+                    Ok(result)
+                }
+                AggregateFilter::Combo { combo } => {
+                    let combo_filter = game_data
+                        .combos
+                        .iter()
+                        .find(|c| c.name == *combo)
+                        .map(|c| c.filter.clone())
+                        .ok_or(format!("Combo {} not found", combo))?;
+                    let result: Vec<usize> = card_ids
+                        .iter()
+                        .filter(|&&card_id| {
+                            Self::card_matches_filter(card_id, &combo_filter, game_data)
+                        })
+                        .copied()
+                        .collect();
+                    Ok(result)
+                }
+                AggregateFilter::NotCombo { combo } => {
+                    let combo_filter = game_data
+                        .combos
+                        .iter()
+                        .find(|c| c.name == *combo)
+                        .map(|c| c.filter.clone())
+                        .ok_or(format!("Combo {} not found", combo))?;
+                    let result: Vec<usize> = card_ids
+                        .iter()
+                        .filter(|&&card_id| {
+                            !Self::card_matches_filter(card_id, &combo_filter, game_data)
+                        })
+                        .copied()
+                        .collect();
+                    Ok(result)
+                }
+            },
+            FilterExpr::Binary {
+                filter: f1,
+                op,
+                filter1: f2,
+            } => {
                 let result1 = Self::apply_filter(f1, card_ids, game_data)?;
                 let result2 = Self::apply_filter(f2, card_ids, game_data)?;
                 match op {
                     front_end::ast::FilterOp::And => {
-                        let combined: Vec<usize> = result1.into_iter()
+                        let combined: Vec<usize> = result1
+                            .into_iter()
                             .filter(|id| result2.contains(id))
                             .collect();
                         Ok(combined)
@@ -1185,40 +1319,46 @@ impl Evaluator {
 
     fn card_matches_filter(card_id: usize, filter: &FilterExpr, game_data: &GameData) -> bool {
         match filter {
-            FilterExpr::Aggregate { aggregate } => {
-                match aggregate {
-                    AggregateFilter::Size { cmp, int_expr } => {
-                        let mut cards = vec![card_id];
-                        if let Ok(target) = Self::eval_int(int_expr, game_data) {
-                            let size = cards.len() as i32;
-                            return Self::eval_int_compare(size, cmp, target);
-                        }
-                        false
+            FilterExpr::Aggregate { aggregate } => match aggregate {
+                AggregateFilter::Size { cmp, int_expr } => {
+                    let mut cards = vec![card_id];
+                    if let Ok(target) = Self::eval_int(int_expr, game_data) {
+                        let size = cards.len() as i32;
+                        return Self::eval_int_compare(size, cmp, target);
                     }
-                    AggregateFilter::Same { key } => {
-                        if let Some(card) = game_data.get_card(card_id) {
-                            if let Some(value) = card.get(key) {
-                                return game_data.cards.iter()
-                                    .filter(|c| c.get(key) == Some(value))
-                                    .any(|c| std::ptr::eq(c, card));
-                            }
-                        }
-                        false
-                    }
-                    AggregateFilter::Distinct { key } => {
-                        if let Some(card) = game_data.get_card(card_id) {
-                            if let Some(value) = card.get(key) {
-                                return !game_data.cards.iter()
-                                    .filter(|c| c.get(key) == Some(value))
-                                    .any(|c| !std::ptr::eq(c, card));
-                            }
-                        }
-                        false
-                    }
-                    _ => false,
+                    false
                 }
-            }
-            FilterExpr::Binary { filter: f1, op, filter1: f2 } => {
+                AggregateFilter::Same { key } => {
+                    if let Some(card) = game_data.get_card(card_id) {
+                        if let Some(value) = card.get(key) {
+                            return game_data
+                                .cards
+                                .iter()
+                                .filter(|c| c.get(key) == Some(value))
+                                .any(|c| std::ptr::eq(c, card));
+                        }
+                    }
+                    false
+                }
+                AggregateFilter::Distinct { key } => {
+                    if let Some(card) = game_data.get_card(card_id) {
+                        if let Some(value) = card.get(key) {
+                            return !game_data
+                                .cards
+                                .iter()
+                                .filter(|c| c.get(key) == Some(value))
+                                .any(|c| !std::ptr::eq(c, card));
+                        }
+                    }
+                    false
+                }
+                _ => false,
+            },
+            FilterExpr::Binary {
+                filter: f1,
+                op,
+                filter1: f2,
+            } => {
                 let m1 = Self::card_matches_filter(card_id, f1, game_data);
                 let m2 = Self::card_matches_filter(card_id, f2, game_data);
                 match op {
@@ -1229,7 +1369,10 @@ impl Evaluator {
         }
     }
 
-    fn infer_location_from_cards(card_ids: &[usize], game_data: &GameData) -> Result<usize, String> {
+    fn infer_location_from_cards(
+        card_ids: &[usize],
+        game_data: &GameData,
+    ) -> Result<usize, String> {
         for (loc_idx, loc) in game_data.locations.iter().enumerate() {
             if card_ids.iter().all(|&id| loc.cards.contains(&id)) {
                 return Ok(loc_idx);
@@ -1245,113 +1388,138 @@ impl Evaluator {
         Ok(0)
     }
 
-    pub fn eval_card_position(
-        expr: &CardPosition,
-        game_data: &GameData,
-    ) -> Result<usize, String> {
+    pub fn eval_card_position(expr: &CardPosition, game_data: &GameData) -> Result<usize, String> {
         match expr {
-            CardPosition::Query { query } => {
-                match query {
-                    QueryCardPosition::At { location, int_expr } => {
-                        let loc_idx = game_data.locations.iter()
-                            .position(|l| l.name == *location)
-                            .ok_or(format!("Location {} not found", location))?;
-                        let idx = Self::eval_int(int_expr, game_data)? as usize;
-                        let card_id = *game_data.locations.get(loc_idx)
-                            .and_then(|l| l.cards.get(idx))
-                            .ok_or(format!("No card at index {} in location {}", idx, location))?;
-                        Ok(card_id)
-                    }
-                    QueryCardPosition::Top { location } => {
-                        let loc_idx = game_data.locations.iter()
-                            .position(|l| l.name == *location)
-                            .ok_or(format!("Location {} not found", location))?;
-                        let card_id = *game_data.locations.get(loc_idx)
-                            .and_then(|l| l.cards.first())
-                            .ok_or(format!("No card at top of location {}", location))?;
-                        Ok(card_id)
-                    }
-                    QueryCardPosition::Bottom { location } => {
-                        let loc_idx = game_data.locations.iter()
-                            .position(|l| l.name == *location)
-                            .ok_or(format!("Location {} not found", location))?;
-                        let card_id = *game_data.locations.get(loc_idx)
-                            .and_then(|l| l.cards.last())
-                            .ok_or(format!("No card at bottom of location {}", location))?;
-                        Ok(card_id)
-                    }
+            CardPosition::Query { query } => match query {
+                QueryCardPosition::At { location, int_expr } => {
+                    let loc_idx = game_data
+                        .locations
+                        .iter()
+                        .position(|l| l.name == *location)
+                        .ok_or(format!("Location {} not found", location))?;
+                    let idx = Self::eval_int(int_expr, game_data)? as usize;
+                    let card_id = *game_data
+                        .locations
+                        .get(loc_idx)
+                        .and_then(|l| l.cards.get(idx))
+                        .ok_or(format!("No card at index {} in location {}", idx, location))?;
+                    Ok(card_id)
                 }
-            }
-            CardPosition::Aggregate { aggregate } => {
-                match aggregate {
-                    front_end::ast::AggregateCardPosition::ExtremaPointMap { extrema, card_set, pointmap } => {
-                        let (_, card_ids) = Self::eval_cardset(card_set, game_data)?;
-                        let point_map = game_data.point_maps.iter()
-                            .find(|pm| pm.name == *pointmap)
-                            .ok_or(format!("PointMap {} not found", pointmap))?;
-                        let mut best_card_id = None;
-                        let mut best_value = None;
-                        for &card_id in &card_ids {
-                            if let Some(card) = game_data.get_card(card_id) {
-                                let mut card_value = 0;
-                                for (key, value) in card.iter() {
-                                    let map_key = format!("{}:{}", key, value);
-                                    if let Some(&points) = point_map.map.get(&map_key) {
-                                        card_value = points;
-                                        break;
+                QueryCardPosition::Top { location } => {
+                    let loc_idx = game_data
+                        .locations
+                        .iter()
+                        .position(|l| l.name == *location)
+                        .ok_or(format!("Location {} not found", location))?;
+                    let card_id = *game_data
+                        .locations
+                        .get(loc_idx)
+                        .and_then(|l| l.cards.first())
+                        .ok_or(format!("No card at top of location {}", location))?;
+                    Ok(card_id)
+                }
+                QueryCardPosition::Bottom { location } => {
+                    let loc_idx = game_data
+                        .locations
+                        .iter()
+                        .position(|l| l.name == *location)
+                        .ok_or(format!("Location {} not found", location))?;
+                    let card_id = *game_data
+                        .locations
+                        .get(loc_idx)
+                        .and_then(|l| l.cards.last())
+                        .ok_or(format!("No card at bottom of location {}", location))?;
+                    Ok(card_id)
+                }
+            },
+            CardPosition::Aggregate { aggregate } => match aggregate {
+                front_end::ast::AggregateCardPosition::ExtremaPointMap {
+                    extrema,
+                    card_set,
+                    pointmap,
+                } => {
+                    let (_, card_ids) = Self::eval_cardset(card_set, game_data)?;
+                    let point_map = game_data
+                        .point_maps
+                        .iter()
+                        .find(|pm| pm.name == *pointmap)
+                        .ok_or(format!("PointMap {} not found", pointmap))?;
+                    let mut best_card_id = None;
+                    let mut best_value = None;
+                    for &card_id in &card_ids {
+                        if let Some(card) = game_data.get_card(card_id) {
+                            let mut card_value = 0;
+                            for (key, value) in card.iter() {
+                                let map_key = format!("{}:{}", key, value);
+                                if let Some(&points) = point_map.map.get(&map_key) {
+                                    card_value = points;
+                                    break;
+                                }
+                            }
+                            match extrema {
+                                Extrema::Min => {
+                                    if best_value.is_none()
+                                        || card_value < *best_value.as_ref().unwrap()
+                                    {
+                                        best_value = Some(card_value);
+                                        best_card_id = Some(card_id);
                                     }
                                 }
-                                match extrema {
-                                    Extrema::Min => {
-                                        if best_value.is_none() || card_value < *best_value.as_ref().unwrap() {
-                                            best_value = Some(card_value);
-                                            best_card_id = Some(card_id);
-                                        }
+                                Extrema::Max => {
+                                    if best_value.is_none()
+                                        || card_value > *best_value.as_ref().unwrap()
+                                    {
+                                        best_value = Some(card_value);
+                                        best_card_id = Some(card_id);
                                     }
-                                    Extrema::Max => {
-                                        if best_value.is_none() || card_value > *best_value.as_ref().unwrap() {
-                                            best_value = Some(card_value);
-                                            best_card_id = Some(card_id);
+                                }
+                            }
+                        }
+                    }
+                    best_card_id.ok_or("No card found for ExtremaPointMap".to_string())
+                }
+                front_end::ast::AggregateCardPosition::ExtremaPrecedence {
+                    extrema,
+                    card_set,
+                    precedence,
+                } => {
+                    let (_, card_ids) = Self::eval_cardset(card_set, game_data)?;
+                    let prec = game_data
+                        .precedences
+                        .iter()
+                        .find(|p| p.name == *precedence)
+                        .ok_or(format!("Precedence {} not found", precedence))?;
+                    let mut best_card_id = None;
+                    let mut best_idx = None;
+                    for &card_id in &card_ids {
+                        if let Some(card) = game_data.get_card(card_id) {
+                            if let Some(value) = card.get(&prec.key) {
+                                if let Some(idx) = prec.values.iter().position(|v| v == value) {
+                                    match extrema {
+                                        Extrema::Min => {
+                                            if best_idx.is_none()
+                                                || idx < *best_idx.as_ref().unwrap()
+                                            {
+                                                best_idx = Some(idx);
+                                                best_card_id = Some(card_id);
+                                            }
+                                        }
+                                        Extrema::Max => {
+                                            if best_idx.is_none()
+                                                || idx > *best_idx.as_ref().unwrap()
+                                            {
+                                                best_idx = Some(idx);
+                                                best_card_id = Some(card_id);
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                        best_card_id.ok_or("No card found for ExtremaPointMap".to_string())
                     }
-                    front_end::ast::AggregateCardPosition::ExtremaPrecedence { extrema, card_set, precedence } => {
-                        let (_, card_ids) = Self::eval_cardset(card_set, game_data)?;
-                        let prec = game_data.precedences.iter()
-                            .find(|p| p.name == *precedence)
-                            .ok_or(format!("Precedence {} not found", precedence))?;
-                        let mut best_card_id = None;
-                        let mut best_idx = None;
-                        for &card_id in &card_ids {
-                            if let Some(card) = game_data.get_card(card_id) {
-                                if let Some(value) = card.get(&prec.key) {
-                                    if let Some(idx) = prec.values.iter().position(|v| v == value) {
-                                        match extrema {
-                                            Extrema::Min => {
-                                                if best_idx.is_none() || idx < *best_idx.as_ref().unwrap() {
-                                                    best_idx = Some(idx);
-                                                    best_card_id = Some(card_id);
-                                                }
-                                            }
-                                            Extrema::Max => {
-                                                if best_idx.is_none() || idx > *best_idx.as_ref().unwrap() {
-                                                    best_idx = Some(idx);
-                                                    best_card_id = Some(card_id);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        best_card_id.ok_or("No card found for ExtremaPrecedence".to_string())
-                    }
+                    best_card_id.ok_or("No card found for ExtremaPrecedence".to_string())
                 }
-            }
+            },
         }
     }
 
@@ -1381,20 +1549,16 @@ impl Evaluator {
                 let val = Self::eval_int(int, &GameData::new()).unwrap_or(1) as usize;
                 Ok(val.min(available))
             }
-            Quantity::Quantifier { quantifier } => {
-                match quantifier {
-                    front_end::ast::Quantifier::All => Ok(available),
-                    front_end::ast::Quantifier::Any => Ok(1),
-                }
-            }
+            Quantity::Quantifier { quantifier } => match quantifier {
+                front_end::ast::Quantifier::All => Ok(available),
+                front_end::ast::Quantifier::Any => Ok(1),
+            },
             Quantity::IntRange { int_range } => {
                 let start_satisfied = match &int_range.start {
-                    (cmp, int_expr) => {
-                        match Self::eval_int(int_expr, &GameData::new()) {
-                            Ok(target) => Self::eval_int_compare(available as i32, cmp, target),
-                            Err(_) => false,
-                        }
-                    }
+                    (cmp, int_expr) => match Self::eval_int(int_expr, &GameData::new()) {
+                        Ok(target) => Self::eval_int_compare(available as i32, cmp, target),
+                        Err(_) => false,
+                    },
                 };
                 if !start_satisfied {
                     return Ok(0);
@@ -1404,10 +1568,14 @@ impl Evaluator {
                     let satisfied = Self::eval_int_compare(available as i32, cmp, target);
                     match op {
                         front_end::ast::IntRangeOperator::And => {
-                            if !satisfied { return Ok(0); }
+                            if !satisfied {
+                                return Ok(0);
+                            }
                         }
                         front_end::ast::IntRangeOperator::Or => {
-                            if satisfied { return Ok(available); }
+                            if satisfied {
+                                return Ok(available);
+                            }
                         }
                     }
                 }
@@ -1446,7 +1614,9 @@ impl Evaluator {
                 indices
             }
 
-            PlayerCollection::Aggregate { .. } => todo!("PlayerCollection::Aggregate::Quantifier handled elsewhere"),
+            PlayerCollection::Aggregate { .. } => {
+                todo!("PlayerCollection::Aggregate::Quantifier handled elsewhere")
+            }
             PlayerCollection::Runtime { runtime } => match runtime {
                 front_end::ast::RuntimePlayerCollection::PlayersOut => game_data
                     .players
@@ -1463,10 +1633,13 @@ impl Evaluator {
                     .map(|(i, _)| i)
                     .collect(),
                 front_end::ast::RuntimePlayerCollection::Others => {
-                    let current = game_data.get_current_player()
+                    let current = game_data
+                        .get_current_player()
                         .map(|p| p.name.clone())
                         .unwrap_or_default();
-                    game_data.players.iter()
+                    game_data
+                        .players
+                        .iter()
                         .enumerate()
                         .filter(|(_, p)| p.name != current && p.in_game)
                         .map(|(i, _)| i)
@@ -1487,8 +1660,13 @@ impl Evaluator {
             Owner::Table => Ok("Table".to_string()),
             Owner::Player { player } => Self::eval_player(player, game_data),
             Owner::Team { team } => Self::eval_team(team, game_data),
-            Owner::PlayerCollection { .. } => Err("resolve_owner_to_name: PlayerCollection cannot resolve to a single name".to_string()),
-            Owner::TeamCollection { .. } => Err("resolve_owner_to_name: TeamCollection cannot resolve to a single name".to_string()),
+            Owner::PlayerCollection { .. } => Err(
+                "resolve_owner_to_name: PlayerCollection cannot resolve to a single name"
+                    .to_string(),
+            ),
+            Owner::TeamCollection { .. } => Err(
+                "resolve_owner_to_name: TeamCollection cannot resolve to a single name".to_string(),
+            ),
         }
     }
 
