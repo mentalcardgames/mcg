@@ -93,12 +93,14 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
         }
         SetUpRule::CreateLocation { locations, owner } => {
             let owner_name = crate::query::Evaluator::resolve_owner_to_name(&owner, game_data)
-                .expect("Failed to resolve owner to name");
+                .unwrap_or_else(|e| {
+                    panic!("CreateLocation: failed to resolve owner {:?}: {}", owner, e)
+                });
             for loc_name in locations {
                 game_data.add_location(
                     owner_name.clone(),
                     Location {
-                        name: loc_name,
+                        name: loc_name.clone(),
                         cards: vec![],
                     },
                 );
@@ -109,7 +111,9 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
                 .locations
                 .iter()
                 .position(|l| l.name == location)
-                .expect("Location not found");
+                .unwrap_or_else(|| {
+                    panic!("CreateCardOnLocation: location {:?} not found", location)
+                });
             for type_expr in cards {
                 let expanded_cards = crate::query::Evaluator::expand_types(&type_expr);
                 for card in expanded_cards {
@@ -205,17 +209,29 @@ fn execute_action_rule(action: ActionRule, game_data: &mut GameData) {
         }
         ActionRule::CycleAction { player } => {
             let player_name = crate::query::Evaluator::eval_player(&player, game_data)
-                .expect("Failed to eval player");
+                .unwrap_or_else(|e| {
+                    panic!("CycleAction: failed to eval player {:?}: {}", player, e)
+                });
             let player_idx = game_data
                 .players
                 .iter()
                 .position(|p| p.name == player_name)
-                .expect("Player not found");
+                .unwrap_or_else(|| {
+                    panic!(
+                        "CycleAction: player {} not found in game_data.players",
+                        player_name
+                    )
+                });
             let turn_idx = game_data
                 .turn_order
                 .iter()
                 .position(|&idx| idx == player_idx)
-                .expect("Player not in turn order");
+                .unwrap_or_else(|| {
+                    panic!(
+                        "CycleAction: player_idx {} not in turn_order {:?}",
+                        player_idx, game_data.turn_order
+                    )
+                });
             game_data.current_player = Some(turn_idx);
         }
         ActionRule::BidAction { quantitiy: _ } => {
@@ -329,7 +345,12 @@ fn execute_cardset_move(
     game_data: &mut GameData,
 ) {
     let card_indices = crate::query::Evaluator::eval_cardset(&from, game_data)
-        .expect("Failed to eval cardset")
+        .unwrap_or_else(|e| {
+            panic!(
+                "execute_cardset_move: failed to eval from cardset {:?}: {}",
+                from, e
+            )
+        })
         .1; // get only the indices, we don't care about the location for from
     let count = match quantity {
         Some(qty) => {
@@ -339,12 +360,21 @@ fn execute_cardset_move(
     };
 
     let dest_loc_idx = crate::query::Evaluator::eval_cardset(&to, game_data)
-        .expect("Failed to eval dest")
+        .unwrap_or_else(|e| {
+            panic!(
+                "execute_cardset_move: failed to eval dest cardset {:?}: {}",
+                to, e
+            )
+        })
         .0;
 
     if dest_loc_idx > game_data.locations.len() {
-        // TODO: throw error since we could not resolve a location for the destination - destination must always resolve a single location, otherwise the rule is invalid.
-        panic!("Could not resolve a destination for move action")
+        panic!(
+            "execute_cardset_move: dest_loc_idx {} > locations.len() {} (cardset expr: {:?})",
+            dest_loc_idx,
+            game_data.locations.len(),
+            to
+        )
     }
 
     // for each card to move

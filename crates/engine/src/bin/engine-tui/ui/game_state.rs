@@ -1,8 +1,8 @@
 //! Left panel: Game state viewer using existing format_game_data()
 
 use ratatui::layout::Rect;
-use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::text::Text;
+use ratatui::widgets::{Block, Borders, Paragraph};
 
 use cgdsl_engine::{format_game_data, DebugLevel, GameData};
 
@@ -18,9 +18,7 @@ impl GameStatePanel {
     pub fn render(&self, f: &mut ratatui::Frame, game_data: &GameData, area: Rect) {
         let content = format_game_data(game_data, self.detail);
 
-        let block = Block::default()
-            .title("GAME STATE")
-            .borders(Borders::ALL);
+        let block = Block::default().title("GAME STATE").borders(Borders::ALL);
 
         let inner = block.inner(area);
 

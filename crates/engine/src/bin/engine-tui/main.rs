@@ -10,15 +10,16 @@ use std::thread;
 use std::time::Duration;
 
 use cgdsl_engine::{run_game, GameData, Input, InputSource, InputType, TraceEntry};
-use front_end::validation::parse_document;
 use crossbeam_channel::{bounded, Receiver, Sender};
+use front_end::validation::parse_document;
 
-use ui::{AppLayout, TuiState, GameStatePanel, TraceLogPanel, InputPanel, ControlsPanel};
+use ui::{AppLayout, ControlsPanel, GameStatePanel, InputPanel, TraceLogPanel, TuiState};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let game_path = std::env::args().nth(1)
+    let game_path = std::env::args()
+        .nth(1)
         .map(PathBuf::from)
         .expect("Usage: engine-tui <path-to-game.cgdsl>");
 
@@ -59,7 +60,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             engine_panic_clone.store(true, Ordering::SeqCst);
         });
         std::panic::set_hook(hook);
-        run_game(engine_ir, GameData::new(), input_source, state_sender, trace_sender)
+        run_game(
+            engine_ir,
+            GameData::new(),
+            input_source,
+            state_sender,
+            trace_sender,
+        )
     });
 
     let mut tui_state = TuiState::new();
@@ -92,11 +99,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tui_state.perspective_idx = 0;
                 }
 
-                let input_panel = InputPanel::new(
-                    tui_state.perspective_idx,
-                    player_names,
+                let input_panel = InputPanel::new(tui_state.perspective_idx, player_names);
+                input_panel.render(
+                    f,
+                    tui_state.waiting_for_input,
+                    tui_state.pending_input.as_ref(),
+                    layout.input_area,
                 );
-                input_panel.render(f, tui_state.waiting_for_input, tui_state.pending_input.as_ref(), layout.input_area);
             }
 
             let trace_panel = TraceLogPanel::new(tui_state.trace_detail);
@@ -106,70 +115,69 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             controls_panel.render(f, layout.controls_area);
         })?;
 
-            match crossterm::event::read() {
-                Ok(crossterm::event::Event::Key(key)) => {
-                    match key.code {
-                        crossterm::event::KeyCode::Char('q') => break,
-                        crossterm::event::KeyCode::F(10) => break,
-                        crossterm::event::KeyCode::Char('l') => {
-                            tui_state.cycle_state_detail();
+        match crossterm::event::read() {
+            Ok(crossterm::event::Event::Key(key)) => match key.code {
+                crossterm::event::KeyCode::Char('q') => break,
+                crossterm::event::KeyCode::F(10) => break,
+                crossterm::event::KeyCode::Char('l') => {
+                    tui_state.cycle_state_detail();
+                }
+                crossterm::event::KeyCode::Char('t') => {
+                    tui_state.cycle_trace_detail();
+                }
+                crossterm::event::KeyCode::Char('p') => {
+                    if let Some(ref gd) = current_state {
+                        let player_count = gd.players.len();
+                        if player_count > 0 {
+                            tui_state.perspective_idx =
+                                (tui_state.perspective_idx + 1) % player_count;
                         }
-                        crossterm::event::KeyCode::Char('t') => {
-                            tui_state.cycle_trace_detail();
-                        }
-                        crossterm::event::KeyCode::Char('p') => {
-                            if let Some(ref gd) = current_state {
-                                let player_count = gd.players.len();
-                                if player_count > 0 {
-                                    tui_state.perspective_idx = (tui_state.perspective_idx + 1) % player_count;
-                                }
+                    }
+                }
+                crossterm::event::KeyCode::Char(n) => {
+                    if n == 'y' || n == 'Y' {
+                        if tui_state.waiting_for_input {
+                            if let Some(ref tx) = tui_state.input_tx {
+                                let _ = tx.send(Input::OptionalAccept);
+                                tui_state.waiting_for_input = false;
+                                tui_state.pending_input = None;
                             }
                         }
-                        crossterm::event::KeyCode::Char(n) => {
-                            if n == 'y' || n == 'Y' {
-                                if tui_state.waiting_for_input {
-                                    if let Some(ref tx) = tui_state.input_tx {
-                                        let _ = tx.send(Input::OptionalAccept);
-                                        tui_state.waiting_for_input = false;
-                                        tui_state.pending_input = None;
-                                    }
-                                }
-                            } else if n == 'n' || n == 'N' {
-                                if tui_state.waiting_for_input {
-                                    if let Some(ref tx) = tui_state.input_tx {
-                                        let _ = tx.send(Input::OptionalDecline);
-                                        tui_state.waiting_for_input = false;
-                                        tui_state.pending_input = None;
-                                    }
-                                }
-                            } else if let Some(digit) = n.to_digit(10) {
-                                if digit >= 1 && digit <= 9 {
-                                    if tui_state.waiting_for_input {
-                                        let idx = digit as usize - 1;
-                                        if let Some(ref tx) = tui_state.input_tx {
-                                            let _ = tx.send(Input::Choice { idx });
-                                            tui_state.waiting_for_input = false;
-                                            tui_state.pending_input = None;
-                                        }
-                                    }
-                                }
+                    } else if n == 'n' || n == 'N' {
+                        if tui_state.waiting_for_input {
+                            if let Some(ref tx) = tui_state.input_tx {
+                                let _ = tx.send(Input::OptionalDecline);
+                                tui_state.waiting_for_input = false;
+                                tui_state.pending_input = None;
                             }
                         }
-                        crossterm::event::KeyCode::Enter => {
+                    } else if let Some(digit) = n.to_digit(10) {
+                        if digit >= 1 && digit <= 9 {
                             if tui_state.waiting_for_input {
+                                let idx = digit as usize - 1;
                                 if let Some(ref tx) = tui_state.input_tx {
-                                    let _ = tx.send(Input::Choice { idx: 0 });
+                                    let _ = tx.send(Input::Choice { idx });
                                     tui_state.waiting_for_input = false;
                                     tui_state.pending_input = None;
                                 }
                             }
                         }
-                        _ => {}
                     }
                 }
-                Err(_) => {}
+                crossterm::event::KeyCode::Enter => {
+                    if tui_state.waiting_for_input {
+                        if let Some(ref tx) = tui_state.input_tx {
+                            let _ = tx.send(Input::Choice { idx: 0 });
+                            tui_state.waiting_for_input = false;
+                            tui_state.pending_input = None;
+                        }
+                    }
+                }
                 _ => {}
-            }
+            },
+            Err(_) => {}
+            _ => {}
+        }
 
         if engine_handle.is_finished() {
             break;

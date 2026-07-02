@@ -1,12 +1,92 @@
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use front_end::ir::{Ir, LoweredPayLoad};
 
 use crate::game_data::GameData;
 use crate::interpreter::{Input, InputType, Interpreter, StepResult, TraceEntry};
+
+#[derive(Clone)]
+struct TraceLogger {
+    writer: Arc<Mutex<BufWriter<File>>>,
+}
+
+impl TraceLogger {
+    fn open(path: &PathBuf) -> std::io::Result<Self> {
+        let file = File::create(path)?;
+        let writer = BufWriter::new(file);
+        Ok(Self {
+            writer: Arc::new(Mutex::new(writer)),
+        })
+    }
+
+    fn log_entry(&self, step: usize, entry: &TraceEntry) {
+        if let Ok(mut writer) = self.writer.lock() {
+            let _ = writeln!(writer, "[Step {:3}] {}", step, entry);
+            let _ = writer.flush();
+        }
+    }
+
+    fn log_header(&self, entry: &str, goal: &str, input_source_kind: &str) {
+        if let Ok(mut writer) = self.writer.lock() {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let _ = writeln!(writer, "=== MCG Trace Log ===");
+            let _ = writeln!(writer, "Started: {}", timestamp);
+            let _ = writeln!(writer, "Entry: {}", entry);
+            let _ = writeln!(writer, "Goal: {}", goal);
+            let _ = writeln!(writer, "Input source: {}", input_source_kind);
+            let _ = writeln!(writer, "====================");
+            let _ = writer.flush();
+        }
+    }
+
+    fn log_footer(&self, status: &str) {
+        if let Ok(mut writer) = self.writer.lock() {
+            let _ = writeln!(writer, "=== {} ===", status);
+            let _ = writer.flush();
+        }
+    }
+
+    fn log_panic(&self, msg: &str) {
+        if let Ok(mut writer) = self.writer.lock() {
+            let _ = writeln!(writer, "=== Panic: {} ===", msg);
+            let _ = writer.flush();
+        }
+    }
+
+    fn flush(&self) {
+        if let Ok(mut writer) = self.writer.lock() {
+            let _ = writer.flush();
+        }
+    }
+}
+
+fn resolve_log_path() -> Option<PathBuf> {
+    match std::env::var("MCG_TRACE_LOG") {
+        Ok(val) => {
+            let val = val.trim();
+            if val.is_empty() || val.eq_ignore_ascii_case("off") || val.eq_ignore_ascii_case("none")
+            {
+                None
+            } else {
+                Some(PathBuf::from(val))
+            }
+        }
+        Err(_) => {
+            if cfg!(test) {
+                None
+            } else {
+                Some(PathBuf::from("mcg-trace.log"))
+            }
+        }
+    }
+}
 
 /// Where the game engine gets its player input from.
 ///
@@ -28,8 +108,55 @@ pub fn run_game(
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
     trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
 ) -> Result<GameData, String> {
-    let entry = ir.entry;
-    let interpreter = Interpreter::new(ir, game_data, trace_sender);
+    let log_path = resolve_log_path();
+    let logger = match &log_path {
+        Some(path) => match TraceLogger::open(path) {
+            Ok(logger) => Some(logger),
+            Err(e) => {
+                eprintln!(
+                    "Warning: failed to open trace log {}: {}",
+                    path.display(),
+                    e
+                );
+                None
+            }
+        },
+        None => None,
+    };
+
+    let input_source_kind: String = match &input_source {
+        InputSource::Player(_) => "interactive".to_string(),
+        InputSource::TestFile(path) => path.to_string_lossy().to_string(),
+    };
+
+    if let Some(ref logger) = logger {
+        logger.log_header(
+            &format!("{:?}", ir.entry.raw()),
+            &format!("{:?}", ir.goal.raw()),
+            &input_source_kind,
+        );
+    }
+
+    let step_count = Arc::new(std::sync::Mutex::new(0usize));
+    let step_count_for_closure = step_count.clone();
+    let logger_for_closure = logger.clone();
+    let caller_sender = trace_sender;
+    let composed_sender: Option<Box<dyn Fn(TraceEntry) + Send>> =
+        if logger_for_closure.is_some() || caller_sender.is_some() {
+            Some(Box::new(move |entry: TraceEntry| {
+                if let Some(ref logger) = logger_for_closure {
+                    let step = *step_count_for_closure.lock().unwrap();
+                    logger.log_entry(step, &entry);
+                }
+                if let Some(ref sender) = caller_sender {
+                    sender(entry);
+                }
+            }))
+        } else {
+            None
+        };
+
+    let interpreter = Interpreter::new(ir, game_data, composed_sender);
     let mut controller = Controller {
         interpreter,
         input_source,
@@ -38,8 +165,45 @@ pub fn run_game(
         file_loaded: false,
         loaded_line_count: 0,
         input_sequence: 0,
+        step_count,
     };
-    controller.run()
+
+    let result = if logger.is_some() {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| controller.run())).map_err(
+            |payload| {
+                let msg = if let Some(s) = payload.downcast_ref::<String>() {
+                    s.clone()
+                } else if let Some(s) = payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else {
+                    "<non-string panic>".to_string()
+                };
+                if let Some(ref logger) = logger {
+                    logger.log_panic(&msg);
+                    logger.flush();
+                }
+                std::panic::resume_unwind(payload);
+            },
+        )
+    } else {
+        Ok(controller.run())
+    };
+
+    match result {
+        Ok(Ok(gd)) => {
+            if let Some(ref logger) = logger {
+                logger.log_footer("GameOver");
+            }
+            Ok(gd)
+        }
+        Ok(Err(e)) => {
+            if let Some(ref logger) = logger {
+                logger.log_footer(&format!("Error: {}", e));
+            }
+            Err(e)
+        }
+        Err(_) => unreachable!(),
+    }
 }
 
 /// Drives the [`Interpreter`] forward, supplying external input when required.
@@ -51,6 +215,7 @@ struct Controller {
     file_loaded: bool,
     loaded_line_count: usize,
     input_sequence: usize,
+    step_count: Arc<std::sync::Mutex<usize>>,
 }
 
 impl Controller {
@@ -59,6 +224,7 @@ impl Controller {
     fn run(&mut self) -> Result<GameData, String> {
         loop {
             self.emit_event();
+            *self.step_count.lock().unwrap() += 1;
 
             match self.interpreter.step() {
                 StepResult::Ok => continue,
@@ -112,10 +278,12 @@ impl Controller {
     /// - `<N>`      → `Input::Choice { idx: N-1 }` (1-based choice index)
     fn read_test_file(&mut self, path: &PathBuf) -> Result<Input, String> {
         if self.line_buffer.is_empty() && !self.file_loaded {
-            let file = File::open(path).map_err(|e| format!("Failed to open test file: {}", e))?;
+            let file = File::open(path)
+                .map_err(|e| format!("Failed to open test file {}: {}", path.display(), e))?;
             let reader = BufReader::new(file);
             for line in reader.lines() {
-                let line = line.map_err(|e| format!("Failed to read test file: {}", e))?;
+                let line = line
+                    .map_err(|e| format!("Failed to read test file {}: {}", path.display(), e))?;
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('#') {
                     self.line_buffer.push_back(trimmed.to_string());
@@ -128,7 +296,7 @@ impl Controller {
         let line = self
             .line_buffer
             .pop_front()
-            .ok_or_else(|| "Test input file exhausted".to_string())?;
+            .ok_or_else(|| format!("Test input file exhausted (input #{})", self.input_sequence))?;
 
         match line.to_lowercase().as_str() {
             "y" | "yes" => Ok(Input::OptionalAccept),
@@ -194,6 +362,7 @@ mod tests {
             file_loaded: true,
             loaded_line_count: 4,
             input_sequence: 0,
+            step_count: Arc::new(std::sync::Mutex::new(0)),
         };
 
         let path = PathBuf::from("/nonexistent");
@@ -238,13 +407,14 @@ mod tests {
             file_loaded: true,
             loaded_line_count: 1,
             input_sequence: 0,
+            step_count: Arc::new(std::sync::Mutex::new(0)),
         };
 
         let path = PathBuf::from("test_input.txt");
         assert!(controller.read_test_file(&path).is_ok());
         let result = controller.read_test_file(&path);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Test input file exhausted");
+        assert_eq!(result.unwrap_err(), "Test input file exhausted (input #0)");
     }
 
     #[test]

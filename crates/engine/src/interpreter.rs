@@ -14,13 +14,98 @@ use crate::game_data::GameData;
 
 #[derive(Clone, Debug)]
 pub enum TraceEntry {
-    Step { state_id: u32, payload_type: String },
-    ChoiceMade { chosen_idx: usize },
-    OptionalAccepted,
-    OptionalDeclined,
-    ConditionEvaluated { expr: String, result: bool, negated: bool, took_else: bool },
-    EndConditionEvaluated { expr: String, result: bool, stage: String, exited: bool },
-    ActionExecuted { action_name: String },
+    Step {
+        from: u32,
+        to: u32,
+        event: TraceEvent,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub enum TraceEvent {
+    Action {
+        subtype: String,
+        detail: String,
+    },
+    Choice {
+        chosen_idx: usize,
+        options: Vec<String>,
+    },
+    OptionalAccept,
+    OptionalDecline,
+    Condition {
+        expr: String,
+        result: bool,
+        negated: bool,
+        took_else: bool,
+    },
+    EndCondition {
+        expr: String,
+        result: bool,
+        stage: String,
+        exited: bool,
+    },
+    StageRoundCounter {
+        stage: String,
+        new_count: u32,
+    },
+    EndStage {
+        stage: String,
+    },
+    Trigger,
+}
+
+impl std::fmt::Display for TraceEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TraceEntry::Step { from, to, event } => write!(f, "[{from}->{to}] {event}"),
+        }
+    }
+}
+
+impl std::fmt::Display for TraceEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TraceEvent::Action { subtype, detail } => write!(f, "Action:{} {}", subtype, detail),
+            TraceEvent::Choice {
+                chosen_idx,
+                options,
+            } => {
+                write!(f, "Choice: chose {} (from {:?})", chosen_idx + 1, options)
+            }
+            TraceEvent::OptionalAccept => write!(f, "Optional: ACCEPTED"),
+            TraceEvent::OptionalDecline => write!(f, "Optional: DECLINED"),
+            TraceEvent::Condition {
+                expr,
+                result,
+                negated,
+                took_else,
+            } => {
+                write!(
+                    f,
+                    "Condition: {} = {} (neg={}, else={})",
+                    expr, result, negated, took_else
+                )
+            }
+            TraceEvent::EndCondition {
+                expr,
+                result,
+                stage,
+                exited,
+            } => {
+                write!(
+                    f,
+                    "EndCondition({}): {} = {} (exited={})",
+                    stage, expr, result, exited
+                )
+            }
+            TraceEvent::StageRoundCounter { stage, new_count } => {
+                write!(f, "StageRoundCounter: {} -> {}", stage, new_count)
+            }
+            TraceEvent::EndStage { stage } => write!(f, "EndStage: {}", stage),
+            TraceEvent::Trigger => write!(f, "Trigger"),
+        }
+    }
 }
 
 pub struct Interpreter {
@@ -32,7 +117,11 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(ir: Ir<LoweredPayLoad>, game_data: GameData, trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>) -> Self {
+    pub fn new(
+        ir: Ir<LoweredPayLoad>,
+        game_data: GameData,
+        trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
+    ) -> Self {
         let current_state = ir.entry;
         Self {
             ir,
@@ -46,36 +135,62 @@ impl Interpreter {
     pub fn step(&mut self) -> StepResult {
         let edges: &Vec<Edge<LoweredPayLoad>> = match self.ir.states.get(&self.current_state) {
             Some(e) => e,
-            None => return StepResult::Error("Current state not found in IR".to_string()),
+            None => {
+                return StepResult::Error(format!(
+                    "Current state {:?} not found in IR",
+                    self.current_state.raw()
+                ))
+            }
         };
 
         if edges.is_empty() {
             if self.current_state == self.ir.goal {
                 return StepResult::GameOver;
             }
-            return StepResult::Error("No outgoing edges and not at goal state".to_string());
+            return StepResult::Error(format!(
+                "No outgoing edges from state {:?} and not at goal state",
+                self.current_state.raw()
+            ));
         }
 
         if let Some(edge) = edges.first() {
+            let from = self.current_state.raw();
+            let to = edge.to.raw();
             match &edge.payload {
-                Payload::Action(_) => {
+                Payload::Action(gr) => {
+                    let (subtype, detail) = rule_signature(gr);
                     if let Some(ref sender) = self.trace_sender {
-                        (sender)(TraceEntry::ActionExecuted { action_name: edge.payload.to_string() });
+                        (sender)(TraceEntry::Step {
+                            from,
+                            to,
+                            event: TraceEvent::Action { subtype, detail },
+                        });
                     }
                     self.execute_edge(edge.clone());
                     StepResult::Ok
                 }
                 Payload::Choice => {
                     if let Some(input) = self.input_buffer.pop() {
+                        let options: Vec<String> = edges
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| format!("Option {}", i + 1))
+                            .collect();
                         if let Some(ref sender) = self.trace_sender {
-                            (sender)(TraceEntry::ChoiceMade { chosen_idx: input.idx() });
+                            (sender)(TraceEntry::Step {
+                                from,
+                                to,
+                                event: TraceEvent::Choice {
+                                    chosen_idx: input.idx(),
+                                    options,
+                                },
+                            });
                         }
                         if let Some(choice_edge) = edges.get(input.idx()) {
                             self.execute_edge(choice_edge.clone());
                         }
                         StepResult::Ok
                     } else {
-                        // here we can later generate option labels by looking down the IR tree by one state to the next action edge for each option.
                         let options: Vec<String> = edges
                             .iter()
                             .enumerate()
@@ -88,11 +203,16 @@ impl Interpreter {
                 Payload::Optional => {
                     if let Some(input) = self.input_buffer.pop() {
                         if let Some(ref sender) = self.trace_sender {
-                            match input {
-                                Input::OptionalAccept => (sender)(TraceEntry::OptionalAccepted),
-                                Input::OptionalDecline => (sender)(TraceEntry::OptionalDeclined),
-                                Input::Choice { .. } => {}
-                            }
+                            let event = match input {
+                                Input::OptionalAccept => TraceEvent::OptionalAccept,
+                                Input::OptionalDecline => TraceEvent::OptionalDecline,
+                                Input::Choice { .. } => {
+                                    return StepResult::Error(
+                                        "Unexpected Choice input for Optional".to_string(),
+                                    )
+                                }
+                            };
+                            (sender)(TraceEntry::Step { from, to, event });
                         }
                         if let Some(opt_edge) = edges.get(input.idx()) {
                             self.execute_edge(opt_edge.clone());
@@ -106,9 +226,11 @@ impl Interpreter {
                 }
                 Payload::Condition { expr, negated } => {
                     if edges.len() != 2 {
-                        return StepResult::Error(
-                            "Condition state must have exactly 2 edges".to_string(),
-                        );
+                        return StepResult::Error(format!(
+                            "Condition state {:?} must have exactly 2 edges, found {}",
+                            self.current_state.raw(),
+                            edges.len()
+                        ));
                     }
                     let result = match crate::query::Evaluator::eval_bool(expr, &self.game_data) {
                         Ok(r) => r,
@@ -116,11 +238,15 @@ impl Interpreter {
                     };
                     let should_take_else = result != *negated;
                     if let Some(ref sender) = self.trace_sender {
-                        (sender)(TraceEntry::ConditionEvaluated {
-                            expr: format!("{:?}", expr),
-                            result,
-                            negated: *negated,
-                            took_else: should_take_else,
+                        (sender)(TraceEntry::Step {
+                            from,
+                            to,
+                            event: TraceEvent::Condition {
+                                expr: format!("{:?}", expr),
+                                result,
+                                negated: *negated,
+                                took_else: should_take_else,
+                            },
                         });
                     }
                     let edge = if should_take_else {
@@ -141,9 +267,11 @@ impl Interpreter {
                     stage,
                 } => {
                     if edges.len() != 2 {
-                        return StepResult::Error(
-                            "EndCondition state must have exactly 2 edges".to_string(),
-                        );
+                        return StepResult::Error(format!(
+                            "EndCondition state {:?} must have exactly 2 edges, found {}",
+                            self.current_state.raw(),
+                            edges.len()
+                        ));
                     }
                     let result = match crate::query::Evaluator::eval_end_condition(
                         expr,
@@ -155,11 +283,15 @@ impl Interpreter {
                     };
                     let should_exit = result != *negated;
                     if let Some(ref sender) = self.trace_sender {
-                        (sender)(TraceEntry::EndConditionEvaluated {
-                            expr: format!("{:?}", expr),
-                            result,
-                            stage: stage.clone(),
-                            exited: should_exit,
+                        (sender)(TraceEntry::Step {
+                            from,
+                            to,
+                            event: TraceEvent::EndCondition {
+                                expr: format!("{:?}", expr),
+                                result,
+                                stage: stage.clone(),
+                                exited: should_exit,
+                            },
                         });
                     }
                     let edge = if should_exit {
@@ -176,21 +308,51 @@ impl Interpreter {
                 }
                 Payload::StageRoundCounter(stage) => {
                     self.game_data.increment_stage_counter(stage.clone());
+                    let new_count = self.game_data.get_stage_counter(stage.clone());
+                    if let Some(ref sender) = self.trace_sender {
+                        (sender)(TraceEntry::Step {
+                            from,
+                            to,
+                            event: TraceEvent::StageRoundCounter {
+                                stage: stage.clone(),
+                                new_count,
+                            },
+                        });
+                    }
                     self.execute_edge(edge.clone());
                     StepResult::Ok
                 }
                 Payload::EndStage(stage) => {
                     self.game_data.leave_stage(stage.clone());
+                    if let Some(ref sender) = self.trace_sender {
+                        (sender)(TraceEntry::Step {
+                            from,
+                            to,
+                            event: TraceEvent::EndStage {
+                                stage: stage.clone(),
+                            },
+                        });
+                    }
                     self.execute_edge(edge.clone());
                     StepResult::Ok
                 }
                 Payload::Trigger => {
+                    if let Some(ref sender) = self.trace_sender {
+                        (sender)(TraceEntry::Step {
+                            from,
+                            to,
+                            event: TraceEvent::Trigger,
+                        });
+                    }
                     self.execute_edge(edge.clone());
                     StepResult::Ok
                 }
             }
         } else {
-            StepResult::Error("No edges found".to_string())
+            StepResult::Error(format!(
+                "No edges found in state {:?}",
+                self.current_state.raw()
+            ))
         }
     }
 
@@ -238,12 +400,79 @@ impl IrExt for Ir<LoweredPayLoad> {
     }
 }
 
-fn format_action_name(rule: &front_end::ast::GameRule) -> String {
+fn rule_signature(rule: &front_end::ast::GameRule) -> (String, String) {
     match rule {
-        front_end::ast::GameRule::Action { action } => format!("{:?}", action),
-        front_end::ast::GameRule::SetUp { setup: _ } => "SetUp".to_string(),
-        front_end::ast::GameRule::Scoring { scoring: _ } => "Scoring".to_string(),
+        front_end::ast::GameRule::Action { action } => {
+            let subtype = match action {
+                front_end::ast::ActionRule::FlipAction { .. } => "Action:FlipAction".to_string(),
+                front_end::ast::ActionRule::ShuffleAction { .. } => {
+                    "Action:ShuffleAction".to_string()
+                }
+                front_end::ast::ActionRule::OutAction { .. } => "Action:OutAction".to_string(),
+                front_end::ast::ActionRule::SetMemory { .. } => "Action:SetMemory".to_string(),
+                front_end::ast::ActionRule::ResetMemory { .. } => "Action:ResetMemory".to_string(),
+                front_end::ast::ActionRule::CycleAction { .. } => "Action:CycleAction".to_string(),
+                front_end::ast::ActionRule::BidAction { .. } => "Action:BidAction".to_string(),
+                front_end::ast::ActionRule::BidMemoryAction { .. } => {
+                    "Action:BidMemoryAction".to_string()
+                }
+                front_end::ast::ActionRule::EndAction { .. } => "Action:EndAction".to_string(),
+                front_end::ast::ActionRule::DemandAction { .. } => {
+                    "Action:DemandAction".to_string()
+                }
+                front_end::ast::ActionRule::DemandMemoryAction { .. } => {
+                    "Action:DemandMemoryAction".to_string()
+                }
+                front_end::ast::ActionRule::Move { .. } => "Action:Move".to_string(),
+            };
+            (subtype, format!("{:?}", action))
+        }
+        front_end::ast::GameRule::SetUp { setup } => {
+            let subtype = match setup {
+                front_end::ast::SetUpRule::CreatePlayer { .. } => "SetUp:CreatePlayer".to_string(),
+                front_end::ast::SetUpRule::CreateTeams { .. } => "SetUp:CreateTeams".to_string(),
+                front_end::ast::SetUpRule::CreateTurnorder { .. } => {
+                    "SetUp:CreateTurnorder".to_string()
+                }
+                front_end::ast::SetUpRule::CreateTurnorderRandom { .. } => {
+                    "SetUp:CreateTurnorderRandom".to_string()
+                }
+                front_end::ast::SetUpRule::CreateLocation { .. } => {
+                    "SetUp:CreateLocation".to_string()
+                }
+                front_end::ast::SetUpRule::CreateCardOnLocation { .. } => {
+                    "SetUp:CreateCardOnLocation".to_string()
+                }
+                front_end::ast::SetUpRule::CreateTokenOnLocation { .. } => {
+                    "SetUp:CreateTokenOnLocation".to_string()
+                }
+                front_end::ast::SetUpRule::CreateCombo { .. } => "SetUp:CreateCombo".to_string(),
+                front_end::ast::SetUpRule::CreateMemory { .. } => "SetUp:CreateMemory".to_string(),
+                front_end::ast::SetUpRule::CreateMemoryWithMemoryType { .. } => {
+                    "SetUp:CreateMemoryWithMemoryType".to_string()
+                }
+                front_end::ast::SetUpRule::CreatePrecedence { .. } => {
+                    "SetUp:CreatePrecedence".to_string()
+                }
+                front_end::ast::SetUpRule::CreatePointMap { .. } => {
+                    "SetUp:CreatePointMap".to_string()
+                }
+            };
+            (subtype, format!("{:?}", setup))
+        }
+        front_end::ast::GameRule::Scoring { scoring } => {
+            let subtype = match scoring {
+                front_end::ast::ScoringRule::ScoreRule { .. } => "Scoring:ScoreRule".to_string(),
+                front_end::ast::ScoringRule::WinnerRule { .. } => "Scoring:WinnerRule".to_string(),
+            };
+            (subtype, format!("{:?}", scoring))
+        }
     }
+}
+
+fn format_action_name(rule: &front_end::ast::GameRule) -> String {
+    let (subtype, _) = rule_signature(rule);
+    subtype
 }
 
 #[derive(Clone, Debug, PartialEq)]

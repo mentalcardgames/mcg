@@ -21,10 +21,40 @@ impl TraceDetail {
     pub fn passes(&self, entry: &TraceEntry) -> bool {
         match self {
             TraceDetail::Choices => {
-                matches!(entry, TraceEntry::ChoiceMade { .. } | TraceEntry::OptionalAccepted | TraceEntry::OptionalDeclined)
+                matches!(
+                    entry,
+                    TraceEntry::Step {
+                        event: cgdsl_engine::TraceEvent::Choice { .. },
+                        ..
+                    }
+                )
             }
             TraceDetail::Evaluations => {
-                !matches!(entry, TraceEntry::Step { .. })
+                matches!(
+                    entry,
+                    TraceEntry::Step {
+                        event: cgdsl_engine::TraceEvent::OptionalAccept,
+                        ..
+                    }
+                ) || matches!(
+                    entry,
+                    TraceEntry::Step {
+                        event: cgdsl_engine::TraceEvent::OptionalDecline,
+                        ..
+                    }
+                ) || matches!(
+                    entry,
+                    TraceEntry::Step {
+                        event: cgdsl_engine::TraceEvent::Condition { .. },
+                        ..
+                    }
+                ) || matches!(
+                    entry,
+                    TraceEntry::Step {
+                        event: cgdsl_engine::TraceEvent::EndCondition { .. },
+                        ..
+                    }
+                )
             }
             TraceDetail::Verbose => true,
         }
@@ -39,6 +69,9 @@ pub struct DisplayTraceEntry {
 
 impl DisplayTraceEntry {
     pub fn from_trace_entry(step: usize, entry: TraceEntry) -> Self {
-        Self { step_number: step, entry }
+        Self {
+            step_number: step,
+            entry,
+        }
     }
 }

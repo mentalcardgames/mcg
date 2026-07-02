@@ -1,8 +1,8 @@
 //! Bottom panel: perspective selector and action input
 
-use ratatui::layout::Rect;
-use ratatui::widgets::{Block, Borders, Paragraph, List, ListItem};
 use cgdsl_engine::InputType;
+use ratatui::layout::Rect;
+use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
 pub struct InputPanel {
     pub perspective_idx: usize,
@@ -11,14 +11,26 @@ pub struct InputPanel {
 
 impl InputPanel {
     pub fn new(perspective_idx: usize, player_names: Vec<String>) -> Self {
-        Self { perspective_idx, player_names }
+        Self {
+            perspective_idx,
+            player_names,
+        }
     }
 
-    pub fn render(&self, f: &mut ratatui::Frame, waiting: bool, input_type: Option<&InputType>, area: Rect) {
+    pub fn render(
+        &self,
+        f: &mut ratatui::Frame,
+        waiting: bool,
+        input_type: Option<&InputType>,
+        area: Rect,
+    ) {
         let block = Block::default()
             .title(format!(
                 "Perspective: {} | {}",
-                self.player_names.get(self.perspective_idx).cloned().unwrap_or_default(),
+                self.player_names
+                    .get(self.perspective_idx)
+                    .cloned()
+                    .unwrap_or_default(),
                 if waiting { "WAITING FOR INPUT" } else { "IDLE" }
             ))
             .borders(Borders::ALL);
@@ -31,9 +43,11 @@ impl InputPanel {
             if let Some(it) = input_type {
                 match it {
                     InputType::Choice { options, .. } => {
-                        let items: Vec<_> = options.iter().enumerate().map(|(i, opt)| {
-                            ListItem::new(format!("[{}] {}", i + 1, opt))
-                        }).collect();
+                        let items: Vec<_> = options
+                            .iter()
+                            .enumerate()
+                            .map(|(i, opt)| ListItem::new(format!("[{}] {}", i + 1, opt)))
+                            .collect();
                         let list = List::new(items);
                         f.render_widget(list, inner);
                     }

@@ -1,9 +1,9 @@
 //! Right panel: IR trace log viewer
 
-use ratatui::layout::Rect;
-use ratatui::widgets::{Block, Borders, Paragraph};
-use ratatui::text::{Text, Line};
 use crate::trace::{DisplayTraceEntry, TraceDetail};
+use ratatui::layout::Rect;
+use ratatui::text::{Line, Text};
+use ratatui::widgets::{Block, Borders, Paragraph};
 
 pub struct TraceLogPanel {
     pub detail: TraceDetail,
@@ -23,7 +23,8 @@ impl TraceLogPanel {
 
         let inner = block.inner(area);
 
-        let filtered: Vec<_> = entries.iter()
+        let filtered: Vec<_> = entries
+            .iter()
             .filter(|e| self.detail.passes(&e.entry))
             .collect();
 
@@ -42,22 +43,6 @@ impl TraceLogPanel {
     }
 
     fn format_entry(&self, entry: &DisplayTraceEntry) -> String {
-        use cgdsl_engine::TraceEntry::*;
-        match &entry.entry {
-            Step { state_id, payload_type } =>
-                format!("Step @{:?}: {:?}", state_id, payload_type),
-            ChoiceMade { chosen_idx } =>
-                format!("-> Chose Option {}", chosen_idx + 1),
-            OptionalAccepted =>
-                format!("-> Optional ACCEPTED"),
-            OptionalDeclined =>
-                format!("-> Optional DECLINED"),
-            ConditionEvaluated { expr, result, negated, took_else } =>
-                format!("Condition {} = {} (neg={}, took_else={})", expr, result, negated, took_else),
-            EndConditionEvaluated { expr, result, stage, exited } =>
-                format!("EndCondition({}) {} = {} (exited={})", stage, expr, result, exited),
-            ActionExecuted { action_name } =>
-                format!("-> Action: {}", action_name),
-        }
+        format!("{}", entry.entry)
     }
 }

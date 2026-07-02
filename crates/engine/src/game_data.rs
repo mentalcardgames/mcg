@@ -131,7 +131,9 @@ impl GameData {
                 .players
                 .iter()
                 .position(|p| p.name == owner_name)
-                .expect("Owner not found");
+                .unwrap_or_else(|| {
+                    panic!("add_location: owner {} not found in players", owner_name)
+                });
             self.players[player_id].owner.locations.push(location_id);
         }
 
@@ -189,7 +191,12 @@ impl GameData {
                 self.turn_order
                     .iter()
                     .position(|&idx| idx == next_player)
-                    .unwrap(),
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "next_player: next_player {} not found in turn_order {:?}",
+                            next_player, self.turn_order
+                        )
+                    }),
             );
         } else {
             self.current_player = None;

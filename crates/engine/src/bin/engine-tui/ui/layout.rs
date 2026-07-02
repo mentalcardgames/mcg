@@ -1,6 +1,6 @@
 //! Main layout definition
 
-use ratatui::layout::{Rect, Layout, Constraint, Direction};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 pub struct AppLayout {
     pub game_state_area: Rect,
@@ -22,18 +22,12 @@ impl AppLayout {
 
         let top_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(40),
-                Constraint::Percentage(60),
-            ])
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(chunks[0]);
 
         let input_and_controls = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(70),
-                Constraint::Percentage(30),
-            ])
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
             .split(chunks[1]);
 
         Self {

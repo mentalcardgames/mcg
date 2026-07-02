@@ -535,11 +535,11 @@ impl Evaluator {
                 }
                 Ok(result)
             }
-            IntCollection::AggregateMemory {
-                memory: _,
-                multi: _,
-            } => {
-                todo!("IntCollection::AggregateMemory not yet implemented")
+            IntCollection::AggregateMemory { memory: _, multi } => {
+                todo!(
+                    "IntCollection::AggregateMemory not yet implemented: {:?}",
+                    multi
+                )
             }
             IntCollection::Memory { memory } => {
                 let key = match memory {
@@ -628,11 +628,11 @@ impl Evaluator {
                     Ok(result)
                 }
             },
-            TeamCollection::AggregateMemory {
-                memory: _,
-                multi: _,
-            } => {
-                todo!("TeamCollection::AggregateMemory not yet implemented")
+            TeamCollection::AggregateMemory { memory: _, multi } => {
+                todo!(
+                    "TeamCollection::AggregateMemory not yet implemented: {:?}",
+                    multi
+                )
             }
             TeamCollection::Memory { memory } => {
                 let key = match memory {
@@ -699,11 +699,11 @@ impl Evaluator {
                 }
                 Ok(result)
             }
-            StringCollection::AggregateMemory {
-                memory: _,
-                multi: _,
-            } => {
-                todo!("StringCollection::AggregateMemory not yet implemented")
+            StringCollection::AggregateMemory { memory: _, multi } => {
+                todo!(
+                    "StringCollection::AggregateMemory not yet implemented: {:?}",
+                    multi
+                )
             }
             StringCollection::Memory { memory } => {
                 let key = match memory {
@@ -1587,12 +1587,16 @@ impl Evaluator {
     pub fn resolve_players(players: &Players, game_data: &GameData) -> Vec<usize> {
         match players {
             Players::Player { player } => {
-                let name = Self::eval_player(player, game_data).expect("Failed to eval player");
+                let name = Self::eval_player(player, game_data).unwrap_or_else(|e| {
+                    panic!("resolve_players: failed to eval player {:?}: {}", player, e)
+                });
                 vec![game_data
                     .players
                     .iter()
                     .position(|p| p.name == name)
-                    .expect("Player not found")]
+                    .unwrap_or_else(|| {
+                        panic!("resolve_players: player {} not found in game_data", name)
+                    })]
             }
             Players::PlayerCollection { player_collection } => {
                 Self::resolve_player_collection(player_collection, game_data)
@@ -1605,8 +1609,12 @@ impl Evaluator {
             PlayerCollection::Literal { players } => {
                 let mut indices = vec![];
                 for player_expr in players {
-                    let name =
-                        Self::eval_player(player_expr, game_data).expect("Failed to eval player");
+                    let name = Self::eval_player(player_expr, game_data).unwrap_or_else(|e| {
+                        panic!(
+                            "resolve_player_collection: failed to eval player {:?}: {}",
+                            player_expr, e
+                        )
+                    });
                     if let Some(idx) = game_data.players.iter().position(|p| p.name == name) {
                         indices.push(idx);
                     }
@@ -1615,7 +1623,7 @@ impl Evaluator {
             }
 
             PlayerCollection::Aggregate { .. } => {
-                todo!("PlayerCollection::Aggregate::Quantifier handled elsewhere")
+                todo!("PlayerCollection::Aggregate not yet implemented")
             }
             PlayerCollection::Runtime { runtime } => match runtime {
                 front_end::ast::RuntimePlayerCollection::PlayersOut => game_data

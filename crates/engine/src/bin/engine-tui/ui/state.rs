@@ -2,8 +2,8 @@
 
 use crossbeam_channel::Sender;
 
-use cgdsl_engine::{Input, InputType, TraceEntry, DebugLevel};
 use crate::trace::{DisplayTraceEntry, TraceDetail};
+use cgdsl_engine::{DebugLevel, Input, InputType, TraceEntry};
 
 pub struct TuiState {
     pub trace_entries: Vec<DisplayTraceEntry>,
@@ -32,7 +32,8 @@ impl TuiState {
 
     pub fn push_trace(&mut self, entry: TraceEntry) {
         self.step_count += 1;
-        self.trace_entries.push(DisplayTraceEntry::from_trace_entry(self.step_count, entry));
+        self.trace_entries
+            .push(DisplayTraceEntry::from_trace_entry(self.step_count, entry));
     }
 
     pub fn cycle_trace_detail(&mut self) {
