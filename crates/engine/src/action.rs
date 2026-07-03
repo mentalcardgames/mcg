@@ -49,12 +49,10 @@ pub fn execute(payload: LoweredPayLoad, game_data: &mut GameData) {
             GameRule::Action { action } => execute_action_rule(action, game_data),
             GameRule::Scoring { scoring } => execute_scoring_rule(scoring, game_data),
         },
-        LoweredPayLoad::StageRoundCounter(stage_name) => {
-            game_data.increment_stage_counter(stage_name);
-        }
-        LoweredPayLoad::EndStage(stage_name) => {
-            game_data.leave_stage(stage_name);
-        }
+        // StageRoundCounter and EndStage are applied by the interpreter's `step()`
+        // (which mutates game_data before calling execute_edge). Re-applying them
+        // here would double-increment the round counter and double-leave the stage
+        // stack (see invariants I-5). They intentionally fall through to `_ => {}`.
         _ => {}
     }
 }

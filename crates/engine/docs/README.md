@@ -169,6 +169,7 @@ A compact glossary an agent should internalize before touching this crate:
 | [`data-structures.md`](./data-structures.md) | `GameData` family, consumed IR types, execution types | You need field-level layout of any struct/enum. |
 | [`lifecycle.md`](./lifecycle.md) | Construction → setup → play loop → termination; run-loop sequencing | You need to understand *when* things happen. |
 | [`invariants.md`](./invariants.md) | 15 hard guardrails (I-1 … I-15) that must never be broken | **Before modifying any engine code.** |
+| [`known-bugs.md`](./known-bugs.md) | 3 bugs in front_end/DSL that manifest at engine runtime (B-1 … B-3) | You are debugging a stage/turn/player-scope issue not explained by invariants. |
 | [`concurrency.md`](./concurrency.md) | Threading model, `Send`/`Sync`, resources, unused deps | You need thread-safety / memory guarantees. |
 | [`api-usage.md`](./api-usage.md) | Golden path, manual interpreter driving, extension points | You are integrating the engine from outside. |
 | [`error-handling.md`](./error-handling.md) | Error channels, recoverable vs panic, silent no-ops | You are diagnosing a failure or adding a path. |

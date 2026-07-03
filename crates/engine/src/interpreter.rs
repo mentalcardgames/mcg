@@ -273,6 +273,7 @@ impl Interpreter {
                             edges.len()
                         ));
                     }
+                    self.game_data.ensure_stage_entered(stage);
                     let result = match crate::query::Evaluator::eval_end_condition(
                         expr,
                         &self.game_data,
@@ -299,6 +300,9 @@ impl Interpreter {
                     } else {
                         edges.get(1)
                     };
+                    if should_exit {
+                        self.game_data.leave_stage(stage.clone());
+                    }
                     if let Some(e) = edge {
                         self.execute_edge(e.clone());
                         StepResult::Ok
@@ -307,10 +311,7 @@ impl Interpreter {
                     }
                 }
                 Payload::StageRoundCounter(stage) => {
-                    if self.game_data.get_stage_counter(stage.clone()) == 0 {
-                        let all_player_names: Vec<String> = self.game_data.players.iter().map(|p| p.name.clone()).collect();
-                        self.game_data.enter_stage(stage.clone(), all_player_names);
-                    }
+                    self.game_data.ensure_stage_entered(stage);
                     self.game_data.increment_stage_counter(stage.clone());
                     let new_count = self.game_data.get_stage_counter(stage.clone());
                     if let Some(ref sender) = self.trace_sender {

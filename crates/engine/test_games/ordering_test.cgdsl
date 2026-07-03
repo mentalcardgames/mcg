@@ -13,7 +13,7 @@ stage Setup for current 1 times {
   deal 1 from top(Stock) private to Hand
 }
 
-stage Play for current 2 times {
+stage Play for all 2 times {
   choose {
     move top(Hand) face down to Table
     or
@@ -28,5 +28,5 @@ stage Play for current 2 times {
 }
 
 stage End for current 1 times {
-  end Play
+  cycle to next
 }

@@ -115,9 +115,9 @@ kind dispatched inside `step()`:
   `Input::OptionalAccept` → edge 0, `Input::OptionalDecline` → edge 1.
 - `Payload::Condition { expr, negated }` → evaluate `expr`, pick edge 0 or 1 (inverted vs.
   `EndCondition` — see I-3).
-- `Payload::EndCondition { expr, negated, stage }` → evaluate, pick edge 0 (exit) or 1 (continue).
-- `Payload::StageRoundCounter(stage)` → increment counter, advance (applied twice — see I-5).
-- `Payload::EndStage(stage)` → `leave_stage`, advance (applied twice — see I-5).
+- `Payload::EndCondition { expr, negated, stage }` → `ensure_stage_entered(stage)` (enters on first encounter), evaluate `expr`, pick edge 0 (exit) or 1 (continue); on exit, `leave_stage(stage)` pops the stage stack. (Edge indexing is inverted vs. `Condition` — see I-3.)
+- `Payload::StageRoundCounter(stage)` → `ensure_stage_entered(stage)` (idempotent), increment counter, advance. Applied **once** (interpreter is the single mutator — see I-5).
+- `Payload::EndStage(stage)` → `leave_stage`, advance. Applied once. (Currently never emitted by the front_end IR builder; retained.)
 - `Payload::Trigger` → advance only (no mutation; `action::execute` catch-all swallows it).
 
 ### 4. Termination

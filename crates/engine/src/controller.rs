@@ -529,4 +529,68 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_play_stage_advances_turn_and_runs_two_iterations() {
+        use crate::interpreter::TraceEvent;
+        use front_end::validation::parse_document;
+        use std::sync::{Arc, Mutex};
+
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let game_path = manifest_dir.join("test_games/turn_switch.cgdsl");
+
+        let source = std::fs::read_to_string(&game_path).expect("read turn_switch.cgdsl");
+        let game = parse_document(&source).expect("parse turn_switch.cgdsl");
+        let ir = game.to_lowered_graph();
+
+        let snapshots: Arc<Mutex<Vec<GameData>>> = Arc::new(Mutex::new(Vec::new()));
+        let snapshots_clone = snapshots.clone();
+        let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
+        let trace_clone = trace.clone();
+
+        let result = run_game(
+            ir,
+            GameData::new(),
+            InputSource::Player(Box::new(|_input_type: InputType| Input::Choice { idx: 0 })),
+            Some(Box::new(move |gd: &GameData| {
+                snapshots_clone.lock().unwrap().push(gd.clone());
+            })),
+            Some(Box::new(move |entry: TraceEntry| {
+                trace_clone.lock().unwrap().push(entry);
+            })),
+        );
+
+        assert!(result.is_ok(), "game should complete: {:?}", result.err());
+
+        let trace_vec = trace.lock().unwrap().clone();
+        let play_rounds = trace_vec
+            .iter()
+            .filter(|e| {
+                if let TraceEntry::Step {
+                    event: TraceEvent::StageRoundCounter { stage, .. },
+                    ..
+                } = *e
+                {
+                    stage.as_str() == "Play"
+                } else {
+                    false
+                }
+            })
+            .count();
+        assert_eq!(
+            play_rounds, 2,
+            "Play must run 2 iterations (one StageRoundCounter traversal each); got {}",
+            play_rounds
+        );
+
+        let reached_p2 = snapshots
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|gd: &GameData| gd.current_player == Some(1));
+        assert!(
+            reached_p2,
+            "current_player must reach P2 (Some(1)) during Play — enter_stage must fire before the first cycle-to-next"
+        );
+    }
 }

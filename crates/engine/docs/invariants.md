@@ -57,20 +57,19 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > `GameOver`. An agent adding a terminal state must ensure it is registered as
 > `front_end::ir::Ir::goal`.
 
-> **I-5 — `StageRoundCounter` and `EndStage` payloads are applied TWICE per traversal.**
-> `crates::engine::interpreter::Interpreter::step` handles these payloads by mutating `game_data`
-> and **then** calling `execute_edge(edge.clone())`
-> (`crates/engine/src/interpreter.rs:125-134`), which calls
-> `crates::engine::action::execute(edge.payload, &mut game_data)`
-> (`crates/engine/src/interpreter.rs:145-148`). `crates::engine::action::execute` has **its own**
-> arms for `front_end::ir::Payload::StageRoundCounter` (`crates/engine/src/action.rs:52-54`) and
-> `front_end::ir::Payload::EndStage` (`crates/engine/src/action.rs:55-57`) that perform the same
-> mutation again. Net effect: the stage round counter is incremented **twice** per traversal, and
-> `crates::engine::game_data::GameData::leave_stage` is called **twice** (the second call on an
-> already-popped stack is a no-op only if the stage was unique — otherwise it pops further stages).
-> `front_end::ir::Payload::Trigger` is unaffected because `action::execute`'s catch-all
-> `_ => {}` (`crates/engine/src/action.rs:58`) swallows it. Agents must either preserve this
-> double-application or refactor both call sites together.
+> **I-5 — `StageRoundCounter` is applied exactly once per traversal (was: twice).**
+> The interpreter's `step()` is the single mutator for `StageRoundCounter` and
+> `EndStage` payloads: it mutates `game_data` and then calls `execute_edge()`
+> (`crates/engine/src/interpreter.rs`), which calls `action::execute()`.
+> `action::execute()`'s match has **no** `StageRoundCounter`/`EndStage` arms — they
+> fall through to the catch-all `_ => {}` (`crates/engine/src/action.rs`). Agents
+> must NOT re-add those arms or the round counter increments twice and
+> `leave_stage` is called twice.
+> Note: the `EndStage` payload is currently never emitted by the front_end IR
+> builder (stages exit via `EndAction` action edges or via the EndCondition-exit
+> pop below); the `EndStage` interpreter arm is retained for completeness. A
+> normal `EndCondition` exit (`should_exit == true`) pops `stage_stack` via
+> `leave_stage(stage)` in the EndCondition arm.
 
 > **I-6 — Cards have no reverse location index; location is found by linear scan.**
 > `crates::engine::game_data::GameData::add_card` (`crates/engine/src/game_data.rs:154-157`) takes
@@ -123,18 +122,17 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > is drained**. `crates::engine::game_data::GameData::get_current_stage`
 > (`crates/engine/src/game_data.rs:212-214`) returns `stage_stack.last()`.
 
-> **I-12 — `enter_stage` is never called by the engine's action layer.**
-> Stage entry (`crates::engine::game_data::GameData::enter_stage`,
-> `crates/engine/src/game_data.rs:216-225`) is defined but no `front_end::ast::ActionRule`/
-> `front_end::ast::SetUpRule` invokes it. Stage participation flags (`in_stage`) are only mutated
-> by `crates::engine::game_data::GameData::set_player_stage_flag`
-> (`crates/engine/src/game_data.rs:206-210`, called from `front_end::ast::ActionRule::OutAction`,
-> `crates/engine/src/action.rs:186-194`) and `enter_stage`. The `in_stage` map is relied upon by
-> turn resolution (`crates::engine::game_data::GameData::resolve_turn`,
-> `crates/engine/src/game_data.rs:236-249`) and by
-> `front_end::ast::RuntimePlayer::Next`/`front_end::ast::OutOf::CurrentStage`. An agent that adds
-> stage-entry logic must populate `in_stage` for every player or `resolve_turn` will find no
-> eligible player and return `None`.
+> **I-12 — `enter_stage` is invoked by the interpreter via `ensure_stage_entered`.**
+> Stage entry (`GameData::enter_stage`) is called from
+> `GameData::ensure_stage_entered` (`crates/engine/src/game_data.rs`), which the
+> interpreter calls on the first encounter of any stage-carrying payload
+> (`EndCondition`, `StageRoundCounter`, `EndStage`) for a stage not yet on
+> `stage_stack`. It is idempotent (guarded by `stage_stack` membership).
+> `ensure_stage_entered` marks **all** players in-stage for the entered stage
+> (participants-by-default); `ActionRule::OutAction` (`end <stage>` / `out of`)
+> removes specific players afterwards. `resolve_turn` and `RuntimePlayer::Next`
+> rely on `in_stage[current_stage]`; without `ensure_stage_entered` they find no
+> eligible player and `current_player` becomes `None`.
 
 > **I-13 — `resolve_turn` / `next_player` find the next *eligible* player, wrapping the turn order.**
 > (`crates/engine/src/game_data.rs:185-197`, `236-249`). Eligible = `in_game && in_stage[current_stage]`.

@@ -1,0 +1,7 @@
+player P1, P2
+team T1 with (P:P1, P:P2)
+turnorder (P:P1, P:P2)
+
+stage Play for current 2 times {
+  cycle to next
+}
