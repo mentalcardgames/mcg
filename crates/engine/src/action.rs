@@ -68,10 +68,8 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
         }
         SetUpRule::CreateTeams { teams } => {
             for (team_name, player_collection) in teams {
-                let player_indices = crate::query::Evaluator::resolve_player_collection(
-                    &player_collection,
-                    game_data,
-                );
+                let player_indices =
+                    crate::quantifier::resolve_player_candidates(&player_collection, game_data);
                 game_data.teams.push(Team {
                     name: team_name,
                     players: player_indices,
@@ -80,29 +78,31 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
         }
         SetUpRule::CreateTurnorder { player_collection } => {
             let indices =
-                crate::query::Evaluator::resolve_player_collection(&player_collection, game_data);
+                crate::quantifier::resolve_player_candidates(&player_collection, game_data);
             game_data.turn_order = indices;
         }
         SetUpRule::CreateTurnorderRandom { player_collection } => {
             use rand::seq::SliceRandom;
             let mut indices =
-                crate::query::Evaluator::resolve_player_collection(&player_collection, game_data);
+                crate::quantifier::resolve_player_candidates(&player_collection, game_data);
             indices.shuffle(&mut rand::thread_rng());
             game_data.turn_order = indices;
         }
         SetUpRule::CreateLocation { locations, owner } => {
-            let owner_name = crate::query::Evaluator::resolve_owner_to_name(&owner, game_data)
+            let owner_names = crate::query::Evaluator::resolve_owner_to_names(&owner, game_data)
                 .unwrap_or_else(|e| {
                     panic!("CreateLocation: failed to resolve owner {:?}: {}", owner, e)
                 });
-            for loc_name in locations {
-                game_data.add_location(
-                    owner_name.clone(),
-                    Location {
-                        name: loc_name.clone(),
-                        cards: vec![],
-                    },
-                );
+            for owner_name in &owner_names {
+                for loc_name in &locations {
+                    game_data.add_location(
+                        owner_name.clone(),
+                        Location {
+                            name: loc_name.clone(),
+                            cards: vec![],
+                        },
+                    );
+                }
             }
         }
         SetUpRule::CreateCardOnLocation { location, cards } => {

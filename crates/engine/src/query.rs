@@ -1731,6 +1731,34 @@ impl Evaluator {
         }
     }
 
+    pub fn resolve_owner_to_names(
+        owner: &Owner,
+        game_data: &GameData,
+    ) -> Result<Vec<String>, String> {
+        match owner {
+            Owner::Table => Ok(vec!["Table".to_string()]),
+            Owner::Player { player } => Ok(vec![Self::eval_player(player, game_data)?]),
+            Owner::Team { team } => {
+                let name = Self::eval_team(team, game_data)?;
+                Err(format!(
+                    "resolve_owner_to_names: team '{name}' cannot own a location or memory (team-owned locations are not in the data model)"
+                ))
+            }
+            Owner::PlayerCollection {
+                player_collection: pc,
+            } => {
+                let indices = crate::quantifier::resolve_player_candidates(pc, game_data);
+                Ok(indices
+                    .into_iter()
+                    .map(|i| game_data.players[i].name.clone())
+                    .collect())
+            }
+            Owner::TeamCollection { .. } => Err(
+                "resolve_owner_to_names: TeamCollection cannot resolve to owner names".to_string(),
+            ),
+        }
+    }
+
     pub fn expand_types(types: &Types) -> Vec<Card> {
         let mut result = vec![Card::new()];
         for (attr, values) in &types.types {

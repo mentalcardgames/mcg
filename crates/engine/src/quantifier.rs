@@ -19,7 +19,7 @@
 use crate::game_data::GameData;
 use front_end::ast::{
     AggregatePlayerCollection, CardSet, IntExpr, IntRange, IntRangeOperator, MoveCardSet, Owner,
-    PlayerCollection, PlayerExpr, Quantifier, Quantity, UseMemory,
+    PlayerCollection, PlayerExpr, Quantifier, Quantity, SetUpRule, UseMemory,
 };
 use front_end::ir::{Edge, LoweredPayLoad, Payload, StateID};
 
@@ -149,6 +149,38 @@ pub fn resolve_player_candidates(pc: &PlayerCollection, game_data: &GameData) ->
                 .collect(),
         },
         _ => crate::query::Evaluator::resolve_player_collection(pc, game_data),
+    }
+}
+
+fn pc_is_any(pc: &PlayerCollection) -> bool {
+    matches!(
+        pc,
+        PlayerCollection::Aggregate {
+            aggregate: AggregatePlayerCollection::Quantifier {
+                quantifier: Quantifier::Any
+            }
+        }
+    )
+}
+
+fn owner_is_any(owner: &Owner) -> bool {
+    matches!(owner, Owner::PlayerCollection { player_collection: pc } if pc_is_any(pc))
+}
+
+pub fn setup_contains_any(setup: &SetUpRule) -> bool {
+    match setup {
+        SetUpRule::CreatePlayer { .. } => false,
+        SetUpRule::CreateTeams { teams } => teams.iter().any(|(_, pc)| pc_is_any(pc)),
+        SetUpRule::CreateTurnorder { player_collection }
+        | SetUpRule::CreateTurnorderRandom { player_collection } => pc_is_any(player_collection),
+        SetUpRule::CreateLocation { owner, .. } => owner_is_any(owner),
+        SetUpRule::CreateCardOnLocation { .. } => false,
+        SetUpRule::CreateTokenOnLocation { .. } => false,
+        SetUpRule::CreateCombo { .. } => false,
+        SetUpRule::CreatePrecedence { .. } => false,
+        SetUpRule::CreatePointMap { .. } => false,
+        SetUpRule::CreateMemory { owner, .. }
+        | SetUpRule::CreateMemoryWithMemoryType { owner, .. } => owner_is_any(owner),
     }
 }
 
@@ -847,5 +879,80 @@ mod tests {
         assert!(validate_int_range(&range, 0, 10).is_err(), "0 < 1");
         assert!(validate_int_range(&range, 4, 10).is_err(), "4 > 3");
         assert!(validate_int_range(&range, 100, 10).is_err(), "100 > 3");
+    }
+
+    #[test]
+    fn setup_contains_any_false_for_create_player() {
+        let setup = SetUpRule::CreatePlayer {
+            players: vec!["P1".into()],
+        };
+        assert!(!setup_contains_any(&setup));
+    }
+
+    #[test]
+    fn setup_contains_any_true_for_create_location_any() {
+        let setup = SetUpRule::CreateLocation {
+            locations: vec!["Hand".into()],
+            owner: aggregate_owner(Quantifier::Any),
+        };
+        assert!(setup_contains_any(&setup));
+    }
+
+    #[test]
+    fn setup_contains_any_false_for_create_location_all() {
+        let setup = SetUpRule::CreateLocation {
+            locations: vec!["Hand".into()],
+            owner: aggregate_owner(Quantifier::All),
+        };
+        assert!(!setup_contains_any(&setup));
+    }
+
+    #[test]
+    fn setup_contains_any_false_for_create_location_literal() {
+        let setup = SetUpRule::CreateLocation {
+            locations: vec!["Hand".into()],
+            owner: Owner::PlayerCollection {
+                player_collection: PlayerCollection::Literal {
+                    players: vec![front_end::ast::PlayerExpr::Literal { name: "P1".into() }],
+                },
+            },
+        };
+        assert!(!setup_contains_any(&setup));
+    }
+
+    #[test]
+    fn setup_contains_any_true_for_create_turnorder_any() {
+        let setup = SetUpRule::CreateTurnorder {
+            player_collection: PlayerCollection::Aggregate {
+                aggregate: AggregatePlayerCollection::Quantifier {
+                    quantifier: Quantifier::Any,
+                },
+            },
+        };
+        assert!(setup_contains_any(&setup));
+    }
+
+    #[test]
+    fn setup_contains_any_true_for_create_teams_any_member() {
+        let setup = SetUpRule::CreateTeams {
+            teams: vec![(
+                "T1".into(),
+                PlayerCollection::Aggregate {
+                    aggregate: AggregatePlayerCollection::Quantifier {
+                        quantifier: Quantifier::Any,
+                    },
+                },
+            )],
+        };
+        assert!(setup_contains_any(&setup));
+    }
+
+    #[test]
+    fn setup_contains_any_true_for_create_memory_any_owner() {
+        let setup = SetUpRule::CreateMemory {
+            memory: "M".into(),
+            owner: aggregate_owner(Quantifier::Any),
+        };
+        assert!(setup_contains_any(&setup));
     }
 }

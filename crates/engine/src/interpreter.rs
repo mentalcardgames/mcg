@@ -244,6 +244,13 @@ impl Interpreter {
             let to = edge.to.raw();
             match &edge.payload {
                 Payload::Action(gr) => {
+                    if let front_end::ast::GameRule::SetUp { setup } = gr {
+                        if crate::quantifier::setup_contains_any(setup) {
+                            return StepResult::Error(
+                                "quantifier 'any' is not supported in setup rules".to_string(),
+                            );
+                        }
+                    }
                     let (subtype, detail) = rule_signature(gr);
                     if let Some(ref sender) = self.trace_sender {
                         (sender)(TraceEntry::Step {

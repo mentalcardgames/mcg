@@ -1,8 +1,7 @@
 player P1, P2
 team T1 with (P:P1, P:P2)
 turnorder (P:P1, P:P2)
-location Hand on P:P1
-location Hand on P:P2
+location Hand on all
 location Table, Stock on table
 
 card on Stock:

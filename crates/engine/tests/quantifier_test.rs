@@ -329,3 +329,120 @@ fn quantifier_ir_not_mutated_and_memory_cleaned() {
         "synthetic memory slot removed after completion"
     );
 }
+
+#[test]
+fn setup_location_all_creates_per_player_hands() {
+    let ir = load_game("setup_location_all.cgdsl");
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        None,
+        None,
+    )
+    .expect("game should complete");
+
+    assert!(
+        player_location(&gd, 0, "Hand").is_some(),
+        "P1 has a Hand location"
+    );
+    assert!(
+        player_location(&gd, 1, "Hand").is_some(),
+        "P2 has a Hand location"
+    );
+    assert!(
+        player_location(&gd, 2, "Hand").is_some(),
+        "P3 has a Hand location"
+    );
+}
+
+#[test]
+fn setup_location_literal_creates_per_player_hands() {
+    let ir = load_game("setup_location_literal.cgdsl");
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        None,
+        None,
+    )
+    .expect("game should complete");
+
+    assert!(
+        player_location(&gd, 0, "Hand").is_some(),
+        "P1 has a Hand location"
+    );
+    assert!(
+        player_location(&gd, 1, "Hand").is_some(),
+        "P2 has a Hand location"
+    );
+    assert!(
+        player_location(&gd, 2, "Hand").is_some(),
+        "P3 has a Hand location"
+    );
+}
+
+#[test]
+fn setup_location_any_returns_error() {
+    let ir = load_game("setup_location_any_errors.cgdsl");
+    let result = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        None,
+        None,
+    );
+    match result {
+        Err(e) => {
+            assert!(
+                e.contains("not supported in setup rules"),
+                "error message should mention 'not supported in setup rules', got: {e}"
+            );
+        }
+        Ok(gd) => {
+            panic!(
+                "expected error but got Ok(GameData). GameData has {:?} players, {:?} locations",
+                gd.players.len(),
+                gd.locations.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn setup_turnorder_all_resolves_to_in_game_players() {
+    let ir = load_game("setup_turnorder_all.cgdsl");
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        None,
+        None,
+    )
+    .expect("game should complete");
+
+    assert_eq!(
+        gd.turn_order,
+        vec![0, 1, 2],
+        "turn_order should be all in-game players in declaration order"
+    );
+}
+
+#[test]
+fn setup_teams_all_resolves_all_players() {
+    let ir = load_game("setup_teams_all.cgdsl");
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        None,
+        None,
+    )
+    .expect("game should complete");
+
+    assert_eq!(
+        gd.teams[0].players.len(),
+        3,
+        "team T1 should have all 3 players"
+    );
+}
