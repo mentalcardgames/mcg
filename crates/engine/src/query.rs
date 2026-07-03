@@ -1032,6 +1032,18 @@ impl Evaluator {
             .map(|(idx, _)| idx)
     }
 
+    fn resolve_location_by_name(name: &str, game_data: &GameData) -> Option<usize> {
+        if let Some(current) = game_data.get_current_player() {
+            if let Some(idx) = Self::find_owned_location(&current.name, name, game_data) {
+                return Some(idx);
+            }
+        }
+        if let Some(idx) = Self::find_owned_location("Table", name, game_data) {
+            return Some(idx);
+        }
+        game_data.locations.iter().position(|l| l.name == name)
+    }
+
     fn eval_group(group: &Group, game_data: &GameData) -> Result<(usize, Vec<usize>), String> {
         match group {
             Group::Groupable { groupable } => Self::eval_groupable(groupable, game_data),
@@ -1089,11 +1101,8 @@ impl Evaluator {
     ) -> Result<(usize, Vec<usize>), String> {
         match groupable {
             Groupable::Location { name } => {
-                let loc_idx = game_data
-                    .locations
-                    .iter()
-                    .position(|l| l.name == *name)
-                    .ok_or(format!("Location {} not found", name))?;
+                let loc_idx = Self::resolve_location_by_name(name, game_data)
+                    .ok_or_else(|| format!("Location {} not found", name))?;
                 let card_ids = game_data
                     .locations
                     .get(loc_idx)
@@ -1108,7 +1117,7 @@ impl Evaluator {
                 let mut all_cards = vec![];
                 let mut location_idx = 0;
                 for name in &loc_names {
-                    if let Some(idx) = game_data.locations.iter().position(|l| &l.name == name) {
+                    if let Some(idx) = Self::resolve_location_by_name(name, game_data) {
                         if location_idx == 0 {
                             location_idx = idx;
                         }
@@ -1118,11 +1127,8 @@ impl Evaluator {
                     }
                 }
                 if location_idx == 0 && !loc_names.is_empty() {
-                    location_idx = game_data
-                        .locations
-                        .iter()
-                        .position(|l| l.name == loc_names[0])
-                        .unwrap_or(0);
+                    location_idx =
+                        Self::resolve_location_by_name(&loc_names[0], game_data).unwrap_or(0);
                 }
                 Ok((location_idx, all_cards))
             }
@@ -1448,11 +1454,8 @@ impl Evaluator {
         match expr {
             CardPosition::Query { query } => match query {
                 QueryCardPosition::At { location, int_expr } => {
-                    let loc_idx = game_data
-                        .locations
-                        .iter()
-                        .position(|l| l.name == *location)
-                        .ok_or(format!("Location {} not found", location))?;
+                    let loc_idx = Self::resolve_location_by_name(location, game_data)
+                        .ok_or_else(|| format!("Location {} not found", location))?;
                     let idx = Self::eval_int(int_expr, game_data)? as usize;
                     let card_id = *game_data
                         .locations
@@ -1462,11 +1465,8 @@ impl Evaluator {
                     Ok(card_id)
                 }
                 QueryCardPosition::Top { location } => {
-                    let loc_idx = game_data
-                        .locations
-                        .iter()
-                        .position(|l| l.name == *location)
-                        .ok_or(format!("Location {} not found", location))?;
+                    let loc_idx = Self::resolve_location_by_name(location, game_data)
+                        .ok_or_else(|| format!("Location {} not found", location))?;
                     let card_id = *game_data
                         .locations
                         .get(loc_idx)
@@ -1475,11 +1475,8 @@ impl Evaluator {
                     Ok(card_id)
                 }
                 QueryCardPosition::Bottom { location } => {
-                    let loc_idx = game_data
-                        .locations
-                        .iter()
-                        .position(|l| l.name == *location)
-                        .ok_or(format!("Location {} not found", location))?;
+                    let loc_idx = Self::resolve_location_by_name(location, game_data)
+                        .ok_or_else(|| format!("Location {} not found", location))?;
                     let card_id = *game_data
                         .locations
                         .get(loc_idx)
