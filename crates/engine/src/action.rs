@@ -42,6 +42,7 @@ use front_end::ast::{
 };
 use front_end::ir::LoweredPayLoad;
 
+#[allow(clippy::single_match)]
 pub fn execute(payload: LoweredPayLoad, game_data: &mut GameData) {
     match payload {
         LoweredPayLoad::Action(gr) => match gr {

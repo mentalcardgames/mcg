@@ -1,0 +1,14 @@
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on P:P1
+location Hand on P:P2
+location Hand on P:P3
+location Stock on table
+
+card on Stock:
+  Rank(Ace, Two, Three)
+    for Suite(Hearts)
+
+stage Setup for current 1 times {
+  deal any from Stock private to Hand of all
+}

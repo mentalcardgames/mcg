@@ -10,7 +10,7 @@ card on Stock:
     for Suite(Diamonds, Hearts)
 
 stage Setup for current 1 times {
-  deal 1 from top(Stock) private to Hand
+  deal 1 from top(Stock) private to Hand of all
 }
 
 stage Play for all 2 times {

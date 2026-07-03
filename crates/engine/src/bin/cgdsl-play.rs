@@ -95,6 +95,71 @@ fn interactive_input(input_type: InputType) -> Input {
                     }
                 }
             }
+            InputType::ChoosePlayer { candidates, prompt } => {
+                println!("\n--- {prompt} ---");
+                for (i, name) in candidates.iter().enumerate() {
+                    println!("  {}. {name}", i + 1);
+                }
+                print!("Enter 1-{}: ", candidates.len());
+                io::stdout().flush().ok();
+                let mut line = String::new();
+                if handle.read_line(&mut line).is_err() {
+                    eprintln!("Input error");
+                    continue;
+                }
+                match line.trim().parse::<usize>() {
+                    Ok(n) if n >= 1 && n <= candidates.len() => {
+                        return Input::ChoosePlayer { idx: n - 1 };
+                    }
+                    _ => {
+                        println!("Invalid choice, try again.");
+                        continue;
+                    }
+                }
+            }
+            InputType::ChooseCards {
+                display,
+                min,
+                max,
+                prompt,
+            } => {
+                println!("\n--- {prompt} (choose {min}-{max}) ---");
+                for (i, card) in display.iter().enumerate() {
+                    let desc = card
+                        .get("Rank")
+                        .or_else(|| card.values().next())
+                        .cloned()
+                        .unwrap_or_else(|| format!("card {}", i + 1));
+                    println!("  {}. {desc}", i + 1);
+                }
+                print!("Enter comma-separated indices (e.g. 1,3): ");
+                io::stdout().flush().ok();
+                let mut line = String::new();
+                if handle.read_line(&mut line).is_err() {
+                    eprintln!("Input error");
+                    continue;
+                }
+                let selected: Option<Vec<usize>> = line
+                    .trim()
+                    .split(',')
+                    .map(|s| s.trim().parse::<usize>().ok())
+                    .collect();
+                let Some(selected) = selected else {
+                    println!("Invalid selection, try again.");
+                    continue;
+                };
+                let zero_based: Vec<usize> =
+                    selected.into_iter().map(|n| n.saturating_sub(1)).collect();
+                if zero_based.iter().all(|&i| i < display.len())
+                    && zero_based.len() >= *min
+                    && zero_based.len() <= *max
+                {
+                    return Input::ChooseCards {
+                        selected: zero_based,
+                    };
+                }
+                println!("Selection out of range, try again.");
+            }
         }
     }
 }

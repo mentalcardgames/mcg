@@ -951,7 +951,20 @@ impl Evaluator {
                         false
                     })
                     .collect();
-                Ok((loc_idx, filtered))
+                // `eval_group` returns the *first* location whose name matches
+                // the group — for a dest-qualified `GroupOwner` (e.g. `Hand of
+                // P2` with several locations named "Hand"), that is the wrong
+                // destination. Resolve the location actually owned by `owner`
+                // whose name matches the group so the destination is correct.
+                // Falls back to `loc_idx` when the group isn't a plain location
+                // or no owned match exists (preserving prior behaviour).
+                let dest_loc_idx = match Self::group_location_name(group) {
+                    Some(name) => {
+                        Self::find_owned_location(&owner_name, name, game_data).unwrap_or(loc_idx)
+                    }
+                    None => loc_idx,
+                };
+                Ok((dest_loc_idx, filtered))
             }
             CardSet::Memory { memory } => {
                 let key = match memory {
@@ -974,6 +987,49 @@ impl Evaluator {
                 }
             }
         }
+    }
+
+    /// Best-effort extraction of the location name from a plain
+    /// `Group::Groupable { Groupable::Location { name } }`. Returns `None` for
+    /// any more elaborate group (filters, combos, collections), in which case
+    /// `eval_cardset` falls back to the first name-match location.
+    fn group_location_name(group: &Group) -> Option<&str> {
+        match group {
+            Group::Groupable {
+                groupable: Groupable::Location { name },
+            } => Some(name),
+            _ => None,
+        }
+    }
+
+    /// Find the index of the location named `loc_name` that is owned by
+    /// `owner_name` (a player name or `"Table"`). Used to resolve a
+    /// dest-qualified `GroupOwner` to the owner's own location rather than the
+    /// first name match.
+    fn find_owned_location(
+        owner_name: &str,
+        loc_name: &str,
+        game_data: &GameData,
+    ) -> Option<usize> {
+        game_data
+            .locations
+            .iter()
+            .enumerate()
+            .find(|(idx, loc)| {
+                if loc.name != loc_name {
+                    return false;
+                }
+                if owner_name == "Table" {
+                    return game_data.table.locations.contains(idx);
+                }
+                game_data
+                    .players
+                    .iter()
+                    .find(|p| p.name == owner_name)
+                    .map(|p| p.owner.locations.contains(idx))
+                    .unwrap_or(false)
+            })
+            .map(|(idx, _)| idx)
     }
 
     fn eval_group(group: &Group, game_data: &GameData) -> Result<(usize, Vec<usize>), String> {

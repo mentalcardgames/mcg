@@ -255,6 +255,27 @@ impl Controller {
                         }
                     }
                 }
+                if let (Input::ChoosePlayer { idx }, InputType::ChoosePlayer { candidates, .. }) =
+                    (&raw, &input_type)
+                {
+                    if *idx >= candidates.len() {
+                        continue;
+                    }
+                }
+                if let (
+                    Input::ChooseCards { selected },
+                    InputType::ChooseCards {
+                        display, min, max, ..
+                    },
+                ) = (&raw, &input_type)
+                {
+                    if selected.iter().any(|&i| i >= display.len())
+                        || selected.len() < *min
+                        || selected.len() > *max
+                    {
+                        continue;
+                    }
+                }
                 break raw;
             },
             InputSource::TestFile(path) => {
@@ -276,6 +297,8 @@ impl Controller {
     /// - `y`, `yes` → `Input::OptionalAccept`
     /// - `n`, `no`  → `Input::OptionalDecline`
     /// - `<N>`      → `Input::Choice { idx: N-1 }` (1-based choice index)
+    /// - `p <N>`    → `Input::ChoosePlayer { idx: N-1 }` (1-based candidate index)
+    /// - `c <csv>`  → `Input::ChooseCards { selected: [..] }` (1-based, comma-separated)
     fn read_test_file(&mut self, path: &PathBuf) -> Result<Input, String> {
         if self.line_buffer.is_empty() && !self.file_loaded {
             let file = File::open(path)
@@ -298,13 +321,53 @@ impl Controller {
             .pop_front()
             .ok_or_else(|| format!("Test input file exhausted (input #{})", self.input_sequence))?;
 
-        match line.to_lowercase().as_str() {
+        let lower = line.to_lowercase();
+        if let Some(rest) = lower.strip_prefix("p ") {
+            let rest = rest.trim();
+            let n: usize = rest.parse().map_err(|_| {
+                format!(
+                    "Invalid test input #{}: expected 'p <N>', got '{}'",
+                    self.input_sequence, line
+                )
+            })?;
+            if n == 0 {
+                return Err(format!(
+                    "Invalid test input #{}: player indices start at 1, got 0",
+                    self.input_sequence
+                ));
+            }
+            return Ok(Input::ChoosePlayer { idx: n - 1 });
+        }
+        if let Some(rest) = lower.strip_prefix("c ") {
+            let rest = rest.trim();
+            let selected: Vec<usize> = rest
+                .split(',')
+                .map(|s| s.trim().parse::<usize>())
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| {
+                    format!(
+                        "Invalid test input #{}: expected 'c <csv>', got '{}'",
+                        self.input_sequence, line
+                    )
+                })?;
+            if selected.contains(&0) {
+                return Err(format!(
+                    "Invalid test input #{}: card indices start at 1, got 0",
+                    self.input_sequence
+                ));
+            }
+            return Ok(Input::ChooseCards {
+                selected: selected.into_iter().map(|n| n - 1).collect(),
+            });
+        }
+
+        match lower.as_str() {
             "y" | "yes" => Ok(Input::OptionalAccept),
             "n" | "no" => Ok(Input::OptionalDecline),
             _ => {
                 let idx: usize = line.parse().map_err(|_| {
                     format!(
-                        "Invalid test input #{}: expected number, 'y', or 'n', got '{}'",
+                        "Invalid test input #{}: expected number, 'y', 'n', 'p <N>', or 'c <csv>', got '{}'",
                         self.input_sequence, line
                     )
                 })?;
@@ -350,6 +413,9 @@ mod tests {
                 input_buffer: Vec::new(),
                 current_state: default_ir.entry,
                 trace_sender: None,
+                pending_overlay: std::collections::HashMap::new(),
+                next_synth: u32::MAX - 1,
+                pending_quant: None,
             },
             input_source: InputSource::TestFile(PathBuf::from("/nonexistent")),
             event_sender: None,
@@ -358,9 +424,11 @@ mod tests {
                 "y".to_string(),
                 "2".to_string(),
                 "n".to_string(),
+                "p 2".to_string(),
+                "c 1,3".to_string(),
             ]),
             file_loaded: true,
-            loaded_line_count: 4,
+            loaded_line_count: 6,
             input_sequence: 0,
             step_count: Arc::new(std::sync::Mutex::new(0)),
         };
@@ -382,6 +450,18 @@ mod tests {
             controller.read_test_file(&path).unwrap(),
             Input::OptionalDecline
         );
+        assert_eq!(
+            controller.read_test_file(&path).unwrap(),
+            Input::ChoosePlayer { idx: 1 },
+            "p 2 -> ChoosePlayer idx 1"
+        );
+        assert_eq!(
+            controller.read_test_file(&path).unwrap(),
+            Input::ChooseCards {
+                selected: vec![0, 2]
+            },
+            "c 1,3 -> ChooseCards selected [0,2]"
+        );
     }
 
     /// Ensure that popping from an empty `line_buffer` produces the expected
@@ -400,6 +480,9 @@ mod tests {
                 input_buffer: Vec::new(),
                 current_state: default_ir.entry,
                 trace_sender: None,
+                pending_overlay: std::collections::HashMap::new(),
+                next_synth: u32::MAX - 1,
+                pending_quant: None,
             },
             input_source: InputSource::TestFile(PathBuf::from("test_input.txt")),
             event_sender: None,

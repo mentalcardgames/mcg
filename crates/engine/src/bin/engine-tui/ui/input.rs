@@ -55,6 +55,42 @@ impl InputPanel {
                         let text = format!("{}: [y] Accept / [n] Decline", prompt);
                         f.render_widget(Paragraph::new(text), inner);
                     }
+                    // Minimal render for the quantifier prompts. Full keyboard
+                    // selection in the TUI is a follow-up; the engine-level
+                    // round trip is exercised via `InputSource::Player`
+                    // closures in tests and via `cgdsl-play` interactively.
+                    InputType::ChoosePlayer { candidates, prompt } => {
+                        let body = candidates
+                            .iter()
+                            .enumerate()
+                            .map(|(i, n)| format!("[{}] {}", i + 1, n))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        let text = format!("{}\n{}", prompt, body);
+                        f.render_widget(Paragraph::new(text), inner);
+                    }
+                    InputType::ChooseCards {
+                        display,
+                        min,
+                        max,
+                        prompt,
+                    } => {
+                        let body = display
+                            .iter()
+                            .enumerate()
+                            .map(|(i, c)| {
+                                let desc = c
+                                    .get("Rank")
+                                    .or_else(|| c.values().next())
+                                    .cloned()
+                                    .unwrap_or_else(|| format!("card {}", i + 1));
+                                format!("[{}] {}", i + 1, desc)
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        let text = format!("{} (choose {}-{})\n{}", prompt, min, max, body);
+                        f.render_widget(Paragraph::new(text), inner);
+                    }
                 }
             }
         }
