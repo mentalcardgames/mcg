@@ -38,7 +38,7 @@ pub struct GameData {
     pub memories: HashMap<String, MemoryValue>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MemoryValue {
     Int(i32),
     String(String),
@@ -294,12 +294,12 @@ impl GameData {
         self.memories.get(key)
     }
 
-    pub fn set_memory(&mut self, key: String, _memory_type: MemoryType) {
-        if let Some(memory) = self.memories.get_mut(&key) {
-            if let MemoryValue::Int(ref mut v) = *memory {
-                *v += 1;
-            }
-        }
+    /// Stores `value` at `key`, overwriting any prior value. This is the
+    /// write-side primitive used by `ActionRule::SetMemory` after the
+    /// `MemoryType` expression has been evaluated by `action.rs`. See
+    /// invariant I-9.
+    pub fn set_memory(&mut self, key: String, value: MemoryValue) {
+        self.memories.insert(key, value);
     }
 
     pub fn reset_memory(&mut self, key: &str) {

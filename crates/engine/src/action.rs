@@ -201,7 +201,43 @@ fn execute_action_rule(action: ActionRule, game_data: &mut GameData) {
             memory,
             memory_type,
         } => {
-            game_data.set_memory(memory, memory_type);
+            use crate::game_data::MemoryValue;
+            use front_end::ast::MemoryType;
+            let value: MemoryValue = match memory_type {
+                MemoryType::Int { int } => {
+                    let n = crate::query::Evaluator::eval_int(&int, game_data)
+                        .unwrap_or_else(|e| panic!("SetMemory Int eval failed: {e}"));
+                    MemoryValue::Int(n)
+                }
+                MemoryType::String { string } => {
+                    let s = crate::query::Evaluator::eval_string(&string, game_data)
+                        .unwrap_or_else(|e| panic!("SetMemory String eval failed: {e}"));
+                    MemoryValue::String(s)
+                }
+                MemoryType::Player { player } => {
+                    // Evaluator::eval_player returns a name; we store the name as
+                    // a String memory so later reads as String succeed. (Storing
+                    // a player index would require a new MemoryValue variant.)
+                    let name = crate::query::Evaluator::eval_player(&player, game_data)
+                        .unwrap_or_else(|e| panic!("SetMemory Player eval failed: {e}"));
+                    MemoryValue::String(name)
+                }
+                MemoryType::Team { team } => {
+                    let name = crate::query::Evaluator::eval_team(&team, game_data)
+                        .unwrap_or_else(|e| panic!("SetMemory Team eval failed: {e}"));
+                    MemoryValue::Team(name)
+                }
+                // TODO: evaluate the remaining variants when Evaluator gains
+                // the corresponding helpers (see test-plan-4). For now, insert
+                // a typed default so the key exists and the variant is not lost.
+                MemoryType::PlayerCollection { .. } => MemoryValue::PlayerCollection(vec![]),
+                MemoryType::StringCollection { .. } => MemoryValue::StringCollection(vec![]),
+                MemoryType::TeamCollection { .. } => MemoryValue::Int(0),
+                MemoryType::IntCollection { .. } => MemoryValue::IntCollection(vec![]),
+                MemoryType::LocationCollection { .. } => MemoryValue::LocationCollection(vec![]),
+                MemoryType::CardSet { .. } => MemoryValue::CardSet(vec![]),
+            };
+            game_data.set_memory(memory, value);
         }
         ActionRule::ResetMemory { memory } => {
             game_data.reset_memory(&memory);
