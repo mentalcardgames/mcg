@@ -90,52 +90,59 @@ Front_end changes to carry the participant collection into the IR, e.g.:
 
 ---
 
-## B-2: `PlayerCollection::Aggregate` (all/any quantifier) is not implemented
+## B-2: `PlayerCollection::Aggregate::Quantifier::Any` in setup is rejected; `All` resolved via preprocessor
 
-**Severity:** Low — unreachable in practice due to B-1.
+**Severity:** Low — setup and Move-dest quantifiers are now handled; the `todo!()` remains for `winner`/`OutOfPlayer`.
 
 ### DSL syntax affected
 
 ```cgdsl
-stage Play for all 2 times { ... }   -- PlayerCollection::Aggregate { Quantifier::All }
-stage Play for any 2 times { ... }   -- PlayerCollection::Aggregate { Quantifier::Any }
+location Hand on all        -- Owner::PlayerCollection { Aggregate::Quantifier::All }
+location Hand on any        -- Owner::PlayerCollection { Aggregate::Quantifier::Any }
+turnorder all               -- PlayerCollection::Aggregate::Quantifier::All
+turnorder any               -- PlayerCollection::Aggregate::Quantifier::Any
+team T1 with all            -- CreateTeams with PlayerCollection::Aggregate::Quantifier::All
 ```
 
 ### What the author probably intended
 
-`for all` means all in-game players participate in the stage simultaneously. `for any` is less clear but
-would presumably mean "at least one player participates."
+`all` means all in-game players participate. `any` would mean "at least one player participates," but
+setup-time `any` is almost certainly a DSL author mistake — there is no synchronous input path at
+game init.
 
 ### What actually happens
 
-Even if B-1 were fixed, `resolve_player_collection` (`crates/engine/src/query.rs:1625–1627`) hits:
+`Quantifier::All` in setup rules now works correctly:
 
-```rust
-PlayerCollection::Aggregate { .. } => {
-    todo!("PlayerCollection::Aggregate not yet implemented")
-}
-```
+- `resolve_player_candidates` (`quantifier.rs:140-153`) intercepts `Aggregate::Quantifier::All`
+  and returns all in-game players, bypassing the `todo!()` in `resolve_player_collection`.
+- `execute_setup_rule` fans out per-player for `CreateLocation`, and directly assigns for
+  `CreateTurnorder`/`CreateTurnorderRandom`/`CreateTeams`.
 
-This code path is **never reached** for stage participation because the `PlayerCollection` is dropped
-during IR lowering (B-1). It is reachable only for `end game with winner(for all ...)` or
-`OutOfPlayer { players: for all, out_of: ... }` expressions, which would panic at runtime if a game
-author wrote them.
+`Quantifier::Any` in setup rules is **rejected** before dispatch by `setup_contains_any`
+(`quantifier.rs`) + interpreter guard (`interpreter.rs:248-253`), returning
+`StepResult::Error("quantifier 'any' is not supported in setup rules")` with no trace entry
+and no `GameData` mutation.
+
+The **remaining `todo!()`** at `query.rs:1678-1680` is untouched — it is still reachable for
+`end game with winner(for all ...)` or `OutOfPlayer { players: for all, ... }` expressions
+( scope: B-1 / winner / OutOfPlayer).
 
 ### Relevant code
 
 | File | Lines | Role |
 |---|---|---|
-| `crates/front_end/src/grammar.pest` | 426–429 | `quantifier = { kw_all \| kw_any }` |
-| `crates/front_end/src/ast.rs` | 1167–1170 | `AggregatePlayerCollection::Quantifier { Quantifier::All \| Any }` |
-| `crates/front_end/src/ast.rs` | 1185–1198 | `PlayerCollection::Aggregate` variant |
-| `crates/engine/src/query.rs` | 1625–1627 | `todo!()` — unreachable for stage participation (B-1), but reachable for winner/OutOfPlayer |
+| `crates/engine/src/quantifier.rs` | 140–153 | `resolve_player_candidates` — handles `Aggregate::Quantifier::All` for setup and Move dests |
+| `crates/engine/src/quantifier.rs` | ~154–169 | `setup_contains_any` — predicate that detects `Any` in setup rules |
+| `crates/engine/src/interpreter.rs` | 248–253 | Interpreter guard — returns `StepResult::Error` for setup `Any` |
+| `crates/engine/src/query.rs` | 1678–1680 | `todo!()` — still reached for `winner(for all ...)` / `OutOfPlayer` (not fixed) |
+| `crates/engine/src/query.rs` | ~1751–1776 | `resolve_owner_to_names` — resolves `Owner::PlayerCollection` to multiple names |
+| `crates/engine/src/action.rs` | 93–110 | `CreateLocation` — now fans out per owner name |
 
 ### Fix requires
 
-Frontend: implement `Quantifier::All`/`Any` in `resolve_player_collection`. For `all`, return all
-in-game players; for `any`, the semantics need clarification (likely "all in-game players" is
-intended since cgdsl stages don't meaningfully support "at least one"). This is blocked on B-1
-fixing first since the IR must carry the `PlayerCollection` to the engine for this to be reachable.
+Setup and Move-dest quantifiers are handled. The remaining `todo!()` for `winner`/`OutOfPlayer` is
+deferred (out of scope for this fix). No further engine changes required for setup-rule quantifiers.
 
 ---
 
