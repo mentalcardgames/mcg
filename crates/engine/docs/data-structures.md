@@ -5,10 +5,13 @@ scope: [engine::game_data, engine::interpreter, engine::controller, front_end::i
 topics: [data-model, state-store, types, ir, memory]
 associated_files:
   - crates/engine/src/game_data.rs
-  - crates/engine/src/interpreter.rs
-  - crates/engine/src/controller.rs
+  - crates/engine/src/interpreter/mod.rs
+  - crates/engine/src/interpreter/types.rs
+  - crates/engine/src/interpreter/trace.rs
+  - crates/engine/src/interpreter/ir_ext.rs
+  - crates/engine/src/controller/mod.rs
   - crates/front_end/src/ir.rs
-last_validated: 2026-07-02
+last_validated: 2026-07-04
 ---
 
 # Data Structures & State Model
@@ -16,7 +19,8 @@ last_validated: 2026-07-02
 Every runtime value in `crates::engine` lives in or is referenced from the flat aggregate
 `crates::engine::game_data::GameData`. This page documents (1) the `GameData` family, (2) the
 `front_end::ir` types the engine consumes, and (3) the execution-time types (`Interpreter`,
-`Controller`, `Input`, `StepResult`, `InputType`). For *how* they are sequenced at runtime, see
+`Controller`, `Input`, `StepResult`, `InputType`, plus the post-Stage-5 trace subsystem
+`TraceEntry`/`TraceEvent` and the `IrExt` trait). For *how* they are sequenced at runtime, see
 [`lifecycle.md`](./lifecycle.md); for *what must not be violated*, see
 [`invariants.md`](./invariants.md).
 
@@ -26,7 +30,7 @@ Every runtime value in `crates::engine` lives in or is referenced from the flat 
 
 All runtime state lives in a single aggregate, `crates::engine::game_data::GameData`
 (`crates/engine/src/game_data.rs:24`). It derives only `Clone` (no `Debug`, no `Serialize` —
-serialization is handled separately by `crates/engine/src/debug.rs`).
+serialization is handled separately by `crates/engine/src/debug/mod.rs`).
 
 ```rust
 // crates/engine/src/game_data.rs:22
@@ -58,16 +62,16 @@ attributes (e.g. `Rank → Ace`, `Suite → Hearts`). Cards are stored **only** 
 
 | Struct | Location | Fields | Role |
 |---|---|---|---|
-| `crates::engine::game_data::OwnerData` | `crates/engine/src/game_data.rs:54` | `locations: Vec<usize>` | Ownership of location indices; held by both `GameData::table` and each `Player`. |
-| `crates::engine::game_data::Player` | `crates/engine/src/game_data.rs:60` | `name, score: i32, owner: OwnerData, in_game: bool, in_stage: HashMap<String,bool>` | Per-player state; `in_stage` tracks participation per named stage. |
-| `crates::engine::game_data::Location` | `crates/engine/src/game_data.rs:69` | `name: String, cards: Vec<usize>` | A named pile; `cards` is an ordered list of card ids. |
-| `crates::engine::game_data::Team` | `crates/engine/src/game_data.rs:75` | `name, players: Vec<usize>` | Named group of player indices. |
-| `crates::engine::game_data::Combo` | `crates/engine/src/game_data.rs:81` | `name: String, filter: front_end::ast::FilterExpr` | A named, reusable card filter (from `front_end::ast`). |
-| `crates::engine::game_data::Precedence` | `crates/engine/src/game_data.rs:88` | `name, key: String, values: Vec<String>` | Ordered values on one key, low→high. Used by `Adjacent`/`Higher`/`Lower`/`ExtremaPrecedence`. |
-| `crates::engine::game_data::PointMap` | `crates/engine/src/game_data.rs:96` | `name, map: HashMap<String,i32>` | Maps `"key:value"` → points. Used by `SumOfCardSet`, `ExtremaCardset`, `ExtremaPointMap`. |
+| `crates::engine::game_data::OwnerData` | `crates/engine/src/game_data.rs:53-57` | `locations: Vec<usize>` | Ownership of location indices; held by both `GameData::table` and each `Player`. |
+| `crates::engine::game_data::Player` | `crates/engine/src/game_data.rs:59-66` | `name, score: i32, owner: OwnerData, in_game: bool, in_stage: HashMap<String,bool>` | Per-player state; `in_stage` tracks participation per named stage. |
+| `crates::engine::game_data::Location` | `crates/engine/src/game_data.rs:68-72` | `name: String, cards: Vec<usize>` | A named pile; `cards` is an ordered list of card ids. |
+| `crates::engine::game_data::Team` | `crates/engine/src/game_data.rs:74-78` | `name, players: Vec<usize>` | Named group of player indices. |
+| `crates::engine::game_data::Combo` | `crates/engine/src/game_data.rs:80-84` | `name: String, filter: front_end::ast::FilterExpr` | A named, reusable card filter (from `front_end::ast`). |
+| `crates::engine::game_data::Precedence` | `crates/engine/src/game_data.rs:87-92` | `name, key: String, values: Vec<String>` | Ordered values on one key, low→high. Used by `Adjacent`/`Higher`/`Lower`/`ExtremaPrecedence`. |
+| `crates::engine::game_data::PointMap` | `crates/engine/src/game_data.rs:95-99` | `name, map: HashMap<String,i32>` | Maps `"key:value"` → points. Used by `SumOfCardSet`, `ExtremaCardset`, `ExtremaPointMap`. |
 
 ```rust
-// crates/engine/src/game_data.rs:42-51
+// crates/engine/src/game_data.rs:41-51
 #[derive(Clone)]
 pub enum MemoryValue {
     Int(i32),
@@ -83,10 +87,14 @@ pub enum MemoryValue {
 
 `crates::engine::game_data::MemoryValue` is the dynamically-typed storage for DSL "memory"
 variables. There is **no** separate `TeamCollection` variant — a stored team collection is
-represented as `MemoryValue::Team(String)` holding one team name (see
-`crates/engine/src/query.rs:637-647`), and `front_end::ast::MemoryType::TeamCollection` initializes
-to `MemoryValue::Int(0)` (`crates/engine/src/game_data.rs:261`), a known mismatch documented as
-invariant I-10 in [`invariants.md`](./invariants.md).
+represented as `MemoryValue::Team(String)` holding one team name (the read sites are
+`crates/engine/src/query/int.rs:277` and `crates/engine/src/query/player.rs:199`), and
+`front_end::ast::MemoryType::TeamCollection` initializes to `MemoryValue::Int(0)`
+(`crates/engine/src/game_data.rs:286`, inside `GameData::add_memory`'s match at
+`game_data.rs:276-291`), a known mismatch documented as invariant I-10 in
+[`invariants.md`](./invariants.md). The `MemoryValue::CardSet` variant is also used by the
+quantifier subsystem to carry player-chosen card ids — see the `SYNTH_MEMORY_KEY` discussion in
+[`observability.md`](./observability.md) and invariant I-18 in [`invariants.md`](./invariants.md).
 
 ---
 
@@ -95,18 +103,18 @@ invariant I-10 in [`invariants.md`](./invariants.md).
 The engine does not own its IR types; it parameterizes over `front_end::ir`:
 
 ```rust
-// crates/front_end/src/ir.rs:43
-pub struct StateID(u32);            // Copy, Eq+Hash+Ord
+// crates/front_end/src/ir.rs:42-43
+pub struct StateID(u32);            // Copy, Eq+Hash+Ord, Serialize/Deserialize
 
-// crates/front_end/src/ir.rs:53-60
+// crates/front_end/src/ir.rs:51-60
 pub struct Edge<T: serde::Serialize> { pub to: StateID, pub payload: T, pub meta: Option<Vec<Meta>> }
 
-// crates/front_end/src/ir.rs:79-83
+// crates/front_end/src/ir.rs:77-83
 pub struct Ir<T: serde::Serialize> { pub states: HashMap<StateID, Vec<Edge<T>>>, pub entry: StateID, pub goal: StateID }
 ```
 
 `front_end::ir::Payload<Ctx>` is the sum of transition kinds
-(`crates/front_end/src/ir.rs:252-268`):
+(`crates/front_end/src/ir.rs:248-268`):
 
 ```rust
 pub enum Payload<Ctx: AstContext> {
@@ -121,7 +129,31 @@ pub enum Payload<Ctx: AstContext> {
 }
 ```
 
-The engine operates on the *lowered* specialization (`crates/front_end/src/ir.rs:313-322`):
+The engine operates on the *lowered* specialization (`crates/front_end/src/ir.rs:313`):
+
+```rust
+pub type LoweredPayLoad = Payload<LoweredCtx>;
+// where LoweredCtx resolves: Condition→BoolExpr, EndCondition→EndCondition,
+//   GameRule→GameRule, Id→String.
+```
+
+So at the engine boundary,
+`front_end::ir::Ir<front_end::ir::LoweredPayLoad>` is
+`HashMap<front_end::ir::StateID, Vec<front_end::ir::Edge<front_end::ir::LoweredPayLoad>>>`
+plus `entry`/`goal`. The `front_end::ir::Edge::meta` field is **ignored** by the engine — it is read
+only by `front_end::fsm_to_dot`.
+
+> **Engine-supplied `Ir` extension trait** (post-Stage-5): the engine defines
+> `crates::engine::interpreter::IrExt` (`crates/engine/src/interpreter/ir_ext.rs:3-26`), a `pub`
+> trait `impl`'d for `Ir<LoweredPayLoad>`:
+> ```rust
+> pub trait IrExt {
+>     fn edge_labels(&self, state: StateID) -> Vec<String>;
+> }
+> ```
+> USED by `Interpreter::step`'s `Payload::Choice` arm (`interpreter/mod.rs:174`) to derive the
+> human-readable label of each outgoing edge from the next state's first edge's payload. `IrExt` is
+> re-exported at the crate root (`crates/engine/src/lib.rs:12`).
 
 ```rust
 pub type LoweredPayLoad = Payload<LoweredCtx>;
@@ -139,39 +171,129 @@ only by `front_end::fsm_to_dot`.
 
 ## 3. The Execution Types
 
+### 3.1 `Interpreter` — the running FSM state
+
 ```rust
-// crates/engine/src/interpreter.rs:15-20
+// crates/engine/src/interpreter/mod.rs:26-43
 pub struct Interpreter {
     pub ir: Ir<LoweredPayLoad>,
     pub game_data: GameData,
     pub input_buffer: Vec<Input>,
     pub current_state: StateID,
+    pub trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
+    /// Ephemeral overlay of synthetic replacement edges, keyed only by synthetic
+    /// `StateID`s allocated from `next_synth`. Real IR ids are never keys here.
+    pub pending_overlay: HashMap<StateID, Vec<Edge<LoweredPayLoad>>>,
+    /// Counter for synthetic `StateID` allocation. Seeded at `u32::MAX - 1`.
+    pub next_synth: u32,
+    /// In-flight quantifier awaiting a player-input round-trip, if any.
+    pub pending_quant: Option<crate::quantifier::PendingQuant>,
 }
-
-// crates/engine/src/interpreter.rs:156-161  (LIFO stack; see invariant I-7)
-#[derive(Clone, Debug, PartialEq)]
-pub enum Input { Choice { idx: usize }, OptionalAccept, OptionalDecline }
-
-// crates/engine/src/interpreter.rs:173-178
-pub enum StepResult { Ok, NeedsInput(InputType), GameOver, Error(String) }
-
-// crates/engine/src/interpreter.rs:180-187
-#[derive(Clone)]
-pub enum InputType { Choice { options: Vec<String>, max_index: usize }, Optional(String) }
 ```
 
-`crates::engine::interpreter::Input::idx` (`crates/engine/src/interpreter.rs:164-170`) normalizes
-all three variants to a 0-based edge index: `Choice{idx}` → `idx`, `OptionalAccept` → `0`,
-`OptionalDecline` → `1`.
+Post-Stage-5 the `Interpreter` grew from 4 fields (`ir`, `game_data`, `input_buffer`,
+`current_state`) to 8 by adding the trace-sender seam and the quantifier bookkeeping. A canonical
+constructor now exists:
 
 ```rust
-// crates/engine/src/controller.rs:15-18
+// crates/engine/src/interpreter/mod.rs:45-62
+impl Interpreter {
+    pub fn new(
+        ir: Ir<LoweredPayLoad>,
+        game_data: GameData,
+        trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
+    ) -> Self { /* seeds current_state = ir.entry, next_synth = u32::MAX - 1, etc. */ }
+}
+```
+
+All fields remain `pub` (the struct is constructible by hand and this is a supported pattern), but
+`Interpreter::new` is the canonical entry point: it is the only place that initialises the
+quantifier bookkeeping correctly (`pending_overlay = HashMap::new()`, `next_synth = u32::MAX - 1`,
+`pending_quant = None`, `input_buffer = Vec::new()`, `current_state = ir.entry`). Direct
+construction that omits these inits will misbehave on the first quantifier edge. See invariant I-16
+in [`invariants.md`](./invariants.md) for the `next_synth` seeding rationale.
+
+### 3.2 `Input`, `StepResult`, `InputType` — the I/O contract
+
+```rust
+// crates/engine/src/interpreter/types.rs:1-16  (input from host → interpreter)
+#[derive(Clone, Debug, PartialEq)]
+pub enum Input {
+    Choice { idx: usize },
+    OptionalAccept,
+    OptionalDecline,
+    ChoosePlayer { idx: usize },          // post-Stage-5 quantifier
+    ChooseCards { selected: Vec<usize> }, // post-Stage-5 quantifier
+}
+
+// crates/engine/src/interpreter/types.rs:49-55  (step outcome)
+pub enum StepResult { Ok, NeedsInput(InputType), GameOver, Error(String) }
+
+// crates/engine/src/interpreter/types.rs:57-78  (prompt the host must answer)
+#[derive(Clone, Debug)]
+pub enum InputType {
+    Choice { options: Vec<String>, max_index: usize },
+    Optional(String),
+    ChoosePlayer { candidates: Vec<String>, prompt: String },       // post-Stage-5
+    ChooseCards { display: Vec<Card>, min: usize, max: usize, prompt: String }, // post-Stage-5
+}
+```
+
+`Input` and `InputType` both grew by two variants for the quantifier subsystem:
+`ChoosePlayer`/`ChooseCards`. `Input` now carries three accessor methods on `impl Input`
+(`crates/engine/src/interpreter/types.rs:18-47`):
+
+- `pub fn idx(&self) -> usize` — backwards-compatible 0-based edge index for the `Choice`/`Optional`
+  arms (`Choice{idx}→idx`, `OptionalAccept→0`, `OptionalDecline→1`; returns `0` for the new
+  variants where `idx` is meaningless — callers use the dedicated accessors below).
+- `pub fn player_idx(&self) -> Option<usize>` — `Some(idx)` if this is a `ChoosePlayer`, else
+  `None`.
+- `pub fn card_selection(&self) -> Option<&[usize]>` — `Some(&selected)` if this is a `ChooseCards`,
+  else `None`.
+
+`Input::idx` lives at `crates/engine/src/interpreter/types.rs:19-30`; `player_idx` at
+`types.rs:33-38`; `card_selection` at `types.rs:41-46`.
+
+### 3.3 `TraceEntry` / `TraceEvent` — the per-step trace seam (post-Stage-5)
+
+```rust
+// crates/engine/src/interpreter/trace.rs:1-8
+pub enum TraceEntry {
+    Step { from: u32, to: u32, event: TraceEvent },
+}
+
+// crates/engine/src/interpreter/trace.rs:10-46
+pub enum TraceEvent {
+    Action { subtype: String, detail: String },
+    Choice { chosen_idx: usize, options: Vec<String> },
+    OptionalAccept,
+    OptionalDecline,
+    Condition { expr: String, result: bool, negated: bool, took_else: bool },
+    EndCondition { expr: String, result: bool, stage: String, exited: bool },
+    StageRoundCounter { stage: String, new_count: u32 },
+    EndStage { stage: String },
+    Trigger,
+    Quantifier { kind: String, detail: String },     // post-Stage-5
+}
+```
+
+`from`/`to` are **raw** `StateID` integers (via `StateID::raw()`). Both enums derive `Clone +
+Debug`; both also implement `std::fmt::Display` (`trace.rs:48-102`) producing human-readable lines
+suitable for `mcg-trace.log` (e.g. `[12->13] Action:Action:Move Move { … }`). The
+`Quantifier` variant is emitted by the quantifier driver at synthetic-state allocation/deallocation
+(`interpreter/quant_driver.rs:363-375`). See [`observability.md`](./observability.md) for how
+`run_game` threads the sender into the `Interpreter`.
+
+### 3.4 `InputSource` and the internal `Controller`
+
+```rust
+// crates/engine/src/controller/mod.rs:22-25
 pub enum InputSource {
     Player(Box<dyn Fn(InputType) -> Input + Send + Sync>),
     TestFile(PathBuf),
 }
 
-// crates/engine/src/controller.rs:49-57  (internal — NOT re-exported)
+// crates/engine/src/controller/mod.rs:137-146  (internal — NOT re-exported)
 struct Controller {
     interpreter: Interpreter,
     input_source: InputSource,
@@ -180,13 +302,29 @@ struct Controller {
     file_loaded: bool,
     loaded_line_count: usize,
     input_sequence: usize,
+    step_count: Arc<std::sync::Mutex<usize>>,           // post-Stage-5
 }
 ```
 
-`crates::engine::query::Evaluator` (`crates/engine/src/query.rs:177`) is a zero-sized `pub struct`
-used purely as a namespace for associated functions (`eval_bool`, `eval_int`, `eval_string`,
-`eval_player`, `eval_team`, `eval_cardset`, `eval_card_position`, `eval_end_condition`,
-`eval_compare`, `eval_int_compare`, `resolve_players`, `resolve_player_collection`,
-`resolve_owner_to_name`, `resolve_quantity`, `expand_types`, `check_attr_value_in_cardset`). It
-holds **no state**; every method takes `&GameData` (or `&mut GameData` for none of them — all reads
-are immutable).
+`Controller` is the (still-private) run-loop owner. Post-Stage-5 it gained a `step_count:
+Arc<Mutex<usize>>` field shared with the composed trace-sender closure (see §1 of
+[`concurrency.md`](./concurrency.md) and [`observability.md`](./observability.md)).
+
+### 3.5 `Evaluator` — the read-side namespace
+
+`crates::engine::query::Evaluator` (`crates/engine/src/query/mod.rs:173`) is a zero-sized `pub
+struct` used purely as a namespace for associated functions (`eval_bool`, `eval_int`,
+`eval_string`, `eval_player`, `eval_team`, `eval_cardset`, `eval_card_position`,
+`eval_end_condition`, `eval_compare`, `eval_int_compare`, `resolve_players`,
+`resolve_player_collection`, `resolve_owner_to_name`, `resolve_owner_to_names`, `resolve_quantity`,
+`expand_types`, `check_attr_value_in_cardset`). It holds **no state**; every method takes `&GameData`
+(all reads are immutable). Post-Stage-5 the query module was split into submodules (`bool.rs`,
+`cardset.rs`, `int.rs`, `player.rs`, `string.rs`) all hanging methods off the shared `Evaluator`
+struct. `resolve_owner_to_names` (plural) is `pub` and now also routes
+`Owner::PlayerCollection` through `crate::quantifier::resolve_player_candidates`
+(`crates/engine/src/query/player.rs:301-327`) so it transparently supports the `Aggregate {
+Quantifier::All }` owner that the setup path produces. WARNING: the underlying
+`Evaluator::resolve_player_collection` (`crates/engine/src/query/player.rs:227-284`) still
+`todo!()`-panics on `PlayerCollection::Aggregate` (`player.rs:246`); the quantifier module's
+`resolve_player_candidates` (`crates/engine/src/quantifier.rs:140-153`) is the safe alternative and
+is what the engine's quantifier path uses.

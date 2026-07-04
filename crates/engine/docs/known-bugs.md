@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [front_end / parser / DSL bugs affecting engine behaviour]
 topics: [known-bugs, parser, DSL, front_end, player-collection, simstage, seqstage]
-last_validated: 2026-07-03
+last_validated: 2026-07-04
 ---
 
 # Known Bugs — Frontend/DSL Bugs Affecting Engine Behaviour
@@ -44,7 +44,7 @@ Any `for Y` clause where `Y` is anything other than `current`.
 lowering** — `build_seq_stage` and `build_sim_stage` (`crates/front_end/src/ir.rs:565` and `:654`)
 both produce the same IR shape (EndCondition-at-entry + StageRoundCounter back-edge) without reading
 `stage.player` or `stage.players`. The stage name alone is encoded in `Payload::EndCondition` /
-`Payload::StageRoundCounter`. The engine's `ensure_stage_entered` (`crates/engine/src/game_data.rs:234`)
+`Payload::StageRoundCounter`. The engine's `ensure_stage_entered` (`crates/engine/src/game_data.rs:244`)
 has no participant information available and marks **all** players `in_stage[stage] = true`.
 
 The two stage types are also not differentiated at runtime:
@@ -67,12 +67,12 @@ game runs to completion, but with all players in-stage instead of the intended s
 | `crates/front_end/src/ir.rs` | 565–641 | `build_seq_stage` — **does not read `stage.player`** |
 | `crates/front_end/src/ir.rs` | 654–730 | `build_sim_stage` — **does not read `stage.players`**; comment at `:648` confirms TODO |
 | `crates/front_end/src/ir.rs` | 598–620, 686–709 | `EndCondition`-at-entry edges only carry `stage: SID`, not participant list |
-| `crates/engine/src/game_data.rs` | 234–239 | `ensure_stage_entered` marks all players in-stage (no participant info available) |
-| `crates/engine/src/query.rs` | 1607–1664 | `resolve_player_collection` — would handle `PlayerCollection` at runtime but is never called for stage participation |
+| `crates/engine/src/game_data.rs` | 244–250 | `ensure_stage_entered` marks all players in-stage (no participant info available) |
+| `crates/engine/src/query/player.rs` | 227–284 | `resolve_player_collection` — would handle `PlayerCollection` at runtime but is never called for stage participation |
 
 ### Partial mitigation
 
-`end <stage>` / `out of` (`ActionRule::OutAction`, `crates/engine/src/action.rs:186–194`) removes
+`end <stage>` / `out of` (`ActionRule::OutAction`, `crates/engine/src/action.rs:183–198`) removes
 specific players from `in_stage` after entry. So a game author *can* express "all except X" by
 entering all and then using `end Play for P:P1` as the first flow action. However:
 - `end <stage>` pops the entire stage stack for that stage (I-11), which may not be the intended
@@ -120,24 +120,28 @@ game init.
   `CreateTurnorder`/`CreateTurnorderRandom`/`CreateTeams`.
 
 `Quantifier::Any` in setup rules is **rejected** before dispatch by `setup_contains_any`
-(`quantifier.rs`) + interpreter guard (`interpreter.rs:248-253`), returning
+(`crates/engine/src/quantifier.rs:170-185`) + the interpreter's setup-`Any` guard
+(`crates/engine/src/interpreter/mod.rs:155-161`), returning
 `StepResult::Error("quantifier 'any' is not supported in setup rules")` with no trace entry
-and no `GameData` mutation.
+and no `GameData` mutation (invariant I-20 in [`invariants.md`](./invariants.md)).
 
-The **remaining `todo!()`** at `query.rs:1678-1680` is untouched — it is still reachable for
-`end game with winner(for all ...)` or `OutOfPlayer { players: for all, ... }` expressions
-( scope: B-1 / winner / OutOfPlayer).
+The **remaining `todo!()`** at `crates/engine/src/query/player.rs:246` is untouched — it is still
+reachable for `end game with winner(for all ...)` or `OutOfPlayer { players: for all, ... }`
+expressions (scope: B-1 / winner / OutOfPlayer). The engine's quantifier paths intercept
+`Aggregate { Quantifier }` *before* reaching this `todo!()` (see
+`crates/engine/src/quantifier.rs:140-153` `resolve_player_candidates`), so the engine's own
+quantifier-driven moves never trigger it.
 
 ### Relevant code
 
 | File | Lines | Role |
 |---|---|---|
 | `crates/engine/src/quantifier.rs` | 140–153 | `resolve_player_candidates` — handles `Aggregate::Quantifier::All` for setup and Move dests |
-| `crates/engine/src/quantifier.rs` | ~154–169 | `setup_contains_any` — predicate that detects `Any` in setup rules |
-| `crates/engine/src/interpreter.rs` | 248–253 | Interpreter guard — returns `StepResult::Error` for setup `Any` |
-| `crates/engine/src/query.rs` | 1678–1680 | `todo!()` — still reached for `winner(for all ...)` / `OutOfPlayer` (not fixed) |
-| `crates/engine/src/query.rs` | ~1751–1776 | `resolve_owner_to_names` — resolves `Owner::PlayerCollection` to multiple names |
-| `crates/engine/src/action.rs` | 93–110 | `CreateLocation` — now fans out per owner name |
+| `crates/engine/src/quantifier.rs` | 170–185 | `setup_contains_any` — predicate that detects `Any` in setup rules |
+| `crates/engine/src/interpreter/mod.rs` | 155–161 | Interpreter setup-`Any` guard — returns `StepResult::Error` for setup `Any` |
+| `crates/engine/src/query/player.rs` | 246 | `todo!("PlayerCollection::Aggregate not yet implemented")` — still reached for `winner(for all ...)` / `OutOfPlayer` (not fixed) |
+| `crates/engine/src/query/player.rs` | 301–327 | `resolve_owner_to_names` — resolves `Owner::PlayerCollection` to multiple names via `quantifier::resolve_player_candidates` |
+| `crates/engine/src/action.rs` | 91–107 | `CreateLocation` — fans out per owner name returned by `resolve_owner_to_names` |
 
 ### Fix requires
 
@@ -195,5 +199,5 @@ This is closely tied to B-1 (the participant collection must be available in the
 
 ---
 
-*Last updated: 2026-07-03. Add new entries above. Each bug gets a `B-N` designation (B for
+*Last updated: 2026-07-04. Add new entries above. Each bug gets a `B-N` designation (B for
 "backend/frontend bug", distinct from invariant `I-N` in `invariants.md`).*

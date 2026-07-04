@@ -4,31 +4,49 @@ module: crates::engine
 scope: [engine::controller, engine::interpreter, engine::game_data]
 topics: [threading, send-sync, memory, lifetimes, resources]
 associated_files:
-  - crates/engine/src/controller.rs
-  - crates/engine/src/interpreter.rs
+  - crates/engine/src/controller/mod.rs
+  - crates/engine/src/controller/trace_logger.rs
+  - crates/engine/src/interpreter/mod.rs
   - crates/engine/src/game_data.rs
   - crates/engine/Cargo.toml
-last_validated: 2026-07-02
+last_validated: 2026-07-04
 ---
 
 # Concurrency, Memory & Thread Safety
 
-The engine is deliberately **single-threaded and fully synchronous**. There is no `tokio`, no
-`async`, no `spawn`, no `Arc`/`Mutex`/`RwLock` in `crates/engine/src`. This page documents the
-threading model, the auto-trait `Send`/`Sync` status of every public type, the resource
-lifecycle, and the dependency hygiene. For *how* the single thread loops, see
-[`lifecycle.md`](./lifecycle.md).
+The **production** engine logic is single-threaded and fully synchronous: there is no `tokio`,
+no `async`, no `spawn`. *Observability* plumbing, however, does use `std::sync::Arc<Mutex<…>>` in
+exactly two places — the trace writer (`crates/engine/src/controller/trace_logger.rs:10`) and the
+step counter (`crates/engine/src/controller/mod.rs:67`) — purely to share the value between the
+main loop closure and the composed trace sender; no threads are spawned. `run_game` additionally
+wraps the run in `std::panic::catch_unwind(AssertUnwindSafe(...))` when a trace log is open (see
+[`observability.md`](./observability.md)). This page documents the threading model, the auto-trait
+`Send`/`Sync` status of every public type, the resource lifecycle, and the dependency hygiene. For
+*how* the single thread loops, see [`lifecycle.md`](./lifecycle.md).
 
 ---
 
 ## 1. Threading Model
 
-The engine is **single-threaded and fully synchronous**. There is no `tokio`, `async`, `spawn`, or
-`Arc`/`Mutex` in `crates/engine/src`. The main loop
-(`crates::engine::controller::Controller::run`, `crates/engine/src/controller.rs:62-79`) is a plain
-`loop { … }` that calls `self.interpreter.step()` directly. The only "concurrency-relevant"
-construct is the `Send + Sync` bound on the `Player` input closure
-(`crates/engine/src/controller.rs:16`), which exists so a *host* application can move an
+The **production** engine logic is single-threaded and fully synchronous: no `tokio`, `async`, or
+`spawn`. The only `std::sync` usage sits in the trace-logging plumbing (post-Stage-5 additions):
+
+- `crates/engine/src/controller/trace_logger.rs:10` — `TraceLogger` stores
+  `Arc<Mutex<BufWriter<File>>>` so the composed trace-sender closure (handed to `Interpreter`) can
+  write log lines back into the same writer the controller holds.
+- `crates/engine/src/controller/mod.rs:67` — `run_game` allocates `Arc<Mutex<usize>>` as a step
+  counter shared between the `run` loop (`controller/mod.rs:154`) and the composed trace sender
+  closure (`controller/mod.rs:71-84`).
+- `crates/engine/src/controller/mod.rs:98-117` — when a trace log is open, `run_game` wraps
+  `controller.run()` in `std::panic::catch_unwind(std::panic::AssertUnwindSafe(...))`, logs any
+  panic to the trace file, then `std::panic::resume_unwind`s to re-panic in the caller. No thread
+  is spawned; this is purely panic-capture.
+
+The main loop (`crates::engine::controller::Controller::run`,
+`crates/engine/src/controller/mod.rs:151-169`) is a plain `loop { … }` that calls
+`self.interpreter.step()` directly. The only traditional "concurrency-relevant" construct on the
+public contract is the `Send + Sync` bound on the `Player` input closure
+(`crates/engine/src/controller/mod.rs:23`), which exists so a *host* application can move an
 `crates::engine::controller::InputSource` across threads — but the engine itself never spawns
 threads.
 
@@ -42,19 +60,22 @@ follows from their fields:
 | Type | Auto `Send`? | Auto `Sync`? | Rationale |
 |---|---|---|---|
 | `crates::engine::game_data::GameData` | yes | yes | All fields are `Vec`/`HashMap` of `String`/`usize`/`i32`/`bool`/`u32`; no `Rc`/`RefCell`/raw. |
-| `crates::engine::interpreter::Interpreter` | yes | yes | `front_end::ir::Ir<front_end::ir::LoweredPayLoad>` (serde types), `GameData`, `Vec<Input>`, `front_end::ir::StateID(u32)`. |
-| `crates::engine::controller::Controller` | yes | **no** | `event_sender: Option<Box<dyn Fn(&GameData) + Send>>` — the bound is `Send` but **not `Sync`** (`crates/engine/src/controller.rs:52`). Two threads cannot share `&Controller` safely. |
-| `crates::engine::controller::InputSource` | yes | yes | `Player(Box<dyn Fn(InputType) -> Input + Send + Sync>)` explicitly `Send + Sync`; `TestFile(PathBuf)` is `Send + Sync`. |
+| `crates::engine::interpreter::Interpreter` | yes | **no** | Now carries `trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>` (`crates/engine/src/interpreter/mod.rs:31`). A `Box<dyn Fn + Send>` is `Send` but **not `Sync`** (the trait object is `Fn + Send`, not `Fn + Send + Sync`). Was `Send + Sync` pre-Stage-5. |
+| `crates::engine::controller::Controller` | yes | **no** | Unchanged in conclusion, now for two reasons: `event_sender: Option<Box<dyn Fn(&GameData) + Send>>` (`crates/engine/src/controller/mod.rs:140`) is `Send` not `Sync`, AND `step_count: Arc<Mutex<usize>>` (`controller/mod.rs:145`) is `Send + Sync` but cannot rescue `Sync`. Two threads cannot share `&Controller` safely. |
+| `crates::engine::controller::InputSource` | yes | yes | `Player(Box<dyn Fn(InputType) -> Input + Send + Sync>)` explicitly `Send + Sync` (`crates/engine/src/controller/mod.rs:23`); `TestFile(PathBuf)` is `Send + Sync`. |
 | `crates::engine::query::Evaluator` | yes | yes | Zero-sized; no interior mutability. |
 | `crates::engine::interpreter::StepResult` | yes | yes | Plain enum (`String` is `Send+Sync`). |
 | `crates::engine::interpreter::Input`, `crates::engine::interpreter::InputType`, `crates::engine::debug::DebugLevel` | yes | yes | Plain data. |
+| `crates::engine::interpreter::TraceEntry`, `crates::engine::interpreter::TraceEvent` | yes | yes | Plain enums of `String`/`u32`/`usize`/`bool`/`Vec<String>` (`crates/engine/src/interpreter/trace.rs:1-46`). |
 
-**Interior mutability:** none. The engine uses `&mut GameData` passed down the call stack
-(`crates::engine::action::execute(payload, &mut game_data)`,
-`crates::engine::query::Evaluator` takes `&GameData`). There are no
-`RefCell`/`Cell`/`Mutex`/`RwLock` anywhere in the crate. The only shared mutability pattern is the
-`event_sender` callback, which receives `&GameData` (shared ref) — it must not attempt to mutate
-through the provided reference; hosts that need to snapshot must `clone()`.
+**Interior mutability:** none in the production state machine. The engine uses `&mut GameData`
+passed down the call stack (`crates::engine::action::execute(payload, &mut game_data)`,
+`crates::engine::query::Evaluator` takes `&GameData`). There are no `RefCell`/`Cell`/`RwLock` in
+the production path. The two `Mutex` uses noted in §1 (`BufWriter<File>` and `usize` step counter)
+are observation-only and never guard engine state. The shared mutability pattern through
+callbacks (`event_sender`, `trace_sender`) is read-only with respect to the engine: `event_sender`
+receives `&GameData`; `trace_sender` receives `TraceEntry` by value. Hosts that need to snapshot
+must `clone()`.
 
 **Implication for hosts:** because `event_sender` is `Send` but not `Sync`, a host that wants to
 emit events from multiple worker threads must wrap the engine in its own `Mutex<Controller>` or run
@@ -66,15 +87,24 @@ the engine on a single dedicated thread and communicate via channels.
 
 - **Memory:** `crates::engine::game_data::GameData` is a flat aggregate of owned
   `Vec`/`HashMap`. The only large allocation point is the terminal `clone()` in
-  `crates::engine::controller::Controller::run` (`crates/engine/src/controller.rs:74`) — for a game
+  `crates::engine::controller::Controller::run`
+  (`crates/engine/src/controller/mod.rs:164`) — for a game
   with many cards this is O(total state). There is no arena, slab, or recycling; card ids are never
-  reused (only appended), so `cards.len()` grows monotonically.
-- **File descriptors:** the test-input `std::fs::File` (`crates/engine/src/controller.rs:118`) is
+  reused (only appended), so `cards.len()` grows monotonically. The quantifier overlay
+  (`crates::engine::interpreter::Interpreter::pending_overlay`,
+  `crates/engine/src/interpreter/mod.rs:36`) only ever holds synthetic-state replacement edges
+  during a single quantifier edge's resolution; it is bounded by the fan-out cap
+  (`crate::quantifier::FANOUT_CAP = 64`, `crates/engine/src/quantifier.rs:38`) and never leaks past
+  the overlay-dispatch completion.
+- **File descriptors:** the test-input `std::fs::File`
+  (`crates/engine/src/controller/mod.rs:205`) is
   opened lazily on the first `NeedsInput` and its `BufReader` is consumed and dropped within
   `crates::engine::controller::Controller::read_test_file`'s loading block
-  (`crates/engine/src/controller.rs:117-129`). No FD leaks across a run.
-  `crates::engine::debug::save_game_data` (`crates/engine/src/debug.rs:255-271`) opens a file in
-  `append(true).create(true)` mode per call and drops it on return.
+  (`crates/engine/src/controller/mod.rs:204-218`). No FD leaks across a run.
+  `crates::engine::debug::save_game_data` (`crates/engine/src/debug/save.rs:8-24`) opens a file in
+  `append(true).create(true)` mode per call and drops it on return. When trace logging is enabled,
+  `TraceLogger::open` (`crates/engine/src/controller/trace_logger.rs:14-20`) creates the log file
+  once per `run_game` invocation and drops it on return from `run_game`.
 - **Network sockets:** none. The engine has no networking; per the workspace's P2P architecture
   intent, each player runs their own backend and this crate is transport-agnostic.
 - **Drop order:** `crates::engine::controller::Controller` owns
@@ -83,13 +113,32 @@ the engine on a single dedicated thread and communicate via channels.
 
 ---
 
-## 4. Unused Dependencies (Agent Note)
+## 4. Dependencies Inventory (Agent Note)
 
-`crates/engine/Cargo.toml` declares `indexmap`, `dashmap`, `thiserror`, and `anyhow`, but **none
-are imported anywhere in `crates/engine/src`** (verified: only `std::collections::HashMap` is used,
-in `crates/engine/src/game_data.rs`, `crates/engine/src/query.rs`, and
-`crates/engine/src/action.rs`). Error handling is stringly-typed (`Result<_, String>`,
-`crates::engine::interpreter::StepResult::Error(String)`) — `thiserror`/`anyhow` are not exercised.
-Agents should not assume these crates are available to engine code without re-adding a real import;
-conversely, removing them from `Cargo.toml` is safe as of this writing. See
-[`error-handling.md`](./error-handling.md) for the error model in use.
+`crates/engine/Cargo.toml` (`crates/engine/Cargo.toml:1-23`) declares:
+
+**In use — production library target** (`crates/engine/src/lib.rs` and below; excludes `bin/`):
+- `front_end` (root dep; `Ir`/`ast`/`ir` types).
+- `serde` + `serde_json` — used by `crates::engine::quantifier::alloc_synth`
+  (`crates/engine/src/quantifier.rs:118-123`) to construct a `StateID` via deserialisation (the
+  `StateID` tuple field is private to `front_end::ir`).
+
+**In use — `engine-tui` binary** (`[[bin]] name = "engine-tui"`,
+`crates/engine/src/bin/engine-tui/main.rs`):
+- `ratatui` and `crossterm` — the TUI itself (the `ui/` module renders with `ratatui` via
+  `crossterm`).
+- `crossbeam-channel` — the TUI's threaded input loop.
+
+**Not imported anywhere in `crates/engine/src`** (verified post-Stage-7 refactor):
+- `indexmap`, `dashmap`, `thiserror`, `anyhow`, `rand`.
+  Only `std::collections::HashMap` is used as a map. Error handling is stringly-typed
+  (`Result<_, String>`, `crates::engine::interpreter::StepResult::Error(String)`) —
+  `thiserror`/`anyhow` are not exercised. `rand` is not imported by engine sources (the TUI is
+  deterministic). Removing these five from `Cargo.toml` is safe as of this writing; they remain
+  declared for future use. Agents must not assume any of them is available to engine code without a
+  real import. See [`error-handling.md`](./error-handling.md) for the error model in use.
+
+> Note: `crates/engine/src/bin/cgdsl-play.rs` is auto-discovered by `rustc` even though it is not
+> listed under an explicit `[[bin]]`. `Cargo.toml` only declares `engine-tui` as a `[[bin]]`
+> (`crates/engine/Cargo.toml:8-10`); cgdsl-play is reached by cargo's auto-discovery of files under
+> `src/bin/`. See [`README.md`](./README.md) for the binary inventory.

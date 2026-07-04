@@ -1,15 +1,17 @@
 ---
 type: agent_wiki_node
 module: crates::engine
-scope: [engine::interpreter, engine::action, engine::query, engine::controller, engine::game_data]
+scope: [engine::interpreter, engine::interpreter::quant_driver, engine::action, engine::query, engine::controller, engine::game_data, engine::quantifier]
 topics: [error-handling, panics, result, recoverability, silent-noops]
 associated_files:
-  - crates/engine/src/interpreter.rs
+  - crates/engine/src/interpreter/mod.rs
+  - crates/engine/src/interpreter/quant_driver.rs
   - crates/engine/src/action.rs
-  - crates/engine/src/query.rs
-  - crates/engine/src/controller.rs
+  - crates/engine/src/query/mod.rs
+  - crates/engine/src/controller/mod.rs
   - crates/engine/src/game_data.rs
-last_validated: 2026-07-02
+  - crates/engine/src/quantifier.rs
+last_validated: 2026-07-04
 ---
 
 # Error Handling, Panic Conditions & Diagnostics
@@ -28,33 +30,50 @@ Three error channels exist:
 
 | Channel | Type | Origin |
 |---|---|---|
-| Run failure | `Result<GameData, String>` from `crates::engine::controller::run_game` (`crates/engine/src/controller.rs:29`) | Propagated from `crates::engine::interpreter::StepResult::Error` or `Controller::get_input`. |
-| Step failure | `crates::engine::interpreter::StepResult::Error(String)` (`crates/engine/src/interpreter.rs:177`) | Missing state, bad edge counts, evaluator errors (below). |
+| Run failure | `Result<GameData, String>` from `crates::engine::controller::run_game` (`crates/engine/src/controller/mod.rs:31`) | Propagated from `crates::engine::interpreter::StepResult::Error` or `Controller::get_input`. |
+| Step failure | `crates::engine::interpreter::StepResult::Error(String)` (`crates/engine/src/interpreter/types.rs:54`) | Missing state, bad edge counts, evaluator errors, quantifier-resume validation errors (below). |
 | Eval failure | `Result<_, String>` from every `crates::engine::query::Evaluator` method | Division by zero, missing memory/location/precedence/pointmap/combo, type-mismatched memory, out-of-range index, "no current player/stage", etc. |
 
 Representative `crates::engine::query::Evaluator` error strings (verbatim from
-`crates/engine/src/query.rs`): `"Division by zero"` (`crates/engine/src/query.rs:387`),
-`"No current stage"` (`crates/engine/src/query.rs:508`), `"Memory {key} not found"`, `"Memory
-value is not an Int"` (and `String`/`Team`/`CardSet`/… variants), `"Location {name} not found"`,
-`"PointMap {name} not found"`, `"Precedence {name} not found"`, `"Combo {name} not found"`,
-`"No card at index {idx} in location {loc}"`, `"No card at top of location {loc}"`,
+`crates/engine/src/query/`): `"Division by zero"` (`crates/engine/src/query/int.rs:21`),
+`"No current stage"` (`crates/engine/src/query/int.rs:142`, also
+`crates/engine/src/query/player.rs:19`), `"Memory {key} not found"`, `"Memory value is not an
+Int"` (and `String`/`Team`/`CardSet`/`PlayerCollection`/… variants), `"Location {name} not
+found"`, `"PointMap {name} not found"`, `"Precedence {name} not found"`, `"Combo {name} not
+found"`, `"No card at index {idx} in location {loc}"`, `"No card at top of location {loc}"`,
 `"No next player available"`, `"No competitor found"`, `"Owner of card position not found"`,
-`"No card found for extrema"`, `"resolve_owner_to_name: PlayerCollection cannot resolve to a single
-name"`, `"Card position not found in any location"`.
+`"No card found for extrema"`, `"resolve_owner_to_name: PlayerCollection cannot resolve to a
+single name"` (`crates/engine/src/query/player.rs:291-294`),
+`"resolve_owner_to_names: team '{name}' cannot own a location or memory (team-owned locations
+are not in the data model)"` (`crates/engine/src/query/player.rs:310-312`),
+`"Card position not found in any location"`.
 
-Controller-level errors: `"Failed to open test file: {e}"`, `"Failed to read test file: {e}"`
-(`crates/engine/src/controller.rs:118,121`), `"Test input file exhausted"`
-(`crates/engine/src/controller.rs:134`), `"Invalid test input #{n}: expected number, 'y', or 'n',
-got '{line}'"` (`crates/engine/src/controller.rs:140-145`), `"Invalid test input #{n}: choice
-indices start at 1, got 0"` (`crates/engine/src/controller.rs:146-151`).
+Controller-level errors (in `crates/engine/src/controller/mod.rs`): `"Failed to open test file
+{path}: {e}"` (`:206`), `"Failed to read test file {path}: {e}"` (`:210`), `"Test input file
+exhausted (input #{})"` (`:223`), `"Invalid test input #{}: expected 'p <N>', got '{}'"
+(`:229-233`), `"Invalid test input #{}: player indices start at 1, got 0"` (`:235-238`),
+`"Invalid test input #{}: expected 'c <csv>', got '{}'"` (`:248-253`), `"Invalid test input #{}:
+card indices start at 1, got 0"` (`:255-258`), `"Invalid test input #{}: expected number, 'y',
+'n', 'p <N>', or 'c <csv>', got '{}'"` (`:269-274`), `"Invalid test input #{}: choice indices
+start at 1, got 0"` (`:275-280`).
 
-Interpreter-level errors: `"Current state not found in IR"`
-(`crates/engine/src/interpreter.rs:26`), `"No outgoing edges and not at goal state"`
-(`crates/engine/src/interpreter.rs:33`), `"Condition state must have exactly 2 edges"`
-(`crates/engine/src/interpreter.rs:73`), `"EndCondition state must have exactly 2 edges"`
-(`crates/engine/src/interpreter.rs:100`), `"Failed to get condition edge"` / `"Failed to get end
-condition edge"` (`crates/engine/src/interpreter.rs:91,122`), `"No edges found"`
-(`crates/engine/src/interpreter.rs:141`).
+Interpreter-level errors (in `crates/engine/src/interpreter/mod.rs`): `"Current state {state} not
+found in IR"` (`:113-117`), `"No outgoing edges from state {state} and not at goal state"`
+(`:124-128`), `"Condition state {state} must have exactly 2 edges, found {n}"` (`:230-236`),
+`"EndCondition state {state} must have exactly 2 edges, found {n}"` (`:271-277`), `"Failed to get
+condition edge"` (`:263`), `"Failed to get end condition edge"` (`:312`), `"No edges found in
+state {state}"` (`:359-363`), `"Unexpected input for Optional"` (`:204-207`).
+
+Quantifier-resume / setup-guard errors (post-Stage-5):
+
+| String | Site | Cause |
+|---|---|---|
+| `"quantifier 'any' is not supported in setup rules"` | `crates/engine/src/interpreter/mod.rs:157-159` | A `Payload::Action(GameRule::SetUp { setup })` edge whose `setup` contains `Quantifier::Any` — invariant I-20. |
+| `"ChoosePlayer idx {idx} out of range ({len})"` | `crates/engine/src/interpreter/quant_driver.rs:220-224` | Resume of `DestPlayerAny` with `idx >= candidates.len()` — invariant I-8. |
+| `"ChooseCards index out of range"` | `crates/engine/src/interpreter/quant_driver.rs:388-390` | Resume of `CardsAnyOrRange` / `DestAllThenCards` with a `selected` entry `>= candidate_ids.len()` — invariant I-8. |
+| `"dest-player fan-out {n} exceeds cap {cap}"` | `crates/engine/src/quantifier.rs:420-423` and `:513-516` | `build_dest_all_chain` / `build_dest_all_chain_with_memory` returning `Err` when a `DestPlayerAll` resolves to more than `FANOUT_CAP = 64` players. |
+| `"selected {count} does not satisfy range {:?}"` | `crates/engine/src/quantifier.rs:480-484` | `validate_int_range` returning `Err` — re-prompts the player (the resume path returns `NeedsInput` again with the error message in the prompt, see `quant_driver.rs:400-407`). |
+| `"selected {count} exceeds available {available}"` | `crates/engine/src/quantifier.rs:493-497` | `validate_int_range`'s fallback when the `IntRange` uses a non-literal `IntExpr`. |
 
 ---
 
@@ -62,45 +81,80 @@ condition edge"` (`crates/engine/src/interpreter.rs:91,122`), `"No edges found"`
 
 **Recoverable** (surfaced as `Err(String)` / `crates::engine::interpreter::StepResult::Error`): all
 `crates::engine::query::Evaluator` `Result` returns; condition/end-condition edge-count violations;
-missing current state in the IR; dead-end non-goal states; test-file open/parse/exhaustion errors.
-These terminate `crates::engine::controller::run_game` with `Err` and leave
+missing current state in the IR; dead-end non-goal states; test-file open/parse/exhaustion errors;
+the six quantifier-resume / setup-guard errors above. These terminate
+`crates::engine::controller::run_game` with `Err` and leave
 `crates::engine::game_data::GameData` in whatever partially-mutated state it reached (the engine
 does **not** roll back applied mutations on error —
 `crates::engine::interpreter::Interpreter::execute_edge` has already written before a later
-evaluator call can fail).
+evaluator call can fail). The `validate_int_range` re-prompt path is a partial exception: it
+returns `NeedsInput` (not `Error`) so the controller re-asks the player and the run continues.
 
 **Unrecoverable** (process-aborting `panic!` / `.expect()` / `.unwrap()` / `todo!`). These are
 invariants the code assumes the IR/data will satisfy; an abnormal IR or DSL input can trigger them:
 
 | Site | Condition | Failure mode |
 |---|---|---|
-| `crates/engine/src/action.rs:96` | `front_end::ast::SetUpRule::CreateLocation` owner name not found | `.expect("Failed to resolve owner to name")` |
-| `crates/engine/src/action.rs:112` | `front_end::ast::SetUpRule::CreateCardOnLocation` location name not found | `.expect("Location not found")` |
-| `crates/engine/src/action.rs:208` | `front_end::ast::ActionRule::CycleAction` player expr fails to eval | `.expect("Failed to eval player")` |
-| `crates/engine/src/action.rs:213` | `CycleAction` resolved player not in `players` | `.expect("Player not found")` |
-| `crates/engine/src/action.rs:218` | `CycleAction` player not in `turn_order` | `.expect("Player not in turn order")` |
-| `crates/engine/src/action.rs:332,342` | `crates::engine::action::execute_cardset_move` source/dest `eval_cardset` fails | `.expect("Failed to eval cardset")` / `"Failed to eval dest"` |
-| `crates/engine/src/action.rs:347` | destination location index strictly greater than `locations.len()` | `panic!("Could not resolve a destination for move action")` |
-| `crates/engine/src/action.rs:362` | destination index **equal to** `locations.len()` (slips past the `>` check at `crates/engine/src/action.rs:345`) | Rust index-out-of-bounds panic at `game_data.locations[dest_loc_idx].cards.push(…)` — note the guard at `:345` uses `>` not `>=`, a latent off-by-one; an agent fixing move validation must change it to `>=` |
-| `crates/engine/src/game_data.rs:134` | `crates::engine::game_data::GameData::add_location` owner (non-Table) not in `players` | `.expect("Owner not found")` |
-| `crates/engine/src/game_data.rs:192` | `crates::engine::game_data::GameData::next_player` found idx missing from `turn_order` | `.unwrap()` (see I-13 — safe given `resolve_turn`'s contract) |
-| `crates/engine/src/query.rs:1590,1609` | `crates::engine::query::Evaluator::resolve_players`/`resolve_player_collection` player eval fails or name missing | `.expect("Failed to eval player")` / `.expect("Player not found")` |
-| `crates/engine/src/query.rs:542,635,706,1618` | `IntCollection`/`TeamCollection`/`StringCollection` `AggregateMemory`, or `front_end::ast::PlayerCollection::Aggregate` | `todo!(…)` — panics if a DSL program reaches these arms |
+| `crates/engine/src/action.rs:92-95` | `front_end::ast::SetUpRule::CreateLocation` owner fails `resolve_owner_to_names` | `panic!("CreateLocation: failed to resolve owner {:?}: {}", owner, e)` |
+| `crates/engine/src/action.rs:113-115` | `front_end::ast::SetUpRule::CreateCardOnLocation` location name not found | `panic!("CreateCardOnLocation: location {:?} not found", location)` |
+| `crates/engine/src/action.rs:211-213` | `front_end::ast::ActionRule::CycleAction` player expr fails to eval | `panic!("CycleAction: failed to eval player {:?}: {}", player, e)` |
+| `crates/engine/src/action.rs:218-223` | `CycleAction` resolved player not in `players` | `panic!("CycleAction: player {} not found in game_data.players", player_name)` |
+| `crates/engine/src/action.rs:228-232` | `CycleAction` player not in `turn_order` | `panic!("CycleAction: player_idx {} not in turn_order {:?}", player_idx, game_data.turn_order)` |
+| `crates/engine/src/action.rs:347-352` | `crates::engine::action::execute_cardset_move` source `eval_cardset` fails | `panic!("execute_cardset_move: failed to eval from cardset {:?}: {}", from, e)` |
+| `crates/engine/src/action.rs:362-367` | `execute_cardset_move` dest `eval_cardset` fails | `panic!("execute_cardset_move: failed to eval dest cardset {:?}: {}", to, e)` |
+| `crates/engine/src/action.rs:370-377` | destination location index strictly greater than `locations.len()` | `panic!("execute_cardset_move: dest_loc_idx {} > locations.len() {} (cardset expr: {:?})", dest_loc_idx, game_data.locations.len(), to)` |
+| `crates/engine/src/action.rs:391` | destination index **equal to** `locations.len()` (slips past the `>` check at `crates/engine/src/action.rs:370`) | Rust index-out-of-bounds panic at `game_data.locations[dest_loc_idx].cards.push(card_id)` — note the guard at `:370` uses `>` not `>=`, a latent off-by-one; an agent fixing move validation must change it to `>=` |
+| `crates/engine/src/game_data.rs:130-136` | `crates::engine::game_data::GameData::add_location` owner (non-Table) not in `players` | `panic!("add_location: owner {} not found in players", owner_name)` |
+| `crates/engine/src/game_data.rs:204-209` | `crates::engine::game_data::GameData::next_player` found idx missing from `turn_order` | `panic!("next_player: next_player {} not found in turn_order {:?}", next_player, self.turn_order)` (see I-13 — safe given `resolve_turn`'s contract) |
+| `crates/engine/src/query/player.rs:211` | `crates::engine::query::Evaluator::resolve_players` player eval fails | `panic!("resolve_players: failed to eval player {:?}: {}", player, e)` |
+| `crates/engine/src/query/player.rs:218` | `resolve_players` resolved player name not in `players` | `panic!("resolve_players: player {} not found in game_data", name)` |
+| `crates/engine/src/query/player.rs:233-238` | `crates::engine::query::Evaluator::resolve_player_collection` (Literal arm) player eval fails | `panic!("resolve_player_collection: failed to eval player {:?}: {}", player_expr, e)` |
+| `crates/engine/src/query/player.rs:246` | `front_end::ast::PlayerCollection::Aggregate` reached via `resolve_player_collection` | `todo!("PlayerCollection::Aggregate not yet implemented")` — panics if a DSL program reaches this arm directly. The quantifier subsystem **intercepts** `Aggregate { Quantifier }` *before* this call site (`crates/engine/src/quantifier.rs:140-153`), so the engine's own quantifier paths never trigger this `todo!`. |
+| `crates/engine/src/query/int.rs:173-176` | `IntCollection::AggregateMemory` | `todo!("IntCollection::AggregateMemory not yet implemented: {:?}", multi)` |
+| `crates/engine/src/query/int.rs:266-269` | `TeamCollection::AggregateMemory` | `todo!("TeamCollection::AggregateMemory not yet implemented: {:?}", multi)` |
+| `crates/engine/src/query/string.rs:60-63` | `StringCollection::AggregateMemory` | `todo!("StringCollection::AggregateMemory not yet implemented: {:?}", multi)` |
+| `crates/engine/src/quantifier.rs:122` | `crates::engine::quantifier::alloc_synth` `serde_json::from_value` failure | `.expect("StateID deserialisation from a valid u32 cannot fail")` — the input is `Value::from(raw: u32)` and `StateID` derives `Deserialize` as a transparent newtype around `u32`, so this expect is unreachable by construction. Listed for completeness; it does not fire on any real input. |
+
+**The quantifier subsystem introduces no new *real* panic sites.** The only `.expect` in
+`crates/engine/src/quantifier.rs` is the unreachable-by-construction one in `alloc_synth` (above);
+`validate_int_range` returns `Err` (not a panic) at `quantifier.rs:454-485`; `build_dest_all_chain`
+returns `Err` at `:413-440`; `build_dest_all_chain_with_memory` returns `Err` at `:505-534`. The
+resume arms in `crates/engine/src/interpreter/quant_driver.rs` likewise return
+`StepResult::Error` on bad input (see the table in §1), never `panic!`. The setup-`Any` guard
+returns `StepResult::Error`, never `panic!` (`interpreter/mod.rs:157-159`).
+
+> **Panic capture:** when a trace log is open, `run_game` wraps `controller.run()` in
+> `std::panic::catch_unwind(AssertUnwindSafe(...))` (`crates/engine/src/controller/mod.rs:98-117`),
+> logs the panic message to the trace file as `=== Panic: <msg> ===`, then `resume_unwind`s so the
+> panic surfaces to the caller after being logged. Without a trace log, panics propagate untouched.
+> See [`observability.md`](./observability.md) §3.2.
 
 **Silent no-ops** (neither error nor panic — agents must know these exist and do nothing):
 
-- `front_end::ast::ActionRule::FlipAction` (`crates/engine/src/action.rs:161-164`) — payload fields
+- `front_end::ast::ActionRule::FlipAction` (`crates/engine/src/action.rs:164-167`) — payload fields
   ignored entirely.
 - `front_end::ast::ActionRule::ShuffleAction` when `eval_cardset` fails
-  (`crates/engine/src/action.rs:175-178`) — prints `eprintln!("ShuffleAction failed: {e}")` and
+  (`crates/engine/src/action.rs:178-180`) — prints `eprintln!("ShuffleAction failed: {}", e)` and
   continues; the pile is left unshuffled.
 - `front_end::ast::ActionRule::BidAction`, `BidMemoryAction`, `DemandAction`, `DemandMemoryAction`,
   `front_end::ast::EndType::GameWithWinner`, all `front_end::ast::ScoringRule` variants,
   `front_end::ast::SetUpRule::CreateTokenOnLocation`, `front_end::ast::MoveType::Place`
-  (`crates/engine/src/action.rs:121,221-251,239-241,243-251,259-277,320`) — `// TODO` no-ops.
+  (`crates/engine/src/action.rs:124, 236-266, 254-256, 274-292, 335`) — `// TODO` no-ops.
 - `front_end::ir::Payload::Trigger` traversal: `crates::engine::interpreter::Interpreter::step`
   advances the state (`execute_edge`) but `crates::engine::action::execute`'s catch-all
-  `_ => {}` (`crates/engine/src/action.rs:58`) performs no mutation.
+  `_ => {}` (`crates/engine/src/action.rs:57`) performs no mutation.
 - `front_end::ast::PlayerCollection::AggregateMemory`, `front_end::ast::PlayerCollection::Memory`
-  (`crates/engine/src/query.rs:1650-1654`) — return `vec![]` silently.
+  (`crates/engine/src/query/player.rs:278-282`) — return `vec![]` silently.
 - Out-of-range `Choice`/`Optional` input (I-8) — silent stall, no error.
+
+**NOT silent no-ops** (the quantifier arms — they actively mutate or prompt):
+
+- `QuantSite::DestPlayerAll` / `DestPlayerAny` / `SrcCardsAnyOrRange` (`interpreter/mod.rs:131-150`)
+  build a synthetic overlay chain or issue a `NeedsInput` prompt — they do real work.
+- The resume arms in `quant_driver.rs:213-334` write the synthetic memory slot, build/insert
+  replacement edges, and advance `current_state` — they do real work.
+- The `SYNTH_MEMORY_KEY` cleanup (`interpreter/mod.rs:65-79`) removes a slot — it does real work
+  (and is itself an invariant, I-18).
+
+A quantifier site is never a silent no-op; verify this remains true if you add a new
+`QuantSite` variant.
