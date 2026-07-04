@@ -175,35 +175,9 @@ impl Controller {
         let input = match &self.input_source {
             InputSource::Player(callback) => loop {
                 let raw = callback(input_type.clone());
-                if let Input::Choice { idx } = &raw {
-                    if let InputType::Choice { max_index, .. } = &input_type {
-                        if idx > max_index {
-                            continue;
-                        }
-                    }
+                if validate_player_input(&raw, &input_type) {
+                    break raw;
                 }
-                if let (Input::ChoosePlayer { idx }, InputType::ChoosePlayer { candidates, .. }) =
-                    (&raw, &input_type)
-                {
-                    if *idx >= candidates.len() {
-                        continue;
-                    }
-                }
-                if let (
-                    Input::ChooseCards { selected },
-                    InputType::ChooseCards {
-                        display, min, max, ..
-                    },
-                ) = (&raw, &input_type)
-                {
-                    if selected.iter().any(|&i| i >= display.len())
-                        || selected.len() < *min
-                        || selected.len() > *max
-                    {
-                        continue;
-                    }
-                }
-                break raw;
             },
             InputSource::TestFile(path) => {
                 let path = path.clone();
@@ -317,5 +291,30 @@ impl Controller {
         if let Some(sender) = &self.event_sender {
             sender(&self.interpreter.game_data);
         }
+    }
+}
+
+/// Validates a `Player`-sourced [`Input`] against the [`InputType`] that
+/// requested it. Returns `true` to accept (and `break` the loop), `false` to
+/// `continue` and re-prompt. Only the `(Input, InputType)` pairs exercised by
+/// `get_input`'s `Player` branch are validated; any other combination is
+/// accepted, preserving the original behavior. See Stage 6 / sub-task B2.
+fn validate_player_input(input: &Input, input_type: &InputType) -> bool {
+    match (input, input_type) {
+        (Input::Choice { idx }, InputType::Choice { max_index, .. }) => *idx <= *max_index,
+        (Input::ChoosePlayer { idx }, InputType::ChoosePlayer { candidates, .. }) => {
+            *idx < candidates.len()
+        }
+        (
+            Input::ChooseCards { selected },
+            InputType::ChooseCards {
+                display, min, max, ..
+            },
+        ) => {
+            !selected.iter().any(|&i| i >= display.len())
+                && selected.len() >= *min
+                && selected.len() <= *max
+        }
+        _ => true,
     }
 }

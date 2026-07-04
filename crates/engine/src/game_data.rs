@@ -162,6 +162,16 @@ impl GameData {
         self.cards.get(card_id)
     }
 
+    /// Returns the index of the (first) location whose `cards` vec contains
+    /// `card_id`, or `None` if no location holds it. Linear scan; see invariant
+    /// I-6. Callers that need a `0` fallback sentinel (e.g. invariant I-14)
+    /// apply `.unwrap_or(0)` at the call site.
+    pub fn find_location_of_card(&self, card_id: usize) -> Option<usize> {
+        self.locations
+            .iter()
+            .position(|l| l.cards.contains(&card_id))
+    }
+
     // stage counter stuff
     pub fn increment_stage_counter(&mut self, stage: String) {
         let counter = self.stage_counters.entry(stage).or_insert(0);

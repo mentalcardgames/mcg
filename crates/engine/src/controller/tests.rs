@@ -11,21 +11,17 @@ use std::sync::{Arc, Mutex};
 #[test]
 fn test_input_parsing() {
     let default_ir = Ir::<LoweredPayLoad>::default();
-    let mut controller = Controller {
-        interpreter: Interpreter {
-            ir: Ir {
-                states: Default::default(),
-                entry: default_ir.entry,
-                goal: default_ir.goal,
-            },
-            game_data: GameData::new(),
-            input_buffer: Vec::new(),
-            current_state: default_ir.entry,
-            trace_sender: None,
-            pending_overlay: std::collections::HashMap::new(),
-            next_synth: u32::MAX - 1,
-            pending_quant: None,
+    let interpreter = Interpreter::new(
+        Ir {
+            states: std::collections::HashMap::new(),
+            entry: default_ir.entry,
+            goal: default_ir.goal,
         },
+        GameData::new(),
+        None,
+    );
+    let mut controller = Controller {
+        interpreter,
         input_source: InputSource::TestFile(PathBuf::from("/nonexistent")),
         event_sender: None,
         line_buffer: VecDeque::from([
@@ -78,21 +74,17 @@ fn test_input_parsing() {
 #[test]
 fn test_input_exhausted_error() {
     let default_ir = Ir::<LoweredPayLoad>::default();
-    let mut controller = Controller {
-        interpreter: Interpreter {
-            ir: Ir {
-                states: Default::default(),
-                entry: default_ir.entry,
-                goal: default_ir.goal,
-            },
-            game_data: GameData::new(),
-            input_buffer: Vec::new(),
-            current_state: default_ir.entry,
-            trace_sender: None,
-            pending_overlay: std::collections::HashMap::new(),
-            next_synth: u32::MAX - 1,
-            pending_quant: None,
+    let interpreter = Interpreter::new(
+        Ir {
+            states: std::collections::HashMap::new(),
+            entry: default_ir.entry,
+            goal: default_ir.goal,
         },
+        GameData::new(),
+        None,
+    );
+    let mut controller = Controller {
+        interpreter,
         input_source: InputSource::TestFile(PathBuf::from("test_input.txt")),
         event_sender: None,
         line_buffer: VecDeque::from(["1".to_string()]),
@@ -127,11 +119,16 @@ fn test_input_file_ordering_and_validation() {
     assert!(result.is_ok(), "Game should complete successfully");
 }
 
-#[test]
-fn test_debug_integration_game_snapshots() {
-    use crate::debug::{format_game_data, DebugLevel};
+/// Shared setup for the two `ordering_test` debug-integration tests: load
+/// `test_games/ordering_test.cgdsl`, run the game with a `TestFile` input
+/// source, and capture every emitted `GameData` snapshot. Returns the
+/// snapshots `Arc` and the run result so each test keeps its own unique
+/// assertions. See Stage 6 / sub-task B5.
+fn run_ordering_game_snapshots() -> (
+    std::sync::Arc<std::sync::RwLock<Vec<GameData>>>,
+    Result<GameData, String>,
+) {
     use front_end::validation::parse_document;
-    use std::sync::{Arc, RwLock};
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let game_path = manifest_dir.join("test_games/ordering_test.cgdsl");
@@ -141,7 +138,7 @@ fn test_debug_integration_game_snapshots() {
     let game = parse_document(&source).expect("Failed to parse game");
     let ir = game.to_lowered_graph();
 
-    let snapshots = Arc::new(RwLock::new(Vec::new()));
+    let snapshots = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
     let snapshots_clone = snapshots.clone();
     let game_data = GameData::new();
 
@@ -154,6 +151,15 @@ fn test_debug_integration_game_snapshots() {
         })),
         None,
     );
+
+    (snapshots, result)
+}
+
+#[test]
+fn test_debug_integration_game_snapshots() {
+    use crate::debug::{format_game_data, DebugLevel};
+
+    let (snapshots, result) = run_ordering_game_snapshots();
 
     assert!(result.is_ok());
     assert!(!snapshots.read().unwrap().is_empty());
@@ -174,30 +180,8 @@ fn test_debug_integration_game_snapshots() {
 #[test]
 fn test_debug_integration_verify_game_progression() {
     use crate::debug::{format_game_data, DebugLevel};
-    use front_end::validation::parse_document;
-    use std::sync::{Arc, RwLock};
 
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let game_path = manifest_dir.join("test_games/ordering_test.cgdsl");
-    let input_path = manifest_dir.join("test_games/ordering_test.txt");
-
-    let source = std::fs::read_to_string(&game_path).expect("Failed to read test game file");
-    let game = parse_document(&source).expect("Failed to parse game");
-    let ir = game.to_lowered_graph();
-
-    let snapshots = Arc::new(RwLock::new(Vec::new()));
-    let snapshots_clone = snapshots.clone();
-    let game_data = GameData::new();
-
-    let result = run_game(
-        ir,
-        game_data,
-        InputSource::TestFile(input_path),
-        Some(Box::new(move |gd| {
-            snapshots_clone.write().unwrap().push(gd.clone());
-        })),
-        None,
-    );
+    let (snapshots, result) = run_ordering_game_snapshots();
 
     assert!(result.is_ok());
 

@@ -63,10 +63,8 @@ impl Evaluator {
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::CardSet(card_ids)) => {
                         if let Some(&first_card) = card_ids.first() {
-                            for (loc_idx, loc) in game_data.locations.iter().enumerate() {
-                                if loc.cards.contains(&first_card) {
-                                    return Ok((loc_idx, card_ids.clone()));
-                                }
+                            if let Some(loc_idx) = game_data.find_location_of_card(first_card) {
+                                return Ok((loc_idx, card_ids.clone()));
                             }
                         }
                         Ok((0, card_ids.clone()))
@@ -174,12 +172,10 @@ impl Evaluator {
             }
             Group::CardPosition { card_position } => {
                 let card_id = Self::eval_card_position(card_position, game_data)?;
-                for (loc_idx, loc) in game_data.locations.iter().enumerate() {
-                    if loc.cards.contains(&card_id) {
-                        return Ok((loc_idx, vec![card_id]));
-                    }
+                match game_data.find_location_of_card(card_id) {
+                    Some(loc_idx) => Ok((loc_idx, vec![card_id])),
+                    None => Err("Card position not found in any location".to_string()),
                 }
-                Err("Card position not found in any location".to_string())
             }
         }
     }

@@ -242,34 +242,22 @@ impl Interpreter {
         candidate_ids: Vec<usize>,
         original: Edge<LoweredPayLoad>,
     ) -> StepResult {
-        if selected.iter().any(|&i| i >= candidate_ids.len()) {
-            return StepResult::Error("ChooseCards index out of range".to_string());
-        }
-        let chosen: Vec<usize> = selected.iter().map(|&i| candidate_ids[i]).collect();
-        if let Some((qty, _)) = crate::quantifier::card_site(&original) {
-            if let front_end::ast::Quantity::IntRange { int_range } = &qty {
-                if let Err(e) = crate::quantifier::validate_int_range(
-                    int_range,
-                    chosen.len(),
-                    candidate_ids.len(),
-                ) {
-                    let (display, min, max) = self.build_choose_cards(&qty, &candidate_ids);
-                    self.pending_quant = Some(crate::quantifier::PendingQuant {
-                        state: self.current_state,
-                        kind: crate::quantifier::PendingKind::CardsAnyOrRange {
-                            candidate_ids,
-                            original,
-                        },
-                    });
-                    return StepResult::NeedsInput(InputType::ChooseCards {
-                        display,
-                        min,
-                        max,
-                        prompt: format!("{}. Please choose again.", e),
-                    });
-                }
+        let qty_match = crate::quantifier::card_site(&original).map(|(q, _)| q.clone());
+        let chosen = match self.validate_choose_cards(&selected, &candidate_ids, qty_match.as_ref())
+        {
+            CardValidation::Ok(chosen) => chosen,
+            CardValidation::RePrompt(it) => {
+                self.pending_quant = Some(crate::quantifier::PendingQuant {
+                    state: self.current_state,
+                    kind: crate::quantifier::PendingKind::CardsAnyOrRange {
+                        candidate_ids,
+                        original,
+                    },
+                });
+                return StepResult::NeedsInput(it);
             }
-        }
+            CardValidation::Fatal(sr) => return sr,
+        };
         self.game_data.memories.insert(
             crate::quantifier::SYNTH_MEMORY_KEY.to_string(),
             crate::game_data::MemoryValue::CardSet(chosen.clone()),
@@ -296,35 +284,23 @@ impl Interpreter {
         candidate_ids: Vec<usize>,
         original: Edge<LoweredPayLoad>,
     ) -> StepResult {
-        if selected.iter().any(|&i| i >= candidate_ids.len()) {
-            return StepResult::Error("ChooseCards index out of range".to_string());
-        }
-        let chosen: Vec<usize> = selected.iter().map(|&i| candidate_ids[i]).collect();
-        if let Some((qty, _)) = crate::quantifier::card_site(&original) {
-            if let front_end::ast::Quantity::IntRange { int_range } = &qty {
-                if let Err(e) = crate::quantifier::validate_int_range(
-                    int_range,
-                    chosen.len(),
-                    candidate_ids.len(),
-                ) {
-                    let (display, min, max) = self.build_choose_cards(&qty, &candidate_ids);
-                    self.pending_quant = Some(crate::quantifier::PendingQuant {
-                        state: self.current_state,
-                        kind: crate::quantifier::PendingKind::DestAllThenCards {
-                            player_names,
-                            candidate_ids,
-                            original,
-                        },
-                    });
-                    return StepResult::NeedsInput(InputType::ChooseCards {
-                        display,
-                        min,
-                        max,
-                        prompt: format!("{}. Please choose again.", e),
-                    });
-                }
+        let qty_match = crate::quantifier::card_site(&original).map(|(q, _)| q.clone());
+        let chosen = match self.validate_choose_cards(&selected, &candidate_ids, qty_match.as_ref())
+        {
+            CardValidation::Ok(chosen) => chosen,
+            CardValidation::RePrompt(it) => {
+                self.pending_quant = Some(crate::quantifier::PendingQuant {
+                    state: self.current_state,
+                    kind: crate::quantifier::PendingKind::DestAllThenCards {
+                        player_names,
+                        candidate_ids,
+                        original,
+                    },
+                });
+                return StepResult::NeedsInput(it);
             }
-        }
+            CardValidation::Fatal(sr) => return sr,
+        };
         self.game_data.memories.insert(
             crate::quantifier::SYNTH_MEMORY_KEY.to_string(),
             crate::game_data::MemoryValue::CardSet(chosen.clone()),
@@ -397,4 +373,51 @@ impl Interpreter {
             });
         }
     }
+
+    /// Validates a `ChooseCards` answer. The caller is responsible for
+    /// restoring `pending_quant` on the `RePrompt` branch (the two callers
+    /// store *different* `PendingKind` variants, so the restoration is not
+    /// unified here). See Stage 6 / sub-task B1.
+    fn validate_choose_cards(
+        &self,
+        selected: &[usize],
+        candidate_ids: &[usize],
+        qty: Option<&front_end::ast::Quantity>,
+    ) -> CardValidation {
+        if selected.iter().any(|&i| i >= candidate_ids.len()) {
+            return CardValidation::Fatal(StepResult::Error(
+                "ChooseCards index out of range".to_string(),
+            ));
+        }
+        let chosen: Vec<usize> = selected.iter().map(|&i| candidate_ids[i]).collect();
+        if let Some(qty) = qty {
+            if let front_end::ast::Quantity::IntRange { int_range } = qty {
+                if let Err(e) = crate::quantifier::validate_int_range(
+                    int_range,
+                    chosen.len(),
+                    candidate_ids.len(),
+                ) {
+                    let (display, min, max) = self.build_choose_cards(qty, candidate_ids);
+                    return CardValidation::RePrompt(InputType::ChooseCards {
+                        display,
+                        min,
+                        max,
+                        prompt: format!("{}. Please choose again.", e),
+                    });
+                }
+            }
+        }
+        CardValidation::Ok(chosen)
+    }
+}
+
+/// Result of validating a `ChooseCards` answer; see [`Interpreter::validate_choose_cards`].
+enum CardValidation {
+    /// Selection is valid; the caller proceeds with the chosen ids.
+    Ok(Vec<usize>),
+    /// Selection is invalid; the caller restores `pending_quant` and returns
+    /// the re-prompt as a `StepResult::NeedsInput`.
+    RePrompt(InputType),
+    /// A fatal error (e.g. index out of range); the caller returns this verbatim.
+    Fatal(StepResult),
 }
