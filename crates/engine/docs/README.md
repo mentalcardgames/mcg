@@ -220,6 +220,7 @@ A compact glossary an agent should internalize before touching this crate:
 
 | Page | Covers | When to read it |
 |---|---|---|
+| [`interfaces.md`](./interfaces.md) | Public API inventory, data flow, UI↔engine contract, observability seams | External host / UI author starting integration. **Read first if integrating from outside.** |
 | [`data-structures.md`](./data-structures.md) | `GameData` family, consumed IR types, execution types, trace types, `IrExt` | You need field-level layout of any struct/enum. |
 | [`lifecycle.md`](./lifecycle.md) | Construction → setup → play loop → termination; run-loop sequencing, quantifier pre-dispatch arms | You need to understand *when* things happen. |
 | [`invariants.md`](./invariants.md) | 20 hard guardrails (I-1 … I-20) that must never be broken | **Before modifying any engine code.** |
