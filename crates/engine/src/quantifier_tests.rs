@@ -1,0 +1,410 @@
+//! Unit tests for the quantifier preprocessor helpers (see `crates/engine/src/quantifier.rs`).
+//!
+//! These tests construct `Edge` / `StateID` directly and exercise the pure
+//! helper functions (`alloc_synth`, `scan_edge`, `substitute_*`,
+//! `build_dest_all_chain`, `validate_int_range`, `setup_contains_any`).
+//! End-to-end tests that drive `run_game` against `.cgdsl` fixtures live
+//! in the separate integration test file `tests/quantifier_test.rs`.
+
+use super::*;
+use crate::game_data::MemoryValue;
+use crate::query::Evaluator;
+use front_end::ast::{
+    ActionRule, ClassicMove, GameRule, Group, Groupable, IntCompare, MoveType, Status,
+};
+use front_end::ir::Ir;
+
+/// A throwaway `StateID` for the `to` of hand-built test edges. `Ir::default`
+/// has `entry == StateID(0)`, which is fine for unit tests (we never
+/// dispatch these edges through the real interpreter).
+fn dest_state() -> StateID {
+    Ir::<LoweredPayLoad>::default().entry
+}
+
+fn loc_cardset(name: &str) -> CardSet {
+    CardSet::Group {
+        group: Group::Groupable {
+            groupable: Groupable::Location {
+                name: name.to_string(),
+            },
+        },
+    }
+}
+
+fn groupowner_cardset(name: &str, owner: Owner) -> CardSet {
+    CardSet::GroupOwner {
+        group: Group::Groupable {
+            groupable: Groupable::Location {
+                name: name.to_string(),
+            },
+        },
+        owner,
+    }
+}
+
+fn aggregate_owner(quantifier: Quantifier) -> Owner {
+    Owner::PlayerCollection {
+        player_collection: PlayerCollection::Aggregate {
+            aggregate: AggregatePlayerCollection::Quantifier { quantifier },
+        },
+    }
+}
+
+/// Build a `Classic`/`MoveQuantity` edge carrying the given quantity/from/to.
+fn move_qty_edge(quantity: Quantity, from: CardSet, to: CardSet) -> Edge<LoweredPayLoad> {
+    Edge {
+        to: dest_state(),
+        payload: Payload::Action(GameRule::Action {
+            action: ActionRule::Move {
+                move_type: MoveType::Classic {
+                    classic: ClassicMove::MoveCardSet {
+                        move_cs: MoveCardSet::MoveQuantity {
+                            quantity,
+                            from,
+                            status: Status::Private,
+                            to,
+                        },
+                    },
+                },
+            },
+        }),
+        meta: None,
+    }
+}
+
+#[test]
+fn alloc_synth_yields_valid_decreasing_stateids() {
+    let mut counter = u32::MAX - 1;
+    let mut prev_raw = u32::MAX;
+    for _ in 0..1024 {
+        let id = alloc_synth(&mut counter);
+        let raw = id.raw();
+        assert_ne!(raw, 0, "synthetic ids must never be 0");
+        assert_eq!(raw, prev_raw - 1, "ids must decrease monotonically");
+        prev_raw = raw;
+    }
+    assert_eq!(
+        alloc_synth(&mut (u32::MAX - 1)).raw(),
+        u32::MAX - 1,
+        "first allocation from a fresh seed is u32::MAX - 1"
+    );
+}
+
+#[test]
+fn alloc_synth_wraps_without_panicking() {
+    let mut counter = 0u32;
+    let _ = alloc_synth(&mut counter);
+    let _ = alloc_synth(&mut counter);
+}
+
+#[test]
+fn scan_edge_dest_player_all() {
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        loc_cardset("Stock"),
+        groupowner_cardset("Hand", aggregate_owner(Quantifier::All)),
+    );
+    assert!(matches!(scan_edge(&edge), QuantSite::DestPlayerAll { .. }));
+}
+
+#[test]
+fn scan_edge_dest_player_any() {
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        loc_cardset("Stock"),
+        groupowner_cardset("Hand", aggregate_owner(Quantifier::Any)),
+    );
+    assert!(matches!(scan_edge(&edge), QuantSite::DestPlayerAny { .. }));
+}
+
+#[test]
+fn scan_edge_src_cards_any() {
+    let edge = move_qty_edge(
+        Quantity::Quantifier {
+            quantifier: Quantifier::Any,
+        },
+        loc_cardset("Stock"),
+        loc_cardset("Discard"),
+    );
+    assert!(matches!(
+        scan_edge(&edge),
+        QuantSite::SrcCardsAnyOrRange { .. }
+    ));
+}
+
+#[test]
+fn scan_edge_src_cards_int_range() {
+    let range = IntRange {
+        start: (IntCompare::Ge, IntExpr::Literal { int: 1 }),
+        op_int: vec![(
+            IntRangeOperator::And,
+            IntCompare::Le,
+            IntExpr::Literal { int: 3 },
+        )],
+    };
+    let edge = move_qty_edge(
+        Quantity::IntRange { int_range: range },
+        loc_cardset("Stock"),
+        loc_cardset("Discard"),
+    );
+    assert!(matches!(
+        scan_edge(&edge),
+        QuantSite::SrcCardsAnyOrRange { .. }
+    ));
+}
+
+#[test]
+fn scan_edge_none_for_concrete_move() {
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        loc_cardset("Stock"),
+        loc_cardset("Discard"),
+    );
+    assert_eq!(scan_edge(&edge), QuantSite::None);
+}
+
+#[test]
+fn scan_edge_precedence_all_over_card_any() {
+    // `deal any from Stock to Hand of all` — both a dest-all site and a
+    // card-any site. scan_edge must report DestPlayerAll (the resume
+    // branch handles the card choice via card_site).
+    let edge = move_qty_edge(
+        Quantity::Quantifier {
+            quantifier: Quantifier::Any,
+        },
+        loc_cardset("Stock"),
+        groupowner_cardset("Hand", aggregate_owner(Quantifier::All)),
+    );
+    assert!(matches!(scan_edge(&edge), QuantSite::DestPlayerAll { .. }));
+    assert!(
+        card_site(&edge).is_some(),
+        "card_site must still detect the any-qty"
+    );
+}
+
+#[test]
+fn substitute_dest_player_replaces_owner() {
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        loc_cardset("Stock"),
+        groupowner_cardset("Hand", aggregate_owner(Quantifier::All)),
+    );
+    let repl = substitute_dest_player(&edge, "P2".to_string());
+    let mcs = move_cardset_ref(&repl).expect("edge still a Move");
+    match mcs_to_ref(mcs) {
+        CardSet::GroupOwner {
+            owner:
+                Owner::Player {
+                    player: PlayerExpr::Literal { name },
+                },
+            ..
+        } => assert_eq!(name, "P2"),
+        other => panic!("expected concrete Player owner, got {:?}", other),
+    }
+}
+
+#[test]
+fn substitute_cardset_memory_round_trips_through_eval_cardset() {
+    let edge = move_qty_edge(
+        Quantity::Quantifier {
+            quantifier: Quantifier::Any,
+        },
+        loc_cardset("Stock"),
+        loc_cardset("Discard"),
+    );
+    let repl = substitute_cardset_memory(&edge, &[5, 7]);
+    let mcs = move_cardset_ref(&repl).expect("edge still a Move");
+
+    let mut gd = GameData::new();
+    gd.memories.insert(
+        SYNTH_MEMORY_KEY.to_string(),
+        MemoryValue::CardSet(vec![5, 7]),
+    );
+    let (loc_idx, card_ids) =
+        Evaluator::eval_cardset(mcs_from_ref(mcs), &gd).expect("eval_cardset ok");
+    assert_eq!(card_ids, vec![5, 7]);
+    // No location holds card 5 in this empty GameData, so the fallback
+    // sentinel loc_idx 0 is returned (invariant I-14).
+    assert_eq!(loc_idx, 0);
+}
+
+#[test]
+fn build_dest_all_chain_length_and_targets() {
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        loc_cardset("Stock"),
+        groupowner_cardset("Hand", aggregate_owner(Quantifier::All)),
+    );
+    let mut next = u32::MAX - 1;
+    let chain = build_dest_all_chain(
+        &edge,
+        vec!["P1".into(), "P2".into(), "P3".into()],
+        &mut next,
+    )
+    .expect("chain builds");
+    assert_eq!(chain.len(), 3);
+    // Each per-player edge must target the next synth (or the original
+    // `edge.to` for the last).
+    assert_eq!(chain[1].0, chain[0].1.to, "edge 0 targets synth 1");
+    assert_eq!(chain[2].0, chain[1].1.to, "edge 1 targets synth 2");
+    assert_eq!(chain[2].1.to, edge.to, "last edge targets the original to");
+    // Each per-player edge has a concrete Player owner.
+    for (_, e) in &chain {
+        let mcs = move_cardset_ref(e).expect("per-player edge is a Move");
+        assert!(
+            matches!(
+                mcs_to_ref(mcs),
+                CardSet::GroupOwner {
+                    owner: Owner::Player { .. },
+                    ..
+                }
+            ),
+            "per-player edge must have a concrete Player owner"
+        );
+    }
+}
+
+#[test]
+fn build_dest_all_chain_empty_is_noop() {
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        loc_cardset("Stock"),
+        groupowner_cardset("Hand", aggregate_owner(Quantifier::All)),
+    );
+    let mut next = u32::MAX - 1;
+    let chain = build_dest_all_chain(&edge, vec![], &mut next).expect("empty chain ok");
+    assert!(chain.is_empty());
+}
+
+#[test]
+fn build_dest_all_chain_errors_over_cap() {
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        loc_cardset("Stock"),
+        groupowner_cardset("Hand", aggregate_owner(Quantifier::All)),
+    );
+    let mut next = u32::MAX - 1;
+    let names: Vec<String> = (0..=FANOUT_CAP).map(|i| format!("P{i}")).collect();
+    let result = build_dest_all_chain(&edge, names, &mut next);
+    assert!(result.is_err(), "fan-out > cap must error");
+}
+
+#[test]
+fn validate_int_range_accepts_in_range_count() {
+    // `>= 1 and <= 3`
+    let range = IntRange {
+        start: (IntCompare::Ge, IntExpr::Literal { int: 1 }),
+        op_int: vec![(
+            IntRangeOperator::And,
+            IntCompare::Le,
+            IntExpr::Literal { int: 3 },
+        )],
+    };
+    assert!(validate_int_range(&range, 1, 10).is_ok());
+    assert!(validate_int_range(&range, 2, 10).is_ok());
+    assert!(validate_int_range(&range, 3, 10).is_ok());
+}
+
+#[test]
+fn validate_int_range_rejects_out_of_range_count() {
+    let range = IntRange {
+        start: (IntCompare::Ge, IntExpr::Literal { int: 1 }),
+        op_int: vec![(
+            IntRangeOperator::And,
+            IntCompare::Le,
+            IntExpr::Literal { int: 3 },
+        )],
+    };
+    assert!(validate_int_range(&range, 0, 10).is_err(), "0 < 1");
+    assert!(validate_int_range(&range, 4, 10).is_err(), "4 > 3");
+    assert!(validate_int_range(&range, 100, 10).is_err(), "100 > 3");
+}
+
+#[test]
+fn setup_contains_any_false_for_create_player() {
+    let setup = SetUpRule::CreatePlayer {
+        players: vec!["P1".into()],
+    };
+    assert!(!setup_contains_any(&setup));
+}
+
+#[test]
+fn setup_contains_any_true_for_create_location_any() {
+    let setup = SetUpRule::CreateLocation {
+        locations: vec!["Hand".into()],
+        owner: aggregate_owner(Quantifier::Any),
+    };
+    assert!(setup_contains_any(&setup));
+}
+
+#[test]
+fn setup_contains_any_false_for_create_location_all() {
+    let setup = SetUpRule::CreateLocation {
+        locations: vec!["Hand".into()],
+        owner: aggregate_owner(Quantifier::All),
+    };
+    assert!(!setup_contains_any(&setup));
+}
+
+#[test]
+fn setup_contains_any_false_for_create_location_literal() {
+    let setup = SetUpRule::CreateLocation {
+        locations: vec!["Hand".into()],
+        owner: Owner::PlayerCollection {
+            player_collection: PlayerCollection::Literal {
+                players: vec![front_end::ast::PlayerExpr::Literal { name: "P1".into() }],
+            },
+        },
+    };
+    assert!(!setup_contains_any(&setup));
+}
+
+#[test]
+fn setup_contains_any_true_for_create_turnorder_any() {
+    let setup = SetUpRule::CreateTurnorder {
+        player_collection: PlayerCollection::Aggregate {
+            aggregate: AggregatePlayerCollection::Quantifier {
+                quantifier: Quantifier::Any,
+            },
+        },
+    };
+    assert!(setup_contains_any(&setup));
+}
+
+#[test]
+fn setup_contains_any_true_for_create_teams_any_member() {
+    let setup = SetUpRule::CreateTeams {
+        teams: vec![(
+            "T1".into(),
+            PlayerCollection::Aggregate {
+                aggregate: AggregatePlayerCollection::Quantifier {
+                    quantifier: Quantifier::Any,
+                },
+            },
+        )],
+    };
+    assert!(setup_contains_any(&setup));
+}
+
+#[test]
+fn setup_contains_any_true_for_create_memory_any_owner() {
+    let setup = SetUpRule::CreateMemory {
+        memory: "M".into(),
+        owner: aggregate_owner(Quantifier::Any),
+    };
+    assert!(setup_contains_any(&setup));
+}
