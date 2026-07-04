@@ -36,7 +36,7 @@ Payload
 Each of the leaves of this payload tree should be accounted for in the execute_edge function, which takes a Payload and modifies the game state accordingly.
 */
 
-use crate::game_data::{Card, Combo, GameData, Location, PointMap, Precedence, Team};
+use crate::game_data::{Combo, GameData, Location, PointMap, Precedence, Team};
 use front_end::ast::{
     ActionRule, GameRule, MoveType, OutOf, Quantity, ScoringRule, SetUpRule, Status,
 };
@@ -159,7 +159,7 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
     }
 }
 
-fn execute_action_rule(action: ActionRule, game_data: &mut GameData) {
+pub(crate) fn execute_action_rule(action: ActionRule, game_data: &mut GameData) {
     match action {
         ActionRule::FlipAction {
             card_set: _,
@@ -307,7 +307,8 @@ fn execute_action_rule(action: ActionRule, game_data: &mut GameData) {
 }
 
 /// not yet implemented
-fn execute_scoring_rule(scoring: ScoringRule, game_data: &mut GameData) {
+#[allow(unused_variables)]
+pub(crate) fn execute_scoring_rule(scoring: ScoringRule, game_data: &mut GameData) {
     match scoring {
         ScoringRule::ScoreRule { score_rule } => match score_rule {
             front_end::ast::ScoreRule::Score { int: _, players: _ } => {
@@ -327,7 +328,7 @@ fn execute_scoring_rule(scoring: ScoringRule, game_data: &mut GameData) {
     }
 }
 
-fn execute_move(move_type: MoveType, game_data: &mut GameData) {
+pub(crate) fn execute_move(move_type: MoveType, game_data: &mut GameData) {
     match move_type {
         MoveType::Deal { deal } => {
             let front_end::ast::DealMove::MoveCardSet { deal_cs } = deal;
@@ -372,7 +373,7 @@ fn execute_move(move_type: MoveType, game_data: &mut GameData) {
     }
 }
 
-fn execute_cardset_move(
+pub(crate) fn execute_cardset_move(
     from: front_end::ast::CardSet,
     quantity: Option<Quantity>,
     _status: Status,
@@ -403,9 +404,9 @@ fn execute_cardset_move(
         })
         .0;
 
-    if dest_loc_idx > game_data.locations.len() {
+    if dest_loc_idx >= game_data.locations.len() {
         panic!(
-            "execute_cardset_move: dest_loc_idx {} > locations.len() {} (cardset expr: {:?})",
+            "execute_cardset_move: dest_loc_idx {} >= locations.len() {} (cardset expr: {:?})",
             dest_loc_idx,
             game_data.locations.len(),
             to
@@ -413,10 +414,8 @@ fn execute_cardset_move(
     }
 
     // for each card to move
-    for i in 0..count.min(card_indices.len()) {
-        // later, once we have implemented card encryption, this won't work (since we won't be able to lookup cards by encrypted indices)
-        let card_id = card_indices[i];
-
+    let take = count.min(card_indices.len());
+    for &card_id in card_indices.iter().take(take) {
         // iterate through all locations in the game, and remove the card id from all of them -
         // later, a more elegant solution would be to resolve the card location somehow but this might just result in the same thing.
         for loc in game_data.locations.iter_mut() {
@@ -427,3 +426,7 @@ fn execute_cardset_move(
         game_data.locations[dest_loc_idx].cards.push(card_id);
     }
 }
+
+#[cfg(test)]
+#[path = "action_tests.rs"]
+mod tests;
