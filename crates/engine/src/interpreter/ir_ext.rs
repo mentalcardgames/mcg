@@ -123,3 +123,7 @@ pub(super) fn payload_label(payload: &LoweredPayLoad) -> String {
         Payload::Trigger => "trigger".to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "ir_ext_tests.rs"]
+mod tests;

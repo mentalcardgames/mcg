@@ -421,3 +421,7 @@ enum CardValidation {
     /// A fatal error (e.g. index out of range); the caller returns this verbatim.
     Fatal(StepResult),
 }
+
+#[cfg(test)]
+#[path = "quant_driver_tests.rs"]
+mod tests;

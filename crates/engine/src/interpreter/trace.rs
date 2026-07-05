@@ -100,3 +100,7 @@ impl std::fmt::Display for TraceEvent {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "trace_tests.rs"]
+mod tests;

@@ -76,3 +76,7 @@ pub enum InputType {
         prompt: String,
     },
 }
+
+#[cfg(test)]
+#[path = "types_tests.rs"]
+mod tests;

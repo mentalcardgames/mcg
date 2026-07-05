@@ -229,6 +229,8 @@ A compact glossary an agent should internalize before touching this crate:
 | [`api-usage.md`](./api-usage.md) | Golden path, manual interpreter driving, extension points | You are integrating the engine from outside. |
 | [`error-handling.md`](./error-handling.md) | Error channels, recoverable vs panic, silent no-ops, quantifier error strings | You are diagnosing a failure or adding a path. |
 | [`observability.md`](./observability.md) | `event_sender` callback, `trace_sender` callback, `MCG_TRACE_LOG` file, `debug` `DebugLevel` dumps | You need telemetry / debugging output. |
+| [`testing.md`](./testing.md) | Test layout, three-layer strategy, fixture conventions, extension guide, commands | You are writing or debugging a test for the engine. **Read before authoring any test.** |
+| [`test-plan-index.md`](./test-plan-index.md) | Hub for the five coverage-remediation plans (game-data, action, interpreter, query, controller/debug) | You are executing or reviewing the coverage-increase effort. |
 
 > The original monolithic source for this wiki is preserved at
 > `crates/engine/ARCHITECTURE.md` for archival diffing; this hub-and-spoke set is the
