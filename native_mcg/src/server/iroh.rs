@@ -65,7 +65,6 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
     println!("\x1b[1mNode ID:\x1b[0m {}", pk);
     println!("\x1b[1;32m===========================\x1b[0m\n");
 
-
     // Keep structured info for debug mode
     let addr = endpoint.addr();
     let relay_urls: Vec<_> = addr.relay_urls().collect();
@@ -589,7 +588,7 @@ where
     }
 }
 
-///Peer Message equivalent of process_iroh_line, not using the same dispatch_client_message 
+///Peer Message equivalent of process_iroh_line, not using the same dispatch_client_message
 ///function setup since it would cause an infinite send-receive loop of messages between peers
 async fn process_iroh_peer_line<W>(
     state: &AppState,

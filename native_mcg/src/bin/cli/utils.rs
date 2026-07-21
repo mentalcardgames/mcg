@@ -43,6 +43,10 @@ impl MessagePrinter {
             Backend2FrontendMsg::QrRes(inner) => {
                 println!("Qr Response: {:?}", inner);
             }
+            Backend2FrontendMsg::NewPlayer(name) => println!("New player: {}", name),
+            Backend2FrontendMsg::OurName(name) => println!("Our name: {}", name),
+            Backend2FrontendMsg::RemovePlayer(name) => println!("Removed player: {}", name),
+            Backend2FrontendMsg::PlayerReady(name, ready) => println!("Player {} ready: {}", name, ready),
         }
     }
 

@@ -1,4 +1,19 @@
 [workspace]
-members = ["frontend", "native_mcg", "shared", "crates/qr_comm"]
+members = [
+    "frontend",
+    "native_mcg",
+    "shared",
+    "crates/qr_comm",
+    "crates/front_end",
+    "crates/lsp_server",
+    "crates/code_gen",
+]
 default-members = ["native_mcg", "shared"]
 resolver = "2"
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
+authors = [
+    "Till Hoffmann",
+    "Jan Christian Cichosz",
+]

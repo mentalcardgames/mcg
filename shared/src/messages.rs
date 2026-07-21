@@ -30,7 +30,7 @@ pub struct GameStatePublic {
     pub min_raise: u32,
 }
 
-/// Messages that clients can send to the server
+/// Messages that the frontend sends to the backend
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Frontend2BackendMsg {
@@ -64,7 +64,7 @@ pub enum Frontend2BackendMsg {
     ReadyUpdate(bool),
 }
 
-/// Messages that the server can send to clients
+/// Messages that the backend sends to the frontend
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Backend2FrontendMsg {
@@ -80,7 +80,7 @@ pub enum Backend2FrontendMsg {
     PlayerReady(String, bool),
 }
 
-//Messages two peers send between eachother
+/// Messages that are send between two peers
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Peer2PeerMsg {

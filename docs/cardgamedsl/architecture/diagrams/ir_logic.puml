@@ -1,0 +1,50 @@
+@startuml
+title IR Builder: AST to FSM Transformation
+
+package "IrBuilder State" #LightBlue {
+    [state_counter] as SC
+    [stage_exits: Vec<u32>] as Stack
+    [stage_to_exit: HashMap] as Map
+    [fsm: Ir<SpannedPayload>] as FSM
+}
+
+package "Transformation Logic" {
+    [build_flows] as Flows
+    [build_flow] as Flow
+    [build_seq_stage] as Seq
+    [build_rule] as Rule
+    
+    Flows --> Flow : "iterates components"
+    Flow --> Seq : "is SeqStage"
+    Flow --> Rule : "is GameRule"
+    
+    note right of Rule
+      Emits GameFlowChange:
+      - EndCurrentStage
+      - EndStage
+      - EndGame
+    end note
+}
+
+node "FSM Primitives" {
+    [new_state()] --> SC : "inc"
+    [new_edge()] --> FSM : "push Edge"
+    [add_state()] --> FSM : "insert Node"
+}
+
+' Logic Flow
+Seq --> Stack : "push exit_id"
+Seq --> Map : "map stage_id -> exit"
+Rule --> FSM : "link entry to exit_id"
+
+database "Diagnostics" {
+    [unreachable()] --> [GameFlowError]
+    [diagnostics()] --> [GameFlowError] : "checks is_connected()"
+}
+
+legend right
+  **SpannedPayload** links FSM edges 
+  back to AST Source Spans for 
+  LSP Diagnostics.
+end legend
+@enduml

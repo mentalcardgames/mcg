@@ -127,10 +127,10 @@ pub mod my_new_screen;
 pub use my_new_screen::MyNewScreen;
 
 // inside the `regs` array in ScreenRegistry::new(), add another entry:
-RegisteredScreen {
+struct RegisteredScreen {
     meta: MyNewScreen::metadata(),
     factory: MyNewScreen::create,
-},
+}
 ```
 
 3) Special-case typed screens (optional)
@@ -147,17 +147,27 @@ pub struct App {
 }
 
 // initialize in App::new()
-Self {
-    // ...
-    my_new_screen: screens::MyNewScreen::new(),
-    // ...
+impl App {
+  pub fn new() -> Self {
+    Self {
+      // ...
+      my_new_screen: screens::MyNewScreen::new(),
+      // ...
+    }
+  }
 }
 
 // render special-case in the CentralPanel before the registry path handling:
-if self.current_screen_path == "/my-new-screen" {
-    self.my_new_screen.ui(&mut app_interface, ui, frame);
-} else {
-    // existing registry-based creation and rendering
+impl eframe::App for App {
+  fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+    // ...
+    if self.current_screen_path == "/my-new-screen" {
+      self.my_new_screen.ui(&mut app_interface, ui, frame);
+    } else {
+      // existing registry-based creation and rendering
+    }
+    // ...
+  }
 }
 ```
 

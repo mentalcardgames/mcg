@@ -44,7 +44,7 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
     {
         let state_clone = state.clone();
         tokio::spawn(async move {
-            if let Err(e) = crate::backend::iroh::spawn_iroh_listener(state_clone).await {
+            if let Err(e) = crate::server::iroh::spawn_iroh_listener(state_clone).await {
                 eprintln!("Iroh listener failed: {}", e);
             }
         });
@@ -58,7 +58,7 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
         });
     }
 
-    let display_addr = if addr.ip().to_string() == "127.0.0.1" {
+    let display_addr = if addr.ip().is_loopback() {
         format!("localhost:{}", addr.port())
     } else {
         addr.to_string()
@@ -97,7 +97,7 @@ async fn serve_index() -> impl IntoResponse {
     }
 }
 
-/// SPA fallback handler - serves index.html for client-side routing
+/// Single Page Application (SPA) fallback handler - serves index.html for client-side routing
 async fn spa_handler(uri: Uri) -> impl IntoResponse {
     let path = uri.path();
 
@@ -112,13 +112,5 @@ async fn spa_handler(uri: Uri) -> impl IntoResponse {
     }
 
     // For all other routes, serve index.html to enable client-side routing
-    match tokio::fs::read_to_string("index.html").await {
-        Ok(content) => (
-            axum::http::StatusCode::OK,
-            [("content-type", "text/html")],
-            content,
-        )
-            .into_response(),
-        Err(_) => (axum::http::StatusCode::NOT_FOUND, "index.html not found").into_response(),
-    }
+    serve_index().await.into_response()
 }

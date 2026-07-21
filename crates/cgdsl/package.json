@@ -1,0 +1,171 @@
+{
+  "name": "cgdsl",
+  "displayName": "CGDSL",
+  "description": "Support for cgdsl (Card Game DSL)",
+  "version": "0.0.5",
+  "publisher": "till-h",
+  "icon": "images/icon.png",
+  "author": {
+    "name": "Till Hoffmann",
+    "email": "rabbit.zootopia@gmail.com"
+  },
+  "license": "MIT OR Apache-2.0",
+  "engines": {
+    "vscode": "^1.108.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "configurationDefaults": {
+    "[cgdsl]": {
+      "editor.semanticHighlighting.enabled": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mentalcardgames/cardgamedsl.git"
+  },
+  "files": [
+    "out/**/*.js",
+    "language-configuration.json",
+    "icons/*.svg",
+    "images/icon.png",
+    "bin/**/**",
+    "themes/**/*.json",
+    "syntaxes/*.json",
+    "LICENSE",
+    "README.md"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "cgdsl",
+        "aliases": [
+          "CGDSL",
+          "cgdsl"
+        ],
+        "extensions": [
+          ".cgdsl"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/cgdsl-light-icon.svg",
+          "dark": "./icons/cgdsl-dark-icon.svg"
+        }
+      }
+    ],
+    "themes": [
+      {
+        "label": "CGDSL Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/cgdsl-dark.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "cgdsl.runFile",
+        "title": "Run CGDSL File",
+        "icon": "$(play)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "cgdsl.runFile",
+          "when": "editorLangId == cgdsl",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "grammars": [
+      {
+        "language": "cgdsl",
+        "scopeName": "source.cgdsl",
+        "path": "./syntaxes/cgdsl.tmLanguage.json"
+      }
+    ],
+    "semanticTokenTypes": [
+      {
+        "id": "player",
+        "description": "Game player entity"
+      },
+      {
+        "id": "team",
+        "description": "Team identifier"
+      },
+      {
+        "id": "location",
+        "description": "Map coordinate"
+      },
+      {
+        "id": "precedence",
+        "description": "Priority level"
+      },
+      {
+        "id": "pointmap",
+        "description": "Point mapping"
+      },
+      {
+        "id": "combo",
+        "description": "Combo sequence"
+      },
+      {
+        "id": "key",
+        "description": "Map key"
+      },
+      {
+        "id": "value",
+        "description": "Map value"
+      },
+      {
+        "id": "memory",
+        "description": "Memory address"
+      },
+      {
+        "id": "token",
+        "description": "Generic token"
+      },
+      {
+        "id": "stage",
+        "description": "Game stage"
+      },
+      {
+        "id": "notype",
+        "description": "Fallback type"
+      }
+    ]
+  },
+  "scripts": {
+    "generate-grammar": "npx ts-node ./src/generate-grammar.ts",
+    "watch": "npm run generate-grammar && tsc -watch -p ./",
+    "build-lsp-win": "cargo zigbuild --release --target x86_64-pc-windows-gnu",
+    "build-lsp-linux": "cargo zigbuild --release --target x86_64-unknown-linux-gnu",
+    "build-lsp-mac": "cargo zigbuild --release --target universal2-apple-darwin --manifest-path ../Cargo.toml",
+    "copy-bins": "mkdir -p bin/win32 bin/linux bin/darwin && cp ../target/x86_64-pc-windows-gnu/release/lsp_server.exe ./bin/win32/ && cp ../target/x86_64-unknown-linux-gnu/release/lsp_server ./bin/linux/ && cp ../target/universal2-apple-darwin/release/lsp_server ./bin/darwin/",
+    "compile": "npm run build-all-lsp && npx tsc -p ./",
+    "build-all-lsp": "npm run build-lsp-win && npm run build-lsp-linux && npm run build-lsp-mac && npm run copy-bins",
+    "bundle": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "vscode:prepublish": "npm run generate-grammar && npm run build-all-lsp && npm run bundle"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.19.13",
+    "@types/vscode": "^1.108.0",
+    "@typescript-eslint/eslint-plugin": "^8.39.0",
+    "@typescript-eslint/parser": "^8.39.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.27.3",
+    "eslint": "^9.32.0",
+    "mocha": "^11.3.0",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "activationEvents": [
+    "onLanguage:cgdsl",
+    "onCommand:cgdsl.runFile"
+  ]
+}

@@ -1,0 +1,51 @@
+@startuml
+title Language Project Architecture
+
+package "VS Code Extension" {
+    [Extension UI] --> [LSP Client] : "Triggers 'Run'"
+    [LSP Client] <--> [tower-lsp] : "JSON-RPC"
+}
+
+package "Rust Language Server (LSP)" {
+    [tower-lsp] --> [LSP Handler]
+    
+    package "front_end Module" {
+        [LSP Handler] --> [Pest Parser] : "Raw Source"
+        
+        node "AST Phase" {
+            [Pest Parser] --> [AST Construction]
+            [AST Construction] --> [AST Validation]
+        }
+        
+        node "IR Phase" {
+            [AST Validation] --> [FSM Transformer]
+            [FSM Transformer] --> [IR Validation]
+        }
+        
+        node "Export Logic" {
+            [IR Validation] --> [JSON Serializer]
+            [IR Validation] --> [Dot Generator]
+        }
+    }
+}
+
+cloud "Workspace Root" {
+    folder "out/" {
+        [JSON Serializer] ---> [output.json] : "Writes to"
+        [Dot Generator] ---> [output.dot] : "Writes to"
+        [output.dot] ---> [output.png] : "Spawns 'dot' process"
+    }
+}
+
+package "External / Backend" {
+    [output.json] ..> [Backend Consumer] : "Reads for execution"
+}
+
+note right of [LSP Handler]
+  The handler coordinates 
+  file diagnostics and 
+  custom "Execute Command" 
+  requests from VS Code.
+end note
+
+@enduml

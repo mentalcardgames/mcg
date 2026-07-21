@@ -44,7 +44,7 @@ The core interaction logic is built around a set of traits and structs that defi
     -   **Features**: Supports `Stack` (cards on top of each other) and `Horizontal` (cards side-by-side) layouts. Handles the drag-and-drop logic for cards within or between fields.
 
 -   **`SimpleCard`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
-    -   A implementation of `CardEncoding` that enumerate cards by a number and support masking and unmasking operations.
+    -   An implementation of `CardEncoding` that enumerate cards by a number and support masking and unmasking operations.
 
 -   **`DirectoryCardType`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
     -   A full implementation of `CardConfig` used for `SimpleCard`.
@@ -110,7 +110,7 @@ ws.connect(
 
 #### Receiving Messages
 
-Currently you need to have the `WebSocketConnection` as a field in your screen.
+Currently, you need to have the `WebSocketConnection` as a field in your screen.
 
 1.  **Callback**: The WebSocket entry receives a message.
 2.  **Queueing**: The message is pushed to a thread-safe queue.
@@ -194,7 +194,18 @@ The project uses the `QrScannerPopup` struct (in `frontend/src/qr_scanner.rs`) t
     }
     
     // In your ui() method
-    self.scanner.button_and_popup(ui, ctx, &mut self.result, &mut self.raw_result);
+    impl ScreenWidget for MyScreen {
+        fn ui(
+            &mut self,
+            _app_interface: &mut AppInterface,
+            ui: &mut egui::Ui,
+            _frame: &mut eframe::Frame,
+        ) {
+            // ...
+            self.scanner.button_and_popup(ui, ctx, &mut self.result, &mut self.raw_result);
+            // ...
+        }
+    }
     ```
     This single call renders the "Scan QR" button and handles the popup overlay, camera permissions, and decoding logic.
 

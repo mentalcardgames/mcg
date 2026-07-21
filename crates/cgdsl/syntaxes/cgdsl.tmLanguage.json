@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json.schemastore.org/tmlanguage.json",
+  "name": "cgdsl",
+  "scopeName": "source.cgdsl",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#punctuation"
+    },
+    {
+      "include": "#control"
+    },
+    {
+      "include": "#actions"
+    },
+    {
+      "include": "#helper"
+    },
+    {
+      "include": "#filter"
+    },
+    {
+      "include": "#quantifier"
+    },
+    {
+      "include": "#operation"
+    },
+    {
+      "include": "#positional"
+    },
+    {
+      "include": "#extrema"
+    },
+    {
+      "include": "#status"
+    },
+    {
+      "include": "#creation"
+    },
+    {
+      "include": "#runtime"
+    },
+    {
+      "include": "#ints"
+    },
+    {
+      "include": "#strings"
+    }
+  ],
+  "repository": {
+    "control": {
+      "patterns": [
+        {
+          "name": "keyword.control.flow.cgdsl",
+          "match": "\\b(stage|if|optional|choose|case|conditional|else|trigger)\\b"
+        }
+      ]
+    },
+    "actions": {
+      "patterns": [
+        {
+          "name": "keyword.control.action.cgdsl",
+          "match": "\\b(cycle|move|deal|demand|exchange|place|flip|token|reset|set|shuffle|bid|end stage|end game|end turn|score|winner)\\b"
+        }
+      ]
+    },
+    "status": {
+      "patterns": [
+        {
+          "name": "keyword.control.state.cgdsl",
+          "match": "\\b(face down|face up|private)\\b"
+        }
+      ]
+    },
+    "creation": {
+      "patterns": [
+        {
+          "name": "keyword.control.create.cgdsl",
+          "match": "\\b(card|combo|create|location|memory|player|points|precedence|team|turnorder)\\b"
+        }
+      ]
+    },
+    "helper": {
+      "patterns": [
+        {
+          "name": "keyword.other.helper.cgdsl",
+          "match": "\\b(for|is|of|in|on|as|to|using|with|where|until|from|at|cards|out|owner|size|fail|successful|table|times)\\b"
+        }
+      ]
+    },
+    "filter": {
+      "patterns": [
+        {
+          "name": "entity.name.function.filter.cgdsl",
+          "match": "\\b(adjacent|distinct|empty|higher|lower|same)\\b"
+        }
+      ]
+    },
+    "quantifier": {
+      "patterns": [
+        {
+          "name": "keyword.operator.quantifier.cgdsl",
+          "match": "\\b(all|any)\\b"
+        }
+      ]
+    },
+    "operation": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.cgdsl",
+          "match": "\\b(and|or|not|random|sum)\\b"
+        }
+      ]
+    },
+    "positional": {
+      "patterns": [
+        {
+          "name": "support.function.query.cgdsl",
+          "match": "\\b(bottom|top)\\b"
+        }
+      ]
+    },
+    "extrema": {
+      "patterns": [
+        {
+          "name": "support.function.query.cgdsl",
+          "match": "\\b(highest|lowest|max|min)\\b"
+        }
+      ]
+    },
+    "runtime": {
+      "patterns": [
+        {
+          "name": "support.type.runtime.cgdsl",
+          "match": "\\b(competitor|current|next|other|others|playersin|playersout|playroundcounter|position|previous|stageroundcounter|teams)\\b"
+        }
+      ]
+    },
+    "ints": {
+      "patterns": [
+        {
+          "name": "constant.numeric.integer.cgdsl",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.cgdsl",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.cgdsl",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cgdsl",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.cgdsl",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.cgdsl"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.cgdsl"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

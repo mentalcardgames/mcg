@@ -23,6 +23,15 @@ impl Matrix {
         self.sweep_downwards();
         self.sweep_upwards();
     }
+    fn normalize_row_by_column(&mut self, row_idx: usize, column_idx: usize) {
+        if let Some(denominator) = self.inner[row_idx].factors.get(column_idx) {
+            if denominator != GaloisField2p4::ONE {
+                self.inner[row_idx] /= denominator;
+            } else if denominator == GaloisField2p4::ZERO {
+                unreachable!("This shouldn't happen!");
+            }
+        }
+    }
     /// Eliminate the lower left triangle
     pub fn sweep_downwards(&mut self) {
         let mut pivot_counter = 0;
@@ -33,13 +42,7 @@ impl Matrix {
             }
             if let Some(pivot_row_idx) = self.find_pivot(column_idx, pivot_counter) {
                 // Normalize the pivot to get identity
-                if let Some(denominator) = self.inner[pivot_row_idx].factors.get(column_idx) {
-                    if denominator != GaloisField2p4::ONE {
-                        self.inner[pivot_row_idx] /= denominator;
-                    } else if denominator == GaloisField2p4::ZERO {
-                        unreachable!("This shouldn't happen!");
-                    }
-                }
+                self.normalize_row_by_column(pivot_row_idx, column_idx);
                 // Subtract pivot row from all rows that are below it
                 for row in pivot_row_idx + 1..self.inner.len() {
                     if let Some(factor) = self.inner[row].factors.get(column_idx) {
@@ -72,13 +75,7 @@ impl Matrix {
             }
             if let Some(pivot_row_idx) = self.find_pivot(column_idx, pivot_counter) {
                 // Normalize the pivot to get identity
-                if let Some(denominator) = self.inner[pivot_row_idx].factors.get(column_idx) {
-                    if denominator != GaloisField2p4::ONE {
-                        self.inner[pivot_row_idx] /= denominator;
-                    } else if denominator == GaloisField2p4::ZERO {
-                        unreachable!("This shouldn't happen!");
-                    }
-                }
+                self.normalize_row_by_column(pivot_row_idx, column_idx);
                 // Only subtract pivot row from last row
                 let row = self.inner.len() - 1;
                 if let Some(factor) = self.inner[row].factors.get(column_idx) {
@@ -109,15 +106,8 @@ impl Matrix {
             }
             if let Some(pivot_row_idx) = self.find_pivot(column_idx, pivot_counter) {
                 pivot_counter -= 1;
-
-                if let Some(pivot) = self.inner[pivot_row_idx].factors.get(column_idx) {
-                    if pivot != GaloisField2p4::ONE {
-                        // In case the pivot is not one we make it
-                        self.inner[pivot_row_idx] /= pivot;
-                    } else if pivot == GaloisField2p4::ZERO {
-                        unreachable!("This shouldn't happen!");
-                    }
-                }
+                // Normalize the pivot to get identity
+                self.normalize_row_by_column(pivot_row_idx, column_idx);
                 // Subtract pivot row from all rows that are above it
                 for row_idx in 0..pivot_row_idx {
                     if let Some(factor) = self.inner[row_idx].factors.get(column_idx)

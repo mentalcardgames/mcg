@@ -1,4 +1,4 @@
-﻿use mcg_shared::{Frontend2BackendMsg, PlayerConfig, Backend2FrontendMsg};
+use mcg_shared::{Frontend2BackendMsg, PlayerConfig, Backend2FrontendMsg};
 use std::rc::Rc;
 use std::collections::HashMap;
 use std::cell::RefCell;
@@ -19,6 +19,7 @@ pub trait MessageSender {
 pub struct WebSocketConnection {
     ws: Option<WebSocket>,
     _onopen: Option<Closure<dyn FnMut(Event)>>,
+    // Store closure handles to prevent memory leaks
     _onmessage: Option<Closure<dyn FnMut(MessageEvent)>>,
     _onerror: Option<Closure<dyn FnMut(Event)>>,
     _onclose: Option<Closure<dyn FnMut(CloseEvent)>>,
@@ -30,7 +31,7 @@ pub struct WebSocketConnection {
 
     /// The key of the currently active listener; only this listener receives messages.
     active_listener: Rc<RefCell<Option<String>>>,
-// new fields active_error_listener and active_close_listener
+    // new fields active_error_listener and active_close_listener
     active_error_listener: Rc<RefCell<Option<String>>>,
     active_close_listener: Rc<RefCell<Option<String>>>,
 }
@@ -71,6 +72,7 @@ impl WebSocketConnection {
         let ws_url = format!("ws://{}/ws", server_address);
         match WebSocket::new(&ws_url) {
             Ok(ws) => {
+                // Prepare the Subscribe and initial NewGame messages
                 let subscribe_json = match serde_json::to_string(&Frontend2BackendMsg::Subscribe) {
                     Ok(s) => s,
                     Err(e) => {

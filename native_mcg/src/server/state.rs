@@ -349,7 +349,6 @@ async fn advance_to_next_hand(state: &AppState) -> mcg_shared::Backend2FrontendM
 async fn create_game_session(
     state: &AppState,
     players: Vec<mcg_shared::PlayerConfig>,
-
 ) -> mcg_shared::Backend2FrontendMsg {
     match create_new_game(state, players).await {
         Ok(()) => {
@@ -406,8 +405,8 @@ async fn handle_get_ip() -> Option<String> {
 
 /// Unified handler for Frontend2BackendMsg coming from any transport.
 ///
-// Centralizes validation, state mutation, and side-effects (broadcasting and
-// bot-driving). Returns a Backend2FrontendMsg that the originating transport should send
+/// Centralizes validation, state mutation, and side-effects (broadcasting and
+/// bot-driving). Returns a Backend2FrontendMsg that the originating transport should send
 /// back to the client. Transports should delegate to this function rather than
 /// duplicating handling logic to ensure consistent behavior across transports.
 pub async fn dispatch_client_message(
