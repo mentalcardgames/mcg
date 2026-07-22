@@ -31,7 +31,7 @@ C4Container
     Container(backend, "Backend (Native)", "Rust, Axum, Tokio, Iroh", "Full Node: Game logic, Cryptography, P2P Networking (Iroh/HTTP).")
     ContainerDb(shared, "Shared Lib", "Rust", "Comm Protocol, Game Types.")
     
-    Rel(frontend, backend, "WebSockets", "ClientMsg / ServerMsg")
+    Rel(frontend, backend, "WebSockets", "Frontend2BackendMsg / Backend2FrontendMsg")
     Rel(backend, backend, "Iroh / P2P", "Syncs state with other nodes")
     
     UpdateRelStyle(frontend, backend, "blue", "solid")
@@ -47,7 +47,7 @@ As described in the project report, the system is designed around a **Split Node
 -   **Native Power**: The Backend handles all heavy lifting: game engine, cryptography (ZK proofs), and P2P networking. This bypasses WASM limitations (sandboxing, lack of threading/sockets).
 
 ### 2. P2P & Transports
-The system supports multiple transport layers for the same protocol (`ClientMsg`/`ServerMsg`):
+The system supports multiple transport layers for the same protocol (`Frontend2BackendMsg`/`Backend2FrontendMsg`):
 -   **WebSockets**: For communication between a Frontend and its local Backend.
 -   **Iroh**: A P2P library used for node-to-node communication (NAT traversal, hole punching).
 -   **QR Codes**: An alternative transport for exchanging data (and potentially bootstrapping connections) in air-gapped or localized settings.
@@ -71,8 +71,8 @@ The backend is the source of truth. It handles:
 ### 3. Shared (`shared/`)
 Contains the "business logic" and "domain objects":
 -   `Game`, `Player`, `Card`: Core poker logic.
--   `ClientMsg`, `ServerMsg`: Serialization contracts.
--   **Terminology Note**: In this P2P system, "Client" and "Server" are roles, not fixed identities. A node acts as a **Server** when receiving a connection/request, and as a **Client** when initiating one. The message enums (`ClientMsg`/`ServerMsg`) reflect the *direction* of data, not the type of the device.
+-   `Frontend2BackendMsg`, `Backend2FrontendMsg`: Serialization contracts.
+-   **Terminology Note**: In this P2P system, "Client" and "Server" are roles, not fixed identities. A node acts as a **Server** when receiving a connection/request, and as a **Client** when initiating one. The message enums (`Frontend2BackendMsg`/`Backend2FrontendMsg`) reflect the *direction* of data, not the type of the device.
 
 ### 4. QR Comm (`crates/qr_comm/`)
 Implements the protocol for transmitting data over a series of QR codes.
@@ -82,8 +82,8 @@ Implements the protocol for transmitting data over a series of QR codes.
 ## Data Flow (Game Loop)
 
 1.  **User Action**: User clicks "Fold" on Frontend.
-2.  **Message**: Frontend sends `ClientMsg::Action { player_id, action: Fold }` to Backend.
+2.  **Message**: Frontend sends `Frontend2BackendMsg::Action { player_id, action: Fold }` to Backend.
 3.  **Validation**: Backend validates turn order and legality of move in `state.rs`.
 4.  **Update**: Backend calls `Game::apply_action`, updating the authoritative state.
-5.  **Broadcast**: Backend broadcasts `ServerMsg::State(GameStatePublic)` to *all* connected clients.
+5.  **Broadcast**: Backend broadcasts `Backend2FrontendMsg::State(GameStatePublic)` to *all* connected clients.
 6.  **Render**: Frontend receives the new state and re-renders the UI.

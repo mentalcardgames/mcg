@@ -1,4 +1,4 @@
-set shell := ["zsh", "-uc"]
+set shell := ["bash", "-c"]
 
 # Ensure `wasm-pack` exists in PATH, aborts if missing
 wasm_pack := require("wasm-pack")

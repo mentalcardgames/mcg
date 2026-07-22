@@ -6,6 +6,7 @@ use crate::cards::Card;
 use crate::game::PlayerAction;
 use crate::game::{ActionEvent, Stage};
 use crate::player::{PlayerConfig, PlayerId, PlayerPublic};
+use std::collections::HashMap;
 
 /// Complete public view of the game state
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -51,6 +52,16 @@ pub enum Frontend2BackendMsg {
     PushState {
         state: serde_json::Value,
     },
+    QrValue(String),
+    GetTicket,
+    GetIP,
+    PlayerCount(usize),
+    LobbyOpen(String),
+    PlayerName(String),
+    GetOurName,
+    GetPlayers,
+    Disconnect,
+    ReadyUpdate(bool),
 }
 
 /// Messages that the backend sends to the frontend
@@ -60,7 +71,13 @@ pub enum Backend2FrontendMsg {
     State(GameStatePublic),
     Error(String),
     Pong,
+    TicketValue(String),
+    IPValue(String),
     QrRes(Box<[u8]>),
+    NewPlayer(String),
+    OurName(String),
+    RemovePlayer(String),
+    PlayerReady(String, bool),
 }
 
 /// Messages that are send between two peers
@@ -69,5 +86,13 @@ pub enum Backend2FrontendMsg {
 pub enum Peer2PeerMsg {
     Ping,
     Pong,
+    Connect(String, Option<String>), // Send our name and our endpointticket (if we have one) to the peer we're connecting to
+    Disconnect(String), // Send our name to the peer we're disconnecting from (so they can remove us from their peer list)
+    Reject(String), // Send a reason for rejecting the connection to the peer we're rejecting
     Payload(String),
+    LobbyAccept(usize, String), // Number of max players in the lobby, gametype, and trigger to open lobby on the receiving peer
+    Peers(HashMap<String, (String, String)>), // EndpointId (as string) -> Peer's Name and Ticket
+    NewName(String), // New name for the peer (after a rename due to being a duplicated name)
+    PeerReady(String, bool), // Peer name and ready status
+    RequestReady, // Request the peer's ready status for the anti-race condition redundancy code when we scan a QR code
 }

@@ -1,4 +1,5 @@
 use eframe::Frame;
+use crate::game::websocket::WebSocketConnection;
 
 pub mod articles_screen;
 pub mod example_screen;
@@ -6,6 +7,8 @@ pub mod game;
 pub mod game_setup_screen;
 pub mod main_menu;
 pub mod pairing_screen;
+pub mod lobby_setup;
+pub mod mcg_lobby;
 
 pub mod poker;
 pub mod qr_test;
@@ -23,10 +26,14 @@ pub use main_menu::MainMenu;
 pub use pairing_screen::PairingScreen;
 pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
+pub use lobby_setup::LobbySelectionScreen;
+pub use mcg_lobby::LobbyScreen;
 
 pub struct AppInterface<'a> {
     pub events: &'a mut Vec<crate::game::AppEvent>,
     pub app_state: &'a mut crate::store::ClientState,
+
+    pub ws: &'a mut WebSocketConnection,
 }
 impl<'a> AppInterface<'a> {
     pub fn queue_event(&mut self, event: crate::game::AppEvent) {
@@ -40,6 +47,8 @@ impl<'a> AppInterface<'a> {
 /// Object-safe runtime trait for drawing a screen
 pub trait ScreenWidget: Downcast {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, frame: &mut Frame);
+    /// Called when the screen is about to be exited. Implement to clean up resources.
+    fn on_exit(&mut self, _app_interface: &mut AppInterface) {}
 }
 impl_downcast!(ScreenWidget);
 
@@ -108,7 +117,8 @@ impl ScreenRegistry {
         reg.register::<QrTestReceive>();
         reg.register::<PokerOnlineScreen>();
         reg.register::<ExampleScreen>();
-
+        reg.register::<LobbySelectionScreen>();
+        reg.register::<LobbyScreen>();
         reg
     }
 

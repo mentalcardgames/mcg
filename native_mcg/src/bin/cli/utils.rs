@@ -38,9 +38,15 @@ impl MessagePrinter {
             }
             Backend2FrontendMsg::Error(e) => eprintln!("Server error: {}", e),
             Backend2FrontendMsg::Pong => println!("Received pong"),
+            Backend2FrontendMsg::TicketValue(ticket) => println!("Received ticket value:{}", ticket),
+            Backend2FrontendMsg::IPValue(ip) => println!("Received IP value: {}", ip),
             Backend2FrontendMsg::QrRes(inner) => {
                 println!("Qr Response: {:?}", inner);
             }
+            Backend2FrontendMsg::NewPlayer(name) => println!("New player: {}", name),
+            Backend2FrontendMsg::OurName(name) => println!("Our name: {}", name),
+            Backend2FrontendMsg::RemovePlayer(name) => println!("Removed player: {}", name),
+            Backend2FrontendMsg::PlayerReady(name, ready) => println!("Player {} ready: {}", name, ready),
         }
     }
 

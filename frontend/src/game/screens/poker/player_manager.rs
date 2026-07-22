@@ -27,26 +27,11 @@ impl PlayerManager {
             players: vec![
                 PlayerConfig {
                     id: mcg_shared::PlayerId(0),
-                    name: "You".to_string(),
+                    name: " ".to_string(),
                     is_bot: false,
                 },
-                PlayerConfig {
-                    id: mcg_shared::PlayerId(1),
-                    name: "Bot 1".to_string(),
-                    is_bot: true,
-                },
-                PlayerConfig {
-                    id: mcg_shared::PlayerId(2),
-                    name: "Bot 2".to_string(),
-                    is_bot: true,
-                },
-                PlayerConfig {
-                    id: mcg_shared::PlayerId(3),
-                    name: "Bot 3".to_string(),
-                    is_bot: true,
-                },
             ],
-            next_player_id: 4,
+            next_player_id: 1,
             new_player_name: String::new(),
             preferred_player: PlayerId(0),
             renaming_player_id: None,
@@ -192,5 +177,34 @@ impl PlayerManager {
                 .unwrap_or_default()
                 .as_secs()
         )
+    }
+    /// Logic for when we get a remote player connected to our lobby
+    pub fn handle_named_player(&mut self, player_name: String){
+        let mut name = player_name.clone();
+        if self.get_existing_names().contains(name.as_str()){
+            for i in 2..100 {
+                let candidate = format!("{} {}", player_name, i);
+                if !self.get_existing_names().contains(candidate.as_str()) {
+                    name = candidate.clone();
+                    break;
+                }
+            }
+        }
+        self.players.push(PlayerConfig {
+            id: mcg_shared::PlayerId(self.next_player_id),
+            name: name,
+            is_bot: false,
+        });
+        self.next_player_id += 1;
+    }
+    pub fn rename_player(&mut self, player_id: PlayerId, new_name: String){
+        let trimmed = new_name.trim();
+
+        if let Some(player) = self.players.iter_mut().find(|p| p.id == player_id) {
+            player.name = trimmed.to_string();
+        }
+    }
+    pub fn remove_player(&mut self, player_name: &str){
+        self.players.retain(|p| p.name != player_name);
     }
 }

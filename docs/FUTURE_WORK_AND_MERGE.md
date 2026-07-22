@@ -38,7 +38,7 @@ The following areas have been identified as key next steps to transition from th
 -   Integrate these proofs into the `native_mcg` backend logic.
 
 ### 4. Security & Trust
-**Problem**: Nodes accept any `ClientMsg` from any source. 
+**Problem**: Nodes accept any `Frontend2BackendMsg` from any source. 
 **Solution**:
 -   **Message Signing**: All messages must be signed by the player's private key.
 -   **Emoji Hash**: Wire up the existing UI to allow users to visually verify public keys (Man-in-the-Middle protection).

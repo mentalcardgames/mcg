@@ -28,6 +28,14 @@ pub struct Settings {
     pub dark_mode: bool,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy, Default)]
+pub enum GameType {
+    #[default]
+    Poker,
+    Blackjack,
+    // Add more game types here
+}
+
 /// Application UI/Screen manager
 pub struct App {
     // current route path ("/", "/game-setup", etc.)
@@ -44,6 +52,8 @@ pub struct App {
 
     // Router for URL handling
     router: Option<Router>,
+
+    ws_connection: websocket::WebSocketConnection,
 }
 
 impl Default for App {
@@ -82,6 +92,7 @@ impl App {
             },
             app_state,
             router,
+            ws_connection: websocket::WebSocketConnection::new(),
         }
     }
 
@@ -141,7 +152,13 @@ impl App {
                         |ui| {
                             ui.add_space(MARGIN_SM);
                             if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
-                                events.push(AppEvent::ChangeRoute("/".to_string()));
+                                if self.current_screen_path.starts_with("/lobbyselect/") {
+                                    events.push(AppEvent::ChangeRoute("/lobbyselect".to_string()));
+                                }
+                                else{
+                                    events.push(AppEvent::ChangeRoute("/".to_string()));
+                                }
+
                             }
                         },
                     );
@@ -252,6 +269,7 @@ impl eframe::App for App {
         let mut app_interface = AppInterface {
             events: &mut events,
             app_state: &mut self.app_state,
+            ws: &mut self.ws_connection,
         };
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -277,6 +295,15 @@ impl eframe::App for App {
         for event in events {
             match event {
                 AppEvent::ChangeRoute(path) => {
+                    // Call on_exit for the current screen before changing routes
+                    if let Some(mut screen) = self.screens.remove(&self.current_screen_path) {
+                        let mut temp_interface = AppInterface {
+                            events: &mut Vec::new(),
+                            app_state: &mut self.app_state,
+                            ws: &mut self.ws_connection,
+                        };
+                        screen.on_exit(&mut temp_interface);
+                    }
                     self.change_route(&path);
                 }
                 AppEvent::StartGame(config) => {

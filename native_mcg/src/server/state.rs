@@ -15,6 +15,7 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
+use std::collections::HashMap;
 
 pub const CHANNEL_BUFFER_SIZE: usize = 256;
 
@@ -23,12 +24,17 @@ pub const CHANNEL_BUFFER_SIZE: usize = 256;
 pub struct AppState {
     pub(crate) lobby: Arc<RwLock<Lobby>>,
     pub broadcaster: broadcast::Sender<mcg_shared::Backend2FrontendMsg>,
+    /// Broadcaster for sending messages to multiple peers at once
+    pub peer_broadcaster: broadcast::Sender<mcg_shared::Peer2PeerMsg>,
     /// In-memory shared Config instance. Holds the authoritative configuration
     /// for the running server. Use tokio::sync::RwLock for concurrent access.
     pub config: std::sync::Arc<RwLock<crate::config::Config>>,
     /// Optional path to the TOML config file used by the running server.
     /// If present, transports (e.g. iroh) may persist changes to this path.
     pub config_path: Option<PathBuf>,
+    pub ticket: Arc<RwLock<Option<String>>>,
+    pub remote_ticket: Arc<RwLock<Option<String>>>,
+    pub peers: Arc<RwLock<HashMap<iroh::EndpointId, PeerInfo>>>,
 }
 
 impl AppState {
@@ -36,11 +42,31 @@ impl AppState {
     // TODO: config path should not be optional
     pub fn new(config: crate::config::Config, config_path: Option<PathBuf>) -> Self {
         let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
+        let (p_tx, _p_rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
         Self {
             lobby: Arc::new(RwLock::new(Lobby::default())),
             broadcaster: tx,
+            peer_broadcaster: p_tx,
             config: std::sync::Arc::new(RwLock::new(config)),
             config_path,
+            ticket: Arc::new(RwLock::new(None)),
+            remote_ticket: Arc::new(RwLock::new(None)),
+            peers: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct PeerInfo {
+    pub name: String,
+    pub ticket: String,
+}
+
+impl Default for PeerInfo {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            ticket: String::new(),
         }
     }
 }
@@ -54,6 +80,16 @@ pub struct Lobby {
     pub(crate) bots: Vec<PlayerId>,
     /// Bot manager for AI decision making
     pub(crate) bot_manager: BotManager,
+
+    //Variables used for managing connections to the lobby and enforcing max player count
+    //I don't know if these even belong here, or if they are needed at all, but It saves
+    //me a lot of work. If needed, we can remove some later.
+    pub(crate) max_players: usize,
+    pub(crate) lobby_open: bool,
+    pub(crate) our_name: String,
+    pub(crate) ready: bool,
+    pub(crate) game_type: String,
+    pub(crate) game_running: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -64,6 +100,12 @@ impl Default for Lobby {
             last_printed_log_len: 0,
             bots: Vec::new(),
             bot_manager: BotManager::default(),
+            max_players: 2,
+            lobby_open: false,
+            our_name: String::new(),
+            ready: false,
+            game_type: String::new(),
+            game_running: false,
         }
     }
 }
@@ -71,11 +113,16 @@ impl Default for Lobby {
 impl Default for AppState {
     fn default() -> Self {
         let (tx, _rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
+        let (p_tx, _p_rx) = broadcast::channel(CHANNEL_BUFFER_SIZE);
         AppState {
             lobby: Arc::new(RwLock::new(Lobby::default())),
             broadcaster: tx,
+            peer_broadcaster: p_tx,
             config: std::sync::Arc::new(RwLock::new(crate::config::Config::default())),
             config_path: None,
+            ticket: Arc::new(RwLock::new(None)),
+            remote_ticket: Arc::new(RwLock::new(None)),
+            peers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -94,6 +141,13 @@ pub async fn subscribe_connection(state: &AppState) -> Subscription {
         receiver,
         initial_state,
     }
+}
+
+/// Broadcast a Peer2PeerMsg to all subscribers (transports).
+/// Transports must decide how to relay that to their connected peers and
+/// must avoid emitting the same message back into this function to prevent loops.
+pub fn broadcast_peer_msg(state: &AppState, msg: mcg_shared::Peer2PeerMsg) {
+    let _ = state.peer_broadcaster.send(msg);
 }
 
 /// Create a new game with the specified players.
@@ -151,7 +205,7 @@ pub async fn current_state_public(state: &AppState) -> Option<GameStatePublic> {
 
 /// Broadcast the current state (and print new events to server console) to all subscribers.
 ///
-/// Transports receive the same `ServerMsg::State` payload; the backend does not
+/// Transports receive the same `Backend2FrontendMsg::State` payload; the backend does not
 /// embed per-connection personalization in the broadcast. If transports or a
 /// future session manager needs to expose client-specific views, they should
 /// compute those on the transport/session layer.
@@ -335,10 +389,24 @@ async fn import_game_state(
     }
 }
 
-/// Unified handler for ClientMsg coming from any transport.
+///Handle a GetTicket message from a client
+async fn handle_get_ticket(state: &AppState) -> mcg_shared::Backend2FrontendMsg {
+    let guard = state.ticket.read().await;
+    match guard.as_ref() {
+        Some(ticket) => mcg_shared::Backend2FrontendMsg::TicketValue(ticket.clone()),
+        None => mcg_shared::Backend2FrontendMsg::Error("Iroh not initialized".into()),
+    }
+}
+
+///Get our own IP address
+async fn handle_get_ip() -> Option<String> {
+    local_ipaddress::get()
+}
+
+/// Unified handler for Frontend2BackendMsg coming from any transport.
 ///
 /// Centralizes validation, state mutation, and side-effects (broadcasting and
-/// bot-driving). Returns a ServerMsg that the originating transport should send
+/// bot-driving). Returns a Backend2FrontendMsg that the originating transport should send
 /// back to the client. Transports should delegate to this function rather than
 /// duplicating handling logic to ensure consistent behavior across transports.
 pub async fn dispatch_client_message(
@@ -356,9 +424,24 @@ pub async fn dispatch_client_message(
             mcg_shared::Backend2FrontendMsg::Pong
         }
         mcg_shared::Frontend2BackendMsg::NextHand => advance_to_next_hand(state).await,
-        mcg_shared::Frontend2BackendMsg::NewGame { players } => create_game_session(state, players).await,
+        mcg_shared::Frontend2BackendMsg::NewGame { players } => {
+            create_game_session(state, players).await
+        }
         mcg_shared::Frontend2BackendMsg::PushState { state: game_state } => {
             import_game_state(state, game_state).await
+        }
+        mcg_shared::Frontend2BackendMsg::QrValue(value) => {
+            tracing::info!("received QR value from client: {}", value);
+            state.remote_ticket.write().await.replace(value);
+            mcg_shared::Backend2FrontendMsg::Error("filler response".into())
+        }
+        mcg_shared::Frontend2BackendMsg::GetTicket => handle_get_ticket(state).await,
+        mcg_shared::Frontend2BackendMsg::GetIP => {
+            let ip = match handle_get_ip().await {
+                Some(ip_addr) => ip_addr,
+                None => return mcg_shared::Backend2FrontendMsg::Error("Unable to determine local IP".into()),
+            };
+            mcg_shared::Backend2FrontendMsg::IPValue(ip)
         }
         mcg_shared::Frontend2BackendMsg::QrReq(file) => {
             match File::open(format!("media/qr_test/{}", file)).await {
@@ -374,6 +457,72 @@ pub async fn dispatch_client_message(
                 }
                 Err(e) => mcg_shared::Backend2FrontendMsg::Error(e.to_string()),
             }
+        }
+        mcg_shared::Frontend2BackendMsg::PlayerCount(count) => {
+            let mut lobby = state.lobby.write().await;
+            lobby.max_players = count;
+            tracing::info!("Max player count set to {}", count);
+            mcg_shared::Backend2FrontendMsg::Error(format!("Max player count set to {}", count))
+        }
+        mcg_shared::Frontend2BackendMsg::LobbyOpen(game_type) => {
+            let mut lobby = state.lobby.write().await;
+            lobby.lobby_open = true;
+            lobby.game_type = game_type.clone();
+            tracing::info!("Lobby opened for game type: {}", game_type);
+            mcg_shared::Backend2FrontendMsg::Error(format!("Lobby is now open"))
+        }
+        mcg_shared::Frontend2BackendMsg::PlayerName(name) => {
+            let mut lobby = state.lobby.write().await;
+            for peer in state.peers.write().await.values_mut() {
+                if peer.name == lobby.our_name {
+                    peer.name = name.clone();
+                    break;
+                }
+            }
+            lobby.our_name = name.clone();
+            tracing::info!("Player name set to {}", name);
+            mcg_shared::Backend2FrontendMsg::Error(format!("Player name set to {}", name))
+        }
+        mcg_shared::Frontend2BackendMsg::GetOurName => {
+            let lobby = state.lobby.read().await;
+            let name = lobby.our_name.clone();
+            mcg_shared::Backend2FrontendMsg::OurName(name)
+        }
+        mcg_shared::Frontend2BackendMsg::Disconnect => {
+            tracing::info!("Received disconnect message from client");
+            {
+            let msg = mcg_shared::Peer2PeerMsg::Disconnect(state.lobby.read().await.our_name.clone());
+            broadcast_peer_msg(state, msg);
+            }
+
+            let mut lobby = state.lobby.write().await;
+            lobby.lobby_open = false;
+            lobby.game_running = false;
+            lobby.game_type = String::new();
+            //Clear all peers except us from the peer list on disconnect
+            {
+                let mut peers = state.peers.write().await;
+                peers.retain(|_, p| p.name == lobby.our_name);
+            }
+            tracing::info!("Lobby closed.");
+
+            mcg_shared::Backend2FrontendMsg::Error("Goodbye".into())
+        }
+        mcg_shared::Frontend2BackendMsg::ReadyUpdate(ready) => {
+            let mut lobby = state.lobby.write().await;
+            let msg = mcg_shared::Peer2PeerMsg::PeerReady(lobby.our_name.clone(), ready);
+            broadcast_peer_msg(state, msg);
+            lobby.ready = ready;
+            mcg_shared::Backend2FrontendMsg::Error(format!("Ready status updated: {}", ready))
+        }
+        mcg_shared::Frontend2BackendMsg::GetPlayers => {
+            let peers = state.peers.read().await;
+            for peer in peers.values() {
+                let _ = state.broadcaster.send(mcg_shared::Backend2FrontendMsg::NewPlayer(peer.name.clone()));
+            }
+            let msg = mcg_shared::Peer2PeerMsg::RequestReady;
+            broadcast_peer_msg(state, msg);
+            mcg_shared::Backend2FrontendMsg::Error("Player list sent".into())
         }
     }
 }
