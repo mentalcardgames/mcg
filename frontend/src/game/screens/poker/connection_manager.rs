@@ -2,7 +2,7 @@ use crate::game::websocket::WebSocketConnection;
 use crate::qr_scanner::QrScannerPopup;
 use crate::store::{ClientState, ConnectionStatus};
 use egui::{Color32, Context, RichText, Ui};
-use mcg_shared::{PlayerConfig, Backend2FrontendMsg};
+use mcg_shared::Backend2FrontendMsg;
 use std::collections::VecDeque;
 
 pub struct ConnectionManager {
@@ -29,7 +29,6 @@ impl ConnectionManager {
         conn: &mut WebSocketConnection,
         app_state: &mut ClientState,
         ctx: &Context,
-        players: Vec<PlayerConfig>,
     ) {
         app_state.connection.connection_status = ConnectionStatus::Connecting;
         app_state.ui.last_error = None;
@@ -55,7 +54,7 @@ impl ConnectionManager {
 
         // Connect using the new simplified API (no per-call closures)
 
-        conn.connect(&self.edit_server_address, players);
+        conn.connect(&self.edit_server_address);
 
         // Register a persistent named listener exactly once and activate it.
         // Use a descriptive key for this manager.

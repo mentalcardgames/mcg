@@ -66,12 +66,8 @@ impl PokerOnlineScreen {
     }
 
     fn connect(&mut self, app_state: &mut ClientState, ctx: &Context) {
-        self.connection_manager.connect(
-            &mut self.conn,
-            app_state,
-            ctx,
-            self.player_manager.get_players().clone(),
-        );
+        self.connection_manager
+            .connect(&mut self.conn, app_state, ctx);
     }
 
     fn disconnect(&mut self) {
@@ -263,34 +259,23 @@ impl PokerOnlineScreen {
     fn render_start_game_button(
         &mut self,
         ui: &mut Ui,
-        app_state: &mut ClientState,
-        ctx: &Context,
+        _app_state: &mut ClientState,
+        _ctx: &Context,
     ) {
         let connected = self.conn.is_connected();
-        let label = if connected {
-            "Start New Game"
-        } else {
-            "Connect & Start Game"
-        };
 
-        let button = ui.button(label);
+        let button = ui.button("Start New Game");
 
         // Add tooltip if disconnected to explain what will happen
         let button = if !connected {
-            button.on_hover_text("Connects to server and starts the game")
+            button.on_hover_text("Please connect first to start a game")
         } else {
             button
         };
 
-        if button.clicked() {
-            if connected {
-                self.send(&mcg_shared::Frontend2BackendMsg::NewGame {
-                    players: self.player_manager.get_players().clone(),
-                });
-            } else {
-                // If not connected, connect (which sends NewGame automatically)
-                self.connect(app_state, ctx);
-            }
+        if button.clicked() && connected {
+            self.conn
+                .create_game(self.player_manager.get_players().clone());
         }
     }
 

@@ -1,10 +1,18 @@
-use mcg_shared::{Frontend2BackendMsg, PlayerConfig, Backend2FrontendMsg};
-use std::rc::Rc;
-use std::collections::HashMap;
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig};
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
+
+/// Network commands representing explicit networking requests from UI components.
+#[derive(Debug, Clone)]
+pub enum NetworkCommand {
+    Connect { server_address: String },
+    CreateGame { players: Vec<PlayerConfig> },
+    Send(Frontend2BackendMsg),
+}
 
 /// Trait for sending messages to the server.
 /// Allows decoupling UI components from the concrete WebSocket implementation.
@@ -60,31 +68,22 @@ impl WebSocketConnection {
     }
 
     /// Connect to a WebSocket server. This opens a new connection and installs event handlers.
-    /// It does not manage which listener is active — that is done via `set_active_listener`.
-    pub fn connect(
-        &mut self,
-        server_address: &str,
-        players: Vec<PlayerConfig>,
-    ) {
+    /// On connection open, it sends Subscribe.
+    pub fn connect(&mut self, server_address: &str) {
         // Close any existing connection first (prevents leaking handlers)
         self.close();
 
         let ws_url = format!("ws://{}/ws", server_address);
         match WebSocket::new(&ws_url) {
             Ok(ws) => {
-                // Prepare the Subscribe and initial NewGame messages
+                // Prepare the Subscribe message
                 let subscribe_json = match serde_json::to_string(&Frontend2BackendMsg::Subscribe) {
                     Ok(s) => s,
                     Err(e) => {
-                        self.route_error(&format!("Failed to serialize Subscribe message: {:?}", e));
-                        return;
-                    }
-                };
-                let newgame_msg = Frontend2BackendMsg::NewGame { players: players.clone() };
-                let newgame_json = match serde_json::to_string(&newgame_msg) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        self.route_error(&format!("Failed to serialize NewGame message: {:?}", e));
+                        self.route_error(&format!(
+                            "Failed to serialize Subscribe message: {:?}",
+                            e
+                        ));
                         return;
                     }
                 };
@@ -96,13 +95,11 @@ impl WebSocketConnection {
                 let active_err = self.active_error_listener.clone();
                 let active_cls = self.active_close_listener.clone();
 
-                // onopen: send Subscribe and NewGame
+                // onopen: send Subscribe
                 let ws_clone_for_open = ws.clone();
                 let subscribe_payload = subscribe_json;
-                let newgame_payload = newgame_json;
                 let onopen = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
                     let _ = ws_clone_for_open.send_with_str(&subscribe_payload);
-                    let _ = ws_clone_for_open.send_with_str(&newgame_payload);
                 });
                 ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
 
@@ -226,6 +223,27 @@ impl WebSocketConnection {
                 if let Err(e) = ws.send_with_str(&txt) {
                     web_sys::console::log_1(&format!("Failed to send message: {:?}", e).into());
                 }
+            }
+        }
+    }
+
+    /// Explicitly send a `NewGame` message to start a new game session.
+    pub fn create_game(&self, players: Vec<PlayerConfig>) {
+        let msg = Frontend2BackendMsg::NewGame { players };
+        self.send_msg(&msg);
+    }
+
+    /// Execute a network command.
+    pub fn execute_command(&mut self, cmd: NetworkCommand) {
+        match cmd {
+            NetworkCommand::Connect { server_address } => {
+                self.connect(&server_address);
+            }
+            NetworkCommand::CreateGame { players } => {
+                self.create_game(players);
+            }
+            NetworkCommand::Send(msg) => {
+                self.send_msg(&msg);
             }
         }
     }

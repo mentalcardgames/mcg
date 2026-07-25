@@ -6,7 +6,7 @@ use js_sys::Date;
 use mcg_qr_comm::data_structures::Package;
 use mcg_qr_comm::network_coding::Epoch;
 use mcg_qr_comm::MAX_PARTICIPANTS;
-use mcg_shared::{Frontend2BackendMsg, PlayerConfig, PlayerId, Backend2FrontendMsg};
+use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
 use qrcode::QrCode;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -91,17 +91,9 @@ impl ScreenWidget for QrTestTransmit {
                 ctx_for_close.request_repaint();
             };
 
-            let mut players = Vec::new();
-            let p = PlayerConfig {
-                id: PlayerId::from(1337),
-                name: "QR_COMM".to_string(),
-                is_bot: false,
-            };
-            players.push(p);
-
             let server = app_interface.state().settings.server_address.clone();
             if !app_interface.ws.is_connected() {
-                    app_interface.ws.connect(&server, players);
+                app_interface.ws.connect(&server);
             }
 
             // Register listener once and activate it

@@ -1,10 +1,9 @@
-use eframe::Frame;
-use egui::{vec2, Align, UiBuilder, Layout, ComboBox, RichText};
+use egui::{ComboBox, RichText};
 use std::rc::Rc;
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::game::GameType;
-use mcg_shared::{Frontend2BackendMsg, PlayerConfig, PlayerId, Backend2FrontendMsg};
+use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
 use crate::sprintln;
 use std::cell::RefCell;
 use crate::qr_scanner::QrScannerPopup;
@@ -62,13 +61,6 @@ impl ScreenWidget for LobbySelectionScreen {
 
                 let name_storage = self.name_storage.clone();
                 let switch = self.switch.clone();
-                let mut players = Vec::new();
-                let p = PlayerConfig {
-                    id: PlayerId::from(1337),
-                    name: "Select_Lobby".to_string(),
-                    is_bot: false,
-                };
-                players.push(p);
 
                 let on_msg = move |x: Backend2FrontendMsg| {
                     match x {
@@ -92,7 +84,7 @@ impl ScreenWidget for LobbySelectionScreen {
                 };
 
                 if !app_interface.ws.is_connected() {
-                    app_interface.ws.connect(&server, players);
+                    app_interface.ws.connect(&server);
                 }
                 app_interface.ws.register_listener_once("/lobbyselect", on_msg, on_err, on_cls);
                 // activate this screen's listener

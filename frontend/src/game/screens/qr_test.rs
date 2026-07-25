@@ -1,8 +1,7 @@
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
-use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
-use image::{ImageBuffer, Luma};
-use mcg_shared::{Frontend2BackendMsg, PlayerConfig, PlayerId, Backend2FrontendMsg};
+use egui::TextureOptions;
+use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
 use crate::sprintln;
 use qrcode::QrCode;
 use std::cell::RefCell;
@@ -50,17 +49,9 @@ impl ScreenWidget for QrScreen {
                 sprintln!("Got a close:\n\t- {:?}", c);
             };
 
-            let mut players = Vec::new();
-            let p = PlayerConfig {
-                id: PlayerId::from(1337),
-                name: "QR_Lobby".to_string(),
-                is_bot: false,
-            };
-            players.push(p);
-
             let server = app_interface.state().settings.server_address.clone();
             if !app_interface.ws.is_connected() {
-                    app_interface.ws.connect(&server, players);
+                app_interface.ws.connect(&server);
             }
 
             // Register listener once and activate it

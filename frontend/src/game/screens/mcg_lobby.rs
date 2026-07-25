@@ -1,8 +1,7 @@
 use crate::game::{AppInterface, ScreenWidget};
 use super::{ScreenDef, ScreenMetadata};
-use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions, RichText};
-use image::{ImageBuffer, Luma};
-use mcg_shared::{Frontend2BackendMsg, PlayerConfig, Backend2FrontendMsg};
+use egui::{TextureOptions, RichText};
+use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
 use crate::sprintln;
 use qrcode::QrCode;
 use std::cell::RefCell;
@@ -61,7 +60,7 @@ impl ScreenWidget for LobbyScreen {
                             let mut p = players.borrow_mut();
                             p.push((name.clone(), false));
                         }
-                        *ready_sync.borrow_mut() = true;; // Set this flag to indicate that we are syncing ready state for a new player
+                        *ready_sync.borrow_mut() = true; // Set this flag to indicate that we are syncing ready state for a new player
                         
                     }
                 }
@@ -98,17 +97,9 @@ impl ScreenWidget for LobbyScreen {
 
             // attempt to connect using central connection
             {
-                let mut players_cfg = Vec::new();
-                let p = PlayerConfig {
-                    id: mcg_shared::PlayerId::from(1337),
-                    name: "Lobby".to_string(),
-                    is_bot: false,
-                };
-                players_cfg.push(p);
-
                 let server = app_interface.state().settings.server_address.clone();
                 if !app_interface.ws.is_connected() {
-                    app_interface.ws.connect(&server, players_cfg);
+                    app_interface.ws.connect(&server);
                 }
 
                 // Register the lobby listener exactly once (idempotent)
