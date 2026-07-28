@@ -26,6 +26,7 @@ impl InputPanel {
         area: Rect,
         choose_cursor: usize,
         choose_selected: &[bool],
+        current_player_name: &str,
     ) {
         let block = Block::default()
             .title(format!(
@@ -43,6 +44,19 @@ impl InputPanel {
         let inner = block.inner(area);
 
         if waiting {
+            let perspective_name = self
+                .player_names
+                .get(self.perspective_idx)
+                .map(|s| s.as_str())
+                .unwrap_or("");
+            if !current_player_name.is_empty() && perspective_name != current_player_name {
+                let msg = format!(
+                    "Waiting for {}'s turn... (you are viewing as {})",
+                    current_player_name, perspective_name
+                );
+                f.render_widget(Paragraph::new(msg), inner);
+                return;
+            }
             if let Some(it) = input_type {
                 match it {
                     InputType::Choice { options, .. } => {
@@ -105,10 +119,8 @@ impl InputPanel {
                                 "[ ]"
                             };
                             let cursor = if i == choose_cursor { ">" } else { " " };
-                            let desc: Vec<String> = card
-                                .iter()
-                                .map(|(k, v)| format!("{}: {}", k, v))
-                                .collect();
+                            let desc: Vec<String> =
+                                card.iter().map(|(k, v)| format!("{}: {}", k, v)).collect();
                             lines.push(format!(
                                 "{} {} {}. {}",
                                 cursor,

@@ -9,11 +9,13 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
-use cgdsl_engine::{run_game, GameData, Input, InputSource, InputType, TraceEntry};
+use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType, TraceEntry};
 use crossbeam_channel::{bounded, Receiver, Sender};
 use front_end::validation::parse_document;
 
-use ui::{AppLayout, ControlsPanel, GameStatePanel, InputPanel, PanelFocus, TraceLogPanel, TuiState};
+use ui::{
+    AppLayout, ControlsPanel, GameStatePanel, InputPanel, PanelFocus, TraceLogPanel, TuiState,
+};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -54,13 +56,9 @@ fn page_focused_scroll(state: &mut TuiState, up: bool) {
         }
         PanelFocus::TraceLog => {
             if up {
-                state.trace_scroll = state
-                    .trace_scroll
-                    .saturating_sub(state.trace_inner_height);
+                state.trace_scroll = state.trace_scroll.saturating_sub(state.trace_inner_height);
             } else {
-                state.trace_scroll = state
-                    .trace_scroll
-                    .saturating_add(state.trace_inner_height);
+                state.trace_scroll = state.trace_scroll.saturating_add(state.trace_inner_height);
             }
             state.trace_auto_scroll = false;
         }
@@ -91,6 +89,18 @@ fn end_focused_scroll(state: &mut TuiState) {
     }
 }
 
+fn is_current_player(state: &TuiState) -> bool {
+    let perspective_name = state
+        .current_state
+        .as_ref()
+        .and_then(|gd| gd.players.get(state.perspective_idx))
+        .map(|p| p.name.as_str())
+        .unwrap_or("");
+    !state.waiting_for_input
+        || state.current_player_name.is_empty()
+        || perspective_name == state.current_player_name
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let game_path = std::env::args()
         .nth(1)
@@ -119,7 +129,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input_type_tx = input_type_tx;
     let input_source = InputSource::Player(Box::new(move |it: cgdsl_engine::InputType| {
         let _ = input_type_tx.send(it);
-        input_rx.recv().unwrap_or(Input::Choice { idx: 0 })
+        input_rx.recv().unwrap_or(Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })
     }));
 
     let engine_panic = std::sync::Arc::new(AtomicBool::new(false));
@@ -171,6 +184,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         while let Ok(gd) = state_rx.try_recv() {
+            tui_state.current_player_name = gd
+                .get_current_player()
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
             tui_state.current_state = Some(gd);
             tui_state.game_state_auto_scroll = true;
         }
@@ -205,6 +222,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     layout.input_area,
                     tui_state.choose_cursor,
                     &tui_state.choose_selected,
+                    &tui_state.current_player_name,
                 );
             }
 
@@ -230,7 +248,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let is_choosing = tui_state.waiting_for_input
                         && matches!(
                             &tui_state.pending_input,
-                            Some(InputType::ChooseCards { .. }) | Some(InputType::ChoosePlayer { .. })
+                            Some(InputType::ChooseCards { .. })
+                                | Some(InputType::ChoosePlayer { .. })
                         );
                     match key.code {
                         crossterm::event::KeyCode::Char('q') => break,
@@ -257,7 +276,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             };
                         }
                         crossterm::event::KeyCode::Up => {
-                            if is_choosing {
+                            if is_choosing && is_current_player(&tui_state) {
                                 if tui_state.choose_cursor > 0 {
                                     tui_state.choose_cursor -= 1;
                                 }
@@ -266,11 +285,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         crossterm::event::KeyCode::Down => {
-                            if is_choosing {
+                            if is_choosing && is_current_player(&tui_state) {
                                 let max = match &tui_state.pending_input {
-                                    Some(InputType::ChooseCards { display, .. }) => {
-                                        display.len()
-                                    }
+                                    Some(InputType::ChooseCards { display, .. }) => display.len(),
                                     Some(InputType::ChoosePlayer { candidates, .. }) => {
                                         candidates.len()
                                     }
@@ -296,36 +313,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             end_focused_scroll(&mut tui_state);
                         }
                         crossterm::event::KeyCode::Char(' ') => {
-                            if tui_state.waiting_for_input {
+                            if tui_state.waiting_for_input && is_current_player(&tui_state) {
                                 if let Some(InputType::ChooseCards { .. }) =
                                     &tui_state.pending_input
                                 {
-                                    if tui_state.choose_cursor
-                                        < tui_state.choose_selected.len()
-                                    {
-                                        tui_state.choose_selected
-                                            [tui_state.choose_cursor] ^= true;
+                                    if tui_state.choose_cursor < tui_state.choose_selected.len() {
+                                        tui_state.choose_selected[tui_state.choose_cursor] ^= true;
                                     }
                                 }
                             }
                         }
                         crossterm::event::KeyCode::Char(n) => {
-                            if tui_state.waiting_for_input {
+                            if tui_state.waiting_for_input && is_current_player(&tui_state) {
                                 match &tui_state.pending_input {
                                     Some(InputType::ChooseCards { .. })
                                     | Some(InputType::ChoosePlayer { .. }) => {
                                         // ignored: use arrows/space/enter for these
                                     }
                                     _ => {
+                                        let player_name = tui_state
+                                            .current_state
+                                            .as_ref()
+                                            .and_then(|gd| {
+                                                gd.players.get(tui_state.perspective_idx)
+                                            })
+                                            .map(|p| p.name.clone())
+                                            .unwrap_or_else(|| {
+                                                format!("Player{}", tui_state.perspective_idx)
+                                            });
                                         if n == 'y' || n == 'Y' {
                                             if let Some(ref tx) = tui_state.input_tx {
-                                                let _ = tx.send(Input::OptionalAccept);
+                                                let _ = tx.send(Input {
+                                                    player_id: player_name,
+                                                    kind: InputKind::OptionalAccept,
+                                                });
                                                 tui_state.waiting_for_input = false;
                                                 tui_state.pending_input = None;
                                             }
                                         } else if n == 'n' || n == 'N' {
                                             if let Some(ref tx) = tui_state.input_tx {
-                                                let _ = tx.send(Input::OptionalDecline);
+                                                let _ = tx.send(Input {
+                                                    player_id: player_name,
+                                                    kind: InputKind::OptionalDecline,
+                                                });
                                                 tui_state.waiting_for_input = false;
                                                 tui_state.pending_input = None;
                                             }
@@ -333,7 +363,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             if digit >= 1 && digit <= 9 {
                                                 let idx = digit as usize - 1;
                                                 if let Some(ref tx) = tui_state.input_tx {
-                                                    let _ = tx.send(Input::Choice { idx });
+                                                    let _ = tx.send(Input {
+                                                        player_id: player_name,
+                                                        kind: InputKind::Choice { idx },
+                                                    });
                                                     tui_state.waiting_for_input = false;
                                                     tui_state.pending_input = None;
                                                 }
@@ -344,7 +377,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         crossterm::event::KeyCode::Enter => {
-                            if tui_state.waiting_for_input {
+                            if tui_state.waiting_for_input && is_current_player(&tui_state) {
+                                let player_name = tui_state
+                                    .current_state
+                                    .as_ref()
+                                    .and_then(|gd| gd.players.get(tui_state.perspective_idx))
+                                    .map(|p| p.name.clone())
+                                    .unwrap_or_else(|| {
+                                        format!("Player{}", tui_state.perspective_idx)
+                                    });
                                 match &tui_state.pending_input {
                                     Some(InputType::ChooseCards { min, max, .. }) => {
                                         let selected: Vec<usize> = tui_state
@@ -354,12 +395,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             .filter(|(_, &s)| s)
                                             .map(|(i, _)| i)
                                             .collect();
-                                        if selected.len() >= *min
-                                            && selected.len() <= *max
-                                        {
+                                        if selected.len() >= *min && selected.len() <= *max {
                                             if let Some(ref tx) = tui_state.input_tx {
-                                                let _ = tx
-                                                    .send(Input::ChooseCards { selected });
+                                                let _ = tx.send(Input {
+                                                    player_id: player_name,
+                                                    kind: InputKind::ChooseCards { selected },
+                                                });
                                                 tui_state.waiting_for_input = false;
                                                 tui_state.pending_input = None;
                                             }
@@ -367,8 +408,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                     Some(InputType::ChoosePlayer { .. }) => {
                                         if let Some(ref tx) = tui_state.input_tx {
-                                            let _ = tx.send(Input::ChoosePlayer {
-                                                idx: tui_state.choose_cursor,
+                                            let _ = tx.send(Input {
+                                                player_id: player_name,
+                                                kind: InputKind::ChoosePlayer {
+                                                    idx: tui_state.choose_cursor,
+                                                },
                                             });
                                             tui_state.waiting_for_input = false;
                                             tui_state.pending_input = None;
@@ -376,7 +420,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                     _ => {
                                         if let Some(ref tx) = tui_state.input_tx {
-                                            let _ = tx.send(Input::Choice { idx: 0 });
+                                            let _ = tx.send(Input {
+                                                player_id: player_name,
+                                                kind: InputKind::Choice { idx: 0 },
+                                            });
                                             tui_state.waiting_for_input = false;
                                             tui_state.pending_input = None;
                                         }

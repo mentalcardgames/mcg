@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use cgdsl_engine::{
-    run_game, GameData, Input, InputSource, InputType, Interpreter, Location, StepResult,
-    TraceEntry, TraceEvent,
+    run_game, GameData, Input, InputKind, InputSource, InputType, Interpreter, Location,
+    StepResult, TraceEntry, TraceEvent,
 };
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
@@ -77,7 +77,10 @@ fn quantifier_deal_all_fans_out_one_card_per_player() {
     let gd = run_game(
         ir,
         GameData::new(),
-        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
         None,
         Some(Box::new(move |e: TraceEntry| {
             trace_clone.lock().unwrap().push(e);
@@ -120,8 +123,14 @@ fn quantifier_deal_any_moves_chosen_card() {
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|it: InputType| match it {
-            InputType::ChooseCards { .. } => Input::ChooseCards { selected: vec![0] },
-            _ => Input::Choice { idx: 0 },
+            InputType::ChooseCards { .. } => Input {
+                player_id: "P1".into(),
+                kind: InputKind::ChooseCards { selected: vec![0] },
+            },
+            _ => Input {
+                player_id: "P1".into(),
+                kind: InputKind::Choice { idx: 0 },
+            },
         })),
         None,
         Some(Box::new(move |e: TraceEntry| {
@@ -164,14 +173,23 @@ fn quantifier_range_rejects_zero_then_moves_two() {
             match it {
                 InputType::ChooseCards { .. } => {
                     if n == 1 {
-                        Input::ChooseCards { selected: vec![] } // 0 cards: out of range
+                        Input {
+                            player_id: "P1".into(),
+                            kind: InputKind::ChooseCards { selected: vec![] },
+                        } // 0 cards: out of range
                     } else {
-                        Input::ChooseCards {
-                            selected: vec![0, 1],
+                        Input {
+                            player_id: "P1".into(),
+                            kind: InputKind::ChooseCards {
+                                selected: vec![0, 1],
+                            },
                         } // 2 cards: valid
                     }
                 }
-                _ => Input::Choice { idx: 0 },
+                _ => Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::Choice { idx: 0 },
+                },
             }
         })),
         None,
@@ -212,8 +230,14 @@ fn quantifier_dest_any_deals_to_chosen_player() {
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|it: InputType| match it {
-            InputType::ChoosePlayer { .. } => Input::ChoosePlayer { idx: 1 }, // P2
-            _ => Input::Choice { idx: 0 },
+            InputType::ChoosePlayer { .. } => Input {
+                player_id: "P1".into(),
+                kind: InputKind::ChoosePlayer { idx: 1 },
+            }, // P2
+            _ => Input {
+                player_id: "P1".into(),
+                kind: InputKind::Choice { idx: 0 },
+            },
         })),
         None,
         Some(Box::new(move |e: TraceEntry| {
@@ -265,9 +289,15 @@ fn quantifier_all_then_any_single_prompt_then_fanout() {
             if matches!(it, InputType::ChooseCards { .. }) {
                 let mut c = calls_clone.lock().unwrap();
                 *c += 1;
-                Input::ChooseCards { selected: vec![0] }
+                Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::ChooseCards { selected: vec![0] },
+                }
             } else {
-                Input::Choice { idx: 0 }
+                Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::Choice { idx: 0 },
+                }
             }
         })),
         None,
@@ -311,9 +341,18 @@ fn quantifier_ir_not_mutated_and_memory_cleaned() {
             StepResult::Ok => continue,
             StepResult::NeedsInput(it) => {
                 let inp = match it {
-                    InputType::ChooseCards { .. } => Input::ChooseCards { selected: vec![0] },
-                    InputType::ChoosePlayer { .. } => Input::ChoosePlayer { idx: 0 },
-                    _ => Input::Choice { idx: 0 },
+                    InputType::ChooseCards { .. } => Input {
+                        player_id: "P1".into(),
+                        kind: InputKind::ChooseCards { selected: vec![0] },
+                    },
+                    InputType::ChoosePlayer { .. } => Input {
+                        player_id: "P1".into(),
+                        kind: InputKind::ChoosePlayer { idx: 0 },
+                    },
+                    _ => Input {
+                        player_id: "P1".into(),
+                        kind: InputKind::Choice { idx: 0 },
+                    },
                 };
                 interp.provide_input(inp);
             }
@@ -336,7 +375,10 @@ fn setup_location_all_creates_per_player_hands() {
     let gd = run_game(
         ir,
         GameData::new(),
-        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
         None,
         None,
     )
@@ -362,7 +404,10 @@ fn setup_location_literal_creates_per_player_hands() {
     let gd = run_game(
         ir,
         GameData::new(),
-        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
         None,
         None,
     )
@@ -388,7 +433,10 @@ fn setup_location_any_returns_error() {
     let result = run_game(
         ir,
         GameData::new(),
-        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
         None,
         None,
     );
@@ -415,7 +463,10 @@ fn setup_turnorder_all_resolves_to_in_game_players() {
     let gd = run_game(
         ir,
         GameData::new(),
-        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
         None,
         None,
     )
@@ -434,7 +485,10 @@ fn setup_teams_all_resolves_all_players() {
     let gd = run_game(
         ir,
         GameData::new(),
-        InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 })),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
         None,
         None,
     )

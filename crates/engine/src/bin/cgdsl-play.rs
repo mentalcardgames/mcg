@@ -1,8 +1,9 @@
 use std::env;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
-use cgdsl_engine::{run_game, GameData, Input, InputSource, InputType};
+use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
 use front_end::validation::parse_document;
 
 fn main() {
@@ -32,13 +33,28 @@ fn main() {
     };
     let ir = game.to_lowered_graph();
 
+    let player_name: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+    let pn_writer = player_name.clone();
+    let state_sender = Some(Box::new(move |gd: &GameData| {
+        *pn_writer.lock().unwrap() = gd.get_current_player().map(|p| p.name.clone());
+    }) as Box<dyn Fn(&GameData) + Send>);
+
+    let pn_reader = player_name.clone();
     let input_source = match input_file {
         Some(path) => InputSource::TestFile(PathBuf::from(path)),
-        None => InputSource::Player(Box::new(interactive_input)),
+        None => InputSource::Player(Box::new(move |it: InputType| {
+            let name = pn_reader
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "P1".to_string());
+            interactive_input(it, &name)
+        })),
     };
 
     let game_data = GameData::new();
-    match run_game(ir, game_data, input_source, None, None) {
+    match run_game(ir, game_data, input_source, state_sender, None) {
         Ok(state) => print_summary(&state),
         Err(e) => {
             eprintln!("Game error: {e}");
@@ -47,9 +63,10 @@ fn main() {
     }
 }
 
-fn interactive_input(input_type: InputType) -> Input {
+fn interactive_input(input_type: InputType, player_name: &str) -> Input {
     let stdin = io::stdin();
     let mut handle = stdin.lock();
+    let player_id = player_name.to_string();
     loop {
         match &input_type {
             InputType::Choice { options, max_index } => {
@@ -68,7 +85,12 @@ fn interactive_input(input_type: InputType) -> Input {
                     }
                 }
                 match line.trim().parse::<usize>() {
-                    Ok(n) if n >= 1 && n <= max_index + 1 => return Input::Choice { idx: n - 1 },
+                    Ok(n) if n >= 1 && n <= max_index + 1 => {
+                        return Input {
+                            player_id,
+                            kind: InputKind::Choice { idx: n - 1 },
+                        };
+                    }
                     _ => {
                         println!("Invalid choice, try again.");
                         continue;
@@ -87,8 +109,18 @@ fn interactive_input(input_type: InputType) -> Input {
                     }
                 }
                 match line.trim().to_lowercase().as_str() {
-                    "y" | "yes" => return Input::OptionalAccept,
-                    "n" | "no" => return Input::OptionalDecline,
+                    "y" | "yes" => {
+                        return Input {
+                            player_id,
+                            kind: InputKind::OptionalAccept,
+                        };
+                    }
+                    "n" | "no" => {
+                        return Input {
+                            player_id,
+                            kind: InputKind::OptionalDecline,
+                        };
+                    }
                     _ => {
                         println!("Please enter y or n.");
                         continue;
@@ -109,7 +141,10 @@ fn interactive_input(input_type: InputType) -> Input {
                 }
                 match line.trim().parse::<usize>() {
                     Ok(n) if n >= 1 && n <= candidates.len() => {
-                        return Input::ChoosePlayer { idx: n - 1 };
+                        return Input {
+                            player_id,
+                            kind: InputKind::ChoosePlayer { idx: n - 1 },
+                        };
                     }
                     _ => {
                         println!("Invalid choice, try again.");
@@ -154,8 +189,11 @@ fn interactive_input(input_type: InputType) -> Input {
                     && zero_based.len() >= *min
                     && zero_based.len() <= *max
                 {
-                    return Input::ChooseCards {
-                        selected: zero_based,
+                    return Input {
+                        player_id,
+                        kind: InputKind::ChooseCards {
+                            selected: zero_based,
+                        },
                     };
                 }
                 println!("Selection out of range, try again.");

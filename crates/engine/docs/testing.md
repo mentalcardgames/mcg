@@ -205,16 +205,20 @@ One input per line in `test_games/<name>.txt`. Accepted line formats
 
 | Line | Yields |
 |---|---|
-| `y` / `yes` | `Input::OptionalAccept` |
-| `n` / `no`  | `Input::OptionalDecline` |
-| `<N>`       | `Input::Choice { idx: N-1 }` (1-based) |
-| `p <N>`     | `Input::ChoosePlayer { idx: N-1 }` (1-based) |
-| `c <csv>`   | `Input::ChooseCards { selected: [..] }` (1-based, comma-separated) |
+| `y` / `yes` | `Input { player_id: "P1", kind: InputKind::OptionalAccept }` |
+| `n` / `no`  | `Input { player_id: "P1", kind: InputKind::OptionalDecline }` |
+| `<N>`       | `Input { player_id: "P1", kind: InputKind::Choice { idx: N-1 } }` (1-based) |
+| `p <N>`     | `Input { player_id: "P1", kind: InputKind::ChoosePlayer { idx: N-1 } }` (1-based) |
+| `c <csv>`   | `Input { player_id: "P1", kind: InputKind::ChooseCards { selected: [..] } }` (1-based, comma-separated) |
+| `Name:y` / `Name:<N>` / etc. | Same as above, with `player_id: "Name"` |
 
 Blank lines and lines starting with `#` are skipped. Use TestFile when you want a
 fixture-input pair that documents the replay verbatim and is easy to diff on failure.
 Example: `test_games/ordering_test.cgdsl` + `ordering_test.txt`, exercised by
 `src/controller/tests.rs:105`.
+
+*Lines without a `Name:` prefix default to player `"P1"`. Use the prefix in
+multi-player test scenarios where different players submit inputs in sequence.*
 
 ### 4.2 `InputSource::Player(Box<dyn Fn(InputType) -> Input + Send + Sync>)` — programmatic
 

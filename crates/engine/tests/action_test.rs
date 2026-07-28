@@ -4,7 +4,9 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use cgdsl_engine::{run_game, GameData, Input, InputSource, InputType, TraceEntry, TraceEvent};
+use cgdsl_engine::{
+    run_game, GameData, Input, InputKind, InputSource, InputType, TraceEntry, TraceEvent,
+};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -18,7 +20,10 @@ fn load_game(name: &str) -> Ir<LoweredPayLoad> {
 }
 
 fn always_choice_0() -> InputSource {
-    InputSource::Player(Box::new(|_it: InputType| Input::Choice { idx: 0 }))
+    InputSource::Player(Box::new(|_it: InputType| Input {
+        player_id: "P1".into(),
+        kind: InputKind::Choice { idx: 0 },
+    }))
 }
 
 /// `move top(Stock) private to Hand` where Hand exists: card moves.

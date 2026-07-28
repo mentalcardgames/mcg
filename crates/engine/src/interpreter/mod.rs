@@ -19,7 +19,7 @@ mod types;
 
 pub use ir_ext::IrExt;
 pub use trace::{TraceEntry, TraceEvent};
-pub use types::{Input, InputType, StepResult};
+pub use types::{Input, InputKind, InputType, StepResult};
 
 use crate::interpreter::ir_ext::{payload_label, rule_signature};
 
@@ -195,12 +195,12 @@ impl Interpreter {
                 Payload::Optional => {
                     if let Some(input) = self.input_buffer.pop() {
                         if let Some(ref sender) = self.trace_sender {
-                            let event = match input {
-                                Input::OptionalAccept => TraceEvent::OptionalAccept,
-                                Input::OptionalDecline => TraceEvent::OptionalDecline,
-                                Input::Choice { .. }
-                                | Input::ChoosePlayer { .. }
-                                | Input::ChooseCards { .. } => {
+                            let event = match &input.kind {
+                                InputKind::OptionalAccept => TraceEvent::OptionalAccept,
+                                InputKind::OptionalDecline => TraceEvent::OptionalDecline,
+                                InputKind::Choice { .. }
+                                | InputKind::ChoosePlayer { .. }
+                                | InputKind::ChooseCards { .. } => {
                                     return StepResult::Error(
                                         "Unexpected input for Optional".to_string(),
                                     )

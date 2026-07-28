@@ -10,7 +10,7 @@ associated_files:
   - crates/engine/src/action.rs
   - crates/engine/src/game_data.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-07-04
+last_validated: 2026-07-28
 ---
 
 # Lifecycle & Runtime Sequencing
@@ -177,7 +177,10 @@ The pre-dispatch arms, in order:
    chosen answer (see `resume_dest_player_any` at `quant_driver.rs:213-234`,
    `resume_cards_any_or_range` at `quant_driver.rs:239-275`, `resume_dest_all_then_cards` at
    `quant_driver.rs:280-334`). If `pending_quant.state != current_state`, the resume is *skipped*
-   and the pending request + buffered input are left untouched — see invariant I-19.
+   and the pending request + buffered input are left untouched — see invariant I-19. If the
+   buffered input does **not** match the pending quantifier kind (e.g. a `Choice` arrives while a
+   `CardsAnyOrRange` prompt is in flight), the stale input is popped from the buffer (preventing an
+   infinite prompt loop) and the pending quantifier is left intact to receive the next input.
 
 4. **Real IR edge lookup** (`interpreter/mod.rs:110-128`). If `current_state` is not in
    `ir.states` → `Error`. If `edges.is_empty()` → `GameOver` if at `ir.goal`, else `Error`.

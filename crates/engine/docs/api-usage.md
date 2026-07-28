@@ -40,7 +40,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use cgdsl_engine::{
-    run_game, GameData, Input, InputSource, InputType, TraceEntry, DebugLevel, format_game_data,
+    run_game, GameData, Input, InputKind, InputSource, InputType, TraceEntry, DebugLevel, format_game_data,
 };
 use front_end::validation::parse_document;
 
@@ -72,22 +72,22 @@ fn main() {
         match input_type {
             InputType::Choice { options, max_index } => {
                 println!("Choose: {:?}", options);
-                // ...read stdin, validate 0..=max_index, return Input::Choice { idx }
-                Input::Choice { idx: 0 }
+                // ...read stdin, validate 0..=max_index, return Input { player_id, kind: InputKind::Choice { idx } }
+                Input { player_id: "P1".into(), kind: InputKind::Choice { idx: 0 } }
             }
             InputType::Optional(prompt) => {
                 println!("{}", prompt);
-                Input::OptionalAccept
+                Input { player_id: "P1".into(), kind: InputKind::OptionalAccept }
             }
             InputType::ChoosePlayer { candidates, prompt } => {
                 println!("{}: {:?}", prompt, candidates);
-                // ...return Input::ChoosePlayer { idx: 0..candidates.len()-1 }
-                Input::ChoosePlayer { idx: 0 }
+                // ...return Input { player_id, kind: InputKind::ChoosePlayer { idx } }
+                Input { player_id: "P1".into(), kind: InputKind::ChoosePlayer { idx: 0 } }
             }
             InputType::ChooseCards { display, min, max, prompt } => {
                 println!("{}: {}..={} of {:?}", prompt, min, max, display);
-                // ...return Input::ChooseCards { selected: vec![0] }
-                Input::ChooseCards { selected: vec![0] }
+                // ...return Input { player_id, kind: InputKind::ChooseCards { selected: vec![0] } }
+                Input { player_id: "P1".into(), kind: InputKind::ChooseCards { selected: vec![0] } }
             }
         }
     }

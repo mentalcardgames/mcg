@@ -1,3 +1,4 @@
+use super::InputKind;
 use super::*;
 use crate::game_data::GameData;
 use front_end::ast::*;
@@ -653,10 +654,7 @@ fn condition_false_takes_false_branch() {
 
     let mut interp = make_interp!(ir, gd_for_bool(), s0);
     interp.step();
-    assert_eq!(
-        interp.current_state, s_false,
-        "false => else/skip branch"
-    );
+    assert_eq!(interp.current_state, s_false, "false => else/skip branch");
 }
 
 // EndCondition: per actual code at interpreter/mod.rs:287,
@@ -985,8 +983,14 @@ fn input_buffer_is_lifo_not_fifo() {
     // First step: NeedsInput (Choice)
     assert!(matches!(interp.step(), StepResult::NeedsInput(_)));
     // Push idx:1 first, then idx:0
-    interp.provide_input(Input::Choice { idx: 1 });
-    interp.provide_input(Input::Choice { idx: 0 });
+    interp.provide_input(Input {
+        player_id: "P1".into(),
+        kind: InputKind::Choice { idx: 1 },
+    });
+    interp.provide_input(Input {
+        player_id: "P1".into(),
+        kind: InputKind::Choice { idx: 0 },
+    });
     // Second step: pops idx:0 (LIFO) -> edges[0] -> s1
     assert!(matches!(interp.step(), StepResult::Ok));
     assert_eq!(
@@ -1040,8 +1044,11 @@ fn out_of_range_choice_silently_stalls() {
     // First step: NeedsInput
     assert!(matches!(interp.step(), StepResult::NeedsInput(_)));
     // Push an out-of-range idx
-    interp.provide_input(Input::Choice { idx: 5 }); // only edges[0] exists
-                                                    // Second step: execute_edge is skipped, returns Ok, current_state unchanged
+    interp.provide_input(Input {
+        player_id: "P1".into(),
+        kind: InputKind::Choice { idx: 5 },
+    }); // only edges[0] exists
+        // Second step: execute_edge is skipped, returns Ok, current_state unchanged
     assert!(matches!(interp.step(), StepResult::Ok));
     assert_eq!(
         interp.current_state, s0,

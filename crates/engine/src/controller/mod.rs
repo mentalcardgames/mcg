@@ -2,12 +2,12 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use front_end::ir::{Ir, LoweredPayLoad};
 
 use crate::game_data::GameData;
-use crate::interpreter::{Input, InputType, Interpreter, StepResult, TraceEntry};
+use crate::interpreter::{Input, InputKind, InputType, Interpreter, StepResult, TraceEntry};
 
 mod trace_logger;
 
@@ -170,12 +170,19 @@ impl Controller {
 
     /// Route an input request to the active [`InputSource`].
     fn get_input(&mut self, input_type: InputType) -> Result<Input, String> {
+        let current_name = self
+            .interpreter
+            .game_data
+            .get_current_player()
+            .map(|p| p.name.as_str())
+            .unwrap_or("");
+
         self.input_sequence += 1;
 
         let input = match &self.input_source {
             InputSource::Player(callback) => loop {
                 let raw = callback(input_type.clone());
-                if validate_player_input(&raw, &input_type) {
+                if validate_player_input(&raw, &input_type, current_name) {
                     break raw;
                 }
             },
@@ -195,11 +202,14 @@ impl Controller {
     /// Blank lines and lines starting with `#` are ignored.
     ///
     /// Accepted line formats:
-    /// - `y`, `yes` → `Input::OptionalAccept`
-    /// - `n`, `no`  → `Input::OptionalDecline`
-    /// - `<N>`      → `Input::Choice { idx: N-1 }` (1-based choice index)
-    /// - `p <N>`    → `Input::ChoosePlayer { idx: N-1 }` (1-based candidate index)
-    /// - `c <csv>`  → `Input::ChooseCards { selected: [..] }` (1-based, comma-separated)
+    /// - `y`, `yes` → `InputKind::OptionalAccept`
+    /// - `n`, `no`  → `InputKind::OptionalDecline`
+    /// - `<N>`      → `InputKind::Choice { idx: N-1 }` (1-based choice index)
+    /// - `p <N>`    → `InputKind::ChoosePlayer { idx: N-1 }` (1-based candidate index)
+    /// - `c <csv>`  → `InputKind::ChooseCards { selected: [..] }` (1-based, comma-separated)
+    ///
+    /// Each line may optionally start with a `Name:` prefix (e.g. `P2:y`, `P3:c 1,3`).
+    /// Lines without a prefix default to player `"P1"`.
     fn read_test_file(&mut self, path: &PathBuf) -> Result<Input, String> {
         if self.line_buffer.is_empty() && !self.file_loaded {
             let file = File::open(path)
@@ -222,8 +232,21 @@ impl Controller {
             .pop_front()
             .ok_or_else(|| format!("Test input file exhausted (input #{})", self.input_sequence))?;
 
-        let lower = line.to_lowercase();
-        if let Some(rest) = lower.strip_prefix("p ") {
+        let (player_id, body) = if let Some(colon) = line.find(':') {
+            if colon > 0 && colon + 1 < line.len() {
+                (
+                    line[..colon].to_string(),
+                    line[colon + 1..].trim_start().to_string(),
+                )
+            } else {
+                ("P1".to_string(), line.clone())
+            }
+        } else {
+            ("P1".to_string(), line.clone())
+        };
+
+        let lower = body.to_lowercase();
+        let kind = if let Some(rest) = lower.strip_prefix("p ") {
             let rest = rest.trim();
             let n: usize = rest.parse().map_err(|_| {
                 format!(
@@ -237,9 +260,8 @@ impl Controller {
                     self.input_sequence
                 ));
             }
-            return Ok(Input::ChoosePlayer { idx: n - 1 });
-        }
-        if let Some(rest) = lower.strip_prefix("c ") {
+            InputKind::ChoosePlayer { idx: n - 1 }
+        } else if let Some(rest) = lower.strip_prefix("c ") {
             let rest = rest.trim();
             let selected: Vec<usize> = rest
                 .split(',')
@@ -257,30 +279,32 @@ impl Controller {
                     self.input_sequence
                 ));
             }
-            return Ok(Input::ChooseCards {
+            InputKind::ChooseCards {
                 selected: selected.into_iter().map(|n| n - 1).collect(),
-            });
-        }
-
-        match lower.as_str() {
-            "y" | "yes" => Ok(Input::OptionalAccept),
-            "n" | "no" => Ok(Input::OptionalDecline),
-            _ => {
-                let idx: usize = line.parse().map_err(|_| {
-                    format!(
-                        "Invalid test input #{}: expected number, 'y', 'n', 'p <N>', or 'c <csv>', got '{}'",
-                        self.input_sequence, line
-                    )
-                })?;
-                if idx == 0 {
-                    return Err(format!(
-                        "Invalid test input #{}: choice indices start at 1, got 0",
-                        self.input_sequence
-                    ));
-                }
-                Ok(Input::Choice { idx: idx - 1 })
             }
-        }
+        } else {
+            match lower.as_str() {
+                "y" | "yes" => InputKind::OptionalAccept,
+                "n" | "no" => InputKind::OptionalDecline,
+                _ => {
+                    let idx: usize = line.parse().map_err(|_| {
+                        format!(
+                            "Invalid test input #{}: expected number, 'y', 'n', 'p <N>', or 'c <csv>', got '{}'",
+                            self.input_sequence, line
+                        )
+                    })?;
+                    if idx == 0 {
+                        return Err(format!(
+                            "Invalid test input #{}: choice indices start at 1, got 0",
+                            self.input_sequence
+                        ));
+                    }
+                    InputKind::Choice { idx: idx - 1 }
+                }
+            }
+        };
+
+        Ok(Input { player_id, kind })
     }
 
     /// Invoke the optional event callback with the current [`GameData`].
@@ -299,14 +323,17 @@ impl Controller {
 /// `continue` and re-prompt. Only the `(Input, InputType)` pairs exercised by
 /// `get_input`'s `Player` branch are validated; any other combination is
 /// accepted, preserving the original behavior. See Stage 6 / sub-task B2.
-fn validate_player_input(input: &Input, input_type: &InputType) -> bool {
-    match (input, input_type) {
-        (Input::Choice { idx }, InputType::Choice { max_index, .. }) => *idx <= *max_index,
-        (Input::ChoosePlayer { idx }, InputType::ChoosePlayer { candidates, .. }) => {
+fn validate_player_input(input: &Input, input_type: &InputType, current_player_name: &str) -> bool {
+    if !current_player_name.is_empty() && input.player_id != current_player_name {
+        return false;
+    }
+    match (&input.kind, input_type) {
+        (InputKind::Choice { idx }, InputType::Choice { max_index, .. }) => *idx <= *max_index,
+        (InputKind::ChoosePlayer { idx }, InputType::ChoosePlayer { candidates, .. }) => {
             *idx < candidates.len()
         }
         (
-            Input::ChooseCards { selected },
+            InputKind::ChooseCards { selected },
             InputType::ChooseCards {
                 display, min, max, ..
             },

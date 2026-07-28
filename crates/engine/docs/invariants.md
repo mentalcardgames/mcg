@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/query/mod.rs
   - crates/engine/src/controller/mod.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-07-04
+last_validated: 2026-07-28
 ---
 
 # System Invariants & Guardrails
@@ -47,11 +47,14 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > `crates/engine/src/interpreter/mod.rs:271-277` for `EndCondition`). But the
 > chosen edge differs:
 > - `front_end::ir::Payload::Condition` (`crates/engine/src/interpreter/mod.rs:229-265`):
->   `should_take_else = result != negated`; `true` → `edges[1]`, `false` → `edges[0]`.
+>   `should_take_else = result != negated`; `true` → `edges[0]` (this edge is correct — take it),
+>   `false` → `edges[1]`.
 > - `front_end::ir::Payload::EndCondition` (`crates/engine/src/interpreter/mod.rs:266-314`):
->   `should_exit = result != negated`; `true` → `edges[0]` (exit), `false` → `edges[1]` (continue).
+>   `should_exit = result == negated`; `true` → `edges[0]` (exit), `false` → `edges[1]` (continue).
 >
 > So edge **0 is the "true/exit" branch for `EndCondition` but the "false" branch for `Condition`**.
+> (Both use opposite formulas due to opposite `negated` values on edge 0 in the IR:
+> `Condition` edge 0 has `negated: false`, `EndCondition` edge 0 has `negated: true`.)
 > Any change to the IR builder's edge ordering or to these match arms must be mirrored across both
 > or games will branch backwards.
 
@@ -247,3 +250,28 @@ pending-resume state match, and the setup-`Any` guard.
 > `crate::quantifier::resolve_player_candidates`, see I-10's setup note in
 > [`lifecycle.md`](./lifecycle.md) §2). See also the corresponding error-string entry in
 > [`error-handling.md`](./error-handling.md).
+
+> **I-21 — Stale input on quantifier prompt mismatch is discarded.**
+> `take_quant_resume` (`crates/engine/src/interpreter/quant_driver.rs:78`) pops mismatched input
+> from the buffer when the pending quantifier kind does not match the input variant (e.g. a `Choice`
+> arrives while a `CardsAnyOrRange` prompt is in flight). Without this, the stale input would never
+> be consumed, `take_quant_resume` would return `None` every step, and `scan_edge` would re-trigger
+> the same quantifier site — creating an infinite prompt loop. The pending quantifier itself is
+> preserved so a future matching input can still resolve it.
+
+> **I-22 — Positional card queries on empty locations resolve to the bare location.**
+> `Evaluator::eval_group`'s `CardPosition` arm (`crates/engine/src/query/cardset.rs:173-195`)
+> extracts the location name from positional queries (`Top`, `Bottom`, `At`) before evaluating
+> the card position. If the location exists but the positional lookup fails (e.g. `top(Discard)` on
+> an empty pile), it gracefully returns `(loc_idx, vec![])` instead of erroring. This is necessary
+> for destination resolution in `execute_cardset_move` where only the location index matters, not
+> individual card IDs. The location-existence check still fails if the location does not exist.
+
+> **I-23 — Inputs are rejected if `player_id` does not match the current player.**
+> `validate_player_input` (`crates/engine/src/controller/mod.rs`) checks
+> `input.player_id == current_player_name` before any range validation. During active
+> play, only the current player's inputs are accepted. Pre-setup
+> (`current_player == None`), `current_player_name` is empty and all inputs pass. The
+> check uses the player **name** (`Player::name: String`) for readability. The `Player`
+> closure path re-prompts on rejection; the `TestFile` path parses `player_id` from an
+> optional `Name:` prefix (defaulting to `"P1"`).

@@ -21,6 +21,7 @@ pub struct TuiState {
     pub waiting_for_input: bool,
     pub input_tx: Option<Sender<Input>>,
     pub current_state: Option<GameData>,
+    pub current_player_name: String,
     pub focus: PanelFocus,
     pub trace_scroll: u16,
     pub trace_auto_scroll: bool,
@@ -53,6 +54,7 @@ impl TuiState {
             game_state_inner_height: 0,
             choose_cursor: 0,
             choose_selected: Vec::new(),
+            current_player_name: String::new(),
         }
     }
 

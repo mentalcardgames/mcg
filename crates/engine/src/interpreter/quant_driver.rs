@@ -2,7 +2,7 @@ use front_end::ir::{Edge, LoweredPayLoad};
 
 use super::Interpreter;
 use crate::interpreter::trace::{TraceEntry, TraceEvent};
-use crate::interpreter::types::{Input, InputType, StepResult};
+use crate::interpreter::types::{InputKind, InputType, StepResult};
 
 impl Interpreter {
     // =======================================================================
@@ -39,13 +39,13 @@ impl Interpreter {
                 return None;
             }
             let input = self.input_buffer.last()?;
-            Some(match (&pq.kind, input) {
+            Some(match (&pq.kind, &input.kind) {
                 (
                     crate::quantifier::PendingKind::DestPlayerAny {
                         candidates,
                         original,
                     },
-                    Input::ChoosePlayer { idx },
+                    InputKind::ChoosePlayer { idx },
                 ) => Resume::Player {
                     idx: *idx,
                     candidates: candidates.clone(),
@@ -56,7 +56,7 @@ impl Interpreter {
                         candidate_ids,
                         original,
                     },
-                    Input::ChooseCards { selected },
+                    InputKind::ChooseCards { selected },
                 ) => Resume::Cards {
                     selected: selected.clone(),
                     candidate_ids: candidate_ids.clone(),
@@ -68,7 +68,7 @@ impl Interpreter {
                         candidate_ids,
                         original,
                     },
-                    Input::ChooseCards { selected },
+                    InputKind::ChooseCards { selected },
                 ) => Resume::AllCards {
                     selected: selected.clone(),
                     player_names: player_names.clone(),

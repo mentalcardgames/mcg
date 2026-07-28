@@ -1,5 +1,15 @@
+/// An input submitted by a player.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Input {
+pub struct Input {
+    /// Name of the player who submitted this input (e.g. "P1").
+    pub player_id: String,
+    /// The kind of input selected.
+    pub kind: InputKind,
+}
+
+/// The choice made by a player, without identity metadata.
+#[derive(Clone, Debug, PartialEq)]
+pub enum InputKind {
     Choice {
         idx: usize,
     },
@@ -17,22 +27,33 @@ pub enum Input {
 
 impl Input {
     pub fn idx(&self) -> usize {
+        self.kind.idx()
+    }
+
+    pub fn player_idx(&self) -> Option<usize> {
+        self.kind.player_idx()
+    }
+
+    pub fn card_selection(&self) -> Option<&[usize]> {
+        self.kind.card_selection()
+    }
+}
+
+impl InputKind {
+    pub fn idx(&self) -> usize {
         match self {
-            Input::Choice { idx } => *idx,
-            Input::OptionalAccept => 0,
-            Input::OptionalDecline => 1,
-            // The new variants are not consumed by the Choice/Optional arms;
-            // `idx()` is meaningless for them — callers use the dedicated
-            // accessors below. Returning 0 keeps the match exhaustive.
-            Input::ChoosePlayer { .. } => 0,
-            Input::ChooseCards { .. } => 0,
+            InputKind::Choice { idx } => *idx,
+            InputKind::OptionalAccept => 0,
+            InputKind::OptionalDecline => 1,
+            InputKind::ChoosePlayer { .. } => 0,
+            InputKind::ChooseCards { .. } => 0,
         }
     }
 
     /// If this is a `ChoosePlayer` input, the chosen 0-based candidate index.
     pub fn player_idx(&self) -> Option<usize> {
         match self {
-            Input::ChoosePlayer { idx } => Some(*idx),
+            InputKind::ChoosePlayer { idx } => Some(*idx),
             _ => None,
         }
     }
@@ -40,7 +61,7 @@ impl Input {
     /// If this is a `ChooseCards` input, the chosen 0-based `display` indices.
     pub fn card_selection(&self) -> Option<&[usize]> {
         match self {
-            Input::ChooseCards { selected } => Some(selected),
+            InputKind::ChooseCards { selected } => Some(selected),
             _ => None,
         }
     }

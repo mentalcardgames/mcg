@@ -1,6 +1,6 @@
 use super::*;
 use crate::game_data::GameData;
-use crate::interpreter::{Input, InputType, Interpreter, StepResult, TraceEntry, TraceEvent};
+use crate::interpreter::{Input, InputKind, InputType, Interpreter, TraceEntry, TraceEvent};
 use front_end::ir::{Ir, LoweredPayLoad};
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -41,29 +41,47 @@ fn test_input_parsing() {
     let path = PathBuf::from("/nonexistent");
     assert_eq!(
         controller.read_test_file(&path).unwrap(),
-        Input::Choice { idx: 0 }
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 }
+        }
     );
     assert_eq!(
         controller.read_test_file(&path).unwrap(),
-        Input::OptionalAccept
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::OptionalAccept
+        }
     );
     assert_eq!(
         controller.read_test_file(&path).unwrap(),
-        Input::Choice { idx: 1 }
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 1 }
+        }
     );
     assert_eq!(
         controller.read_test_file(&path).unwrap(),
-        Input::OptionalDecline
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::OptionalDecline
+        }
     );
     assert_eq!(
         controller.read_test_file(&path).unwrap(),
-        Input::ChoosePlayer { idx: 1 },
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::ChoosePlayer { idx: 1 }
+        },
         "p 2 -> ChoosePlayer idx 1"
     );
     assert_eq!(
         controller.read_test_file(&path).unwrap(),
-        Input::ChooseCards {
-            selected: vec![0, 2]
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::ChooseCards {
+                selected: vec![0, 2]
+            }
         },
         "c 1,3 -> ChooseCards selected [0,2]"
     );
@@ -227,7 +245,10 @@ fn test_play_stage_advances_turn_and_runs_two_iterations() {
     let result = run_game(
         ir,
         GameData::new(),
-        InputSource::Player(Box::new(|_input_type: InputType| Input::Choice { idx: 0 })),
+        InputSource::Player(Box::new(|_input_type: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
         Some(Box::new(move |gd: &GameData| {
             snapshots_clone.lock().unwrap().push(gd.clone());
         })),
