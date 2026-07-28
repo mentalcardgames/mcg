@@ -10,7 +10,7 @@ associated_files:
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/interpreter/types.rs
   - crates/engine/src/game_data.rs
-last_validated: 2026-07-04
+last_validated: 2026-07-28
 ---
 
 # Public Interfaces — the External Host Contract
@@ -414,11 +414,12 @@ For test-suite writers. The on-disk replay format (`crates/engine/src/controller
 
 | Line | Maps to |
 |---|---|
-| `y`, `yes` | `Input::OptionalAccept` |
-| `n`, `no` | `Input::OptionalDecline` |
-| `<N>` | `Input::Choice { idx: N-1 }` (1-based) |
-| `p <N>` | `Input::ChoosePlayer { idx: N-1 }` (1-based candidate index) |
-| `c <csv>` | `Input::ChooseCards { selected: <0-based> }` — input is 1-based, internally converted; comma-separated |
+| `y`, `yes` | `Input { player_id: "P1", kind: InputKind::OptionalAccept }` |
+| `n`, `no` | `Input { player_id: "P1", kind: InputKind::OptionalDecline }` |
+| `<N>` | `Input { player_id: "P1", kind: InputKind::Choice { idx: N-1 } }` (1-based) |
+| `p <N>` | `Input { player_id: "P1", kind: InputKind::ChoosePlayer { idx: N-1 } }` (1-based candidate index) |
+| `c <csv>` | `Input { player_id: "P1", kind: InputKind::ChooseCards { selected: <0-based> } }` — input is 1-based, internally converted; comma-separated |
+| `Name:y` / `Name:<N>` / etc. | Same as above, with `player_id: "Name"` (defaults to `"P1"` when no prefix) |
 
 Blank lines and `#…` comment lines are ignored (`controller/mod.rs:211-216`). On exhaustion the
 path returns the error `"Test input file exhausted (input #N)"` (`controller/mod.rs:223`) rather
@@ -508,9 +509,9 @@ than re-prompting.
 
 | `InputType` request | Matching `Input` answer | Validation rule |
 |---|---|---|
-| `Choice { options, max_index }` | `Input::Choice { idx }` | `idx <= max_index` |
-| `Optional(prompt)` | `Input::OptionalAccept` \| `Input::OptionalDecline` | none — either variant is accepted |
-| `ChoosePlayer { candidates, prompt }` | `Input::ChoosePlayer { idx }` | `idx < candidates.len()` |
+| `Choice { options, max_index }` | `Input { player_id, kind: InputKind::Choice { idx } }` | `idx <= max_index` |
+| `Optional(prompt)` | `Input { player_id, kind: InputKind::OptionalAccept }` \| `InputKind::OptionalDecline` | none — either variant is accepted |
+| `ChoosePlayer { candidates, prompt }` | `Input { player_id, kind: InputKind::ChoosePlayer { idx } }` | `idx < candidates.len()` |
 | `ChooseCards { display, min, max, prompt }` | `Input::ChooseCards { selected }` | every `i` in `selected` is `< display.len()` AND `selected.len() >= min` AND `<= max` |
 
 > **Pitfall (most error-prone).** `Input::ChooseCards.selected` are indices **INTO `display`**, not

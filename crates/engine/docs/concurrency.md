@@ -9,7 +9,7 @@ associated_files:
   - crates/engine/src/interpreter/mod.rs
   - crates/engine/src/game_data.rs
   - crates/engine/Cargo.toml
-last_validated: 2026-07-04
+last_validated: 2026-07-28
 ---
 
 # Concurrency, Memory & Thread Safety
@@ -113,32 +113,26 @@ the engine on a single dedicated thread and communicate via channels.
 
 ---
 
-## 4. Dependencies Inventory (Agent Note)
+## 4. Dependencies Inventory
 
-`crates/engine/Cargo.toml` (`crates/engine/Cargo.toml:1-23`) declares:
+`crates/engine/Cargo.toml` declares:
 
-**In use — production library target** (`crates/engine/src/lib.rs` and below; excludes `bin/`):
-- `front_end` (root dep; `Ir`/`ast`/`ir` types).
-- `serde` + `serde_json` — used by `crates::engine::quantifier::alloc_synth`
-  (`crates/engine/src/quantifier.rs:118-123`) to construct a `StateID` via deserialisation (the
-  `StateID` tuple field is private to `front_end::ir`).
+**In use — production library target:**
+- `front_end` — IR, AST, and lowering types.
+- `serde` + `serde_json` — used by `alloc_synth` for `StateID` construction.
 
-**In use — `engine-tui` binary** (`[[bin]] name = "engine-tui"`,
-`crates/engine/src/bin/engine-tui/main.rs`):
-- `ratatui` and `crossterm` — the TUI itself (the `ui/` module renders with `ratatui` via
-  `crossterm`).
-- `crossbeam-channel` — the TUI's threaded input loop.
+**In use — `engine-tui` binary:**
+- `ratatui` + `crossterm` — terminal UI.
+- `crossbeam-channel` — threaded input loop.
 
-**Not imported anywhere in `crates/engine/src`** (verified post-Stage-7 refactor):
-- `indexmap`, `dashmap`, `thiserror`, `anyhow`, `rand`.
-  Only `std::collections::HashMap` is used as a map. Error handling is stringly-typed
-  (`Result<_, String>`, `crates::engine::interpreter::StepResult::Error(String)`) —
-  `thiserror`/`anyhow` are not exercised. `rand` is not imported by engine sources (the TUI is
-  deterministic). Removing these five from `Cargo.toml` is safe as of this writing; they remain
-  declared for future use. Agents must not assume any of them is available to engine code without a
-  real import. See [`error-handling.md`](./error-handling.md) for the error model in use.
+**`cgdsl-play` binary:**
+- No extra dependencies (auto-discovered, no `[[bin]]` entry needed).
 
-> Note: `crates/engine/src/bin/cgdsl-play.rs` is auto-discovered by `rustc` even though it is not
-> listed under an explicit `[[bin]]`. `Cargo.toml` only declares `engine-tui` as a `[[bin]]`
-> (`crates/engine/Cargo.toml:8-10`); cgdsl-play is reached by cargo's auto-discovery of files under
-> `src/bin/`. See [`README.md`](./README.md) for the binary inventory.
+**Not in `Cargo.toml`:** no unused dependencies remain.
+Error handling is stringly-typed (`Result<_, String>`).
+`rand` is imported from `front_end`'s dependency tree, not directly.
+
+> Note: `crates/engine/src/bin/cgdsl-play.rs` is auto-discovered by cargo. Only `engine-tui`
+> has an explicit `[[bin]]` entry in `Cargo.toml`.
+
+last_validated: 2026-07-28

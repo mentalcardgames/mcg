@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/interpreter/ir_ext.rs
   - crates/engine/src/controller/mod.rs
   - crates/front_end/src/ir.rs
-last_validated: 2026-07-04
+last_validated: 2026-07-28
 ---
 
 # Data Structures & State Model
@@ -213,19 +213,26 @@ quantifier bookkeeping correctly (`pending_overlay = HashMap::new()`, `next_synt
 construction that omits these inits will misbehave on the first quantifier edge. See invariant I-16
 in [`invariants.md`](./invariants.md) for the `next_synth` seeding rationale.
 
-### 3.2 `Input`, `StepResult`, `InputType` — the I/O contract
+### 3.2 `Input`, `InputKind`, `StepResult`, `InputType` — the I/O contract
 
 ```rust
 // crates/engine/src/interpreter/types.rs:1-16  (input from host → interpreter)
 #[derive(Clone, Debug, PartialEq)]
-pub enum Input {
+pub struct Input {
+    pub player_id: String,    // "P1", "P2" — who submitted this
+    pub kind: InputKind,      // what they chose
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InputKind {
     Choice { idx: usize },
     OptionalAccept,
     OptionalDecline,
-    ChoosePlayer { idx: usize },          // post-Stage-5 quantifier
-    ChooseCards { selected: Vec<usize> }, // post-Stage-5 quantifier
+    ChoosePlayer { idx: usize },
+    ChooseCards { selected: Vec<usize> },
 }
 
+// Accessors delegate: Input::idx() → self.kind.idx(), etc.
 // crates/engine/src/interpreter/types.rs:49-55  (step outcome)
 pub enum StepResult { Ok, NeedsInput(InputType), GameOver, Error(String) }
 
@@ -239,20 +246,14 @@ pub enum InputType {
 }
 ```
 
-`Input` and `InputType` both grew by two variants for the quantifier subsystem:
-`ChoosePlayer`/`ChooseCards`. `Input` now carries three accessor methods on `impl Input`
-(`crates/engine/src/interpreter/types.rs:18-47`):
+`Input` now carries three accessor methods that delegate to `InputKind`
+(`crates/engine/src/interpreter/types.rs:22-35`):
 
-- `pub fn idx(&self) -> usize` — backwards-compatible 0-based edge index for the `Choice`/`Optional`
-  arms (`Choice{idx}→idx`, `OptionalAccept→0`, `OptionalDecline→1`; returns `0` for the new
-  variants where `idx` is meaningless — callers use the dedicated accessors below).
-- `pub fn player_idx(&self) -> Option<usize>` — `Some(idx)` if this is a `ChoosePlayer`, else
-  `None`.
-- `pub fn card_selection(&self) -> Option<&[usize]>` — `Some(&selected)` if this is a `ChooseCards`,
-  else `None`.
+- `pub fn idx(&self) -> usize` — delegates to `self.kind.idx()`: `Choice{idx}→idx`, `OptionalAccept→0`, `OptionalDecline→1`; returns `0` for other variants.
+- `pub fn player_idx(&self) -> Option<usize>` — `Some(idx)` if this is a `ChoosePlayer`, else `None`.
+- `pub fn card_selection(&self) -> Option<&[usize]>` — `Some(&selected)` if this is a `ChooseCards`, else `None`.
 
-`Input::idx` lives at `crates/engine/src/interpreter/types.rs:19-30`; `player_idx` at
-`types.rs:33-38`; `card_selection` at `types.rs:41-46`.
+`InputKind` methods live at `crates/engine/src/interpreter/types.rs:38-69`; `Input` delegates at `types.rs:22-35`.
 
 ### 3.3 `TraceEntry` / `TraceEvent` — the per-step trace seam (post-Stage-5)
 

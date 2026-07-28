@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/controller/trace_logger.rs
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/action.rs
-last_validated: 2026-07-04
+last_validated: 2026-07-28
 ---
 
 # Observability & Diagnostics
@@ -224,7 +224,7 @@ in `crates/engine/src/debug/tests.rs` (`from_marker` cases at lines 8-37, marker
 ## 5. Ad-hoc stderr
 
 The only direct stdlib logging in the production library is
-`eprintln!("ShuffleAction failed: {}", e)` (`crates/engine/src/action.rs:179`). There are no
+`eprintln!("ShuffleAction failed: {}", e)` (`crates/engine/src/action.rs:204`). There are no
 `dbg!`/`println!` calls in the library target (the `println!`s in
 `crates/engine/src/bin/cgdsl-play.rs` are CLI output, not engine telemetry). One additional
 `eprintln!` was added post-Stage-5 in the `run_game` startup path: when `MCG_TRACE_LOG` resolves

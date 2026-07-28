@@ -13,6 +13,13 @@ card-game definitions. It parses a game description, builds an IR graph, and ste
 through it — executing actions, evaluating conditions, and requesting player input
 when needed.
 
+This crate is part of a larger workspace. Other crates you may need:
+- `front_end` — the `.cgdsl` parser, AST types, IR lowering, and graph visualizer (`fsm_to_dot` → `.dot`/`.svg`)
+- `cgdsl` — VS Code extension with syntax highlighting and LSP integration
+- `lsp_server` — language server (diagnostics, completions, semantic highlighting)
+- `mcg-cli` — CLI tool for WebSocket/HTTP/Iroh game interaction
+- `qr_comm` — research-phase QR communication protocol
+
 ## Quick Architecture
 
 ```
@@ -40,19 +47,20 @@ when needed.
 **Modifying engine code:**
 3. [`invariants.md`](./invariants.md) — 23 guardrails. **Read before touching anything.**
 4. [`data-structures.md`](./data-structures.md) — field-level layout of every struct and enum
+5. [`contributing.md`](./contributing.md) — development cheatsheet: which files to touch when adding features
 
 **Writing tests:**
-5. [`testing.md`](./testing.md) — test layers, fixture conventions, commands
+6. [`testing.md`](./testing.md) — test layers, fixture conventions, commands
 
 **Integrating from outside:**
-6. [`interfaces.md`](./interfaces.md) — public API surface, data flow
-7. [`api-usage.md`](./api-usage.md) — `run_game()` examples
+7. [`interfaces.md`](./interfaces.md) — public API surface, data flow
+8. [`api-usage.md`](./api-usage.md) — `run_game()` examples
 
 **Reference:**
-8. [`developer-notes.md`](./developer-notes.md) — design decisions, completeness audit, known bugs
-9. [`error-handling.md`](./error-handling.md) — panic sites, recoverable errors, silent no-ops
-10. [`concurrency.md`](./concurrency.md) — threading model, `Send`/`Sync`
-11. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
+9. [`developer-notes.md`](./developer-notes.md) — design decisions, completeness audit, known bugs
+10. [`error-handling.md`](./error-handling.md) — panic sites, recoverable errors, silent no-ops
+11. [`concurrency.md`](./concurrency.md) — threading model, `Send`/`Sync`
+12. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
 
 ## Module Map
 
