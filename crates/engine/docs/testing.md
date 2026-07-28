@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/debug/tests.rs
   - crates/engine/tests/quantifier_test.rs
   - crates/engine/test_games/
-last_validated: 2026-07-04
+last_validated: 2026-07-28
 ---
 
 # Testing Strategy
@@ -373,7 +373,7 @@ Conventions the suite aims for (not yet fully met — see §10):
 5. Every `.expect`/`panic!`/`unwrap`/`todo!` site listed in [`error-handling.md`](./error-handling.md)
    §2 has a `#[should_panic(expected = "…")]` test pinning the panic message — unless the
    site is a known bug scheduled for a fix (in which case file it in
-   [`known-bugs.md`](./known-bugs.md) and write the regression test around the *corrected*
+   [`developer-notes.md`](./known-bugs.md) and write the regression test around the *corrected*
    behavior).
 6. Every `TraceEvent::Display` arm in `src/interpreter/trace.rs` has a test pinning the
    rendered string format (so trace-log consumers downstream of `cgdsl-engine` don't
@@ -384,7 +384,7 @@ Conventions the suite aims for (not yet fully met — see §10):
 When a test reveals behavior that disagrees with intent (e.g. the WTO mismatch in I-9, or
 the `>` vs `>=` off-by-one in `execute_cardset_move`), the workflow is:
 
-1. Add the bug to [`known-bugs.md`](./known-bugs.md) with a B-n id if not already present.
+1. Add the bug to [`developer-notes.md`](./known-bugs.md) with a B-n id if not already present.
 2. **Do not** write a "pin current behavior" test — that cements the bug. Instead, write
    the regression test around the *corrected* behavior; it will stay red until the fix lands.
 3. Land the fix and the now-passing regression test in the same commit.
@@ -510,7 +510,7 @@ Per §8.1, these are bugs to fix before writing the regression tests:
   `dest_loc_idx == locations.len()` slips past the guard and panics on the subsequent
   index. Documented in [`invariants.md`](./invariants.md) / [`error-handling.md`](./error-handling.md).
 
-When fixing, file entries under [`known-bugs.md`](./known-bugs.md), land the corrected
+When fixing, file entries under [`developer-notes.md`](./known-bugs.md), land the corrected
 behavior and its regression test together.
 
 ---
@@ -526,4 +526,4 @@ behavior and its regression test together.
 | [`observability.md`](./observability.md) | The `event_sender` / `trace_sender` seams tests capture through |
 | [`data-structures.md`](./data-structures.md) | Field-level layout for hand-building `GameData` in unit tests |
 | [`api-usage.md`](./api-usage.md) | Golden path and manual interpreter driving patterns reused by §6 |
-| [`known-bugs.md`](./known-bugs.md) | Bugs scheduled for fix; tests should be written around corrected behavior |
+| [`developer-notes.md`](./known-bugs.md) | Bugs scheduled for fix; tests should be written around corrected behavior |

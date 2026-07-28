@@ -444,16 +444,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         thread::sleep(Duration::from_millis(16));
     }
 
+    ratatui::restore();
+
     if engine_panic.load(Ordering::SeqCst) {
-        let _ = ratatui::restore();
         eprintln!();
         eprintln!("========================================");
         eprintln!("ENGINE PANIC:");
         eprintln!("{}", engine_panic_msg.lock().unwrap());
         eprintln!("========================================");
     } else {
-        ratatui::restore();
-        println!("Engine terminated.");
+        match engine_handle.join() {
+            Ok(Ok(_)) => println!("Engine terminated."),
+            Ok(Err(e)) => eprintln!("Engine error: {e}"),
+            Err(_) => {} // thread already reported via engine_panic
+        }
     }
 
     Ok(())

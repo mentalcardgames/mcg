@@ -9,7 +9,7 @@ associated_files:
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/query/mod.rs
   - crates/engine/src/bin/cgdsl-play.rs
-last_validated: 2026-07-04
+last_validated: 2026-07-28
 ---
 
 # Public API & End-to-End Usage Manual

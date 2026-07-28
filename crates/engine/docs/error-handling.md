@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/controller/mod.rs
   - crates/engine/src/game_data.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-07-04
+last_validated: 2026-07-28
 ---
 
 # Error Handling, Panic Conditions & Diagnostics
@@ -137,7 +137,7 @@ returns `StepResult::Error`, never `panic!` (`interpreter/mod.rs:157-159`).
   (`crates/engine/src/action.rs:178-180`) — prints `eprintln!("ShuffleAction failed: {}", e)` and
   continues; the pile is left unshuffled.
 - `front_end::ast::ActionRule::BidAction`, `BidMemoryAction`, `DemandAction`, `DemandMemoryAction`,
-  `front_end::ast::EndType::GameWithWinner`, all `front_end::ast::ScoringRule` variants,
+  `front_end::ast::EndType::GameWithWinner`,
   `front_end::ast::SetUpRule::CreateTokenOnLocation`, `front_end::ast::MoveType::Place`
   (`crates/engine/src/action.rs:124, 236-266, 254-256, 274-292, 335`) — `// TODO` no-ops.
 - `front_end::ir::Payload::Trigger` traversal: `crates::engine::interpreter::Interpreter::step`
