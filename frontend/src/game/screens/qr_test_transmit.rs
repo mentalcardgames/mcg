@@ -92,13 +92,13 @@ impl ScreenWidget for QrTestTransmit {
             };
 
             let server = app_interface.state().settings.server_address.clone();
-            if !app_interface.ws.is_connected() {
-                app_interface.ws.connect(&server);
+            if !app_interface.is_connected() {
+                app_interface.connect(&server);
             }
 
             // Register listener once and activate it
-            app_interface.ws.register_listener_once("/transmit", on_msg, on_err, on_cls);
-            app_interface.ws.set_active_listener(Some("/transmit"));
+            app_interface.register_listener_once("/transmit", on_msg, on_err, on_cls);
+            app_interface.set_active_listener(Some("/transmit"));
 
             self.initialized = true;
         }
@@ -127,7 +127,7 @@ impl ScreenWidget for QrTestTransmit {
                 if let Ok(epoch) = self.epoch.try_borrow_mut() {
                     if let Some(file) = self.file_list.get(epoch.header.participant as usize) {
                         let message = Frontend2BackendMsg::QrReq(file.clone());
-                        app_interface.ws.send_msg(&message);
+                        app_interface.send_msg(message);
                     }
                 }
             }
@@ -176,7 +176,7 @@ impl ScreenWidget for QrTestTransmit {
 
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
         // Deactivate this screen's listener, keep it registered
-        app_interface.ws.set_active_listener(None);
+        app_interface.set_active_listener(None);
     }
 }
 

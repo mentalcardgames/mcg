@@ -98,42 +98,41 @@ impl ScreenWidget for LobbyScreen {
             // attempt to connect using central connection
             {
                 let server = app_interface.state().settings.server_address.clone();
-                if !app_interface.ws.is_connected() {
-                    app_interface.ws.connect(&server);
+                if !app_interface.is_connected() {
+                    app_interface.connect(&server);
                 }
 
                 // Register the lobby listener exactly once (idempotent)
                 app_interface
-                    .ws
                     .register_listener_once("/lobbyselect/lobby", on_msg, on_err, on_cls);
 
                 // Activate this listener so incoming messages are routed to it
-                app_interface.ws.set_active_listener(Some("/lobbyselect/lobby"));
+                app_interface.set_active_listener(Some("/lobbyselect/lobby"));
             }
 
             self.initialized = true;
         }
 
         // When the screen is visible and connected, ensure we have requested initial state
-        if !self.setup && app_interface.ws.is_connected() {
+        if !self.setup && app_interface.is_connected() {
             // now connected: request our name and players explicitly
             let msg = Frontend2BackendMsg::GetOurName;
-            app_interface.ws.send_msg(&msg);
+            app_interface.send_msg(msg);
             let msg = Frontend2BackendMsg::GetPlayers;
-            app_interface.ws.send_msg(&msg);
+            app_interface.send_msg(msg);
             self.setup = true;
         }
-        if *self.ready_sync.borrow() && app_interface.ws.is_connected() {
+        if *self.ready_sync.borrow() && app_interface.is_connected() {
             // If we just got a new player and are syncing ready state, send our current ready state to backend
             let local_ready = self.players.borrow().first().map(|(_, r)| *r).unwrap_or(false);
             let msg = Frontend2BackendMsg::ReadyUpdate(local_ready);
-            app_interface.ws.send_msg(&msg);
+            app_interface.send_msg(msg);
             *self.ready_sync.borrow_mut() = false; // Reset the flag after syncing
         }
 
         // If we got a name from the backend, apply it to our local player entry and settings.
         if let Some(new_name) = self.our_name_pending.borrow_mut().take() {
-            app_interface.state().settings.name = new_name;
+            app_interface.state_mut().settings.name = new_name;
         }
 
         // If user set a name in the previous screen, apply it to the local player entry once.
@@ -179,7 +178,7 @@ impl ScreenWidget for LobbyScreen {
                     *ready = !*ready;
                     // Send ready state to backend so we can tell the other players
                     let msg = Frontend2BackendMsg::ReadyUpdate(*ready);
-                    app_interface.ws.send_msg(&msg);
+                    app_interface.send_msg(msg);
                 }
             }
         }
@@ -206,7 +205,7 @@ impl ScreenWidget for LobbyScreen {
         ui.horizontal(|ui| {
             if ui.button("Generate QR Code and let others scan it to join!").clicked() {
                 let msg = Frontend2BackendMsg::GetTicket;
-                app_interface.ws.send_msg(&msg);
+                app_interface.send_msg(msg);
             }
         });
         ui.add_space(8.0);
@@ -231,9 +230,9 @@ impl ScreenWidget for LobbyScreen {
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
         // Tell others we wish to disconnect
         let msg = Frontend2BackendMsg::Disconnect;
-        app_interface.ws.send_msg(&msg);
+        app_interface.send_msg(msg);
         // Deactivate the lobby listener but keep it registered (idempotent registration elsewhere)
-        app_interface.ws.set_active_listener(None);
+        app_interface.set_active_listener(None);
     }
 }
 

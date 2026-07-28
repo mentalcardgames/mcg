@@ -83,12 +83,12 @@ impl ScreenWidget for LobbySelectionScreen {
                     sprintln!("Got a close:\n\t- {:?}", c);
                 };
 
-                if !app_interface.ws.is_connected() {
-                    app_interface.ws.connect(&server);
+                if !app_interface.is_connected() {
+                    app_interface.connect(&server);
                 }
-                app_interface.ws.register_listener_once("/lobbyselect", on_msg, on_err, on_cls);
+                app_interface.register_listener_once("/lobbyselect", on_msg, on_err, on_cls);
                 // activate this screen's listener
-                app_interface.ws.set_active_listener(Some("/lobbyselect"));
+                app_interface.set_active_listener(Some("/lobbyselect"));
             }
 
             self.initialized = true;
@@ -139,25 +139,25 @@ impl ScreenWidget for LobbySelectionScreen {
         if ui.button("Host Game").clicked() {
             // Set max players and player name on the server, then open the lobby
             let msg = Frontend2BackendMsg::PlayerCount(self.players);
-            app_interface.ws.send_msg(&msg);
+            app_interface.send_msg(msg);
             let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
-            app_interface.ws.send_msg(&msg);
+            app_interface.send_msg(msg);
             // Persist chosen name into global client state prior to join
-            app_interface.state().settings.name = self.player_name.clone();
+            app_interface.state_mut().settings.name = self.player_name.clone();
             match self.game_type {
                 GameType::Poker => {
                     // Transition to poker lobby setup
                     eprintln!("Hosting Poker game with max {} players", self.players);
                     let msg = Frontend2BackendMsg::LobbyOpen("Poker".to_string());
-                    app_interface.ws.send_msg(&msg);
-                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/lobby".to_string()));
+                    app_interface.send_msg(msg);
+                    app_interface.change_screen("/lobbyselect/lobby".to_string());
                 }
                 GameType::Blackjack => {
                     // Transition to blackjack lobby setup
                     eprintln!("Hosting Blackjack game with max {} players", self.players);
                     let msg = Frontend2BackendMsg::LobbyOpen("Blackjack".to_string());
-                    app_interface.ws.send_msg(&msg);
-                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/lobby".to_string()));
+                    app_interface.send_msg(msg);
+                    app_interface.change_screen("/lobbyselect/lobby".to_string());
                 }
             }
         }
@@ -186,18 +186,18 @@ impl ScreenWidget for LobbySelectionScreen {
         if self.input.starts_with("endpoint"){
             tracing::info!("Sending endpoint ticket to server: {}", self.input);
             // Persist chosen name into global client state prior to join
-            app_interface.state().settings.name = self.player_name.clone();
+            app_interface.state_mut().settings.name = self.player_name.clone();
             let ticket = self.input.clone();
             let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
-            app_interface.ws.send_msg(&msg);
+            app_interface.send_msg(msg);
             let msg = Frontend2BackendMsg::QrValue(ticket);
-            app_interface.ws.send_msg(&msg);
+            app_interface.send_msg(msg);
             self.input.clear();
         }
 
         // Only switch screens if we got accepted into the lobby
         if *self.switch.borrow() {
-            app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/lobbyselect/lobby".to_string()));
+            app_interface.change_screen("/lobbyselect/lobby".to_string());
         }
         // If we received a new name, update our name both here and
         // in the global state so it persists across screens
@@ -210,7 +210,7 @@ impl ScreenWidget for LobbySelectionScreen {
         };
 
         if let Some(name) = name_opt {
-            app_interface.state().settings.name = name.clone();
+            app_interface.state_mut().settings.name = name.clone();
             self.player_name = name.clone();
 
             if let Ok(mut storage) = self.name_storage.try_borrow_mut() {
@@ -220,9 +220,9 @@ impl ScreenWidget for LobbySelectionScreen {
     }
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
         // Persist name when leaving this screen
-        app_interface.state().settings.name = self.player_name.clone();
+        app_interface.state_mut().settings.name = self.player_name.clone();
         // Deactivate this screen's listener
-        app_interface.ws.set_active_listener(None);
+        app_interface.set_active_listener(None);
     }
 }
 

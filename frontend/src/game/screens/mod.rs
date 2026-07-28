@@ -28,19 +28,62 @@ pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
 pub use lobby_setup::LobbySelectionScreen;
 pub use mcg_lobby::LobbyScreen;
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig};
 
 pub struct AppInterface<'a> {
-    pub events: &'a mut Vec<crate::game::AppEvent>,
-    pub app_state: &'a mut crate::store::ClientState,
-
-    pub ws: &'a mut WebSocketConnection,
+    events: &'a mut Vec<crate::game::AppEvent>,
+    app_state: &'a mut crate::store::ClientState,
+    ws: &'a mut WebSocketConnection,
 }
 impl<'a> AppInterface<'a> {
-    pub fn queue_event(&mut self, event: crate::game::AppEvent) {
-        self.events.push(event);
+    pub fn new(events: &'a mut Vec<crate::game::AppEvent>,
+               client_state: &'a mut crate::store::ClientState,
+               websocket: &'a mut WebSocketConnection) -> Self {
+        Self {
+            events,
+            app_state: client_state,
+            ws: websocket,
+        }
     }
-    pub fn state(&mut self) -> &mut crate::store::ClientState {
+    pub fn state(&mut self) -> &crate::store::ClientState {
         self.app_state
+    }
+    pub fn state_mut(&mut self) -> &mut crate::store::ClientState {
+        self.app_state
+    }
+    pub fn change_screen(&mut self, screen: String) {
+        self.events.push(crate::game::AppEvent::ChangeRoute(screen));
+    }
+    pub fn send_msg(&mut self, msg: Frontend2BackendMsg) {
+        self.ws.send_msg(msg);
+    }
+    /// This starts a drag and drop game
+    pub fn start_game(&mut self, config: GameState<DirectoryCardType>) {
+        self.events.push(crate::game::AppEvent::StartGame(config));
+    }
+    /// This starts the static poker implementation
+    pub fn create_game(&mut self, config: Vec<PlayerConfig>) {
+        self.ws.create_game(config)
+    }
+    pub fn exit_game(&mut self) {
+        self.events.push(crate::game::AppEvent::ExitGame);
+    }
+    pub fn is_connected(&self) -> bool {
+        self.ws.is_connected()
+    }
+    pub fn connect(&mut self, address: &str) {
+        self.ws.connect(address)
+    }
+    pub fn set_active_listener(&mut self, screen: Option<&str>) {
+        self.ws.set_active_listener(screen)
+    }
+    pub fn register_listener_once(
+        &mut self,
+        screen: &str,
+        on_message: impl Fn(Backend2FrontendMsg) + 'static,
+        on_error: impl Fn(String) + 'static,
+        on_close: impl Fn(String) + 'static) {
+        self.ws.register_listener_once(screen, on_message, on_error, on_close)
     }
 }
 

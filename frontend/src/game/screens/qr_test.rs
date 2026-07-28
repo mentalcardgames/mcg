@@ -50,13 +50,13 @@ impl ScreenWidget for QrScreen {
             };
 
             let server = app_interface.state().settings.server_address.clone();
-            if !app_interface.ws.is_connected() {
-                app_interface.ws.connect(&server);
+            if !app_interface.is_connected() {
+                app_interface.connect(&server);
             }
 
             // Register listener once and activate it
-            app_interface.ws.register_listener_once("/qr", on_msg, on_err, on_cls);
-            app_interface.ws.set_active_listener(Some("/qr"));
+            app_interface.register_listener_once("/qr", on_msg, on_err, on_cls);
+            app_interface.set_active_listener(Some("/qr"));
 
             self.initialized = true;
         }
@@ -67,11 +67,11 @@ impl ScreenWidget for QrScreen {
             self.scanner.button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
             if ui.button("Generate Endpoint Ticket QR Code").clicked() {
                 let msg = Frontend2BackendMsg::GetTicket;
-                app_interface.ws.send_msg(&msg);
+                app_interface.send_msg(msg);
             }
             if ui.button("Generate Local IP QR Code").clicked() {
                 let msg = Frontend2BackendMsg::GetIP;
-                app_interface.ws.send_msg(&msg);
+                app_interface.send_msg(msg);
             }
         });
         ui.add_space(8.0);
@@ -81,7 +81,7 @@ impl ScreenWidget for QrScreen {
             tracing::info!("Sending endpoint ticket to server: {}", self.input);
             let ticket = self.input.clone();
             let msg = Frontend2BackendMsg::QrValue(ticket);
-            app_interface.ws.send_msg(&msg);
+            app_interface.send_msg(msg);
             self.input.clear();
         }
         if let Ok(payload_ref) = self.qr_payload.try_borrow() {
@@ -100,7 +100,7 @@ impl ScreenWidget for QrScreen {
 
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
         // Deactivate this screen's listener, keep it registered
-        app_interface.ws.set_active_listener(None);
+        app_interface.set_active_listener(None);
     }
 }
 

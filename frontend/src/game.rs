@@ -265,12 +265,10 @@ impl eframe::App for App {
         if self.current_screen_path != "/" {
             self.render_top_bar(ctx, &mut events);
         }
-
-        let mut app_interface = AppInterface {
-            events: &mut events,
-            app_state: &mut self.app_state,
-            ws: &mut self.ws_connection,
-        };
+        let mut app_interface = AppInterface::new(
+            &mut events,
+            &mut self.app_state,
+            &mut self.ws_connection);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // Ensure screen exists
@@ -291,17 +289,17 @@ impl eframe::App for App {
                 mm.ui(&mut app_interface, ui, frame);
             }
         });
-        let events = std::mem::take(app_interface.events);
+        let events = std::mem::take(&mut events);
         for event in events {
             match event {
                 AppEvent::ChangeRoute(path) => {
                     // Call on_exit for the current screen before changing routes
                     if let Some(mut screen) = self.screens.remove(&self.current_screen_path) {
-                        let mut temp_interface = AppInterface {
-                            events: &mut Vec::new(),
-                            app_state: &mut self.app_state,
-                            ws: &mut self.ws_connection,
-                        };
+                        let mut events = Vec::new();
+                        let mut temp_interface = AppInterface::new(
+                            &mut events,
+                            &mut self.app_state,
+                            &mut self.ws_connection);
                         screen.on_exit(&mut temp_interface);
                     }
                     self.change_route(&path);

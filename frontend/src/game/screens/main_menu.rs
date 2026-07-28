@@ -43,9 +43,9 @@ impl ScreenWidget for MainMenu {
 
                             if ui.add_sized(button_size, button).clicked() {
                                 eprintln!("{} opened", meta.display_name);
-                                app_interface.queue_event(crate::game::AppEvent::ChangeRoute(
-                                    meta.path.to_string(),
-                                ));
+                                app_interface.change_screen(
+                                    meta.path.to_string()
+                                );
                             }
                         }
                     });

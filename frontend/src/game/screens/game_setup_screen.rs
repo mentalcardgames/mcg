@@ -132,7 +132,7 @@ impl ScreenWidget for GameSetupScreen {
                     ui.add_space(5.0);
                     if ui.button("Start Game").clicked() {
                         if let Some(config) = self.generate_config() {
-                            app_interface.queue_event(crate::game::AppEvent::StartGame(config));
+                            app_interface.start_game(config);
                         }
                     }
                 });

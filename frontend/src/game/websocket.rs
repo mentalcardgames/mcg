@@ -17,7 +17,7 @@ pub enum NetworkCommand {
 /// Trait for sending messages to the server.
 /// Allows decoupling UI components from the concrete WebSocket implementation.
 pub trait MessageSender {
-    fn send(&self, msg: &Frontend2BackendMsg);
+    fn send(&self, msg: Frontend2BackendMsg);
 }
 
 /// A simplified WebSocket connection service with immediate message processing.
@@ -217,9 +217,9 @@ impl WebSocketConnection {
     }
 
     /// Send a `Frontend2BackendMsg` to the server if connected.
-    pub fn send_msg(&self, msg: &Frontend2BackendMsg) {
+    pub fn send_msg(&self, msg: Frontend2BackendMsg) {
         if let Some(ws) = &self.ws {
-            if let Ok(txt) = serde_json::to_string(msg) {
+            if let Ok(txt) = serde_json::to_string(&msg) {
                 if let Err(e) = ws.send_with_str(&txt) {
                     web_sys::console::log_1(&format!("Failed to send message: {:?}", e).into());
                 }
@@ -286,7 +286,7 @@ impl Drop for WebSocketConnection {
 }
 
 impl MessageSender for WebSocketConnection {
-    fn send(&self, msg: &Frontend2BackendMsg) {
+    fn send(&self, msg: Frontend2BackendMsg) {
         self.send_msg(msg);
     }
 }

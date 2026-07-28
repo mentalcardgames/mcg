@@ -71,7 +71,7 @@ impl ScreenWidget for ExampleScreen {
                     )
                     .clicked()
                 {
-                    app_interface.queue_event(crate::game::AppEvent::ChangeRoute("/".to_string()));
+                    app_interface.change_screen("/".to_string());
                 }
 
                 ui.add_space(20.0);

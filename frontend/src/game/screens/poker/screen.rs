@@ -74,7 +74,7 @@ impl PokerOnlineScreen {
         self.conn.close();
     }
 
-    fn send(&self, msg: &mcg_shared::Frontend2BackendMsg) {
+    fn send(&self, msg: mcg_shared::Frontend2BackendMsg) {
         self.conn.send_msg(msg);
     }
 
@@ -331,7 +331,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                             )
                             .clicked()
                         {
-                            self.send(&mcg_shared::Frontend2BackendMsg::Action {
+                            self.send(mcg_shared::Frontend2BackendMsg::Action {
                                 player_id,
                                 action: PlayerAction::CheckCall,
                             });
@@ -349,7 +349,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                             .add(egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)))
                             .clicked()
                         {
-                            self.send(&mcg_shared::Frontend2BackendMsg::Action {
+                            self.send(mcg_shared::Frontend2BackendMsg::Action {
                                 player_id,
                                 action: PlayerAction::Fold,
                             });
@@ -396,7 +396,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
                         .add(egui::Button::new(next_label).min_size(egui::vec2(140.0, 40.0)))
                         .clicked()
                     {
-                        self.send(&mcg_shared::Frontend2BackendMsg::NextHand);
+                        self.send(mcg_shared::Frontend2BackendMsg::NextHand);
                     }
                 });
                 ui.add_space(6.0);
@@ -406,7 +406,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
         });
     }
 
-    fn send(&self, msg: &mcg_shared::Frontend2BackendMsg) {
+    fn send(&self, msg: mcg_shared::Frontend2BackendMsg) {
         self.conn.send_msg(msg);
     }
 }
@@ -414,7 +414,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
 impl ScreenWidget for PokerOnlineScreen {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
-        let app_state = &mut app_interface.app_state;
+        let app_state = app_interface.state_mut();
 
         // Process any queued WebSocket messages first
         self.connection_manager.dispatch_queued_messages(app_state);
