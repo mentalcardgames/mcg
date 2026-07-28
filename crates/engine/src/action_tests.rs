@@ -250,10 +250,10 @@ fn move_type_place_is_currently_a_noop() {
 }
 
 #[test]
-fn scoring_rule_score_is_currently_a_noop() {
+fn scoring_rule_score_adds_to_player_score() {
     let mut gd = GameData::new();
     let p0 = gd.add_player("Alice".to_string());
-    let before_score = gd.players[p0].score;
+    assert_eq!(gd.players[p0].score, 0);
     execute_scoring_rule(
         ScoringRule::ScoreRule {
             score_rule: front_end::ast::ScoreRule::Score {
@@ -267,17 +267,13 @@ fn scoring_rule_score_is_currently_a_noop() {
         },
         &mut gd,
     );
-    assert_eq!(
-        gd.players[p0].score, before_score,
-        "Score must not change score (TODO no-op)"
-    );
+    assert_eq!(gd.players[p0].score, 10, "Score should add 10 to Alice");
 }
 
 #[test]
-fn scoring_rule_score_memory_is_currently_a_noop() {
+fn scoring_rule_score_memory_writes_to_memory_slot() {
     let mut gd = GameData::new();
-    let p0 = gd.add_player("Alice".to_string());
-    let before_score = gd.players[p0].score;
+    gd.add_player("Alice".to_string());
     execute_scoring_rule(
         ScoringRule::ScoreRule {
             score_rule: front_end::ast::ScoreRule::ScoreMemory {
@@ -292,17 +288,20 @@ fn scoring_rule_score_memory_is_currently_a_noop() {
         },
         &mut gd,
     );
-    assert_eq!(
-        gd.players[p0].score, before_score,
-        "ScoreMemory must not change score (TODO no-op)"
-    );
+    match gd.get_memory("m") {
+        Some(crate::game_data::MemoryValue::Int(n)) => assert_eq!(*n, 10),
+        other => panic!("expected Int(10), got {:?}", other),
+    }
 }
 
 #[test]
-fn scoring_rule_winner_is_currently_a_noop() {
+fn scoring_rule_winner_eliminates_non_winners() {
     let mut gd = GameData::new();
     let p0 = gd.add_player("Alice".to_string());
-    let before_score = gd.players[p0].score;
+    let p1 = gd.add_player("Bob".to_string());
+    gd.turn_order = vec![p0, p1];
+    assert!(gd.players[p0].in_game);
+    assert!(gd.players[p1].in_game);
     execute_scoring_rule(
         ScoringRule::WinnerRule {
             winner_rule: front_end::ast::WinnerRule::Winner {
@@ -315,17 +314,20 @@ fn scoring_rule_winner_is_currently_a_noop() {
         },
         &mut gd,
     );
-    assert_eq!(
-        gd.players[p0].score, before_score,
-        "WinnerRule must not change score (TODO no-op)"
-    );
+    assert!(gd.players[p0].in_game, "Alice should still be in game");
+    assert!(!gd.players[p1].in_game, "Bob should be eliminated");
 }
 
 #[test]
-fn scoring_rule_winner_with_is_currently_a_noop() {
+fn scoring_rule_winner_with_eliminates_lowest_score() {
     let mut gd = GameData::new();
     let p0 = gd.add_player("Alice".to_string());
-    let before_score = gd.players[p0].score;
+    let p1 = gd.add_player("Bob".to_string());
+    gd.turn_order = vec![p0, p1];
+    gd.players[p0].score = 10;
+    gd.players[p1].score = 5;
+    assert!(gd.players[p0].in_game);
+    assert!(gd.players[p1].in_game);
     execute_scoring_rule(
         ScoringRule::WinnerRule {
             winner_rule: front_end::ast::WinnerRule::WinnerWith {
@@ -335,9 +337,13 @@ fn scoring_rule_winner_with_is_currently_a_noop() {
         },
         &mut gd,
     );
-    assert_eq!(
-        gd.players[p0].score, before_score,
-        "WinnerRule::WinnerWith must not change score (TODO no-op)"
+    assert!(
+        gd.players[p0].in_game,
+        "Alice (score=10) should win on highest score"
+    );
+    assert!(
+        !gd.players[p1].in_game,
+        "Bob (score=5) should be eliminated"
     );
 }
 

@@ -353,7 +353,26 @@ fn rule_signature_scoring_score_rule() {
             },
         },
     };
-    assert_eq!(subtype(&rule), "Scoring:ScoreRule");
+    assert_eq!(subtype(&rule), "Scoring:Score");
+}
+
+#[test]
+fn rule_signature_scoring_score_memory() {
+    use front_end::ast::{IntExpr, PlayerExpr, Players, ScoreRule};
+    let rule = GameRule::Scoring {
+        scoring: ScoringRule::ScoreRule {
+            score_rule: ScoreRule::ScoreMemory {
+                int: IntExpr::Literal { int: 1 },
+                memory: "m".to_string(),
+                players: Players::Player {
+                    player: PlayerExpr::Literal {
+                        name: "P1".to_string(),
+                    },
+                },
+            },
+        },
+    };
+    assert_eq!(subtype(&rule), "Scoring:ScoreMemory");
 }
 
 #[test]
@@ -370,5 +389,19 @@ fn rule_signature_scoring_winner_rule() {
             },
         },
     };
-    assert_eq!(subtype(&rule), "Scoring:WinnerRule");
+    assert_eq!(subtype(&rule), "Scoring:Winner");
+}
+
+#[test]
+fn rule_signature_scoring_winner_with() {
+    use front_end::ast::{Extrema, WinnerRule, WinnerType};
+    let rule = GameRule::Scoring {
+        scoring: ScoringRule::WinnerRule {
+            winner_rule: WinnerRule::WinnerWith {
+                extrema: Extrema::Max,
+                winner_type: WinnerType::Score,
+            },
+        },
+    };
+    assert_eq!(subtype(&rule), "Scoring:WinnerWith");
 }

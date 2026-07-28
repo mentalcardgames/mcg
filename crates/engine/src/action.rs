@@ -306,25 +306,94 @@ pub(crate) fn execute_action_rule(action: ActionRule, game_data: &mut GameData) 
     }
 }
 
-/// not yet implemented
-#[allow(unused_variables)]
 pub(crate) fn execute_scoring_rule(scoring: ScoringRule, game_data: &mut GameData) {
     match scoring {
         ScoringRule::ScoreRule { score_rule } => match score_rule {
-            front_end::ast::ScoreRule::Score { int: _, players: _ } => {
-                //TODO: figure out what this should do
+            front_end::ast::ScoreRule::Score { int, players } => {
+                let value = crate::query::Evaluator::eval_int(&int, game_data)
+                    .unwrap_or_else(|e| panic!("Score: failed to eval int {:?}: {}", int, e));
+                let indices = crate::query::Evaluator::resolve_players(&players, game_data);
+                for idx in indices {
+                    game_data.players[idx].score += value;
+                }
             }
             front_end::ast::ScoreRule::ScoreMemory {
-                int: _,
+                int,
+                memory,
                 players: _,
-                memory: _,
             } => {
-                //TODO: figure out what this should do
+                // NOTE: per-player memory does not exist yet. ScoreMemory
+                // writes the evaluated int to the named global memory slot.
+                // Multi-player targets will overwrite (last write wins).
+                let value = crate::query::Evaluator::eval_int(&int, game_data)
+                    .unwrap_or_else(|e| panic!("ScoreMemory: failed to eval int {:?}: {}", int, e));
+                game_data
+                    .memories
+                    .insert(memory, crate::game_data::MemoryValue::Int(value));
             }
         },
-        ScoringRule::WinnerRule { winner_rule: _ } => {
-            // TODO: figure out what this should do
-        }
+        ScoringRule::WinnerRule { winner_rule } => match winner_rule {
+            front_end::ast::WinnerRule::Winner { players } => {
+                let winner_indices = crate::query::Evaluator::resolve_players(&players, game_data);
+                for i in 0..game_data.players.len() {
+                    if !winner_indices.contains(&i) {
+                        game_data.set_player_out(i);
+                    }
+                }
+            }
+            front_end::ast::WinnerRule::WinnerWith {
+                extrema,
+                winner_type,
+            } => {
+                // NOTE: Position = turn-order index (lower = earlier in turn).
+                // NOTE: Memory reads global slot, expects Int; per-player
+                // memory does not exist yet so all players share the same value.
+                let values: Vec<(usize, usize)> = game_data
+                    .players
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| p.in_game)
+                    .map(|(i, p)| {
+                        let val = match &winner_type {
+                            front_end::ast::WinnerType::Score => p.score as usize,
+                            front_end::ast::WinnerType::Position => game_data
+                                .turn_order
+                                .iter()
+                                .position(|&x| x == i)
+                                .unwrap_or(usize::MAX),
+                            front_end::ast::WinnerType::Memory { memory } => {
+                                match game_data.get_memory(memory) {
+                                    Some(crate::game_data::MemoryValue::Int(n)) => {
+                                        (*n).max(0) as usize
+                                    }
+                                    _ => 0,
+                                }
+                            }
+                        };
+                        (i, val)
+                    })
+                    .collect();
+
+                if values.is_empty() {
+                    return;
+                }
+
+                let target = match extrema {
+                    front_end::ast::Extrema::Max => {
+                        values.iter().map(|(_, v)| v).max().copied().unwrap()
+                    }
+                    front_end::ast::Extrema::Min => {
+                        values.iter().map(|(_, v)| v).min().copied().unwrap()
+                    }
+                };
+
+                for (i, v) in &values {
+                    if *v != target {
+                        game_data.set_player_out(*i);
+                    }
+                }
+            }
+        },
     }
 }
 

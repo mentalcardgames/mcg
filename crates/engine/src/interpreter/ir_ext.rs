@@ -87,8 +87,18 @@ pub(super) fn rule_signature(rule: &front_end::ast::GameRule) -> (String, String
         }
         front_end::ast::GameRule::Scoring { scoring } => {
             let subtype = match scoring {
-                front_end::ast::ScoringRule::ScoreRule { .. } => "Scoring:ScoreRule".to_string(),
-                front_end::ast::ScoringRule::WinnerRule { .. } => "Scoring:WinnerRule".to_string(),
+                front_end::ast::ScoringRule::ScoreRule { score_rule } => match score_rule {
+                    front_end::ast::ScoreRule::Score { .. } => "Scoring:Score".to_string(),
+                    front_end::ast::ScoreRule::ScoreMemory { .. } => {
+                        "Scoring:ScoreMemory".to_string()
+                    }
+                },
+                front_end::ast::ScoringRule::WinnerRule { winner_rule } => match winner_rule {
+                    front_end::ast::WinnerRule::Winner { .. } => "Scoring:Winner".to_string(),
+                    front_end::ast::WinnerRule::WinnerWith { .. } => {
+                        "Scoring:WinnerWith".to_string()
+                    }
+                },
             };
             (subtype, format!("{:?}", scoring))
         }
