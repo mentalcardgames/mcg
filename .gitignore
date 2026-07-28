@@ -19,6 +19,8 @@ tags
 mcg_server_public.toml
 *.log
 
+*.dot
+
 CLAUDE.md
 CRUSH.md
 WARP.md
