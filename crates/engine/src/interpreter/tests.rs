@@ -565,30 +565,31 @@ fn step_returns_error_when_current_state_not_in_ir() {
 
 fn condition_state_edges(
     expr: BoolExpr,
-    negated: bool,
     true_to: StateID,
     false_to: StateID,
 ) -> Vec<Edge<LoweredPayLoad>> {
     vec![
         Edge {
-            to: false_to,
+            to: true_to,
             payload: Payload::Condition {
                 expr: expr.clone(),
-                negated,
+                negated: false,
             },
             meta: None,
         },
         Edge {
-            to: true_to,
-            payload: Payload::Condition { expr, negated },
+            to: false_to,
+            payload: Payload::Condition {
+                expr,
+                negated: true,
+            },
             meta: None,
         },
     ]
 }
 
 #[test]
-fn condition_takes_else_branch_when_expr_true_and_not_negated() {
-    // result=true, negated=false => should_take_else=true => edges[1] (s_true)
+fn condition_true_takes_true_branch() {
     let mut ir = Ir::<LoweredPayLoad>::default();
     let s0 = ir.entry;
     let s_true = state_id(10);
@@ -596,10 +597,10 @@ fn condition_takes_else_branch_when_expr_true_and_not_negated() {
     let s_end = state_id(30);
     ir.states.insert(
         s0,
-        condition_state_edges(const_true_expr(), false, s_true, s_false),
+        condition_state_edges(const_true_expr(), s_true, s_false),
     );
     ir.states.insert(
-        s_false,
+        s_true,
         vec![Edge {
             to: s_end,
             payload: Payload::Trigger,
@@ -607,7 +608,7 @@ fn condition_takes_else_branch_when_expr_true_and_not_negated() {
         }],
     );
     ir.states.insert(
-        s_true,
+        s_false,
         vec![Edge {
             to: s_end,
             payload: Payload::Trigger,
@@ -618,15 +619,11 @@ fn condition_takes_else_branch_when_expr_true_and_not_negated() {
 
     let mut interp = make_interp!(ir, gd_for_bool(), s0);
     interp.step();
-    assert_eq!(
-        interp.current_state, s_true,
-        "true & not-negated => edges[1] (the 'else'/true branch)"
-    );
+    assert_eq!(interp.current_state, s_true, "true => if-body branch");
 }
 
 #[test]
-fn condition_takes_false_branch_when_expr_false_and_not_negated() {
-    // result=false, negated=false => should_take_else=false => edges[0] (s_false)
+fn condition_false_takes_false_branch() {
     let mut ir = Ir::<LoweredPayLoad>::default();
     let s0 = ir.entry;
     let s_true = state_id(10);
@@ -634,10 +631,10 @@ fn condition_takes_false_branch_when_expr_false_and_not_negated() {
     let s_end = state_id(30);
     ir.states.insert(
         s0,
-        condition_state_edges(const_false_expr(), false, s_true, s_false),
+        condition_state_edges(const_false_expr(), s_true, s_false),
     );
     ir.states.insert(
-        s_false,
+        s_true,
         vec![Edge {
             to: s_end,
             payload: Payload::Trigger,
@@ -645,7 +642,7 @@ fn condition_takes_false_branch_when_expr_false_and_not_negated() {
         }],
     );
     ir.states.insert(
-        s_true,
+        s_false,
         vec![Edge {
             to: s_end,
             payload: Payload::Trigger,
@@ -658,81 +655,8 @@ fn condition_takes_false_branch_when_expr_false_and_not_negated() {
     interp.step();
     assert_eq!(
         interp.current_state, s_false,
-        "false & not-negated => edges[0]"
+        "false => else/skip branch"
     );
-}
-
-#[test]
-fn condition_takes_false_branch_when_expr_true_and_negated() {
-    // result=true, negated=true => should_take_else = true != true = false => edges[0]
-    let mut ir = Ir::<LoweredPayLoad>::default();
-    let s0 = ir.entry;
-    let s_true = state_id(10);
-    let s_false = state_id(20);
-    let s_end = state_id(30);
-    ir.states.insert(
-        s0,
-        condition_state_edges(const_true_expr(), true, s_true, s_false),
-    );
-    ir.states.insert(
-        s_false,
-        vec![Edge {
-            to: s_end,
-            payload: Payload::Trigger,
-            meta: None,
-        }],
-    );
-    ir.states.insert(
-        s_true,
-        vec![Edge {
-            to: s_end,
-            payload: Payload::Trigger,
-            meta: None,
-        }],
-    );
-    ir.states.insert(s_end, vec![]);
-
-    let mut interp = make_interp!(ir, gd_for_bool(), s0);
-    interp.step();
-    assert_eq!(
-        interp.current_state, s_false,
-        "true & negated => edges[0] (the false branch)"
-    );
-}
-
-#[test]
-fn condition_takes_else_branch_when_expr_false_and_negated() {
-    // result=false, negated=true => should_take_else = false != true = true => edges[1]
-    let mut ir = Ir::<LoweredPayLoad>::default();
-    let s0 = ir.entry;
-    let s_true = state_id(10);
-    let s_false = state_id(20);
-    let s_end = state_id(30);
-    ir.states.insert(
-        s0,
-        condition_state_edges(const_false_expr(), true, s_true, s_false),
-    );
-    ir.states.insert(
-        s_false,
-        vec![Edge {
-            to: s_end,
-            payload: Payload::Trigger,
-            meta: None,
-        }],
-    );
-    ir.states.insert(
-        s_true,
-        vec![Edge {
-            to: s_end,
-            payload: Payload::Trigger,
-            meta: None,
-        }],
-    );
-    ir.states.insert(s_end, vec![]);
-
-    let mut interp = make_interp!(ir, gd_for_bool(), s0);
-    interp.step();
-    assert_eq!(interp.current_state, s_true, "false & negated => edges[1]");
 }
 
 // EndCondition: per actual code at interpreter/mod.rs:287,
@@ -1253,7 +1177,7 @@ fn trace_emits_condition_event() {
     let s1 = state_id(1);
     let s2 = state_id(2);
     ir.states
-        .insert(s0, condition_state_edges(const_true_expr(), false, s2, s1));
+        .insert(s0, condition_state_edges(const_true_expr(), s2, s1));
     ir.states.insert(s1, vec![]);
     ir.states.insert(s2, vec![]);
 

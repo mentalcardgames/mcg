@@ -75,7 +75,10 @@ impl Interpreter {
                     candidate_ids: candidate_ids.clone(),
                     original: original.clone(),
                 },
-                _ => return None,
+                _ => {
+                    self.input_buffer.pop();
+                    return None;
+                }
             })
         };
         self.input_buffer.pop();

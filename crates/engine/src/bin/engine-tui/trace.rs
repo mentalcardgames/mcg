@@ -7,6 +7,7 @@ pub enum TraceDetail {
     Choices,
     Evaluations,
     Verbose,
+    Last5,
 }
 
 impl TraceDetail {
@@ -14,7 +15,8 @@ impl TraceDetail {
         *self = match self {
             TraceDetail::Choices => TraceDetail::Evaluations,
             TraceDetail::Evaluations => TraceDetail::Verbose,
-            TraceDetail::Verbose => TraceDetail::Choices,
+            TraceDetail::Verbose => TraceDetail::Last5,
+            TraceDetail::Last5 => TraceDetail::Choices,
         };
     }
 
@@ -57,6 +59,7 @@ impl TraceDetail {
                 )
             }
             TraceDetail::Verbose => true,
+            TraceDetail::Last5 => true,
         }
     }
 }

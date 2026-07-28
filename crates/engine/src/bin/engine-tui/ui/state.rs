@@ -5,6 +5,12 @@ use crossbeam_channel::Sender;
 use crate::trace::{DisplayTraceEntry, TraceDetail};
 use cgdsl_engine::{DebugLevel, GameData, Input, InputType, TraceEntry};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PanelFocus {
+    GameState,
+    TraceLog,
+}
+
 pub struct TuiState {
     pub trace_entries: Vec<DisplayTraceEntry>,
     pub step_count: usize,
@@ -15,6 +21,15 @@ pub struct TuiState {
     pub waiting_for_input: bool,
     pub input_tx: Option<Sender<Input>>,
     pub current_state: Option<GameData>,
+    pub focus: PanelFocus,
+    pub trace_scroll: u16,
+    pub trace_auto_scroll: bool,
+    pub trace_inner_height: u16,
+    pub game_state_scroll: u16,
+    pub game_state_auto_scroll: bool,
+    pub game_state_inner_height: u16,
+    pub choose_cursor: usize,
+    pub choose_selected: Vec<bool>,
 }
 
 impl TuiState {
@@ -29,6 +44,15 @@ impl TuiState {
             waiting_for_input: false,
             input_tx: None,
             current_state: None,
+            focus: PanelFocus::TraceLog,
+            trace_scroll: 0,
+            trace_auto_scroll: true,
+            trace_inner_height: 0,
+            game_state_scroll: 0,
+            game_state_auto_scroll: true,
+            game_state_inner_height: 0,
+            choose_cursor: 0,
+            choose_selected: Vec::new(),
         }
     }
 
@@ -36,6 +60,7 @@ impl TuiState {
         self.step_count += 1;
         self.trace_entries
             .push(DisplayTraceEntry::from_trace_entry(self.step_count, entry));
+        self.trace_auto_scroll = true;
     }
 
     pub fn cycle_trace_detail(&mut self) {

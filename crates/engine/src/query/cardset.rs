@@ -171,10 +171,30 @@ impl Evaluator {
                 Ok((loc_idx, filtered))
             }
             Group::CardPosition { card_position } => {
-                let card_id = Self::eval_card_position(card_position, game_data)?;
-                match game_data.find_location_of_card(card_id) {
-                    Some(loc_idx) => Ok((loc_idx, vec![card_id])),
-                    None => Err("Card position not found in any location".to_string()),
+                let loc_name = match card_position {
+                    CardPosition::Query { query } => match query {
+                        QueryCardPosition::Top { location }
+                        | QueryCardPosition::Bottom { location }
+                        | QueryCardPosition::At { location, .. } => Some(location.as_str()),
+                    },
+                    _ => None,
+                };
+
+                if let Some(name) = loc_name {
+                    if let Some(loc_idx) = Self::resolve_location_by_name(name, game_data) {
+                        match Self::eval_card_position(card_position, game_data) {
+                            Ok(card_id) => Ok((loc_idx, vec![card_id])),
+                            Err(_) => Ok((loc_idx, vec![])),
+                        }
+                    } else {
+                        Err(format!("Location '{}' not found for card position", name))
+                    }
+                } else {
+                    let card_id = Self::eval_card_position(card_position, game_data)?;
+                    match game_data.find_location_of_card(card_id) {
+                        Some(loc_idx) => Ok((loc_idx, vec![card_id])),
+                        None => Err("Card position not found in any location".to_string()),
+                    }
                 }
             }
         }

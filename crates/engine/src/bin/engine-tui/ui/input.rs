@@ -2,6 +2,7 @@
 
 use cgdsl_engine::InputType;
 use ratatui::layout::Rect;
+use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
 pub struct InputPanel {
@@ -23,6 +24,8 @@ impl InputPanel {
         waiting: bool,
         input_type: Option<&InputType>,
         area: Rect,
+        choose_cursor: usize,
+        choose_selected: &[bool],
     ) {
         let block = Block::default()
             .title(format!(
@@ -55,18 +58,31 @@ impl InputPanel {
                         let text = format!("{}: [y] Accept / [n] Decline", prompt);
                         f.render_widget(Paragraph::new(text), inner);
                     }
-                    // Minimal render for the quantifier prompts. Full keyboard
-                    // selection in the TUI is a follow-up; the engine-level
-                    // round trip is exercised via `InputSource::Player`
-                    // closures in tests and via `cgdsl-play` interactively.
                     InputType::ChoosePlayer { candidates, prompt } => {
-                        let body = candidates
-                            .iter()
-                            .enumerate()
-                            .map(|(i, n)| format!("[{}] {}", i + 1, n))
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        let text = format!("{}\n{}", prompt, body);
+                        let line_count = candidates.len();
+                        let mut lines = Vec::with_capacity(line_count + 2);
+                        lines.push(format!("{} (↑↓ to move, Enter to confirm)", prompt));
+                        lines.push(String::new());
+                        for (i, name) in candidates.iter().enumerate() {
+                            let prefix = if i == choose_cursor { ">" } else { " " };
+                            lines.push(format!("{} {}. {}", prefix, i + 1, name));
+                        }
+                        let text = ratatui::text::Text::from(
+                            lines
+                                .iter()
+                                .enumerate()
+                                .map(|(i, line)| {
+                                    if i >= 2 && (i - 2) == choose_cursor {
+                                        ratatui::text::Line::styled(
+                                            line.clone(),
+                                            Style::default().fg(Color::Yellow),
+                                        )
+                                    } else {
+                                        ratatui::text::Line::from(line.as_str())
+                                    }
+                                })
+                                .collect::<Vec<_>>(),
+                        );
                         f.render_widget(Paragraph::new(text), inner);
                     }
                     InputType::ChooseCards {
@@ -75,20 +91,48 @@ impl InputPanel {
                         max,
                         prompt,
                     } => {
-                        let body = display
-                            .iter()
-                            .enumerate()
-                            .map(|(i, c)| {
-                                let desc = c
-                                    .get("Rank")
-                                    .or_else(|| c.values().next())
-                                    .cloned()
-                                    .unwrap_or_else(|| format!("card {}", i + 1));
-                                format!("[{}] {}", i + 1, desc)
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        let text = format!("{} (choose {}-{})\n{}", prompt, min, max, body);
+                        let selected_count = choose_selected.iter().filter(|&&s| s).count();
+                        let mut lines = Vec::with_capacity(display.len() + 3);
+                        lines.push(format!(
+                            "{} (select {}-{}, currently {} selected, ↑↓/Space/Enter)",
+                            prompt, min, max, selected_count
+                        ));
+                        lines.push(String::new());
+                        for (i, card) in display.iter().enumerate() {
+                            let check = if i < choose_selected.len() && choose_selected[i] {
+                                "[X]"
+                            } else {
+                                "[ ]"
+                            };
+                            let cursor = if i == choose_cursor { ">" } else { " " };
+                            let desc: Vec<String> = card
+                                .iter()
+                                .map(|(k, v)| format!("{}: {}", k, v))
+                                .collect();
+                            lines.push(format!(
+                                "{} {} {}. {}",
+                                cursor,
+                                check,
+                                i + 1,
+                                desc.join(", ")
+                            ));
+                        }
+                        let text = ratatui::text::Text::from(
+                            lines
+                                .iter()
+                                .enumerate()
+                                .map(|(i, line)| {
+                                    if i >= 2 && (i - 2) == choose_cursor {
+                                        ratatui::text::Line::styled(
+                                            line.clone(),
+                                            Style::default().fg(Color::Yellow),
+                                        )
+                                    } else {
+                                        ratatui::text::Line::from(line.as_str())
+                                    }
+                                })
+                                .collect::<Vec<_>>(),
+                        );
                         f.render_widget(Paragraph::new(text), inner);
                     }
                 }

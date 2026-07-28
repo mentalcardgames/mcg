@@ -252,9 +252,9 @@ impl Interpreter {
                         });
                     }
                     let edge = if should_take_else {
-                        edges.get(1)
-                    } else {
                         edges.first()
+                    } else {
+                        edges.get(1)
                     };
                     if let Some(e) = edge {
                         self.execute_edge(e.clone());
