@@ -163,6 +163,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = ratatui::try_init()?;
 
     loop {
+        while let Ok(gd) = state_rx.try_recv() {
+            tui_state.current_player_name = gd
+                .get_current_player()
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
+            tui_state.current_state = Some(gd);
+            tui_state.game_state_auto_scroll = true;
+        }
+
+        tui_state.detect_turn_change();
+
         while let Ok(entry) = trace_rx.try_recv() {
             tui_state.push_trace(entry);
         }
@@ -181,15 +192,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             tui_state.pending_input = Some(it);
             tui_state.waiting_for_input = true;
-        }
-
-        while let Ok(gd) = state_rx.try_recv() {
-            tui_state.current_player_name = gd
-                .get_current_player()
-                .map(|p| p.name.clone())
-                .unwrap_or_default();
-            tui_state.current_state = Some(gd);
-            tui_state.game_state_auto_scroll = true;
         }
 
         terminal.draw(|f| {

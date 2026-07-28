@@ -65,16 +65,12 @@ impl TraceDetail {
 }
 
 #[derive(Clone, Debug)]
-pub struct DisplayTraceEntry {
-    pub step_number: usize,
-    pub entry: TraceEntry,
-}
-
-impl DisplayTraceEntry {
-    pub fn from_trace_entry(step: usize, entry: TraceEntry) -> Self {
-        Self {
-            step_number: step,
-            entry,
-        }
-    }
+pub enum DisplayTraceEntry {
+    Entry {
+        step_number: usize,
+        entry: TraceEntry,
+    },
+    TurnSeparator {
+        player_name: String,
+    },
 }

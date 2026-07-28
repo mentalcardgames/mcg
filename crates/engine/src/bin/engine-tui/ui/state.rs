@@ -22,6 +22,7 @@ pub struct TuiState {
     pub input_tx: Option<Sender<Input>>,
     pub current_state: Option<GameData>,
     pub current_player_name: String,
+    pub prev_player_name: String,
     pub focus: PanelFocus,
     pub trace_scroll: u16,
     pub trace_auto_scroll: bool,
@@ -55,14 +56,29 @@ impl TuiState {
             choose_cursor: 0,
             choose_selected: Vec::new(),
             current_player_name: String::new(),
+            prev_player_name: String::new(),
         }
     }
 
     pub fn push_trace(&mut self, entry: TraceEntry) {
         self.step_count += 1;
-        self.trace_entries
-            .push(DisplayTraceEntry::from_trace_entry(self.step_count, entry));
+        self.trace_entries.push(DisplayTraceEntry::Entry {
+            step_number: self.step_count,
+            entry,
+        });
         self.trace_auto_scroll = true;
+    }
+
+    pub fn detect_turn_change(&mut self) {
+        if !self.current_player_name.is_empty()
+            && !self.prev_player_name.is_empty()
+            && self.current_player_name != self.prev_player_name
+        {
+            self.trace_entries.push(DisplayTraceEntry::TurnSeparator {
+                player_name: self.current_player_name.clone(),
+            });
+        }
+        self.prev_player_name = self.current_player_name.clone();
     }
 
     pub fn cycle_trace_detail(&mut self) {

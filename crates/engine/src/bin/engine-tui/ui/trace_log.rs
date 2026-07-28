@@ -43,12 +43,26 @@ impl TraceLogPanel {
 
         let filtered: Vec<_> = entries
             .iter()
-            .filter(|e| self.detail.passes(&e.entry))
+            .filter(|e| match e {
+                DisplayTraceEntry::TurnSeparator { .. } => true,
+                DisplayTraceEntry::Entry { entry, .. } => self.detail.passes(entry),
+            })
             .collect();
 
         let visible: Vec<&DisplayTraceEntry> = if matches!(self.detail, TraceDetail::Last5) {
-            let start = filtered.len().saturating_sub(5);
-            filtered[start..].to_vec()
+            let mut result = Vec::new();
+            let mut count = 0;
+            for e in filtered.iter().rev() {
+                if matches!(e, DisplayTraceEntry::Entry { .. }) {
+                    count += 1;
+                }
+                result.push(*e);
+                if count >= 5 {
+                    break;
+                }
+            }
+            result.reverse();
+            result
         } else {
             filtered
         };
@@ -79,20 +93,31 @@ impl TraceLogPanel {
     }
 
     fn format_entry(&self, entry: &DisplayTraceEntry) -> Line<'static> {
-        let TraceEntry::Step { from, to, event } = &entry.entry;
+        match entry {
+            DisplayTraceEntry::Entry {
+                step_number,
+                entry: TraceEntry::Step { from, to, event },
+            } => {
+                let step = Span::styled(
+                    format!("[Step {:3}]", step_number),
+                    Style::default().fg(Color::LightBlue),
+                );
+                let arrow = Span::styled(
+                    format!("[{:->4}]", format!("{}->{}", from, to)),
+                    Style::default().fg(Color::Cyan),
+                );
 
-        let step = Span::styled(
-            format!("[Step {:3}]", entry.step_number),
-            Style::default().fg(Color::LightBlue),
-        );
-        let arrow = Span::styled(
-            format!("[{:->4}]", format!("{}->{}", from, to)),
-            Style::default().fg(Color::Cyan),
-        );
-
-        let mut spans = vec![step, Span::raw(" "), arrow, Span::raw(" ")];
-        spans.extend(self.format_event(event));
-        Line::from(spans)
+                let mut spans = vec![step, Span::raw(" "), arrow, Span::raw(" ")];
+                spans.extend(self.format_event(event));
+                Line::from(spans)
+            }
+            DisplayTraceEntry::TurnSeparator { player_name } => {
+                let width = 60;
+                let label = format!(" Turn: {} ", player_name);
+                let line = format!("{:─^width$}", label);
+                Line::from(Span::styled(line, Style::default().fg(Color::Magenta)))
+            }
+        }
     }
 
     fn format_event(&self, event: &TraceEvent) -> Vec<Span<'static>> {
