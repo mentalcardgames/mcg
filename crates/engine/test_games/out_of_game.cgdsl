@@ -1,0 +1,8 @@
+// Test: set P1 out of game eliminates P1 from the game
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  set P:P1 out of game
+  end stage
+}

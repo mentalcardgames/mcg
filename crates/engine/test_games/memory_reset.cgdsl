@@ -1,0 +1,10 @@
+// Exercise: M is 42 then reset M zeros M back to Int(0)
+player P1
+turnorder (P:P1)
+memory M on table
+
+stage Play for current 1 times {
+  M is 42
+  reset M
+  end stage
+}

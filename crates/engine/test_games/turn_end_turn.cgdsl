@@ -1,0 +1,12 @@
+// end turn advances current_player from P1 to P2
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on P:P1
+card on Hand:
+  Rank(Ace)
+    for Suite(Hearts)
+
+stage Play for current 1 times {
+  end turn
+  end stage
+}

@@ -1,0 +1,9 @@
+// Exercise: score (1 + 2) to (P:P1, P:P2, P:P3)
+// Tests binary int expressions and player collection
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  score (1 + 2) to (P:P1, P:P2, P:P3)
+  end stage
+}

@@ -92,3 +92,7 @@ impl Evaluator {
         result
     }
 }
+
+#[cfg(test)]
+#[path = "string_tests.rs"]
+mod tests;

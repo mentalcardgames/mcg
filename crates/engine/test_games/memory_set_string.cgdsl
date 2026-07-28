@@ -1,0 +1,9 @@
+// Exercise: M is "hello" sets global memory M to String("hello")
+player P1
+turnorder (P:P1)
+memory M on table
+
+stage Play for current 1 times {
+  M is "Hello"
+  end stage
+}

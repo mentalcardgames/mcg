@@ -326,3 +326,7 @@ impl Evaluator {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "player_tests.rs"]
+mod tests;

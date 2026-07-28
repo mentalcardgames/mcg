@@ -1,0 +1,10 @@
+// Exercise: after scoring, winner is P1
+// P1 should remain in_game, P2 and P3 should be eliminated
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  score 10 to P:P1
+  winner is P:P1
+  end stage
+}

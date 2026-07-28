@@ -1,0 +1,7 @@
+// creates a combo rule via setup
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+combo TwoOfAKind where same Rank
+stage Play for current 1 times {
+    end stage
+}

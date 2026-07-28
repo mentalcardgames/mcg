@@ -11,11 +11,19 @@ impl Evaluator {
                 bool_expr1,
             } => {
                 let left = Self::eval_bool(bool_expr, game_data)?;
-                let right = Self::eval_bool(bool_expr1, game_data)?;
                 match op {
-                    BoolOp::And => Ok(left && right),
-                    BoolOp::Or => Ok(left || right),
+                    BoolOp::And => {
+                        if !left {
+                            return Ok(false);
+                        }
+                    }
+                    BoolOp::Or => {
+                        if left {
+                            return Ok(true);
+                        }
+                    }
                 }
+                Self::eval_bool(bool_expr1, game_data)
             }
             BoolExpr::Unary { op, bool_expr } => {
                 let inner = Self::eval_bool(bool_expr, game_data)?;
@@ -198,3 +206,7 @@ impl Evaluator {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "bool_tests.rs"]
+mod tests;

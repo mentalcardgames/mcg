@@ -701,3 +701,7 @@ impl Evaluator {
         false
     }
 }
+
+#[cfg(test)]
+#[path = "cardset_tests.rs"]
+mod tests;

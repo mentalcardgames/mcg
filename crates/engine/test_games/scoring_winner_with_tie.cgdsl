@@ -1,0 +1,12 @@
+// Exercise: score P1=10, P2=10, P3=5 then winner is highest score
+// Both P1 and P2 should remain in_game (tie), P3 eliminated
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  score 10 to P:P1
+  score 10 to P:P2
+  score 5 to P:P3
+  winner is highest score
+  end stage
+}

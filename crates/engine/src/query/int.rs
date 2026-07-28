@@ -323,3 +323,7 @@ impl Evaluator {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "int_tests.rs"]
+mod tests;

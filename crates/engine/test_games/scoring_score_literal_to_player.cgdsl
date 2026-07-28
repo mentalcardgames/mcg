@@ -1,0 +1,8 @@
+// Exercise: score 10 to P1 adds 10 to P1's score
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  score 10 to P:P1
+  end stage
+}

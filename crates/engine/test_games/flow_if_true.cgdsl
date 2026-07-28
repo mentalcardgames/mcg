@@ -1,0 +1,10 @@
+// Exercise: if (1 == 1) always executes the body
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  if (1 == 1) {
+    score 10 to P:P1
+  }
+  end stage
+}

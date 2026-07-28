@@ -1,0 +1,12 @@
+// Exercise: score P1=10, P2=5, P3=3 then winner is lowest score
+// P3 should remain in_game, P1 and P2 eliminated
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  score 10 to P:P1
+  score 5 to P:P2
+  score 3 to P:P3
+  winner is lowest score
+  end stage
+}

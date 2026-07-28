@@ -1,0 +1,9 @@
+// Exercise: M is 42 sets global memory M to Int(42)
+player P1
+turnorder (P:P1)
+memory M on table
+
+stage Play for current 1 times {
+  M is 42
+  end stage
+}
