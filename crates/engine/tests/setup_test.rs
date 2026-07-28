@@ -66,6 +66,10 @@ fn setup_create_pointmap_stores_entry() {
 
     assert!(!gd.point_maps.is_empty());
     assert_eq!(gd.point_maps[0].name, "Values");
+    // Verify actual point values from the DSL (Ace: 1, Two: 2, Three: 3)
+    assert_eq!(gd.point_maps[0].map.get("Rank:Ace"), Some(&1));
+    assert_eq!(gd.point_maps[0].map.get("Rank:Two"), Some(&2));
+    assert_eq!(gd.point_maps[0].map.get("Rank:Three"), Some(&3));
 }
 
 #[test]

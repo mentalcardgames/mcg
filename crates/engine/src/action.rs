@@ -164,9 +164,17 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
         }
         SetUpRule::CreatePointMap { pointmap, kvis } => {
             let mut map = std::collections::HashMap::new();
-            for (key, value, _) in kvis {
+            for (key, value, int_expr) in kvis {
                 let card_key = format!("{}:{}", key, value);
-                map.insert(card_key, 0);
+                let points =
+                    crate::query::Evaluator::eval_int(&int_expr, game_data)
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "CreatePointMap: failed to eval int {:?} for key {}:{}: {}",
+                                int_expr, key, value, e
+                            )
+                        });
+                map.insert(card_key, points);
             }
             game_data.point_maps.push(PointMap {
                 name: pointmap,
