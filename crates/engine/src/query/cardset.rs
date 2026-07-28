@@ -13,8 +13,25 @@ impl Evaluator {
         match expr {
             CardSet::Group { group } => Self::eval_group(group, game_data),
             CardSet::GroupOwner { group, owner } => {
-                let (loc_idx, card_ids) = Self::eval_group(group, game_data)?;
                 let owner_name = Self::resolve_owner_to_name(owner, game_data)?;
+                // For plain locations with an explicit owner, resolve the
+                // owner's specific location directly. The old path of "eval
+                // first name match, then filter by owner" fails when
+                // multiple players own locations with the same name (e.g.
+                // P1:Hand, P2:Hand, P3:Hand).
+                if let Some(name) = Self::group_location_name(group) {
+                    let owned_loc = Self::find_owned_location(&owner_name, name, game_data)
+                        .ok_or_else(|| {
+                            format!(
+                                "Location {} not found for owner {}",
+                                name, owner_name
+                            )
+                        })?;
+                    return Ok((owned_loc, game_data.locations[owned_loc].cards.clone()));
+                }
+                // For filtered groups / combos / card positions without an
+                // owner, keep the existing filter-by-owner logic.
+                let (loc_idx, card_ids) = Self::eval_group(group, game_data)?;
                 let owner_idx = game_data
                     .players
                     .iter()
@@ -40,13 +57,6 @@ impl Evaluator {
                         false
                     })
                     .collect();
-                // `eval_group` returns the *first* location whose name matches
-                // the group — for a dest-qualified `GroupOwner` (e.g. `Hand of
-                // P2` with several locations named "Hand"), that is the wrong
-                // destination. Resolve the location actually owned by `owner`
-                // whose name matches the group so the destination is correct.
-                // Falls back to `loc_idx` when the group isn't a plain location
-                // or no owned match exists (preserving prior behaviour).
                 let dest_loc_idx = match Self::group_location_name(group) {
                     Some(name) => {
                         Self::find_owned_location(&owner_name, name, game_data).unwrap_or(loc_idx)

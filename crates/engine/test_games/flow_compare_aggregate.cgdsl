@@ -1,0 +1,16 @@
+// Tests: comparison of aggregate int (SumOfCardSet) against literal in if
+// Deal Ace (11). if (sum > 10) { score 1 to current }
+player P1, P2
+turnorder (P:P1, P:P2)
+location Hand on all
+location Deck on table
+card on Deck: Rank(Ace, Ace) for Suit(Diamonds, Hearts)
+points BJ on Rank(Ace: 11)
+deal 1 from top(Deck) private to Hand of all
+
+stage Play for current 1 times {
+  if (sum of Hand of current using BJ > 10) {
+    score 1 to current
+  }
+  end stage
+}

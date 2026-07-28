@@ -242,3 +242,45 @@ fn scoring_winner_with_highest_memory_wins() {
     assert!(!gd.players[1].in_game, "P2 (M=5) should be eliminated");
     assert!(!gd.players[2].in_game, "P3 (M=3) should be eliminated");
 }
+
+#[test]
+fn scoring_aggregate_int_to_current() {
+    let ir = load_game("scoring_aggregate_int_to_current.cgdsl");
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
+        None,
+        None,
+    )
+    .expect("game should complete");
+
+    assert_eq!(gd.players[0].score, 21, "P1 score should be 11+10=21");
+    assert_eq!(gd.players[1].score, 21, "P2 score should be 11+10=21");
+}
+
+#[test]
+fn scoring_winner_with_highest_position_wins() {
+    let ir = load_game("scoring_winner_with_position.cgdsl");
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
+        None,
+        None,
+    )
+    .expect("game should complete");
+
+    assert!(
+        gd.players[2].in_game,
+        "P3 (highest position) should be in game"
+    );
+    assert!(!gd.players[0].in_game, "P1 should be eliminated");
+    assert!(!gd.players[1].in_game, "P2 should be eliminated");
+}

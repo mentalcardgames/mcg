@@ -1,6 +1,35 @@
-use crate::game_data::GameData;
+use crate::game_data::{Card, GameData};
+use std::collections::HashMap;
+
+fn format_card(card: &Card) -> String {
+    let mut items: Vec<String> = card
+        .iter()
+        .map(|(k, v)| format!("{}: {}", k, v))
+        .collect();
+    items.sort();
+    format!("{{{}}}", items.join(", "))
+}
+
+fn owner_names(data: &GameData) -> HashMap<usize, String> {
+    let mut map = HashMap::new();
+    for &loc_id in &data.table.locations {
+        map.insert(loc_id, "Table".to_string());
+    }
+    for player in &data.players {
+        for &loc_id in &player.owner.locations {
+            map.insert(loc_id, player.name.clone());
+        }
+    }
+    map
+}
+
+fn location_label(i: usize, location: &crate::game_data::Location, owners: &HashMap<usize, String>) -> String {
+    let owner = owners.get(&i).map(|s| s.as_str()).unwrap_or("?");
+    format!("{}:{}", owner, location.name)
+}
 
 pub(super) fn format_game_data_high(data: &GameData) -> String {
+    let owners = owner_names(data);
     let mut output = String::new();
     output.push_str("=== GAME DATA (HIGH) ===\n\n");
 
@@ -26,15 +55,38 @@ pub(super) fn format_game_data_high(data: &GameData) -> String {
 
     output.push_str("\nLocations:\n");
     for (i, location) in data.locations.iter().enumerate() {
+        if i > 0 {
+            output.push('\n');
+        }
         output.push_str(&format!(
-            "  [{}] {}: {:?}\n",
-            i, location.name, location.cards
+            "  [{}] {} ({} cards):\n",
+            i,
+            location_label(i, location, &owners),
+            location.cards.len()
         ));
+        for &card_id in &location.cards {
+            if let Some(card) = data.get_card(card_id) {
+                output.push_str(&format!("     [{}] {}\n", card_id, format_card(card)));
+            }
+        }
     }
 
-    output.push_str("\nCards:\n");
-    for (i, card) in data.cards.iter().enumerate() {
-        output.push_str(&format!("  [{}] {:?}\n", i, card));
+    output.push_str(&format!("\nTotal cards: {}\n", data.cards.len()));
+    let in_any_location: std::collections::HashSet<usize> = data
+        .locations
+        .iter()
+        .flat_map(|l| l.cards.iter().copied())
+        .collect();
+    let orphaned: Vec<usize> = (0..data.cards.len())
+        .filter(|i| !in_any_location.contains(i))
+        .collect();
+    if !orphaned.is_empty() {
+        output.push_str("\nOrphaned cards (not in any location):\n");
+        for &id in &orphaned {
+            if let Some(card) = data.get_card(id) {
+                output.push_str(&format!("  [{}] {}\n", id, format_card(card)));
+            }
+        }
     }
 
     output.push_str("\nStage Stack:\n");

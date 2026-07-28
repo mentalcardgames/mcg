@@ -169,7 +169,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(|p| p.name.clone())
                 .unwrap_or_default();
             tui_state.current_state = Some(gd);
-            tui_state.game_state_auto_scroll = true;
         }
 
         tui_state.detect_turn_change();

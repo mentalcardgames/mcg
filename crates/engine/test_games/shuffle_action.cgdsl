@@ -1,0 +1,10 @@
+// Tests: shuffle action in stage flow preserves cards
+player P1, P2
+turnorder (P:P1, P:P2)
+location Stock on table
+card on Stock: Rank(Ace, Two, Three, Four) for Suit(Diamonds)
+
+stage Play for current 1 times {
+  shuffle Stock
+  end stage
+}

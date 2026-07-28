@@ -1,0 +1,66 @@
+// Blackjack — 3 players + automatic dealer (casino rules)
+// Dealer gets 1 card up front, 2nd card after all players finish.
+// Dealer hits on <18, stands on >=18. Ace = 11.
+// Players can hit as many times as they want until they stand or bust.
+// Non-busted players at game end win.
+
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location DealerHand on table
+location Deck on table
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King)
+    for Suit(Diamonds, Clubs, Hearts, Spades)
+
+points BJ on Rank(
+  Ace: 11, Two: 2, Three: 3, Four: 4, Five: 5, Six: 6,
+  Seven: 7, Eight: 8, Nine: 9, Ten: 10,
+  Jack: 10, Queen: 10, King: 10
+)
+
+shuffle Deck
+
+// Deal: 2 cards to each player, 1 card to dealer (face up)
+stage Deal for current 1 times {
+    deal 2 from Deck private to Hand of P:P1
+    deal 2 from Deck private to Hand of P:P2
+    deal 2 from Deck private to Hand of P:P3
+    deal 1 from Deck private to DealerHand
+}
+
+// Players take turns hitting or standing. Up to 8 turns per player.
+// Stand = decline. Bust > 21 = eliminated.
+// 18 iterations = 6 per player. Remaining iterations after everyone
+// busts or stands are harmless (optional is declined, cycle skips busted).
+stage Play for current 18 times {
+    optional {
+        deal 1 from Deck private to Hand of current
+        if (sum of Hand of current using BJ > 21) {
+            set current out of game
+        }
+    }
+    cycle to next
+}
+
+// Dealer hits while < 18, stands at >= 18. Up to 9 attempts
+// (handles worst-case starting hand of 4 and 7 hits to reach 18).
+stage Dealer for current 9 times {
+    if (sum of DealerHand using BJ < 18) {
+        deal 1 from Deck private to DealerHand
+    }
+}
+
+// Score each surviving player's hand
+stage Score for current 3 times {
+    score sum of Hand of current using BJ to current
+    cycle to next
+}
+
+// Declare all surviving players as winners
+// Players eliminated during Play are already out of game.
+// Any player still in_game at this point wins.
+stage End for current 1 times {
+    winner is highest score
+}

@@ -1,4 +1,13 @@
-use crate::game_data::GameData;
+use crate::game_data::{Card, GameData};
+
+fn format_card(card: &Card) -> String {
+    let mut items: Vec<String> = card
+        .iter()
+        .map(|(k, v)| format!("{}: {}", k, v))
+        .collect();
+    items.sort();
+    format!("{{{}}}", items.join(", "))
+}
 
 pub(super) fn format_game_data_medium(data: &GameData) -> String {
     let mut output = String::new();
@@ -60,11 +69,7 @@ pub(super) fn format_game_data_medium(data: &GameData) -> String {
                 .iter()
                 .take(5)
                 .filter_map(|id| data.cards.get(*id))
-                .map(|c| {
-                    c.get("name")
-                        .cloned()
-                        .unwrap_or_else(|| "Unnamed".to_string())
-                })
+                .map(|c| format_card(c))
                 .collect::<Vec<_>>();
             format!("{} (first 5: {}, ...)", total, first_5.join(", "))
         } else {
@@ -72,11 +77,7 @@ pub(super) fn format_game_data_medium(data: &GameData) -> String {
                 .cards
                 .iter()
                 .filter_map(|id| data.cards.get(*id))
-                .map(|c| {
-                    c.get("name")
-                        .cloned()
-                        .unwrap_or_else(|| "Unnamed".to_string())
-                })
+                .map(|c| format_card(c))
                 .collect::<Vec<_>>();
             format!("{} ({})", total, card_names.join(", "))
         };

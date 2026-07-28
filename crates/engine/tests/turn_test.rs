@@ -69,3 +69,36 @@ fn turn_end_stage_named_pops_stage_stack() {
         "stage stack should not contain Play"
     );
 }
+
+#[test]
+fn turn_stage_deal_all_in_counted_stage() {
+    let ir = load_game("turn_stage_deal_all.cgdsl");
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| default_input())),
+        None,
+        None,
+    )
+    .expect("game should complete");
+
+    for (i, player) in gd.players.iter().enumerate() {
+        let hand_location = player
+            .owner
+            .locations
+            .iter()
+            .find_map(|&li| gd.locations.get(li).filter(|l| l.name == "Hand"));
+
+        assert!(
+            hand_location.is_some(),
+            "Player {} should have a Hand location",
+            i
+        );
+        assert_eq!(
+            hand_location.unwrap().cards.len(),
+            1,
+            "Player {}'s Hand should have exactly 1 card",
+            i
+        );
+    }
+}

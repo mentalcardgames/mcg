@@ -1,0 +1,12 @@
+// Tests: optional body with multiple flow_components
+// Accept → both score rules fire. Decline → neither.
+player P1, P2
+turnorder (P:P1, P:P2)
+
+stage Play for current 1 times {
+  optional {
+    score 5 to P:P1
+    score 3 to P:P2
+  }
+  end stage
+}

@@ -56,3 +56,12 @@ fn memory_reset_zeros_int() {
         other => panic!("expected Int(0), got {:?}", other),
     }
 }
+
+#[test]
+fn memory_set_then_read_back_via_evaluator() {
+    let ir = load_game("memory_read_back.cgdsl");
+    let gd =
+        run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
+
+    assert_eq!(gd.players[0].score, 5, "P1 score should be 5");
+}

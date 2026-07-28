@@ -1,0 +1,10 @@
+// Tests: WinnerWith::Position. turn_order [P2,P1,P3]
+// P2=pos0 (lowest), P1=pos1, P3=pos2 (highest)
+// highest position → P3 wins
+player P1, P2, P3
+turnorder (P:P2, P:P1, P:P3)
+
+stage Play for current 1 times {
+  winner is highest position
+  end stage
+}

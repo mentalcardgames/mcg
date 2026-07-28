@@ -119,6 +119,49 @@ fn test_input_exhausted_error() {
     assert_eq!(result.unwrap_err(), "Test input file exhausted (input #0)");
 }
 
+/// Verify that [`read_test_file`] correctly parses a `Name:` prefix on
+/// each line (e.g. `P2:y`, `P3:c 1,3`), setting the right `player_id`.
+#[test]
+fn test_input_parsing_name_prefix() {
+    let default_ir = Ir::<LoweredPayLoad>::default();
+    let interpreter = Interpreter::new(
+        Ir {
+            states: std::collections::HashMap::new(),
+            entry: default_ir.entry,
+            goal: default_ir.goal,
+        },
+        GameData::new(),
+        None,
+    );
+    let mut controller = Controller {
+        interpreter,
+        input_source: InputSource::TestFile(PathBuf::from("/nonexistent")),
+        event_sender: None,
+        line_buffer: VecDeque::from(["P2:y".to_string(), "P3:c 1,3".to_string()]),
+        file_loaded: true,
+        loaded_line_count: 2,
+        input_sequence: 0,
+        step_count: Arc::new(std::sync::Mutex::new(0)),
+    };
+    let path = PathBuf::from("/nonexistent");
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P2".into(),
+            kind: InputKind::OptionalAccept,
+        }
+    );
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P3".into(),
+            kind: InputKind::ChooseCards {
+                selected: vec![0, 2],
+            },
+        }
+    );
+}
+
 #[test]
 fn test_input_file_ordering_and_validation() {
     use front_end::validation::parse_document;

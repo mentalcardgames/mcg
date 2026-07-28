@@ -73,7 +73,7 @@ fn test_format_game_data_high() {
     assert!(!output.is_empty());
     assert!(output.contains("GAME DATA (HIGH)"));
     assert!(output.contains("Players:"));
-    assert!(output.contains("Cards:"));
+    assert!(output.contains("Total cards:"));
     assert!(output.contains("Combos:"));
     assert!(output.contains("Precedences:"));
     assert!(output.contains("Point Maps:"));
@@ -271,14 +271,16 @@ fn test_format_game_data_high_all_cards() {
             cards: vec![],
         },
     );
-    data.add_card(
+    let c0 = data.add_card(
         stock_loc,
         HashMap::from([("name".to_string(), "Fireball".to_string())]),
     );
-    data.add_card(
+    let c1 = data.add_card(
         stock_loc,
         HashMap::from([("name".to_string(), "Lightning".to_string())]),
     );
+    data.locations[stock_loc].cards.push(c0);
+    data.locations[stock_loc].cards.push(c1);
 
     let output = format_game_data(&data, DebugLevel::High);
     assert!(output.contains("Fireball"));

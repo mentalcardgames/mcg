@@ -55,7 +55,7 @@ impl GameStatePanel {
 
         let text: Text = content.into();
         let paragraph = Paragraph::new(text)
-            .wrap(ratatui::widgets::Wrap { trim: true })
+            .wrap(ratatui::widgets::Wrap { trim: false })
             .scroll((scroll_offset, 0));
 
         f.render_widget(paragraph, inner);

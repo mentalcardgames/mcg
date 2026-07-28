@@ -90,3 +90,23 @@ fn out_of_stage_named_removes_from_named_stage() {
         "P3 should still be in Play stage"
     );
 }
+
+#[test]
+fn out_runtime_current_eliminates_current_player() {
+    let ir = load_game("out_runtime_current.cgdsl");
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
+        None,
+        None,
+    )
+    .expect("game should complete");
+
+    assert!(!gd.players[0].in_game, "P1 (current) should be eliminated");
+    assert!(gd.players[1].in_game, "P2 should still be in game");
+    assert!(gd.players[2].in_game, "P3 should still be in game");
+}
