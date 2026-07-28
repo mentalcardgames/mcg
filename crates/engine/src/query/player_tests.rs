@@ -2,8 +2,8 @@ use super::*;
 use crate::game_data::{GameData, Location, MemoryValue, Team};
 use front_end::ast::{
     CardPosition, Extrema, IntExpr, MemoryType, Owner, PlayerCollection, PlayerExpr, Players,
-    QueryCardPosition, QueryPlayer, RuntimePlayer, RuntimePlayerCollection, TeamCollection,
-    TeamExpr, UseSingleMemory,
+    QueryCardPosition, QueryPlayer, RuntimePlayer, RuntimePlayerCollection, SingleOwner,
+    TeamCollection, TeamExpr, UseSingleMemory,
 };
 use std::collections::HashMap;
 
@@ -331,11 +331,14 @@ fn eval_player_query_collection_at_out_of_range() {
 #[test]
 fn eval_player_memory_string() {
     let mut gd = GameData::new();
-    gd.memories
-        .insert("name".to_string(), MemoryValue::String("Alice".to_string()));
+    gd.memories.insert(
+        "Table_name".to_string(),
+        MemoryValue::String("Alice".to_string()),
+    );
     let expr = PlayerExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "name".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("Alice".to_string()));
@@ -345,11 +348,14 @@ fn eval_player_memory_string() {
 fn eval_player_memory_player_collection() {
     let mut gd = GameData::new();
     let p0 = gd.add_player("P1".to_string());
-    gd.memories
-        .insert("pc".to_string(), MemoryValue::PlayerCollection(vec![p0]));
+    gd.memories.insert(
+        "Table_pc".to_string(),
+        MemoryValue::PlayerCollection(vec![p0]),
+    );
     let expr = PlayerExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "pc".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P1".to_string()));
@@ -358,11 +364,14 @@ fn eval_player_memory_player_collection() {
 #[test]
 fn eval_player_memory_empty() {
     let mut gd = GameData::new();
-    gd.memories
-        .insert("pc".to_string(), MemoryValue::PlayerCollection(vec![]));
+    gd.memories.insert(
+        "Table_pc".to_string(),
+        MemoryValue::PlayerCollection(vec![]),
+    );
     let expr = PlayerExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "pc".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(
@@ -375,10 +384,11 @@ fn eval_player_memory_empty() {
 fn eval_player_memory_wrong_type() {
     let mut gd = GameData::new();
     gd.memories
-        .insert("counter".to_string(), MemoryValue::Int(42));
+        .insert("Table_counter".to_string(), MemoryValue::Int(42));
     let expr = PlayerExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "counter".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(
@@ -391,13 +401,28 @@ fn eval_player_memory_wrong_type() {
 fn eval_player_memory_missing() {
     let gd = GameData::new();
     let expr = PlayerExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "ghost".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(
         Evaluator::eval_player(&expr, &gd),
-        Err("Memory ghost not found".to_string())
+        Err("Memory Table_ghost not found".to_string())
+    );
+}
+
+#[test]
+fn eval_player_memory_no_owner_error() {
+    let gd = GameData::new();
+    let expr = PlayerExpr::Memory {
+        memory: UseSingleMemory::Memory {
+            memory: "M".to_string(),
+        },
+    };
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd),
+        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
     );
 }
 
@@ -421,7 +446,7 @@ fn eval_player_i2_empty_turn_order_safe() {
 fn eval_player_i10_player_memory_mismatched_init() {
     let mut gd = GameData::new();
     gd.add_memory(
-        "p".to_string(),
+        "Table_p".to_string(),
         Owner::Table,
         Some(MemoryType::Player {
             player: PlayerExpr::Literal {
@@ -430,8 +455,9 @@ fn eval_player_i10_player_memory_mismatched_init() {
         }),
     );
     let expr = PlayerExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "p".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(
@@ -494,10 +520,11 @@ fn eval_team_aggregate_team_of_absent() {
 fn eval_team_memory_team() {
     let mut gd = GameData::new();
     gd.memories
-        .insert("t".to_string(), MemoryValue::Team("Red".to_string()));
+        .insert("Table_t".to_string(), MemoryValue::Team("Red".to_string()));
     let expr = TeamExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "t".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(Evaluator::eval_team(&expr, &gd), Ok("Red".to_string()));
@@ -507,10 +534,11 @@ fn eval_team_memory_team() {
 fn eval_team_memory_wrong_type() {
     let mut gd = GameData::new();
     gd.memories
-        .insert("counter".to_string(), MemoryValue::Int(42));
+        .insert("Table_counter".to_string(), MemoryValue::Int(42));
     let expr = TeamExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "counter".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(
@@ -523,13 +551,28 @@ fn eval_team_memory_wrong_type() {
 fn eval_team_memory_missing() {
     let gd = GameData::new();
     let expr = TeamExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "ghost".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(
         Evaluator::eval_team(&expr, &gd),
-        Err("Memory ghost not found".to_string())
+        Err("Memory Table_ghost not found".to_string())
+    );
+}
+
+#[test]
+fn eval_team_memory_no_owner_error() {
+    let gd = GameData::new();
+    let expr = TeamExpr::Memory {
+        memory: UseSingleMemory::Memory {
+            memory: "M".to_string(),
+        },
+    };
+    assert_eq!(
+        Evaluator::eval_team(&expr, &gd),
+        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
     );
 }
 
@@ -703,8 +746,9 @@ fn resolve_player_collection_memory_silent_empty() {
     let p0 = gd.add_player("P1".to_string());
     gd.turn_order = vec![p0];
     let pc = PlayerCollection::Memory {
-        memory: front_end::ast::UseMemory::Memory {
+        memory: front_end::ast::UseMemory::WithOwner {
             memory: "m".to_string(),
+            owner: Box::new(front_end::ast::Owner::Table),
         },
     };
     // Quirk: Memory returns empty vec (silent, no error)

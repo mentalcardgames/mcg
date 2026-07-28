@@ -71,11 +71,11 @@ impl Interpreter {
             && self
                 .game_data
                 .memories
-                .contains_key(crate::quantifier::SYNTH_MEMORY_KEY)
+                .contains_key(&format!("Table_{}", crate::quantifier::SYNTH_MEMORY_KEY))
         {
             self.game_data
                 .memories
-                .remove(crate::quantifier::SYNTH_MEMORY_KEY);
+                .remove(&format!("Table_{}", crate::quantifier::SYNTH_MEMORY_KEY));
         }
 
         // (B) Overlay dispatch: a synthetic state has its replacement edge(s)

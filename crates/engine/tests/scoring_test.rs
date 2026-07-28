@@ -90,7 +90,7 @@ fn scoring_score_memory_writes_to_global_slot() {
     )
     .expect("game should complete");
 
-    match gd.get_memory("M") {
+    match gd.get_memory("P1_M") {
         Some(MemoryValue::Int(n)) => assert_eq!(*n, 5),
         other => panic!("expected Int(5), got {:?}", other),
     }
@@ -221,4 +221,24 @@ fn scoring_winner_with_tie_keeps_all_matching() {
         "P2 (tied for max score 10) should be in game"
     );
     assert!(!gd.players[2].in_game, "P3 should be eliminated");
+}
+
+#[test]
+fn scoring_winner_with_highest_memory_wins() {
+    let ir = load_game("scoring_winner_with_memory.cgdsl");
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_it: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
+        None,
+        None,
+    )
+    .expect("game should complete");
+
+    assert!(gd.players[0].in_game, "P1 (M=10) should be in game");
+    assert!(!gd.players[1].in_game, "P2 (M=5) should be eliminated");
+    assert!(!gd.players[2].in_game, "P3 (M=3) should be eliminated");
 }

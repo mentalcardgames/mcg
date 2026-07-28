@@ -81,7 +81,7 @@ fn setup_create_memory_initializes_slot() {
     .expect("game should complete");
 
     use cgdsl_engine::game_data::MemoryValue;
-    match gd.get_memory("M") {
+    match gd.get_memory("Table_M") {
         Some(MemoryValue::Int(n)) => assert_eq!(*n, 0),
         other => panic!("expected Int(0), got {:?}", other),
     }

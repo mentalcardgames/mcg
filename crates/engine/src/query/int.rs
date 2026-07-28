@@ -2,7 +2,7 @@ use super::Evaluator;
 use crate::game_data::{GameData, MemoryValue};
 use front_end::ast::{
     AggregateInt, Collection, Extrema, IntCollection, IntExpr, IntOp, LocationCollection, Quantity,
-    QueryInt, RuntimeInt, RuntimeTeamCollection, TeamCollection, UseMemory, UseSingleMemory,
+    QueryInt, RuntimeInt, RuntimeTeamCollection, TeamCollection,
 };
 
 impl Evaluator {
@@ -147,10 +147,7 @@ impl Evaluator {
                 }
             },
             IntExpr::Memory { memory } => {
-                let key = match memory {
-                    UseSingleMemory::Memory { memory: m } => m.clone(),
-                    UseSingleMemory::WithOwner { memory: m, .. } => m.clone(),
-                };
+                let key = Self::resolve_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::Int(v)) => Ok(v.clone()),
                     Some(_) => Err("Memory value is not an Int".to_string()),
@@ -176,10 +173,7 @@ impl Evaluator {
                 )
             }
             IntCollection::Memory { memory } => {
-                let key = match memory {
-                    UseMemory::Memory { memory: m } => m.clone(),
-                    UseMemory::WithOwner { memory: m, .. } => m.clone(),
-                };
+                let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::IntCollection(v)) => Ok(v.clone()),
                     Some(_) => Err("Memory value is not an IntCollection".to_string()),
@@ -219,10 +213,7 @@ impl Evaluator {
         match col {
             LocationCollection::Literal { locations } => Ok(locations.clone()),
             LocationCollection::Memory { memory } => {
-                let key = match memory {
-                    UseMemory::Memory { memory: m } => m.clone(),
-                    UseMemory::WithOwner { memory: m, .. } => m.clone(),
-                };
+                let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::LocationCollection(v)) => Ok(v
                         .iter()
@@ -269,10 +260,7 @@ impl Evaluator {
                 )
             }
             TeamCollection::Memory { memory } => {
-                let key = match memory {
-                    UseMemory::Memory { memory: m } => m.clone(),
-                    UseMemory::WithOwner { memory: m, .. } => m.clone(),
-                };
+                let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::Team(v)) => Ok(vec![v.clone()]),
                     Some(_) => Err("Memory value is not a Team".to_string()),

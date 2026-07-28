@@ -23,8 +23,9 @@ fn size_of(collection: Collection) -> IntExpr {
 
 fn int_collection_mem(key: &str) -> IntCollection {
     IntCollection::Memory {
-        memory: UseMemory::Memory {
+        memory: UseMemory::WithOwner {
             memory: key.to_string(),
+            owner: Box::new(Owner::Table),
         },
     }
 }
@@ -129,7 +130,10 @@ fn eval_int_query_int_collection_at_out_of_range() {
 #[test]
 fn eval_int_size_of_int_collection_memory_present() {
     let mut gd = GameData::new();
-    gd.set_memory("ic".to_string(), MemoryValue::IntCollection(vec![1, 2, 3]));
+    gd.set_memory(
+        "Table_ic".to_string(),
+        MemoryValue::IntCollection(vec![1, 2, 3]),
+    );
     let expr = size_of(Collection::IntCollection {
         int: int_collection_mem("ic"),
     });
@@ -144,7 +148,7 @@ fn eval_int_size_of_int_collection_memory_missing() {
     });
     assert_eq!(
         Evaluator::eval_int(&expr, &gd),
-        Err("Memory nope not found".to_string())
+        Err("Memory Table_nope not found".to_string())
     );
 }
 
@@ -152,11 +156,15 @@ fn eval_int_size_of_int_collection_memory_missing() {
 #[test]
 fn eval_int_size_of_player_collection_memory() {
     let mut gd = GameData::new();
-    gd.set_memory("pc".to_string(), MemoryValue::PlayerCollection(vec![0, 1]));
+    gd.set_memory(
+        "Table_pc".to_string(),
+        MemoryValue::PlayerCollection(vec![0, 1]),
+    );
     let expr = size_of(Collection::PlayerCollection {
         player: PlayerCollection::Memory {
-            memory: UseMemory::Memory {
+            memory: UseMemory::WithOwner {
                 memory: "pc".to_string(),
+                owner: Box::new(Owner::Table),
             },
         },
     });
@@ -198,7 +206,7 @@ fn card_with(map: &[(&str, &str)]) -> crate::game_data::Card {
 fn eval_int_aggregate_sum_of_card_set_present() {
     let mut gd = GameData::new();
     let c0 = gd.add_card(0, card_with(&[("rank", "Ace")]));
-    gd.set_memory("cs".to_string(), MemoryValue::CardSet(vec![c0]));
+    gd.set_memory("Table_cs".to_string(), MemoryValue::CardSet(vec![c0]));
     let mut pm = PointMap {
         name: "Pm".to_string(),
         map: HashMap::new(),
@@ -209,8 +217,9 @@ fn eval_int_aggregate_sum_of_card_set_present() {
     let expr = IntExpr::Aggregate {
         aggregate: AggregateInt::SumOfCardSet {
             card_set: Box::new(CardSet::Memory {
-                memory: UseMemory::Memory {
+                memory: UseMemory::WithOwner {
                     memory: "cs".to_string(),
+                    owner: Box::new(Owner::Table),
                 },
             }),
             pointmap: "Pm".to_string(),
@@ -223,13 +232,14 @@ fn eval_int_aggregate_sum_of_card_set_present() {
 fn eval_int_aggregate_sum_of_card_set_missing_pointmap() {
     let mut gd = GameData::new();
     let c0 = gd.add_card(0, card_with(&[("rank", "Ace")]));
-    gd.set_memory("cs".to_string(), MemoryValue::CardSet(vec![c0]));
+    gd.set_memory("Table_cs".to_string(), MemoryValue::CardSet(vec![c0]));
 
     let expr = IntExpr::Aggregate {
         aggregate: AggregateInt::SumOfCardSet {
             card_set: Box::new(CardSet::Memory {
-                memory: UseMemory::Memory {
+                memory: UseMemory::WithOwner {
                     memory: "cs".to_string(),
+                    owner: Box::new(Owner::Table),
                 },
             }),
             pointmap: "Ghost".to_string(),
@@ -247,8 +257,9 @@ fn extrema_cardset(extrema: Extrema, cs_key: &str, pointmap: &str) -> IntExpr {
         aggregate: AggregateInt::ExtremaCardset {
             extrema,
             card_set: Box::new(CardSet::Memory {
-                memory: UseMemory::Memory {
+                memory: UseMemory::WithOwner {
                     memory: cs_key.to_string(),
+                    owner: Box::new(Owner::Table),
                 },
             }),
             pointmap: pointmap.to_string(),
@@ -261,7 +272,10 @@ fn eval_int_aggregate_extrema_cardset_max() {
     let mut gd = GameData::new();
     let ace = gd.add_card(0, card_with(&[("rank", "Ace")]));
     let king = gd.add_card(0, card_with(&[("rank", "King")]));
-    gd.set_memory("cs".to_string(), MemoryValue::CardSet(vec![ace, king]));
+    gd.set_memory(
+        "Table_cs".to_string(),
+        MemoryValue::CardSet(vec![ace, king]),
+    );
     let mut pm = PointMap {
         name: "Pm".to_string(),
         map: HashMap::new(),
@@ -281,7 +295,10 @@ fn eval_int_aggregate_extrema_cardset_min() {
     let mut gd = GameData::new();
     let ace = gd.add_card(0, card_with(&[("rank", "Ace")]));
     let king = gd.add_card(0, card_with(&[("rank", "King")]));
-    gd.set_memory("cs".to_string(), MemoryValue::CardSet(vec![ace, king]));
+    gd.set_memory(
+        "Table_cs".to_string(),
+        MemoryValue::CardSet(vec![ace, king]),
+    );
     let mut pm = PointMap {
         name: "Pm".to_string(),
         map: HashMap::new(),
@@ -299,7 +316,7 @@ fn eval_int_aggregate_extrema_cardset_min() {
 #[test]
 fn eval_int_aggregate_extrema_cardset_empty() {
     let mut gd = GameData::new();
-    gd.set_memory("cs".to_string(), MemoryValue::CardSet(vec![]));
+    gd.set_memory("Table_cs".to_string(), MemoryValue::CardSet(vec![]));
     let pm = PointMap {
         name: "Pm".to_string(),
         map: HashMap::new(),
@@ -407,8 +424,9 @@ fn eval_int_runtime_stage_round_counter_absent() {
 // ── I‑15 ─────────────────────────────────────────────────────────
 fn memory_int(key: &str) -> IntExpr {
     IntExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: key.to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     }
 }
@@ -416,14 +434,14 @@ fn memory_int(key: &str) -> IntExpr {
 #[test]
 fn eval_int_memory_int_present() {
     let mut gd = GameData::new();
-    gd.set_memory("k".to_string(), MemoryValue::Int(7));
+    gd.set_memory("Table_k".to_string(), MemoryValue::Int(7));
     assert_eq!(Evaluator::eval_int(&memory_int("k"), &gd), Ok(7));
 }
 
 #[test]
 fn eval_int_memory_int_wrong_type() {
     let mut gd = GameData::new();
-    gd.set_memory("k".to_string(), MemoryValue::String("x".to_string()));
+    gd.set_memory("Table_k".to_string(), MemoryValue::String("x".to_string()));
     assert_eq!(
         Evaluator::eval_int(&memory_int("k"), &gd),
         Err("Memory value is not an Int".to_string())
@@ -435,7 +453,21 @@ fn eval_int_memory_int_missing() {
     let gd = GameData::new();
     assert_eq!(
         Evaluator::eval_int(&memory_int("ghost"), &gd),
-        Err("Memory ghost not found".to_string())
+        Err("Memory Table_ghost not found".to_string())
+    );
+}
+
+#[test]
+fn eval_int_memory_no_owner_error() {
+    let gd = GameData::new();
+    let expr = IntExpr::Memory {
+        memory: UseSingleMemory::Memory {
+            memory: "M".to_string(),
+        },
+    };
+    assert_eq!(
+        Evaluator::eval_int(&expr, &gd),
+        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
     );
 }
 
@@ -443,11 +475,12 @@ fn eval_int_memory_int_missing() {
 #[test]
 fn eval_int_size_of_location_collection_memory_wrong_type() {
     let mut gd = GameData::new();
-    gd.set_memory("lc".to_string(), MemoryValue::Int(0));
+    gd.set_memory("Table_lc".to_string(), MemoryValue::Int(0));
     let expr = size_of(Collection::LocationCollection {
         location: LocationCollection::Memory {
-            memory: UseMemory::Memory {
+            memory: UseMemory::WithOwner {
                 memory: "lc".to_string(),
+                owner: Box::new(Owner::Table),
             },
         },
     });
@@ -462,14 +495,15 @@ fn eval_int_size_of_location_collection_memory_missing() {
     let gd = GameData::new();
     let expr = size_of(Collection::LocationCollection {
         location: LocationCollection::Memory {
-            memory: UseMemory::Memory {
+            memory: UseMemory::WithOwner {
                 memory: "ghost".to_string(),
+                owner: Box::new(Owner::Table),
             },
         },
     });
     assert_eq!(
         Evaluator::eval_int(&expr, &gd),
-        Err("Memory ghost not found".to_string())
+        Err("Memory Table_ghost not found".to_string())
     );
 }
 
@@ -477,11 +511,12 @@ fn eval_int_size_of_location_collection_memory_missing() {
 #[test]
 fn eval_int_size_of_team_collection_memory_wrong_type() {
     let mut gd = GameData::new();
-    gd.set_memory("tc".to_string(), MemoryValue::Int(0));
+    gd.set_memory("Table_tc".to_string(), MemoryValue::Int(0));
     let expr = size_of(Collection::TeamCollection {
         team: TeamCollection::Memory {
-            memory: UseMemory::Memory {
+            memory: UseMemory::WithOwner {
                 memory: "tc".to_string(),
+                owner: Box::new(Owner::Table),
             },
         },
     });
@@ -496,14 +531,31 @@ fn eval_int_size_of_team_collection_memory_missing() {
     let gd = GameData::new();
     let expr = size_of(Collection::TeamCollection {
         team: TeamCollection::Memory {
-            memory: UseMemory::Memory {
+            memory: UseMemory::WithOwner {
                 memory: "ghost".to_string(),
+                owner: Box::new(Owner::Table),
             },
         },
     });
     assert_eq!(
         Evaluator::eval_int(&expr, &gd),
-        Err("Memory ghost not found".to_string())
+        Err("Memory Table_ghost not found".to_string())
+    );
+}
+
+#[test]
+fn eval_int_collection_memory_no_owner_error() {
+    let gd = GameData::new();
+    let expr = size_of(Collection::LocationCollection {
+        location: LocationCollection::Memory {
+            memory: UseMemory::Memory {
+                memory: "M".to_string(),
+            },
+        },
+    });
+    assert_eq!(
+        Evaluator::eval_int(&expr, &gd),
+        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
     );
 }
 
@@ -665,8 +717,9 @@ fn resolve_quantity_int_range_or_satisfied() {
 fn resolve_quantity_ignores_runtime_gamedata() {
     let q = Quantity::Int {
         int: IntExpr::Memory {
-            memory: UseSingleMemory::Memory {
+            memory: UseSingleMemory::WithOwner {
                 memory: "secret".to_string(),
+                owner: Box::new(SingleOwner::Table),
             },
         },
     };
@@ -682,8 +735,9 @@ fn resolve_quantity_int_range_swallows_start_eval_error() {
             start: (
                 IntCompare::Ge,
                 IntExpr::Memory {
-                    memory: UseSingleMemory::Memory {
+                    memory: UseSingleMemory::WithOwner {
                         memory: "ghost".to_string(),
+                        owner: Box::new(SingleOwner::Table),
                     },
                 },
             ),

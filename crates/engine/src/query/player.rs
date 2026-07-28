@@ -2,7 +2,7 @@ use super::Evaluator;
 use crate::game_data::{GameData, MemoryValue};
 use front_end::ast::{
     AggregatePlayer, AggregateTeam, Extrema, Owner, PlayerCollection, PlayerExpr, Players,
-    QueryPlayer, RuntimePlayer, TeamExpr, UseSingleMemory,
+    QueryPlayer, RuntimePlayer, TeamExpr,
 };
 
 impl Evaluator {
@@ -68,12 +68,12 @@ impl Evaluator {
                     let card_id = Self::eval_card_position(card_position, game_data)?;
                     for (loc_idx, loc) in game_data.locations.iter().enumerate() {
                         if loc.cards.contains(&card_id) {
-                            if let Some(owner_loc_idx) =
+                            if let Some(_owner_loc_idx) =
                                 game_data.table.locations.iter().find(|&&l| l == loc_idx)
                             {
                                 return Ok("Table".to_string());
                             }
-                            for (player_idx, player) in game_data.players.iter().enumerate() {
+                            for (_player_idx, player) in game_data.players.iter().enumerate() {
                                 if player.owner.locations.contains(&loc_idx) {
                                     return Ok(player.name.clone());
                                 }
@@ -148,10 +148,7 @@ impl Evaluator {
                 }
             },
             PlayerExpr::Memory { memory } => {
-                let key = match memory {
-                    UseSingleMemory::Memory { memory: m } => m.clone(),
-                    UseSingleMemory::WithOwner { memory: m, .. } => m.clone(),
-                };
+                let key = Self::resolve_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::PlayerCollection(indices)) => {
                         if let Some(&idx) = indices.first() {
@@ -191,10 +188,7 @@ impl Evaluator {
                 }
             },
             TeamExpr::Memory { memory } => {
-                let key = match memory {
-                    UseSingleMemory::Memory { memory: m } => m.clone(),
-                    UseSingleMemory::WithOwner { memory: m, .. } => m.clone(),
-                };
+                let key = Self::resolve_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::Team(v)) => Ok(v.clone()),
                     Some(_) => Err("Memory value is not a Team".to_string()),

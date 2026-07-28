@@ -1,8 +1,6 @@
 use super::Evaluator;
 use crate::game_data::{Card, GameData, MemoryValue};
-use front_end::ast::{
-    QueryString, StringCollection, StringExpr, Types, UseMemory, UseSingleMemory,
-};
+use front_end::ast::{QueryString, StringCollection, StringExpr, Types};
 
 impl Evaluator {
     pub fn eval_string(expr: &StringExpr, game_data: &GameData) -> Result<String, String> {
@@ -31,10 +29,7 @@ impl Evaluator {
                 }
             },
             StringExpr::Memory { memory } => {
-                let key = match memory {
-                    UseSingleMemory::Memory { memory: m } => m.clone(),
-                    UseSingleMemory::WithOwner { memory: m, .. } => m.clone(),
-                };
+                let key = Self::resolve_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::String(v)) => Ok(v.clone()),
                     Some(_) => Err("Memory value is not a String".to_string()),
@@ -63,10 +58,7 @@ impl Evaluator {
                 )
             }
             StringCollection::Memory { memory } => {
-                let key = match memory {
-                    UseMemory::Memory { memory: m } => m.clone(),
-                    UseMemory::WithOwner { memory: m, .. } => m.clone(),
-                };
+                let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::StringCollection(v)) => Ok(v.clone()),
                     Some(_) => Err("Memory value is not a StringCollection".to_string()),

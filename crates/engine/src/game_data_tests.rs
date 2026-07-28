@@ -40,19 +40,19 @@ fn set_memory_int_stores_evaluated_value_not_increment() {
     // increment the existing one by 1.
     let mut gd = GameData::new();
     gd.add_memory(
-        "counter".to_string(),
+        "Table_counter".to_string(),
         Owner::Table,
         Some(MemoryType::Int {
             int: IntExpr::Literal { int: 0 },
         }),
     );
     // simulate the post-fix path: action.rs evaluated IntExpr::Literal{5}
-    gd.set_memory("counter".to_string(), MemoryValue::Int(5));
-    assert_eq!(gd.get_memory("counter"), Some(&MemoryValue::Int(5)));
+    gd.set_memory("Table_counter".to_string(), MemoryValue::Int(5));
+    assert_eq!(gd.get_memory("Table_counter"), Some(&MemoryValue::Int(5)));
 
     // second set overwrites, does not increment
-    gd.set_memory("counter".to_string(), MemoryValue::Int(10));
-    assert_eq!(gd.get_memory("counter"), Some(&MemoryValue::Int(10)));
+    gd.set_memory("Table_counter".to_string(), MemoryValue::Int(10));
+    assert_eq!(gd.get_memory("Table_counter"), Some(&MemoryValue::Int(10)));
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn set_memory_overwrites_non_int_variant() {
     // it must overwrite regardless of variant.
     let mut gd = GameData::new();
     gd.add_memory(
-        "label".to_string(),
+        "Table_label".to_string(),
         Owner::Table,
         Some(MemoryType::String {
             string: StringExpr::Literal {
@@ -70,11 +70,11 @@ fn set_memory_overwrites_non_int_variant() {
         }),
     );
     gd.set_memory(
-        "label".to_string(),
+        "Table_label".to_string(),
         MemoryValue::String("hello".to_string()),
     );
     assert_eq!(
-        gd.get_memory("label"),
+        gd.get_memory("Table_label"),
         Some(&MemoryValue::String("hello".to_string()))
     );
 }
@@ -448,20 +448,20 @@ fn set_player_stage_flag_on_missing_index_is_noop() {
 fn add_memory_int_initializes_to_zero() {
     let mut gd = GameData::new();
     gd.add_memory(
-        "counter".to_string(),
+        "Table_counter".to_string(),
         Owner::Table,
         Some(MemoryType::Int {
             int: IntExpr::Literal { int: 0 },
         }),
     );
-    assert_eq!(gd.get_memory("counter"), Some(&MemoryValue::Int(0)));
+    assert_eq!(gd.get_memory("Table_counter"), Some(&MemoryValue::Int(0)));
 }
 
 #[test]
 fn add_memory_string_initializes_to_empty() {
     let mut gd = GameData::new();
     gd.add_memory(
-        "label".to_string(),
+        "Table_label".to_string(),
         Owner::Table,
         Some(MemoryType::String {
             string: StringExpr::Literal {
@@ -470,7 +470,7 @@ fn add_memory_string_initializes_to_empty() {
         }),
     );
     assert_eq!(
-        gd.get_memory("label"),
+        gd.get_memory("Table_label"),
         Some(&MemoryValue::String(String::new()))
     );
 }
@@ -478,8 +478,8 @@ fn add_memory_string_initializes_to_empty() {
 #[test]
 fn add_memory_none_initializes_to_int_zero() {
     let mut gd = GameData::new();
-    gd.add_memory("anon".to_string(), Owner::Table, None);
-    assert_eq!(gd.get_memory("anon"), Some(&MemoryValue::Int(0)));
+    gd.add_memory("Table_anon".to_string(), Owner::Table, None);
+    assert_eq!(gd.get_memory("Table_anon"), Some(&MemoryValue::Int(0)));
 }
 
 #[test]
@@ -489,7 +489,7 @@ fn add_memory_player_initializes_to_int_zero_mismatched() {
     // writes a correctly-typed value. Pin the mismatch.
     let mut gd = GameData::new();
     gd.add_memory(
-        "p".to_string(),
+        "Table_p".to_string(),
         Owner::Table,
         Some(MemoryType::Player {
             player: PlayerExpr::Literal {
@@ -498,7 +498,7 @@ fn add_memory_player_initializes_to_int_zero_mismatched() {
         }),
     );
     assert_eq!(
-        gd.get_memory("p"),
+        gd.get_memory("Table_p"),
         Some(&MemoryValue::Int(0)),
         "I-10: Player memory inits to Int(0), not a player"
     );
@@ -509,14 +509,14 @@ fn add_memory_team_collection_initializes_to_int_zero_mismatched() {
     // I-10: TeamCollection also inits to Int(0).
     let mut gd = GameData::new();
     gd.add_memory(
-        "tc".to_string(),
+        "Table_tc".to_string(),
         Owner::Table,
         Some(MemoryType::TeamCollection {
             teams: TeamCollection::Literal { teams: vec![] },
         }),
     );
     assert_eq!(
-        gd.get_memory("tc"),
+        gd.get_memory("Table_tc"),
         Some(&MemoryValue::Int(0)),
         "I-10: TeamCollection memory inits to Int(0)"
     );
@@ -526,51 +526,51 @@ fn add_memory_team_collection_initializes_to_int_zero_mismatched() {
 fn add_memory_collection_variants_init_to_empty_vecs() {
     let mut gd = GameData::new();
     gd.add_memory(
-        "pcs".to_string(),
+        "Table_pcs".to_string(),
         Owner::Table,
         Some(MemoryType::PlayerCollection {
             players: PlayerCollection::Literal { players: vec![] },
         }),
     );
     assert_eq!(
-        gd.get_memory("pcs"),
+        gd.get_memory("Table_pcs"),
         Some(&MemoryValue::PlayerCollection(vec![]))
     );
     gd.add_memory(
-        "scs".to_string(),
+        "Table_scs".to_string(),
         Owner::Table,
         Some(MemoryType::StringCollection {
             strings: StringCollection::Literal { strings: vec![] },
         }),
     );
     assert_eq!(
-        gd.get_memory("scs"),
+        gd.get_memory("Table_scs"),
         Some(&MemoryValue::StringCollection(vec![]))
     );
     gd.add_memory(
-        "ics".to_string(),
+        "Table_ics".to_string(),
         Owner::Table,
         Some(MemoryType::IntCollection {
             ints: IntCollection::Literal { ints: vec![] },
         }),
     );
     assert_eq!(
-        gd.get_memory("ics"),
+        gd.get_memory("Table_ics"),
         Some(&MemoryValue::IntCollection(vec![]))
     );
     gd.add_memory(
-        "lcs".to_string(),
+        "Table_lcs".to_string(),
         Owner::Table,
         Some(MemoryType::LocationCollection {
             locations: LocationCollection::Literal { locations: vec![] },
         }),
     );
     assert_eq!(
-        gd.get_memory("lcs"),
+        gd.get_memory("Table_lcs"),
         Some(&MemoryValue::LocationCollection(vec![]))
     );
     gd.add_memory(
-        "cs".to_string(),
+        "Table_cs".to_string(),
         Owner::Table,
         Some(MemoryType::CardSet {
             card_set: CardSet::Group {
@@ -582,7 +582,10 @@ fn add_memory_collection_variants_init_to_empty_vecs() {
             },
         }),
     );
-    assert_eq!(gd.get_memory("cs"), Some(&MemoryValue::CardSet(vec![])));
+    assert_eq!(
+        gd.get_memory("Table_cs"),
+        Some(&MemoryValue::CardSet(vec![]))
+    );
 }
 
 #[test]
@@ -593,7 +596,7 @@ fn add_memory_team_initializes_to_empty_team_string() {
     // `Team` is the correct variant. Corrected here.
     let mut gd = GameData::new();
     gd.add_memory(
-        "t".to_string(),
+        "Table_t".to_string(),
         Owner::Table,
         Some(MemoryType::Team {
             team: TeamExpr::Literal {
@@ -601,16 +604,19 @@ fn add_memory_team_initializes_to_empty_team_string() {
             },
         }),
     );
-    assert_eq!(gd.get_memory("t"), Some(&MemoryValue::Team(String::new())));
+    assert_eq!(
+        gd.get_memory("Table_t"),
+        Some(&MemoryValue::Team(String::new()))
+    );
 }
 
 #[test]
 fn reset_memory_zeros_int() {
     let mut gd = GameData::new();
-    gd.add_memory("counter".to_string(), Owner::Table, None);
-    gd.set_memory("counter".to_string(), MemoryValue::Int(5));
-    gd.reset_memory("counter");
-    assert_eq!(gd.get_memory("counter"), Some(&MemoryValue::Int(0)));
+    gd.add_memory("Table_counter".to_string(), Owner::Table, None);
+    gd.set_memory("Table_counter".to_string(), MemoryValue::Int(5));
+    gd.reset_memory("Table_counter");
+    assert_eq!(gd.get_memory("Table_counter"), Some(&MemoryValue::Int(0)));
 }
 
 #[test]
@@ -624,14 +630,14 @@ fn reset_memory_on_absent_is_noop() {
 fn reset_memory_on_non_int_is_noop() {
     // Per current behavior, reset_memory only touches Int memories.
     let mut gd = GameData::new();
-    gd.add_memory("label".to_string(), Owner::Table, None);
+    gd.add_memory("Table_label".to_string(), Owner::Table, None);
     gd.set_memory(
-        "label".to_string(),
+        "Table_label".to_string(),
         MemoryValue::String("hello".to_string()),
     );
-    gd.reset_memory("label");
+    gd.reset_memory("Table_label");
     assert_eq!(
-        gd.get_memory("label"),
+        gd.get_memory("Table_label"),
         Some(&MemoryValue::String("hello".to_string())),
         "reset_memory must not touch non-Int memories"
     );

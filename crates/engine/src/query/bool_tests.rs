@@ -372,8 +372,9 @@ fn eval_aggregate_compare_string_missing_memory() {
         aggregate: AggregateBool::Compare {
             cmp_bool: CompareBool::String {
                 string: StringExpr::Memory {
-                    memory: UseSingleMemory::Memory {
+                    memory: UseSingleMemory::WithOwner {
                         memory: "nonexistent".to_string(),
+                        owner: Box::new(SingleOwner::Table),
                     },
                 },
                 cmp: StringCompare::Eq,
@@ -385,7 +386,32 @@ fn eval_aggregate_compare_string_missing_memory() {
     };
     assert_eq!(
         Evaluator::eval_bool(&expr, &gd),
-        Err("Memory nonexistent not found".to_string())
+        Err("Memory Table_nonexistent not found".to_string())
+    );
+}
+
+#[test]
+fn eval_aggregate_compare_string_no_owner_error() {
+    let gd = gd_empty();
+
+    let expr = BoolExpr::Aggregate {
+        aggregate: AggregateBool::Compare {
+            cmp_bool: CompareBool::String {
+                string: StringExpr::Memory {
+                    memory: UseSingleMemory::Memory {
+                        memory: "M".to_string(),
+                    },
+                },
+                cmp: StringCompare::Eq,
+                string1: StringExpr::Literal {
+                    value: "hello".to_string(),
+                },
+            },
+        },
+    };
+    assert_eq!(
+        Evaluator::eval_bool(&expr, &gd),
+        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
     );
 }
 

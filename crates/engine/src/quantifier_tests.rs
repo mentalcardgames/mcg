@@ -225,7 +225,7 @@ fn substitute_cardset_memory_round_trips_through_eval_cardset() {
 
     let mut gd = GameData::new();
     gd.memories.insert(
-        SYNTH_MEMORY_KEY.to_string(),
+        format!("Table_{}", SYNTH_MEMORY_KEY),
         MemoryValue::CardSet(vec![5, 7]),
     );
     let (loc_idx, card_ids) =

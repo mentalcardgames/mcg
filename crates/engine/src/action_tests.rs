@@ -288,7 +288,7 @@ fn scoring_rule_score_memory_writes_to_memory_slot() {
         },
         &mut gd,
     );
-    match gd.get_memory("m") {
+    match gd.get_memory("Alice_m") {
         Some(crate::game_data::MemoryValue::Int(n)) => assert_eq!(*n, 10),
         other => panic!("expected Int(10), got {:?}", other),
     }
@@ -658,13 +658,9 @@ fn shuffle_action_on_missing_location_is_silent_noop() {
 #[test]
 fn set_memory_action_stores_evaluated_int() {
     let mut gd = GameData::new();
-    gd.add_memory(
-        "counter".to_string(),
-        Owner::Table,
-        Some(MemoryType::Int {
-            int: IntExpr::Literal { int: 0 },
-        }),
-    );
+    let _alice = gd.add_player("Alice".to_string());
+    gd.turn_order.push(_alice);
+    gd.current_player = Some(0);
     execute_action_rule(
         ActionRule::SetMemory {
             memory: "counter".to_string(),
@@ -674,21 +670,23 @@ fn set_memory_action_stores_evaluated_int() {
         },
         &mut gd,
     );
-    assert_eq!(gd.get_memory("counter"), Some(&MemoryValue::Int(42)));
+    assert_eq!(gd.get_memory("Alice_counter"), Some(&MemoryValue::Int(42)));
 }
 
 #[test]
 fn reset_memory_action_zeros_int() {
     let mut gd = GameData::new();
-    gd.add_memory("counter".to_string(), Owner::Table, None);
-    gd.set_memory("counter".to_string(), MemoryValue::Int(7));
+    let _alice = gd.add_player("Alice".to_string());
+    gd.turn_order.push(_alice);
+    gd.current_player = Some(0);
+    gd.set_memory("Alice_counter".to_string(), MemoryValue::Int(7));
     execute_action_rule(
         ActionRule::ResetMemory {
             memory: "counter".to_string(),
         },
         &mut gd,
     );
-    assert_eq!(gd.get_memory("counter"), Some(&MemoryValue::Int(0)));
+    assert_eq!(gd.get_memory("Alice_counter"), Some(&MemoryValue::Int(0)));
 }
 
 // ---------------------------------------------------------------------------

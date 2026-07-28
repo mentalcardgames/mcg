@@ -170,4 +170,57 @@ mod int;
 mod player;
 mod string;
 
+use crate::game_data::GameData;
+use front_end::ast::{UseMemory, UseSingleMemory};
+
 pub struct Evaluator;
+
+impl Evaluator {
+    /// Resolves a `UseSingleMemory` to a prefixed HashMap key.
+    /// `WithOwner` uses the explicit owner; `Memory` (no owner) returns
+    /// an error — the engine requires explicit memory ownership.
+    pub fn resolve_memory_key(
+        use_single: &UseSingleMemory,
+        game_data: &GameData,
+    ) -> Result<String, String> {
+        match use_single {
+            UseSingleMemory::WithOwner { memory, owner } => {
+                let name = match owner.as_ref() {
+                    front_end::ast::SingleOwner::Player { player } => {
+                        Self::eval_player(player, game_data)?
+                    }
+                    front_end::ast::SingleOwner::Team { team } => Self::eval_team(team, game_data)?,
+                    front_end::ast::SingleOwner::Table => "Table".to_string(),
+                };
+                Ok(format!("{}_{}", name, memory))
+            }
+            UseSingleMemory::Memory { memory } => {
+                // NOTE(grammar-gap): memory references without an
+                // explicit owner should not be reachable once the
+                // grammar enforces `of <owner>` everywhere.
+                Err(format!(
+                    "memory access requires an explicit owner; use &M:{} of <owner>",
+                    memory
+                ))
+            }
+        }
+    }
+
+    /// Resolves a `UseMemory` (multi-owner collection memory) to a
+    /// prefixed HashMap key.
+    pub fn resolve_collection_memory_key(
+        use_mem: &UseMemory,
+        game_data: &GameData,
+    ) -> Result<String, String> {
+        match use_mem {
+            UseMemory::WithOwner { memory, owner } => {
+                let name = Self::resolve_owner_to_name(owner.as_ref(), game_data)?;
+                Ok(format!("{}_{}", name, memory))
+            }
+            UseMemory::Memory { memory } => Err(format!(
+                "memory access requires an explicit owner; use &M:{} of <owner>",
+                memory
+            )),
+        }
+    }
+}

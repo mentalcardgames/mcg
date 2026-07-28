@@ -27,8 +27,8 @@ fn memory_set_int_stores_value() {
     let gd =
         run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
 
-    match gd.get_memory("M") {
-        Some(MemoryValue::Int(n)) => assert_eq!(*n, 42, "M should be Int(42)"),
+    match gd.get_memory("P1_M") {
+        Some(MemoryValue::Int(n)) => assert_eq!(*n, 42, "P1_M should be Int(42)"),
         other => panic!("expected Int(42), got {:?}", other),
     }
 }
@@ -39,8 +39,8 @@ fn memory_set_string_stores_value() {
     let gd =
         run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
 
-    match gd.get_memory("M") {
-        Some(MemoryValue::String(s)) => assert_eq!(s, "Hello", "M should be String(\"Hello\")"),
+    match gd.get_memory("P1_M") {
+        Some(MemoryValue::String(s)) => assert_eq!(s, "Hello", "P1_M should be String(\"Hello\")"),
         other => panic!("expected String(\"Hello\"), got {:?}", other),
     }
 }
@@ -51,8 +51,8 @@ fn memory_reset_zeros_int() {
     let gd =
         run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
 
-    match gd.get_memory("M") {
-        Some(MemoryValue::Int(n)) => assert_eq!(*n, 0, "M should be Int(0) after reset"),
+    match gd.get_memory("P1_M") {
+        Some(MemoryValue::Int(n)) => assert_eq!(*n, 0, "P1_M should be Int(0) after reset"),
         other => panic!("expected Int(0), got {:?}", other),
     }
 }

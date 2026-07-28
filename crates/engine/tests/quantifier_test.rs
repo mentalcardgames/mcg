@@ -106,7 +106,7 @@ fn quantifier_deal_all_fans_out_one_card_per_player() {
         "one Move dispatch per player"
     );
     assert!(
-        !gd.memories.contains_key(SYNTH_KEY),
+        !gd.memories.contains_key(&format!("Table_{}", SYNTH_KEY)),
         "synthetic memory slot removed"
     );
 }
@@ -149,7 +149,7 @@ fn quantifier_deal_any_moves_chosen_card() {
         "chosen card left Stock"
     );
     assert_eq!(move_traces(&trace.lock().unwrap()), 1);
-    assert!(!gd.memories.contains_key(SYNTH_KEY));
+    assert!(!gd.memories.contains_key(&format!("Table_{}", SYNTH_KEY)));
 }
 
 /// `move >= 1 and <= 3 from Stock face down to Discard`: choosing 0 cards
@@ -215,7 +215,7 @@ fn quantifier_range_rejects_zero_then_moves_two() {
         "Stock shrank by 2"
     );
     assert_eq!(move_traces(&trace.lock().unwrap()), 1);
-    assert!(!gd.memories.contains_key(SYNTH_KEY));
+    assert!(!gd.memories.contains_key(&format!("Table_{}", SYNTH_KEY)));
 }
 
 /// `deal 1 from top(Stock) private to Hand of any`: only the chosen player's
@@ -267,7 +267,7 @@ fn quantifier_dest_any_deals_to_chosen_player() {
         "Stock shrank by 1"
     );
     assert_eq!(move_traces(&trace.lock().unwrap()), 1);
-    assert!(!gd.memories.contains_key(SYNTH_KEY));
+    assert!(!gd.memories.contains_key(&format!("Table_{}", SYNTH_KEY)));
 }
 
 /// `deal any from Stock private to Hand of all`: exactly one `ChooseCards`
@@ -324,7 +324,7 @@ fn quantifier_all_then_any_single_prompt_then_fanout() {
         !table_location(&gd, "Stock").unwrap().cards.contains(&0),
         "chosen card left Stock"
     );
-    assert!(!gd.memories.contains_key(SYNTH_KEY));
+    assert!(!gd.memories.contains_key(&format!("Table_{}", SYNTH_KEY)));
 }
 
 /// `self.ir` must be bit-for-bit unchanged after a quantifier run, and the
@@ -364,7 +364,10 @@ fn quantifier_ir_not_mutated_and_memory_cleaned() {
     let ir_after = format!("{:?}", interp.ir);
     assert_eq!(ir_before, ir_after, "self.ir must be bit-for-bit unchanged");
     assert!(
-        !interp.game_data.memories.contains_key(SYNTH_KEY),
+        !interp
+            .game_data
+            .memories
+            .contains_key(&format!("Table_{}", SYNTH_KEY)),
         "synthetic memory slot removed after completion"
     );
 }

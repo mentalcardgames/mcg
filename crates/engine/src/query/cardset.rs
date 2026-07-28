@@ -2,7 +2,7 @@ use super::Evaluator;
 use crate::game_data::{GameData, MemoryValue};
 use front_end::ast::{
     AggregateFilter, CardPosition, CardSet, Extrema, FilterExpr, Group, Groupable,
-    QueryCardPosition, UseMemory,
+    QueryCardPosition,
 };
 
 impl Evaluator {
@@ -56,10 +56,7 @@ impl Evaluator {
                 Ok((dest_loc_idx, filtered))
             }
             CardSet::Memory { memory } => {
-                let key = match memory {
-                    UseMemory::Memory { memory: m } => m.clone(),
-                    UseMemory::WithOwner { memory: m, .. } => m.clone(),
-                };
+                let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::CardSet(card_ids)) => {
                         if let Some(&first_card) = card_ids.first() {
@@ -488,7 +485,7 @@ impl Evaluator {
         match filter {
             FilterExpr::Aggregate { aggregate } => match aggregate {
                 AggregateFilter::Size { cmp, int_expr } => {
-                    let mut cards = vec![card_id];
+                    let cards = vec![card_id];
                     if let Ok(target) = Self::eval_int(int_expr, game_data) {
                         let size = cards.len() as i32;
                         return Self::eval_int_compare(size, cmp, target);

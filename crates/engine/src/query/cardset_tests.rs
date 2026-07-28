@@ -386,10 +386,11 @@ fn eval_cardset_group_owner() {
 fn eval_cardset_memory_cardset() {
     let mut gd = basic_fixture();
     gd.memories
-        .insert("mycs".to_string(), MemoryValue::CardSet(vec![0, 1]));
+        .insert("Table_mycs".to_string(), MemoryValue::CardSet(vec![0, 1]));
     let expr = CardSet::Memory {
-        memory: UseMemory::Memory {
+        memory: UseMemory::WithOwner {
             memory: "mycs".to_string(),
+            owner: Box::new(Owner::Table),
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
@@ -402,10 +403,12 @@ fn eval_cardset_memory_cardset() {
 #[test]
 fn eval_cardset_memory_wrong_type() {
     let mut gd = basic_fixture();
-    gd.memories.insert("notcs".to_string(), MemoryValue::Int(0));
+    gd.memories
+        .insert("Table_notcs".to_string(), MemoryValue::Int(0));
     let expr = CardSet::Memory {
-        memory: UseMemory::Memory {
+        memory: UseMemory::WithOwner {
             memory: "notcs".to_string(),
+            owner: Box::new(Owner::Table),
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
@@ -416,12 +419,28 @@ fn eval_cardset_memory_wrong_type() {
 fn eval_cardset_memory_missing() {
     let gd = basic_fixture();
     let expr = CardSet::Memory {
-        memory: UseMemory::Memory {
+        memory: UseMemory::WithOwner {
             memory: "ghost".to_string(),
+            owner: Box::new(Owner::Table),
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Err("Memory ghost not found".to_string()));
+    assert_eq!(result, Err("Memory Table_ghost not found".to_string()));
+}
+
+#[test]
+fn eval_cardset_memory_no_owner_error() {
+    let gd = basic_fixture();
+    let expr = CardSet::Memory {
+        memory: UseMemory::Memory {
+            memory: "M".to_string(),
+        },
+    };
+    let result = Evaluator::eval_cardset(&expr, &gd);
+    assert_eq!(
+        result,
+        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
+    );
 }
 
 #[test]
@@ -437,11 +456,14 @@ fn eval_cardset_memory_orphaned_cards_sentinel_location() {
         },
     );
     let orphan = gd.add_card(stock, make_card(vec![("Rank", "Ace")]));
-    gd.memories
-        .insert("orphans".to_string(), MemoryValue::CardSet(vec![orphan]));
+    gd.memories.insert(
+        "Table_orphans".to_string(),
+        MemoryValue::CardSet(vec![orphan]),
+    );
     let expr = CardSet::Memory {
-        memory: UseMemory::Memory {
+        memory: UseMemory::WithOwner {
             memory: "orphans".to_string(),
+            owner: Box::new(Owner::Table),
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
@@ -598,11 +620,14 @@ fn infer_location_from_cards_infallible() {
         },
     );
     let orphan = gd.add_card(stock, make_card(vec![("Rank", "Ace")]));
-    gd.memories
-        .insert("orphans".to_string(), MemoryValue::CardSet(vec![orphan]));
+    gd.memories.insert(
+        "Table_orphans".to_string(),
+        MemoryValue::CardSet(vec![orphan]),
+    );
     let expr = CardSet::Memory {
-        memory: UseMemory::Memory {
+        memory: UseMemory::WithOwner {
             memory: "orphans".to_string(),
+            owner: Box::new(Owner::Table),
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
@@ -707,13 +732,14 @@ fn eval_card_position_extrema_point_map_empty() {
         },
     );
     gd.memories
-        .insert("emptycs".to_string(), MemoryValue::CardSet(vec![]));
+        .insert("Table_emptycs".to_string(), MemoryValue::CardSet(vec![]));
     let expr = CardPosition::Aggregate {
         aggregate: AggregateCardPosition::ExtremaPointMap {
             extrema: Extrema::Max,
             card_set: Box::new(CardSet::Memory {
-                memory: UseMemory::Memory {
+                memory: UseMemory::WithOwner {
                     memory: "emptycs".to_string(),
+                    owner: Box::new(Owner::Table),
                 },
             }),
             pointmap: "NoSuchPointMap".to_string(),
@@ -846,7 +872,7 @@ fn eval_card_position_extrema_precedence_empty() {
         },
     );
     gd.memories
-        .insert("emptycs".to_string(), MemoryValue::CardSet(vec![]));
+        .insert("Table_emptycs".to_string(), MemoryValue::CardSet(vec![]));
     gd.precedences.push(Precedence {
         name: "RankOrder".to_string(),
         key: "Rank".to_string(),
@@ -856,8 +882,9 @@ fn eval_card_position_extrema_precedence_empty() {
         aggregate: AggregateCardPosition::ExtremaPrecedence {
             extrema: Extrema::Max,
             card_set: Box::new(CardSet::Memory {
-                memory: UseMemory::Memory {
+                memory: UseMemory::WithOwner {
                     memory: "emptycs".to_string(),
+                    owner: Box::new(Owner::Table),
                 },
             }),
             precedence: "RankOrder".to_string(),

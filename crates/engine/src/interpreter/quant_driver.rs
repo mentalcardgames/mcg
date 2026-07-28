@@ -262,7 +262,7 @@ impl Interpreter {
             CardValidation::Fatal(sr) => return sr,
         };
         self.game_data.memories.insert(
-            crate::quantifier::SYNTH_MEMORY_KEY.to_string(),
+            format!("Table_{}", crate::quantifier::SYNTH_MEMORY_KEY),
             crate::game_data::MemoryValue::CardSet(chosen.clone()),
         );
         let mut repl = crate::quantifier::substitute_cardset_memory(&original, &chosen);
@@ -305,7 +305,7 @@ impl Interpreter {
             CardValidation::Fatal(sr) => return sr,
         };
         self.game_data.memories.insert(
-            crate::quantifier::SYNTH_MEMORY_KEY.to_string(),
+            format!("Table_{}", crate::quantifier::SYNTH_MEMORY_KEY),
             crate::game_data::MemoryValue::CardSet(chosen.clone()),
         );
         let n = player_names.len();

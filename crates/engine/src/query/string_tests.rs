@@ -2,7 +2,7 @@ use super::*;
 use crate::game_data::{GameData, Location, MemoryValue};
 use front_end::ast::{
     CardPosition, IntExpr, MultiOwner, PlayerCollection, PlayerExpr, QueryCardPosition,
-    QueryString, StringCollection, StringExpr, Types, UseSingleMemory,
+    QueryString, SingleOwner, StringCollection, StringExpr, Types, UseSingleMemory,
 };
 use std::collections::HashMap;
 
@@ -146,11 +146,14 @@ fn eval_string_query_string_collection_at_out_of_range() {
 #[test]
 fn eval_string_memory_string() {
     let mut gd = GameData::new();
-    gd.memories
-        .insert("m".to_string(), MemoryValue::String("hello".to_string()));
+    gd.memories.insert(
+        "Table_m".to_string(),
+        MemoryValue::String("hello".to_string()),
+    );
     let expr = StringExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "m".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(Evaluator::eval_string(&expr, &gd), Ok("hello".to_string()));
@@ -159,10 +162,12 @@ fn eval_string_memory_string() {
 #[test]
 fn eval_string_memory_wrong_type() {
     let mut gd = GameData::new();
-    gd.memories.insert("m".to_string(), MemoryValue::Int(0));
+    gd.memories
+        .insert("Table_m".to_string(), MemoryValue::Int(0));
     let expr = StringExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "m".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(
@@ -175,13 +180,28 @@ fn eval_string_memory_wrong_type() {
 fn eval_string_memory_missing() {
     let gd = GameData::new();
     let expr = StringExpr::Memory {
-        memory: UseSingleMemory::Memory {
+        memory: UseSingleMemory::WithOwner {
             memory: "m".to_string(),
+            owner: Box::new(SingleOwner::Table),
         },
     };
     assert_eq!(
         Evaluator::eval_string(&expr, &gd),
-        Err("Memory m not found".to_string())
+        Err("Memory Table_m not found".to_string())
+    );
+}
+
+#[test]
+fn eval_string_memory_no_owner_error() {
+    let gd = GameData::new();
+    let expr = StringExpr::Memory {
+        memory: UseSingleMemory::Memory {
+            memory: "M".to_string(),
+        },
+    };
+    assert_eq!(
+        Evaluator::eval_string(&expr, &gd),
+        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
     );
 }
 

@@ -379,8 +379,9 @@ pub fn substitute_cardset_memory(
     let mut repl = edge.clone();
     if let Some(mcs) = move_cardset_mut(&mut repl) {
         let new_from = CardSet::Memory {
-            memory: UseMemory::Memory {
+            memory: UseMemory::WithOwner {
                 memory: SYNTH_MEMORY_KEY.to_string(),
+                owner: Box::new(Owner::Table),
             },
         };
         match mcs {

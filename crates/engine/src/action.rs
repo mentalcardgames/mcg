@@ -129,14 +129,31 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) {
             });
         }
         SetUpRule::CreateMemory { memory, owner } => {
-            game_data.add_memory(memory, owner, None);
+            let names = crate::query::Evaluator::resolve_owner_to_names(&owner, game_data)
+                .unwrap_or_else(|e| {
+                    panic!("CreateMemory: failed to resolve owner {:?}: {}", owner, e)
+                });
+            for name in names {
+                let key = format!("{}_{}", name, memory);
+                game_data.add_memory(key, owner.clone(), None);
+            }
         }
         SetUpRule::CreateMemoryWithMemoryType {
             memory,
             owner,
             memory_type,
         } => {
-            game_data.add_memory(memory, owner, Some(memory_type));
+            let names = crate::query::Evaluator::resolve_owner_to_names(&owner, game_data)
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "CreateMemoryWithMemoryType: failed to resolve owner {:?}: {}",
+                        owner, e
+                    )
+                });
+            for name in names {
+                let key = format!("{}_{}", name, memory);
+                game_data.add_memory(key, owner.clone(), Some(memory_type.clone()));
+            }
         }
         SetUpRule::CreatePrecedence { precedence, kvs } => {
             game_data.precedences.push(Precedence {
@@ -237,10 +254,26 @@ pub(crate) fn execute_action_rule(action: ActionRule, game_data: &mut GameData) 
                 MemoryType::LocationCollection { .. } => MemoryValue::LocationCollection(vec![]),
                 MemoryType::CardSet { .. } => MemoryValue::CardSet(vec![]),
             };
-            game_data.set_memory(memory, value);
+            // NOTE(grammar-gap): set_memory grammar has no owner clause.
+            // Prefix key with current player name until grammar supports
+            // explicit `of <owner>`.
+            let key = match game_data.get_current_player() {
+                Some(p) => format!("{}_{}", p.name, memory),
+                None => {
+                    panic!("SetMemory requires a current player")
+                }
+            };
+            game_data.set_memory(key, value);
         }
         ActionRule::ResetMemory { memory } => {
-            game_data.reset_memory(&memory);
+            // NOTE(grammar-gap): reset_memory grammar has no owner clause.
+            let key = match game_data.get_current_player() {
+                Some(p) => format!("{}_{}", p.name, memory),
+                None => {
+                    panic!("ResetMemory requires a current player")
+                }
+            };
+            game_data.reset_memory(&key);
         }
         ActionRule::CycleAction { player } => {
             let player_name = crate::query::Evaluator::eval_player(&player, game_data)
@@ -320,16 +353,18 @@ pub(crate) fn execute_scoring_rule(scoring: ScoringRule, game_data: &mut GameDat
             front_end::ast::ScoreRule::ScoreMemory {
                 int,
                 memory,
-                players: _,
+                players,
             } => {
-                // NOTE: per-player memory does not exist yet. ScoreMemory
-                // writes the evaluated int to the named global memory slot.
-                // Multi-player targets will overwrite (last write wins).
                 let value = crate::query::Evaluator::eval_int(&int, game_data)
                     .unwrap_or_else(|e| panic!("ScoreMemory: failed to eval int {:?}: {}", int, e));
-                game_data
-                    .memories
-                    .insert(memory, crate::game_data::MemoryValue::Int(value));
+                let indices = crate::query::Evaluator::resolve_players(&players, game_data);
+                for idx in indices {
+                    let name = &game_data.players[idx].name;
+                    let key = format!("{}_{}", name, memory);
+                    game_data
+                        .memories
+                        .insert(key, crate::game_data::MemoryValue::Int(value));
+                }
             }
         },
         ScoringRule::WinnerRule { winner_rule } => match winner_rule {
@@ -346,8 +381,6 @@ pub(crate) fn execute_scoring_rule(scoring: ScoringRule, game_data: &mut GameDat
                 winner_type,
             } => {
                 // NOTE: Position = turn-order index (lower = earlier in turn).
-                // NOTE: Memory reads global slot, expects Int; per-player
-                // memory does not exist yet so all players share the same value.
                 let values: Vec<(usize, usize)> = game_data
                     .players
                     .iter()
@@ -362,7 +395,8 @@ pub(crate) fn execute_scoring_rule(scoring: ScoringRule, game_data: &mut GameDat
                                 .position(|&x| x == i)
                                 .unwrap_or(usize::MAX),
                             front_end::ast::WinnerType::Memory { memory } => {
-                                match game_data.get_memory(memory) {
+                                let key = format!("{}_{}", p.name, memory);
+                                match game_data.get_memory(&key) {
                                     Some(crate::game_data::MemoryValue::Int(n)) => {
                                         (*n).max(0) as usize
                                     }
