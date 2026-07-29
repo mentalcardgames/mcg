@@ -228,7 +228,7 @@ expression: `memory Name 42 on P:P1`.
 ### 3.10 Tokens
 
 ```
-token 3 Marker on Table
+token 3 Marker on table
 ```
 
 ❌ **Stub** — tokens are not modeled in `GameData`. Any `token` rule is
@@ -311,8 +311,8 @@ These will never match — see §12.
 | Explicit | `(P:A, P:B, P:C)` | Comma-separated |
 | All | `all` | All in-game players |
 | Any | `any` | Prompt player to pick |
-| In-stage | `playersin` | Players with `in_stage=true` |
-| Out-of-stage | `playersout` | Players with `in_stage=false` |
+| In-game | `playersin` | Players with `in_game=true` |
+| Out-of-game | `playersout` | Players with `in_game=false` (eliminated) |
 | Others | `others` | All players except `current` |
 | Memory | `(&PC:names of P:P1)` | Read from memory |
 
@@ -385,7 +385,8 @@ stage Reveal for all 1 times { ... }       // sim (player_collection)
 | Fixed iterations | `N times` | Exits after N stage-round increments |
 | Until bool | `until <bool>` | Exits when bool becomes true |
 | Until end | `until end` | Exits via `end stage` / `end <name>` action |
-| Until bool + count | `until <bool> and N times` | Combines both (exits after N rounds) |
+| Until bool + count | `until <bool> and N times` | Exits when bool is true AND counter ≥ N |
+| Until bool + count | `until <bool> or N times` | Exits when bool is true OR counter ≥ N |
 
 Examples:
 
@@ -394,9 +395,6 @@ stage Draw for current 5 times { ... }
 stage Draw for current until Hand empty { ... }
 stage Draw for current until end { ... }
 ```
-
-⚠️ `until <bool> or N times` is valid in the grammar but the engine
-treats it as "and".
 
 ### 5.3 Stage lifecycle
 
@@ -409,18 +407,9 @@ treats it as "and".
 3. **Exit**: On end-condition match or `end stage` action, the stage is
    popped from `stage_stack`.
 
-### 5.4 Trigger rules (`on enter`)
+### 5.4 Trigger rules
 
-Trigger rules fire once when a stage is entered:
-
-```
-stages:
-  Play:
-    on enter:
-      deal 2 from Deck private to Hand of current
-```
-
-At the top level, use:
+Trigger rules fire each time they are encountered in the flow:
 
 ```
 trigger {
@@ -428,8 +417,12 @@ trigger {
 }
 ```
 
-Triggers are lowered as `Payload::Trigger` edges and dispatched immediately
-at stage entry.
+A `trigger` block inside a stage fires on every iteration (when the flow
+reaches it). A top-level `trigger` fires once before any stage. There is
+no dedicated `on enter` syntax — place a `trigger` block at the start of
+a stage body to simulate entry-only behaviour.
+
+Triggers are lowered as `Payload::Trigger` edges and dispatched immediately.
 
 ---
 
@@ -468,11 +461,11 @@ The `<quantity>` field controls how many cards:
 
 | Quantity | Syntax | Behaviour |
 |----------|--------|-----------|
-| Exact | `3` | Move exactly 3 |
-| All | `all` | Fan-out: one synthetic edge per player |
-| Any | `any` | Prompt: player picks a card |
-| Range | `>= 1 and <= 3` | Prompt: player picks 1–3 cards |
-| Omitted | *(no quantity)* | Move all cards in the set |
+| Exact | `3` | Move exactly 3 cards |
+| All | `all` | Move all cards in the source set |
+| Any | `any` | Prompt: player picks cards from source |
+| Range | `>= 1 and <= 3` | Prompt: player picks 1–3 cards from source |
+| Omitted | *(no quantity)* | Move all cards in the source set |
 
 When `<quantity>` is omitted, all cards from the source set are moved.
 
@@ -598,7 +591,8 @@ choose {
 ```
 
 Presents a **multi-choice** prompt. Each arm is a separate flow-component
-block. The player selects one by index. There can be 2+ arms.
+block. The player selects one by index. There can be 1+ arms (though having
+only one is equivalent to an `optional`).
 
 ### 7.4 `conditional`
 
@@ -665,8 +659,10 @@ Extrema winners: all in-game players are compared; only those matching the
 target value remain.
 
 ⚠️ `winner is highest/lowest position` uses turn-order index (lower = earlier
-in turn). Memory-based extrema read global memory slots. See §12 for the
-key-order bug.
+in turn). `winner is highest/lowest <memory>` reads the per-player memory slot
+`<player>_<memory>` — this is the correct key format, unlike the
+`owner of highest/lowest <memory>` player expression which has a key-order
+bug (see §12).
 
 ---
 
@@ -996,7 +992,6 @@ stage End for current 1 times {
 | `reset memory` on non-Int | ⚠️ | Silently no-ops |
 | `owner of highest/lowest <mem>` | ⚠️ | Key-order bug: builds `<mem>_<player>` instead of `<player>_<mem>` |
 | Aggregate memory (multi-owner) | ⚠️ | `todo!()` panics in query evaluators |
-| `score … to memory` multi-player | ⚠️ | Last-write-wins (global, not per-player) |
 
 ---
 
