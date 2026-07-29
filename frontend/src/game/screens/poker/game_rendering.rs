@@ -1,3 +1,4 @@
+use crate::game::websocket::MessageSender;
 use egui::{Color32, Ui};
 use mcg_shared::{GameStatePublic, PlayerId, PlayerPublic};
 
@@ -112,6 +113,7 @@ pub fn render_my_cards_and_actions(
     p: &PlayerPublic,
     preferred_player: PlayerId,
     poker_screen: &mut dyn PokerScreenActions,
+    sender: &dyn MessageSender,
 ) {
     ui.vertical(|ui| {
         if let Some(cards) = p.cards {
@@ -130,13 +132,13 @@ pub fn render_my_cards_and_actions(
         }
 
         if p.id == state.to_act && state.stage != mcg_shared::Stage::Showdown {
-            poker_screen.render_action_row(ui, state, p.id, true, false);
+            poker_screen.render_action_row(ui, state, p.id, true, false, sender);
             ui.add_space(6.0);
             ui.separator();
         } else if p.id == preferred_player
             && (state.stage == mcg_shared::Stage::Showdown || p.cards.is_none())
         {
-            poker_screen.render_action_row(ui, state, p.id, false, true);
+            poker_screen.render_action_row(ui, state, p.id, false, true, sender);
             ui.add_space(6.0);
             ui.separator();
         } else {
@@ -151,13 +153,14 @@ pub fn render_player(
     p: &PlayerPublic,
     preferred_player: PlayerId,
     poker_screen: &mut dyn PokerScreenActions,
+    sender: &dyn MessageSender,
 ) {
     ui.horizontal(|ui| {
         render_player_status_and_bet(ui, state, p, preferred_player);
     });
 
     if p.id == preferred_player {
-        render_my_cards_and_actions(ui, state, p, preferred_player, poker_screen);
+        render_my_cards_and_actions(ui, state, p, preferred_player, poker_screen, sender);
     } else if state.stage == mcg_shared::Stage::Showdown {
         if let Some(cards) = p.cards {
             ui.horizontal(|ui| {
@@ -175,10 +178,11 @@ pub fn render_players_panel(
     state: &GameStatePublic,
     preferred_player: PlayerId,
     poker_screen: &mut dyn PokerScreenActions,
+    sender: &dyn MessageSender,
 ) {
     ui.group(|ui| {
         for p in state.players.iter() {
-            render_player(ui, state, p, preferred_player, poker_screen);
+            render_player(ui, state, p, preferred_player, poker_screen, sender);
         }
     });
 }
@@ -188,16 +192,17 @@ pub fn render_panels(
     state: &GameStatePublic,
     preferred_player: PlayerId,
     poker_screen: &mut dyn PokerScreenActions,
+    sender: &dyn MessageSender,
 ) {
     let narrow = ui.available_width() < 900.0;
     if narrow {
-        render_players_panel(ui, state, preferred_player, poker_screen);
+        render_players_panel(ui, state, preferred_player, poker_screen, sender);
         ui.add_space(8.0);
         render_table_panel(ui, state, preferred_player);
     } else {
         ui.columns(2, |cols| {
             render_table_panel(&mut cols[0], state, preferred_player);
-            render_players_panel(&mut cols[1], state, preferred_player, poker_screen);
+            render_players_panel(&mut cols[1], state, preferred_player, poker_screen, sender);
         });
     }
 }
@@ -210,6 +215,7 @@ pub trait PokerScreenActions {
         state: &GameStatePublic,
         player_id: mcg_shared::PlayerId,
         enabled: bool,
+        sender: &dyn MessageSender,
     );
     fn render_action_row(
         &mut self,
@@ -218,6 +224,6 @@ pub trait PokerScreenActions {
         player_id: mcg_shared::PlayerId,
         enabled: bool,
         show_next: bool,
+        sender: &dyn MessageSender,
     );
-    fn send(&self, msg: mcg_shared::Frontend2BackendMsg);
 }

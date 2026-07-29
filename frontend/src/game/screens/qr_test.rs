@@ -1,8 +1,8 @@
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::qr_scanner::QrScannerPopup;
-use egui::TextureOptions;
-use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
 use crate::sprintln;
+use egui::TextureOptions;
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use qrcode::QrCode;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -27,36 +27,10 @@ impl ScreenWidget for QrScreen {
 
         // Lazy connect using central WebSocket
         if !self.initialized {
-            let payload = self.qr_payload.clone();
-
-            let on_msg = move |x: Backend2FrontendMsg| match x {
-                Backend2FrontendMsg::TicketValue(ticket) => {
-                    sprintln!("Got a ticket value:\n\t- {:?}", ticket);
-                    *payload.borrow_mut() = Some(ticket);
-                }
-                Backend2FrontendMsg::IPValue(ip) => {
-                    sprintln!("Got an IP value:\n\t- {:?}", ip);
-                    *payload.borrow_mut() = Some(ip);
-                }
-                _ => {
-                    sprintln!("Got an unhandled message:\n\t- {:?}", x);
-                }
-            };
-            let on_err = move |e: String| {
-                sprintln!("Got an error:\n\t- {:?}", e);
-            };
-            let on_cls = move |c: String| {
-                sprintln!("Got a close:\n\t- {:?}", c);
-            };
-
             let server = app_interface.state().settings.server_address.clone();
             if !app_interface.is_connected() {
                 app_interface.connect(&server);
             }
-
-            // Register listener once and activate it
-            app_interface.register_listener_once("/qr", on_msg, on_err, on_cls);
-            app_interface.set_active_listener(Some("/qr"));
 
             self.initialized = true;
         }
@@ -64,7 +38,8 @@ impl ScreenWidget for QrScreen {
         ui.heading("QR Scanner Demo");
         ui.add_space(12.0);
         ui.horizontal(|ui| {
-            self.scanner.button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
+            self.scanner
+                .button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
             if ui.button("Generate Endpoint Ticket QR Code").clicked() {
                 let msg = Frontend2BackendMsg::GetTicket;
                 app_interface.send_msg(msg);
@@ -92,15 +67,26 @@ impl ScreenWidget for QrScreen {
                     [image.width() as usize, image.height() as usize],
                     image.as_raw(),
                 );
-                let texture = ui.ctx().load_texture("qr_code", texture, TextureOptions::default());
+                let texture = ui
+                    .ctx()
+                    .load_texture("qr_code", texture, TextureOptions::default());
                 ui.image(&texture);
             }
         }
     }
 
-    fn on_exit(&mut self, app_interface: &mut AppInterface) {
-        // Deactivate this screen's listener, keep it registered
-        app_interface.set_active_listener(None);
+    fn on_message(&mut self, _app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
+        match message {
+            Backend2FrontendMsg::TicketValue(ticket) => {
+                sprintln!("Got a ticket value:\n\t- {:?}", ticket);
+                *self.qr_payload.borrow_mut() = Some(ticket);
+            }
+            Backend2FrontendMsg::IPValue(ip) => {
+                sprintln!("Got an IP value:\n\t- {:?}", ip);
+                *self.qr_payload.borrow_mut() = Some(ip);
+            }
+            other => sprintln!("Got an unhandled message:\n\t- {:?}", other),
+        }
     }
 }
 

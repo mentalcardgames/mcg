@@ -6,7 +6,7 @@ use js_sys::Date;
 use mcg_qr_comm::data_structures::Package;
 use mcg_qr_comm::network_coding::Epoch;
 use mcg_qr_comm::MAX_PARTICIPANTS;
-use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use qrcode::QrCode;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -60,45 +60,10 @@ impl ScreenWidget for QrTestTransmit {
 
         // Lazy connect using central WebSocket
         if !self.initialized {
-            let epoch_copy = self.epoch.clone();
-            let ctx_for_msg = ctx.clone();
-            let ctx_for_err = ctx_for_msg.clone();
-            let ctx_for_close = ctx_for_msg.clone();
-
-            let on_msg = move |x: Backend2FrontendMsg| match x {
-                Backend2FrontendMsg::QrRes(content) => {
-                    let s = String::from_utf8_lossy(&content);
-                    sprintln!("Got a response:\n\t- {:?}", s);
-                    if let Ok(mut epoch) = epoch_copy.try_borrow_mut() {
-                        let ap = Package::new(&content);
-                        epoch.write(ap);
-                        epoch.header.participant += 1;
-                        epoch.header.participant %= MAX_PARTICIPANTS as u8;
-                    }
-                    ctx_for_msg.request_repaint();
-                }
-                _ => {
-                    sprintln!("Got an unhandled message:\n\t- {:?}", x);
-                    ctx_for_msg.request_repaint();
-                }
-            };
-            let on_err = move |e: String| {
-                sprintln!("Got an error:\n\t- {:?}", e);
-                ctx_for_err.request_repaint();
-            };
-            let on_cls = move |c: String| {
-                sprintln!("Got a close:\n\t- {:?}", c);
-                ctx_for_close.request_repaint();
-            };
-
             let server = app_interface.state().settings.server_address.clone();
             if !app_interface.is_connected() {
                 app_interface.connect(&server);
             }
-
-            // Register listener once and activate it
-            app_interface.register_listener_once("/transmit", on_msg, on_err, on_cls);
-            app_interface.set_active_listener(Some("/transmit"));
 
             self.initialized = true;
         }
@@ -174,9 +139,20 @@ impl ScreenWidget for QrTestTransmit {
         }
     }
 
-    fn on_exit(&mut self, app_interface: &mut AppInterface) {
-        // Deactivate this screen's listener, keep it registered
-        app_interface.set_active_listener(None);
+    fn on_message(&mut self, _app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
+        match message {
+            Backend2FrontendMsg::QrRes(content) => {
+                let text = String::from_utf8_lossy(&content);
+                sprintln!("Got a response:\n\t- {:?}", text);
+                if let Ok(mut epoch) = self.epoch.try_borrow_mut() {
+                    let package = Package::new(&content);
+                    epoch.write(package);
+                    epoch.header.participant += 1;
+                    epoch.header.participant %= MAX_PARTICIPANTS as u8;
+                }
+            }
+            other => sprintln!("Got an unhandled message:\n\t- {:?}", other),
+        }
     }
 }
 

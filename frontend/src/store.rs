@@ -1,6 +1,5 @@
 use crate::articles::Post;
-use mcg_shared::{GameStatePublic, Backend2FrontendMsg};
-use std::collections::VecDeque;
+use mcg_shared::{Backend2FrontendMsg, GameStatePublic};
 
 #[derive(Clone, Default, Debug)]
 pub struct ClientSettings {
@@ -48,7 +47,6 @@ pub struct GameSessionState {
 #[derive(Clone, Debug, Default)]
 pub struct ConnectionState {
     pub connection_status: ConnectionStatus,
-    pub pending_messages: VecDeque<Backend2FrontendMsg>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -106,7 +104,6 @@ impl ClientState {
             session: GameSessionState { game_state: None },
             connection: ConnectionState {
                 connection_status: ConnectionStatus::Disconnected,
-                pending_messages: VecDeque::new(),
             },
             ui: UIState {
                 last_error: None,
@@ -116,37 +113,6 @@ impl ClientState {
                 pairing_confirm_player: None,
                 pairing_confirm_action: None,
             },
-        }
-    }
-
-    pub fn queue_server_msg(&mut self, msg: Backend2FrontendMsg) {
-        self.connection.pending_messages.push_back(msg);
-    }
-
-    /// Process all pending server messages
-    pub fn dispatch_pending_messages(&mut self) {
-        while let Some(msg) = self.connection.pending_messages.pop_front() {
-            self.apply_server_msg(msg);
-        }
-    }
-
-    /// Helper to apply an incoming Backend2FrontendMsg into the shared ClientState.
-    /// Effects may call this helper while holding the appropriate repaint context.
-    pub fn apply_server_msg(&mut self, msg: Backend2FrontendMsg) {
-        match msg {
-            Backend2FrontendMsg::State(gs) => {
-                self.connection.connection_status = ConnectionStatus::Connected;
-                self.session.game_state = Some(gs.clone());
-                self.ui.last_error = None;
-                self.ui.last_info = None;
-            }
-            Backend2FrontendMsg::Error(e) => {
-                self.ui.last_error = Some(e.clone());
-            }
-            Backend2FrontendMsg::OurName(string) => {
-                self.settings.name = string.clone();
-            }
-            _ => {}
         }
     }
 }

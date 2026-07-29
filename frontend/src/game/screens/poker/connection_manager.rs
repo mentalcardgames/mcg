@@ -1,16 +1,12 @@
-use crate::game::websocket::WebSocketConnection;
+use crate::game::AppInterface;
 use crate::qr_scanner::QrScannerPopup;
 use crate::store::{ClientState, ConnectionStatus};
 use egui::{Color32, Context, RichText, Ui};
-use mcg_shared::Backend2FrontendMsg;
-use std::collections::VecDeque;
 
 pub struct ConnectionManager {
     edit_server_address: String,
     qr_result_raw: Vec<u8>,
     scanner: QrScannerPopup,
-    message_queue: Option<std::rc::Rc<std::cell::RefCell<VecDeque<Backend2FrontendMsg>>>>,
-    error_queue: Option<std::rc::Rc<std::cell::RefCell<VecDeque<String>>>>,
 }
 
 impl ConnectionManager {
@@ -19,94 +15,18 @@ impl ConnectionManager {
             edit_server_address: server_address,
             qr_result_raw: Vec::new(),
             scanner: QrScannerPopup::default(),
-            message_queue: None,
-            error_queue: None,
         }
     }
 
-    pub fn connect(
-        &mut self,
-        conn: &mut WebSocketConnection,
-        app_state: &mut ClientState,
-        ctx: &Context,
-    ) {
-        app_state.connection.connection_status = ConnectionStatus::Connecting;
-        app_state.ui.last_error = None;
-        app_state.ui.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
-        app_state.settings.server_address = self.edit_server_address.clone();
-
-        // Create a shared message queue using Rc<RefCell<VecDeque<Backend2FrontendMsg>>>
-        let message_queue =
-            std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<
-                mcg_shared::Backend2FrontendMsg,
-            >::new()));
-        let error_queue = std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<
-            String,
-        >::new()));
-
-        // Clone queues and context for each closure
-        let msg_queue_for_msg = message_queue.clone();
-        let error_queue_for_error = error_queue.clone();
-        let error_queue_for_close = error_queue.clone();
-        let ctx_for_msg = ctx.clone();
-        let ctx_for_error = ctx.clone();
-        let ctx_for_close = ctx.clone();
-
-        // Connect using the new simplified API (no per-call closures)
-
-        conn.connect(&self.edit_server_address);
-
-        // Register a persistent named listener exactly once and activate it.
-        // Use a descriptive key for this manager.
-        let key = "/poker/connection_manager";
-        conn.register_listener_once(
-            key,
-            move |msg: Backend2FrontendMsg| {
-                if let Ok(mut q) = msg_queue_for_msg.try_borrow_mut() {
-                    q.push_back(msg);
-                    ctx_for_msg.request_repaint();
-                }
-            },
-            move |error: String| {
-                if let Ok(mut q) = error_queue_for_error.try_borrow_mut() {
-                    q.push_back(error);
-                    ctx_for_error.request_repaint();
-                }
-            },
-            move |reason: String| {
-                if let Ok(mut q) = error_queue_for_close.try_borrow_mut() {
-                    q.push_back(reason);
-                    ctx_for_close.request_repaint();
-                }
-            },
-        );
-
-        // Activate this listener so routing will deliver events here while connected via this UI flow.
-        conn.set_active_listener(Some(key));
-
-        // Store the queues for processing in the update loop
-        self.message_queue = Some(message_queue);
-        self.error_queue = Some(error_queue);
-    }
-
-    /// Process any queued messages from WebSocket callbacks
-    pub fn dispatch_queued_messages(&mut self, app_state: &mut ClientState) {
-        if let Some(queue) = &self.message_queue {
-            if let Ok(mut q) = queue.try_borrow_mut() {
-                while let Some(msg) = q.pop_front() {
-                    app_state.apply_server_msg(msg);
-                }
-            }
+    pub fn connect(&mut self, app_interface: &mut AppInterface) {
+        {
+            let app_state = app_interface.state_mut();
+            app_state.connection.connection_status = ConnectionStatus::Connecting;
+            app_state.ui.last_error = None;
+            app_state.ui.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
+            app_state.settings.server_address = self.edit_server_address.clone();
         }
-
-        if let Some(queue) = &self.error_queue {
-            if let Ok(mut q) = queue.try_borrow_mut() {
-                while let Some(error) = q.pop_front() {
-                    app_state.ui.last_error = Some(error);
-                    app_state.connection.connection_status = ConnectionStatus::Disconnected;
-                }
-            }
-        }
+        app_interface.connect(&self.edit_server_address);
     }
 
     pub fn render_header(&mut self, app_state: &mut ClientState, ui: &mut Ui, ctx: &Context) {

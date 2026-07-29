@@ -6,10 +6,13 @@ pub mod websocket;
 use crate::router::Router;
 use crate::{
     game::{card::DirectoryCardType, screens::Game},
+    sprintln,
     store::ClientState,
 };
 use egui::Context;
+use mcg_shared::Backend2FrontendMsg;
 use screens::{AppInterface, MainMenu, ScreenWidget};
+use std::sync::mpsc::{self, Receiver};
 use theme::*;
 
 /// Events that can be sent between screens
@@ -54,6 +57,9 @@ pub struct App {
     router: Option<Router>,
 
     ws_connection: websocket::WebSocketConnection,
+    message_receiver: Receiver<Backend2FrontendMsg>,
+    error_receiver: Receiver<web_sys::Event>,
+    close_receiver: Receiver<web_sys::CloseEvent>,
 }
 
 impl Default for App {
@@ -80,6 +86,9 @@ impl App {
             .unwrap_or_else(|| "/".to_string());
 
         let app_state = ClientState::new();
+        let (message_sender, message_receiver) = mpsc::channel();
+        let (error_sender, error_receiver) = mpsc::channel();
+        let (close_sender, close_receiver) = mpsc::channel();
         Self {
             current_screen_path: current_path,
             screens: std::collections::HashMap::new(),
@@ -92,7 +101,14 @@ impl App {
             },
             app_state,
             router,
-            ws_connection: websocket::WebSocketConnection::new(),
+            ws_connection: websocket::WebSocketConnection::new(
+                message_sender,
+                error_sender,
+                close_sender,
+            ),
+            message_receiver,
+            error_receiver,
+            close_receiver,
         }
     }
 
@@ -127,6 +143,55 @@ impl App {
     pub fn current_path(&self) -> &str {
         &self.current_screen_path
     }
+
+    fn ensure_current_screen(&mut self) {
+        if self.screens.contains_key(&self.current_screen_path) {
+            return;
+        }
+
+        if let Some(factory) = self
+            .screen_registry
+            .factory_by_path(&self.current_screen_path)
+        {
+            self.screens
+                .insert(self.current_screen_path.clone(), factory());
+        }
+    }
+
+    fn dispatch_messages(&mut self, events: &mut Vec<AppEvent>) {
+        let Some(screen) = self.screens.get_mut(&self.current_screen_path) else {
+            // Leave messages in the channel until their destination screen exists.
+            return;
+        };
+        let mut app_interface = AppInterface::new(events, &mut self.app_state, &mut self.ws_connection);
+        while let Ok(msg) = self.message_receiver.try_recv() {
+            // Keep application-owned state independent of screen lifetime.
+            // Screens still receive every message for their screen-specific behavior.
+            screen.on_message(&mut app_interface, msg);
+        }
+    }
+
+    fn dispatch_error_events(&mut self) {
+        while let Ok(event) = self.error_receiver.try_recv() {
+            sprintln!("WebSocket error event occurred: {:?}", event);
+            self.app_state.connection.connection_status =
+                crate::store::ConnectionStatus::Disconnected;
+            self.app_state.ui.last_error = Some("WebSocket connection error.".to_string());
+        }
+    }
+
+    fn dispatch_close_events(&mut self) {
+        while let Ok(event) = self.close_receiver.try_recv() {
+            sprintln!(
+                "Close event occurred:\n\tCode: {}\n\tReason: {}\n\tClean: {}",
+                event.code(),
+                event.reason(),
+                event.was_clean()
+            );
+            self.app_state.connection.connection_status =
+                crate::store::ConnectionStatus::Disconnected;
+        }
+    }
 }
 
 impl App {
@@ -154,11 +219,9 @@ impl App {
                             if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
                                 if self.current_screen_path.starts_with("/lobbyselect/") {
                                     events.push(AppEvent::ChangeRoute("/lobbyselect".to_string()));
-                                }
-                                else{
+                                } else {
                                     events.push(AppEvent::ChangeRoute("/".to_string()));
                                 }
-
                             }
                         },
                     );
@@ -248,8 +311,14 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+        self.check_url_changes();
+        self.ensure_current_screen();
+
         // Process any pending messages from WebSocket callbacks
-        self.app_state.dispatch_pending_messages();
+        let mut events = Vec::new();
+        self.dispatch_messages(&mut events);
+        self.dispatch_error_events();
+        self.dispatch_close_events();
 
         ctx.set_pixels_per_point(self.pending_settings.applied_dpi);
         if self.pending_settings.dark_mode {
@@ -257,30 +326,15 @@ impl eframe::App for App {
         } else {
             ctx.set_visuals(egui::Visuals::light());
         }
-        self.check_url_changes();
-
-        let mut events = Vec::new();
 
         // show top bar unless root
         if self.current_screen_path != "/" {
             self.render_top_bar(ctx, &mut events);
         }
-        let mut app_interface = AppInterface::new(
-            &mut events,
-            &mut self.app_state,
-            &mut self.ws_connection);
+        let mut app_interface =
+            AppInterface::new(&mut events, &mut self.app_state, &mut self.ws_connection);
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Ensure screen exists
-            if !self.screens.contains_key(&self.current_screen_path) {
-                if let Some(factory) = self
-                    .screen_registry
-                    .factory_by_path(&self.current_screen_path)
-                {
-                    let boxed = factory();
-                    self.screens.insert(self.current_screen_path.clone(), boxed);
-                }
-            }
             if let Some(screen) = self.screens.get_mut(&self.current_screen_path) {
                 screen.ui(&mut app_interface, ui, frame);
             } else {
@@ -299,7 +353,8 @@ impl eframe::App for App {
                         let mut temp_interface = AppInterface::new(
                             &mut events,
                             &mut self.app_state,
-                            &mut self.ws_connection);
+                            &mut self.ws_connection,
+                        );
                         screen.on_exit(&mut temp_interface);
                     }
                     self.change_route(&path);

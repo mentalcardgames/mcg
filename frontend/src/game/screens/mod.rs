@@ -1,14 +1,14 @@
+use crate::game::websocket::{MessageSender, WebSocketConnection};
 use eframe::Frame;
-use crate::game::websocket::WebSocketConnection;
 
 pub mod articles_screen;
 pub mod example_screen;
 pub mod game;
 pub mod game_setup_screen;
-pub mod main_menu;
-pub mod pairing_screen;
 pub mod lobby_setup;
+pub mod main_menu;
 pub mod mcg_lobby;
+pub mod pairing_screen;
 
 pub mod poker;
 pub mod qr_test;
@@ -22,13 +22,13 @@ use downcast_rs::{impl_downcast, Downcast};
 pub use example_screen::ExampleScreen;
 pub use game::{DNDSelector, DirectoryCardType, Game, GameState};
 pub use game_setup_screen::GameSetupScreen;
+pub use lobby_setup::LobbySelectionScreen;
 pub use main_menu::MainMenu;
+pub use mcg_lobby::LobbyScreen;
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig};
 pub use pairing_screen::PairingScreen;
 pub use poker::PokerOnlineScreen;
 pub use qr_test::QrScreen;
-pub use lobby_setup::LobbySelectionScreen;
-pub use mcg_lobby::LobbyScreen;
-use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig};
 
 pub struct AppInterface<'a> {
     events: &'a mut Vec<crate::game::AppEvent>,
@@ -36,9 +36,11 @@ pub struct AppInterface<'a> {
     ws: &'a mut WebSocketConnection,
 }
 impl<'a> AppInterface<'a> {
-    pub fn new(events: &'a mut Vec<crate::game::AppEvent>,
-               client_state: &'a mut crate::store::ClientState,
-               websocket: &'a mut WebSocketConnection) -> Self {
+    pub fn new(
+        events: &'a mut Vec<crate::game::AppEvent>,
+        client_state: &'a mut crate::store::ClientState,
+        websocket: &'a mut WebSocketConnection,
+    ) -> Self {
         Self {
             events,
             app_state: client_state,
@@ -74,16 +76,12 @@ impl<'a> AppInterface<'a> {
     pub fn connect(&mut self, address: &str) {
         self.ws.connect(address)
     }
-    pub fn set_active_listener(&mut self, screen: Option<&str>) {
-        self.ws.set_active_listener(screen)
+    pub fn close_connection(&mut self) {
+        self.ws.close();
+        self.app_state.connection.connection_status = crate::store::ConnectionStatus::Disconnected;
     }
-    pub fn register_listener_once(
-        &mut self,
-        screen: &str,
-        on_message: impl Fn(Backend2FrontendMsg) + 'static,
-        on_error: impl Fn(String) + 'static,
-        on_close: impl Fn(String) + 'static) {
-        self.ws.register_listener_once(screen, on_message, on_error, on_close)
+    pub fn state_and_sender(&mut self) -> (&mut crate::store::ClientState, &dyn MessageSender) {
+        (self.app_state, &*self.ws)
     }
 }
 
@@ -92,6 +90,7 @@ pub trait ScreenWidget: Downcast {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, frame: &mut Frame);
     /// Called when the screen is about to be exited. Implement to clean up resources.
     fn on_exit(&mut self, _app_interface: &mut AppInterface) {}
+    fn on_message(&mut self, _app_interface: &mut AppInterface, _message: Backend2FrontendMsg) {}
 }
 impl_downcast!(ScreenWidget);
 

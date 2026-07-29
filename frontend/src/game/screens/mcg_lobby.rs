@@ -1,8 +1,8 @@
-use crate::game::{AppInterface, ScreenWidget};
 use super::{ScreenDef, ScreenMetadata};
-use egui::{TextureOptions, RichText};
-use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
+use crate::game::{AppInterface, ScreenWidget};
 use crate::sprintln;
+use egui::{RichText, TextureOptions};
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use qrcode::QrCode;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -36,78 +36,11 @@ impl ScreenWidget for LobbyScreen {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
-        let ready_sync = self.ready_sync.clone();
-        // Lazy init: register persistent listeners once and activate them for this screen
+        // Lazy init: connect through the application-owned WebSocket.
         if !self.initialized {
-            // Prepare closure state clones
-            let payload = self.qr_payload.clone();
-            let players = self.players.clone();
-            let our_name_pending = self.our_name_pending.clone();
-
-            let on_msg = move |x: Backend2FrontendMsg| match x {
-                Backend2FrontendMsg::TicketValue(ticket) => {
-                    sprintln!("Got a ticket value:\n\t- {:?}", ticket);
-                    *payload.borrow_mut() = Some(ticket);
-                }
-                Backend2FrontendMsg::IPValue(ip) => {
-                    sprintln!("Got an IP value:\n\t- {:?}", ip);
-                    *payload.borrow_mut() = Some(ip);
-                }
-                Backend2FrontendMsg::NewPlayer(name) => {
-                    // add player
-                    if !players.borrow().iter().any(|(n, _)| n == &name) {
-                        {
-                            let mut p = players.borrow_mut();
-                            p.push((name.clone(), false));
-                        }
-                        *ready_sync.borrow_mut() = true; // Set this flag to indicate that we are syncing ready state for a new player
-                        
-                    }
-                }
-                Backend2FrontendMsg::RemovePlayer(name) => {
-                    sprintln!("Got a remove player message for: {}", name);
-                    players.borrow_mut().retain(|(n, _)| n != &name);
-                }
-                Backend2FrontendMsg::PlayerReady(name, ready) => {
-                    sprintln!("Got a ready update for player {}: {}", name, ready);
-                    if let Some((_, r)) = players.borrow_mut().iter_mut().find(|(n, _)| n == &name) {
-                        *r = ready;
-                    }
-                }
-                Backend2FrontendMsg::OurName(name) => {
-                    sprintln!("Got our player name from backend: {}", name);
-                    // Update ourname if we got it from the backend (e.g. after being renamed by a peer)
-                    // Only update the first entry which is reserved for the local player
-                    if let Some((n, _)) = players.borrow_mut().first_mut() {
-                        *n = name.clone();
-                    }
-                    *our_name_pending.borrow_mut() = Some(name);
-                }
-                _ => {
-                    sprintln!("Got an unhandled message:\n\t- {:?}", x);
-                }
-            };
-
-            let on_err = move |e: String| {
-                sprintln!("Got an error:\n\t- {:?}", e);
-            };
-            let on_cls = move |c: String| {
-                sprintln!("Got a close:\n\t- {:?}", c);
-            };
-
-            // attempt to connect using central connection
-            {
-                let server = app_interface.state().settings.server_address.clone();
-                if !app_interface.is_connected() {
-                    app_interface.connect(&server);
-                }
-
-                // Register the lobby listener exactly once (idempotent)
-                app_interface
-                    .register_listener_once("/lobbyselect/lobby", on_msg, on_err, on_cls);
-
-                // Activate this listener so incoming messages are routed to it
-                app_interface.set_active_listener(Some("/lobbyselect/lobby"));
+            let server = app_interface.state().settings.server_address.clone();
+            if !app_interface.is_connected() {
+                app_interface.connect(&server);
             }
 
             self.initialized = true;
@@ -124,7 +57,12 @@ impl ScreenWidget for LobbyScreen {
         }
         if *self.ready_sync.borrow() && app_interface.is_connected() {
             // If we just got a new player and are syncing ready state, send our current ready state to backend
-            let local_ready = self.players.borrow().first().map(|(_, r)| *r).unwrap_or(false);
+            let local_ready = self
+                .players
+                .borrow()
+                .first()
+                .map(|(_, r)| *r)
+                .unwrap_or(false);
             let msg = Frontend2BackendMsg::ReadyUpdate(local_ready);
             app_interface.send_msg(msg);
             *self.ready_sync.borrow_mut() = false; // Reset the flag after syncing
@@ -153,28 +91,32 @@ impl ScreenWidget for LobbyScreen {
             for (name, ready) in self.players.borrow().iter() {
                 ui.horizontal(|ui| {
                     ui.label(name);
-                    ui.label(
-                        if *ready {
-                            RichText::new("Ready").color(egui::Color32::GREEN)
-                        } else {
-                            RichText::new("Not Ready").color(egui::Color32::RED)
-                        }
-                    );
+                    ui.label(if *ready {
+                        RichText::new("Ready").color(egui::Color32::GREEN)
+                    } else {
+                        RichText::new("Not Ready").color(egui::Color32::RED)
+                    });
                 });
             }
         });
         ui.add_space(12.0);
         {
-            let is_ready = self.players
+            let is_ready = self
+                .players
                 .borrow()
                 .iter()
                 .find(|(name, _)| *name == chosen_name)
                 .map(|(_, ready)| *ready)
                 .unwrap_or(false);
-            if ui.button(if is_ready { "Unready" } else { "Ready Up" }).clicked() {
+            if ui
+                .button(if is_ready { "Unready" } else { "Ready Up" })
+                .clicked()
+            {
                 // Toggle ready state for the local player
                 let mut players_b = self.players.borrow_mut();
-                if let Some((_, ready)) = players_b.iter_mut().find(|(name, _)| *name == chosen_name) {
+                if let Some((_, ready)) =
+                    players_b.iter_mut().find(|(name, _)| *name == chosen_name)
+                {
                     *ready = !*ready;
                     // Send ready state to backend so we can tell the other players
                     let msg = Frontend2BackendMsg::ReadyUpdate(*ready);
@@ -186,24 +128,31 @@ impl ScreenWidget for LobbyScreen {
             // Not enough players to start
             ui.add_space(4.0);
             ui.label(RichText::new("Need at least 2 players to start!").color(egui::Color32::RED));
-        }
-        else if self.players.borrow().iter().any(|(_, ready)| !*ready) {
+        } else if self.players.borrow().iter().any(|(_, ready)| !*ready) {
             // Not all players are ready
             ui.add_space(4.0);
-            ui.label(RichText::new("Waiting for all players to be ready...").color(egui::Color32::YELLOW));
-        }
-        else {
+            ui.label(
+                RichText::new("Waiting for all players to be ready...")
+                    .color(egui::Color32::YELLOW),
+            );
+        } else {
             // All players are ready, can start the game
             ui.add_space(12.0);
             if ui.button("Start Game").clicked() {
                 //TODO
             }
             ui.add_space(4.0);
-            ui.label(RichText::new("All players are ready! You can start the game.").color(egui::Color32::GREEN));
+            ui.label(
+                RichText::new("All players are ready! You can start the game.")
+                    .color(egui::Color32::GREEN),
+            );
         }
         ui.add_space(12.0);
         ui.horizontal(|ui| {
-            if ui.button("Generate QR Code and let others scan it to join!").clicked() {
+            if ui
+                .button("Generate QR Code and let others scan it to join!")
+                .clicked()
+            {
                 let msg = Frontend2BackendMsg::GetTicket;
                 app_interface.send_msg(msg);
             }
@@ -217,11 +166,9 @@ impl ScreenWidget for LobbyScreen {
                     [image.width() as usize, image.height() as usize],
                     image.as_raw(),
                 );
-                let texture = ui.ctx().load_texture(
-                    "qr_code",
-                    texture,
-                    TextureOptions::default(),
-                );
+                let texture = ui
+                    .ctx()
+                    .load_texture("qr_code", texture, TextureOptions::default());
                 ui.image(&texture);
             }
         }
@@ -231,8 +178,48 @@ impl ScreenWidget for LobbyScreen {
         // Tell others we wish to disconnect
         let msg = Frontend2BackendMsg::Disconnect;
         app_interface.send_msg(msg);
-        // Deactivate the lobby listener but keep it registered (idempotent registration elsewhere)
-        app_interface.set_active_listener(None);
+    }
+
+    fn on_message(&mut self, _app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
+        match message {
+            Backend2FrontendMsg::TicketValue(ticket) => {
+                sprintln!("Got a ticket value:\n\t- {:?}", ticket);
+                *self.qr_payload.borrow_mut() = Some(ticket);
+            }
+            Backend2FrontendMsg::IPValue(ip) => {
+                sprintln!("Got an IP value:\n\t- {:?}", ip);
+                *self.qr_payload.borrow_mut() = Some(ip);
+            }
+            Backend2FrontendMsg::NewPlayer(name) => {
+                if !self.players.borrow().iter().any(|(n, _)| n == &name) {
+                    self.players.borrow_mut().push((name, false));
+                    *self.ready_sync.borrow_mut() = true;
+                }
+            }
+            Backend2FrontendMsg::RemovePlayer(name) => {
+                sprintln!("Got a remove player message for: {}", name);
+                self.players.borrow_mut().retain(|(n, _)| n != &name);
+            }
+            Backend2FrontendMsg::PlayerReady(name, ready) => {
+                sprintln!("Got a ready update for player {}: {}", name, ready);
+                if let Some((_, current)) = self
+                    .players
+                    .borrow_mut()
+                    .iter_mut()
+                    .find(|(n, _)| n == &name)
+                {
+                    *current = ready;
+                }
+            }
+            Backend2FrontendMsg::OurName(name) => {
+                sprintln!("Got our player name from backend: {}", name);
+                if let Some((current, _)) = self.players.borrow_mut().first_mut() {
+                    *current = name.clone();
+                }
+                *self.our_name_pending.borrow_mut() = Some(name);
+            }
+            other => sprintln!("Got an unhandled message:\n\t- {:?}", other),
+        }
     }
 }
 

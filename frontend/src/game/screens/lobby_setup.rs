@@ -3,18 +3,17 @@ use std::rc::Rc;
 
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
 use crate::game::GameType;
-use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
-use crate::sprintln;
-use std::cell::RefCell;
 use crate::qr_scanner::QrScannerPopup;
-
+use crate::sprintln;
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
+use std::cell::RefCell;
 
 pub struct LobbySelectionScreen {
     pub players: usize,
     pub game_type: GameType,
     input: String,
     scanner: QrScannerPopup,
-    name_storage: Rc<RefCell<Option<String>>>, 
+    name_storage: Rc<RefCell<Option<String>>>,
     raw: Vec<u8>,
     player_name: String,
     initialized: bool,
@@ -46,7 +45,6 @@ impl ScreenWidget for LobbySelectionScreen {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
-
         let before = self.game_type;
         // If user set a name in the previous screen, apply it to the local player entry once.
         if !self.initialized {
@@ -55,40 +53,9 @@ impl ScreenWidget for LobbySelectionScreen {
                 self.player_name = global;
             }
 
-            // connect using the central connection from AppInterface
-            {
-                let server = app_interface.state().settings.server_address.clone();
-
-                let name_storage = self.name_storage.clone();
-                let switch = self.switch.clone();
-
-                let on_msg = move |x: Backend2FrontendMsg| {
-                    match x {
-                        Backend2FrontendMsg::OurName(name) => {
-                            sprintln!("Got our name from the server:\n\t- {:?}", name);
-                            *name_storage.borrow_mut() = Some(name);
-                        }
-                        Backend2FrontendMsg::Pong => {
-                            *switch.borrow_mut() = true;
-                        }
-                        _ => {
-                            sprintln!("Got an unhandled message:\n\t- {:?}", x);
-                        }
-                    }
-                };
-                let on_err = move |e: String| {
-                    sprintln!("Got an error:\n\t- {:?}", e);
-                };
-                let on_cls = move |c: String| {
-                    sprintln!("Got a close:\n\t- {:?}", c);
-                };
-
-                if !app_interface.is_connected() {
-                    app_interface.connect(&server);
-                }
-                app_interface.register_listener_once("/lobbyselect", on_msg, on_err, on_cls);
-                // activate this screen's listener
-                app_interface.set_active_listener(Some("/lobbyselect"));
+            let server = app_interface.state().settings.server_address.clone();
+            if !app_interface.is_connected() {
+                app_interface.connect(&server);
             }
 
             self.initialized = true;
@@ -96,7 +63,7 @@ impl ScreenWidget for LobbySelectionScreen {
 
         ui.heading("Host or Join Game");
         ui.group(|ui| {
-        // --- First dropdown: Game ---
+            // --- First dropdown: Game ---
             ComboBox::from_label("Select Game")
                 .selected_text(format!("{:?}", self.game_type))
                 .show_ui(ui, |ui| {
@@ -104,19 +71,19 @@ impl ScreenWidget for LobbySelectionScreen {
                     ui.selectable_value(&mut self.game_type, GameType::Blackjack, "Blackjack");
                 });
 
-        // Reset player count if game changes
+            // Reset player count if game changes
             if self.game_type != before {
                 self.players = match self.game_type {
                     GameType::Poker => 2,
                     GameType::Blackjack => 2,
                 };
             }
-        // Define valid player counts based on selected game
+            // Define valid player counts based on selected game
             let valid_counts: &[usize] = match self.game_type {
                 GameType::Poker => &[2, 4, 8],
                 GameType::Blackjack => &[2, 3, 4],
             };
-        // --- Second dropdown: Players ---
+            // --- Second dropdown: Players ---
             ComboBox::from_label("Select Player Count")
                 .selected_text(self.players.to_string())
                 .show_ui(ui, |ui| {
@@ -125,13 +92,15 @@ impl ScreenWidget for LobbySelectionScreen {
                     }
                 });
             ui.add_space(8.0);
-            ui.label(RichText::new("Select Your Name (This is used for both hosting and joining):").strong());
+            ui.label(
+                RichText::new("Select Your Name (This is used for both hosting and joining):")
+                    .strong(),
+            );
             ui.add_space(4.0);
 
             ui.horizontal(|ui| {
                 ui.label("Name:");
                 ui.text_edit_singleline(&mut self.player_name);
-
             });
         });
         // Open lobby button
@@ -166,7 +135,8 @@ impl ScreenWidget for LobbySelectionScreen {
 
         ui.add_space(12.0);
         let ctx = ui.ctx().clone();
-        self.scanner.button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
+        self.scanner
+            .button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
 
         ui.add_space(8.0);
         ui.label("Click 'Scan QR' to connect to another player's lobby by scanning a QR code!");
@@ -183,7 +153,7 @@ impl ScreenWidget for LobbySelectionScreen {
         });
 
         // If our input is an endpoint, send it to get a connection
-        if self.input.starts_with("endpoint"){
+        if self.input.starts_with("endpoint") {
             tracing::info!("Sending endpoint ticket to server: {}", self.input);
             // Persist chosen name into global client state prior to join
             app_interface.state_mut().settings.name = self.player_name.clone();
@@ -214,15 +184,27 @@ impl ScreenWidget for LobbySelectionScreen {
             self.player_name = name.clone();
 
             if let Ok(mut storage) = self.name_storage.try_borrow_mut() {
-                storage.take(); 
+                storage.take();
             }
         }
     }
     fn on_exit(&mut self, app_interface: &mut AppInterface) {
         // Persist name when leaving this screen
         app_interface.state_mut().settings.name = self.player_name.clone();
-        // Deactivate this screen's listener
-        app_interface.set_active_listener(None);
+    }
+    fn on_message(&mut self, _app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
+        match message {
+            Backend2FrontendMsg::OurName(name) => {
+                sprintln!("Got our name from the server:\n\t- {:?}", name);
+                *self.name_storage.borrow_mut() = Some(name);
+            }
+            Backend2FrontendMsg::Pong => {
+                *self.switch.borrow_mut() = true;
+            }
+            _ => {
+                sprintln!("Got an unhandled message:\n\t- {:?}", message);
+            }
+        }
     }
 }
 
@@ -235,7 +217,8 @@ impl ScreenDef for LobbySelectionScreen {
             path: "/lobbyselect",
             display_name: "Host or Join Game",
             icon: "⚙",
-            description: "Host your own lobby, or join another player's lobby by scanning a QR code.",
+            description:
+                "Host your own lobby, or join another player's lobby by scanning a QR code.",
             show_in_menu: true,
         }
     }

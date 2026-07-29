@@ -179,7 +179,7 @@ impl PlayerManager {
         )
     }
     /// Logic for when we get a remote player connected to our lobby
-    pub fn handle_named_player(&mut self, player_name: String){
+    pub fn handle_named_player(&mut self, player_name: String) {
         let mut name = player_name.clone();
         if self.get_existing_names().contains(name.as_str()){
             for i in 2..100 {
@@ -197,14 +197,14 @@ impl PlayerManager {
         });
         self.next_player_id += 1;
     }
-    pub fn rename_player(&mut self, player_id: PlayerId, new_name: String){
+    pub fn rename_player(&mut self, player_id: PlayerId, new_name: String) {
         let trimmed = new_name.trim();
 
         if let Some(player) = self.players.iter_mut().find(|p| p.id == player_id) {
             player.name = trimmed.to_string();
         }
     }
-    pub fn remove_player(&mut self, player_name: &str){
+    pub fn remove_player(&mut self, player_name: &str) {
         self.players.retain(|p| p.name != player_name);
     }
 }
