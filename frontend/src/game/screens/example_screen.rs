@@ -71,7 +71,7 @@ impl ScreenWidget for ExampleScreen {
                     )
                     .clicked()
                 {
-                    app_interface.change_screen("/".to_string());
+                    app_interface.change_screen::<super::MainMenu>();
                 }
 
                 ui.add_space(20.0);

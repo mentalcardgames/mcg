@@ -33,8 +33,8 @@ impl ScreenWidget for MainMenu {
                         let button_size = vec2(180.0, 80.0);
 
                         // Generate buttons from screen registry
-                        let menu = self.screen_registry.menu_metas();
-                        for meta in menu {
+                        let menu = self.screen_registry.menu_entries();
+                        for (screen_id, meta) in menu {
                             let label = format!("{} {}", meta.icon, meta.display_name);
 
                             let button = egui::Button::new(
@@ -43,9 +43,7 @@ impl ScreenWidget for MainMenu {
 
                             if ui.add_sized(button_size, button).clicked() {
                                 eprintln!("{} opened", meta.display_name);
-                                app_interface.change_screen(
-                                    meta.path.to_string()
-                                );
+                                app_interface.change_screen_id(screen_id);
                             }
                         }
                     });

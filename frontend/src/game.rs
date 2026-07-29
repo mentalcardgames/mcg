@@ -11,14 +11,14 @@ use crate::{
 };
 use egui::Context;
 use mcg_shared::Backend2FrontendMsg;
-use screens::{AppInterface, MainMenu, ScreenWidget};
+use screens::{AppInterface, MainMenu, ScreenId, ScreenWidget};
 use std::sync::mpsc::{self, Receiver};
 use theme::*;
 
 /// Events that can be sent between screens
 #[derive(Debug, Clone)]
 pub enum AppEvent {
-    ChangeRoute(String),
+    ChangeScreen(ScreenId),
     StartGame(screens::GameState<screens::DirectoryCardType>),
     ExitGame,
 }
@@ -41,10 +41,10 @@ pub enum GameType {
 
 /// Application UI/Screen manager
 pub struct App {
-    // current route path ("/", "/game-setup", etc.)
-    current_screen_path: String,
-    // lazily-created screens by path
-    screens: std::collections::HashMap<String, Box<dyn ScreenWidget>>,
+    // current screen type
+    current_screen_id: ScreenId,
+    // lazily-created screens by type
+    screens: std::collections::HashMap<ScreenId, Box<dyn ScreenWidget>>,
     // single shared screen registry
     screen_registry: screens::ScreenRegistry,
 
@@ -80,19 +80,20 @@ impl App {
 
         let router = Router::new().ok();
 
-        let current_path = router
-            .as_ref()
-            .map(|r| r.current_path().to_string())
-            .unwrap_or_else(|| "/".to_string());
+        let current_path = router.as_ref().map(|r| r.current_path()).unwrap_or("/");
+        let screen_registry = screens::ScreenRegistry::new();
+        let current_screen_id = screen_registry
+            .id_by_path(current_path)
+            .unwrap_or_else(ScreenId::of::<MainMenu>);
 
         let app_state = ClientState::new();
         let (message_sender, message_receiver) = mpsc::channel();
         let (error_sender, error_receiver) = mpsc::channel();
         let (close_sender, close_receiver) = mpsc::channel();
         Self {
-            current_screen_path: current_path,
+            current_screen_id,
             screens: std::collections::HashMap::new(),
-            screen_registry: screens::ScreenRegistry::new(),
+            screen_registry,
             settings_open: false,
             pending_settings: Settings {
                 dpi: crate::calculate_dpi_scale(),
@@ -112,13 +113,15 @@ impl App {
         }
     }
 
-    /// Change route by path and update URL
-    fn change_route(&mut self, path: &str) {
-        let new_path = self.screen_registry.path_from_path(path).unwrap_or("/");
-        if self.current_screen_path != new_path {
-            self.current_screen_path = new_path.to_string();
+    /// Change screen and update the URL with its registered path.
+    fn change_screen(&mut self, screen_id: ScreenId) {
+        let Some(meta) = self.screen_registry.meta_by_id(screen_id) else {
+            return;
+        };
+        if self.current_screen_id != screen_id {
+            self.current_screen_id = screen_id;
             if let Some(ref mut router) = self.router {
-                let _ = router.navigate_to_path(new_path);
+                let _ = router.navigate_to_path(meta.path);
             }
         }
     }
@@ -128,11 +131,10 @@ impl App {
         if let Some(ref mut router) = self.router {
             if let Ok(changed) = router.check_for_url_changes() {
                 if changed {
-                    if let Some(new_path) =
-                        self.screen_registry.path_from_path(router.current_path())
+                    if let Some(screen_id) = self.screen_registry.id_by_path(router.current_path())
                     {
-                        if new_path != self.current_screen_path {
-                            self.current_screen_path = new_path.to_string();
+                        if screen_id != self.current_screen_id {
+                            self.current_screen_id = screen_id;
                         }
                     }
                 }
@@ -141,29 +143,29 @@ impl App {
     }
 
     pub fn current_path(&self) -> &str {
-        &self.current_screen_path
+        self.screen_registry
+            .meta_by_id(self.current_screen_id)
+            .map(|meta| meta.path)
+            .unwrap_or("/")
     }
 
     fn ensure_current_screen(&mut self) {
-        if self.screens.contains_key(&self.current_screen_path) {
+        if self.screens.contains_key(&self.current_screen_id) {
             return;
         }
 
-        if let Some(factory) = self
-            .screen_registry
-            .factory_by_path(&self.current_screen_path)
-        {
-            self.screens
-                .insert(self.current_screen_path.clone(), factory());
+        if let Some(factory) = self.screen_registry.factory_by_id(self.current_screen_id) {
+            self.screens.insert(self.current_screen_id, factory());
         }
     }
 
     fn dispatch_messages(&mut self, events: &mut Vec<AppEvent>) {
-        let Some(screen) = self.screens.get_mut(&self.current_screen_path) else {
+        let Some(screen) = self.screens.get_mut(&self.current_screen_id) else {
             // Leave messages in the channel until their destination screen exists.
             return;
         };
-        let mut app_interface = AppInterface::new(events, &mut self.app_state, &mut self.ws_connection);
+        let mut app_interface =
+            AppInterface::new(events, &mut self.app_state, &mut self.ws_connection);
         while let Ok(msg) = self.message_receiver.try_recv() {
             // Keep application-owned state independent of screen lifetime.
             // Screens still receive every message for their screen-specific behavior.
@@ -217,10 +219,12 @@ impl App {
                         |ui| {
                             ui.add_space(MARGIN_SM);
                             if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
-                                if self.current_screen_path.starts_with("/lobbyselect/") {
-                                    events.push(AppEvent::ChangeRoute("/lobbyselect".to_string()));
+                                if self.current_path().starts_with("/lobbyselect/") {
+                                    let lobby_selection =
+                                        ScreenId::of::<screens::LobbySelectionScreen>();
+                                    events.push(AppEvent::ChangeScreen(lobby_selection));
                                 } else {
-                                    events.push(AppEvent::ChangeRoute("/".to_string()));
+                                    events.push(AppEvent::ChangeScreen(ScreenId::of::<MainMenu>()));
                                 }
                             }
                         },
@@ -231,7 +235,7 @@ impl App {
                         egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
                         |ui| {
                             if let Some(meta) =
-                                self.screen_registry.meta_by_path(&self.current_screen_path)
+                                self.screen_registry.meta_by_id(self.current_screen_id)
                             {
                                 ui.strong(meta.display_name);
                             }
@@ -328,14 +332,14 @@ impl eframe::App for App {
         }
 
         // show top bar unless root
-        if self.current_screen_path != "/" {
+        if self.current_screen_id != ScreenId::of::<MainMenu>() {
             self.render_top_bar(ctx, &mut events);
         }
         let mut app_interface =
             AppInterface::new(&mut events, &mut self.app_state, &mut self.ws_connection);
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(screen) = self.screens.get_mut(&self.current_screen_path) {
+            if let Some(screen) = self.screens.get_mut(&self.current_screen_id) {
                 screen.ui(&mut app_interface, ui, frame);
             } else {
                 // fallback: main menu
@@ -346,9 +350,12 @@ impl eframe::App for App {
         let events = std::mem::take(&mut events);
         for event in events {
             match event {
-                AppEvent::ChangeRoute(path) => {
+                AppEvent::ChangeScreen(screen_id) => {
+                    if self.screen_registry.meta_by_id(screen_id).is_none() {
+                        continue;
+                    }
                     // Call on_exit for the current screen before changing routes
-                    if let Some(mut screen) = self.screens.remove(&self.current_screen_path) {
+                    if let Some(mut screen) = self.screens.remove(&self.current_screen_id) {
                         let mut events = Vec::new();
                         let mut temp_interface = AppInterface::new(
                             &mut events,
@@ -357,24 +364,25 @@ impl eframe::App for App {
                         );
                         screen.on_exit(&mut temp_interface);
                     }
-                    self.change_route(&path);
+                    self.change_screen(screen_id);
                 }
                 AppEvent::StartGame(config) => {
-                    if !self.screens.contains_key("/game") {
-                        if let Some(factory) = self.screen_registry.factory_by_path("/game") {
+                    let game_id = ScreenId::of::<Game<DirectoryCardType>>();
+                    if !self.screens.contains_key(&game_id) {
+                        if let Some(factory) = self.screen_registry.factory_by_id(game_id) {
                             let boxed = factory();
-                            self.screens.insert("/game".to_string(), boxed);
+                            self.screens.insert(game_id, boxed);
                         }
                     }
-                    if let Some(screen) = self.screens.get_mut("/game") {
+                    if let Some(screen) = self.screens.get_mut(&game_id) {
                         if let Some(game) = screen.downcast_mut::<Game<DirectoryCardType>>() {
                             game.set_state(config);
-                            self.change_route("/game");
+                            self.change_screen(game_id);
                         }
                     }
                 }
                 AppEvent::ExitGame => {
-                    self.change_route("/");
+                    self.change_screen(ScreenId::of::<MainMenu>());
                 }
             }
         }

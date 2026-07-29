@@ -119,14 +119,14 @@ impl ScreenWidget for LobbySelectionScreen {
                     eprintln!("Hosting Poker game with max {} players", self.players);
                     let msg = Frontend2BackendMsg::LobbyOpen("Poker".to_string());
                     app_interface.send_msg(msg);
-                    app_interface.change_screen("/lobbyselect/lobby".to_string());
+                    app_interface.change_screen::<super::LobbyScreen>();
                 }
                 GameType::Blackjack => {
                     // Transition to blackjack lobby setup
                     eprintln!("Hosting Blackjack game with max {} players", self.players);
                     let msg = Frontend2BackendMsg::LobbyOpen("Blackjack".to_string());
                     app_interface.send_msg(msg);
-                    app_interface.change_screen("/lobbyselect/lobby".to_string());
+                    app_interface.change_screen::<super::LobbyScreen>();
                 }
             }
         }
@@ -167,7 +167,7 @@ impl ScreenWidget for LobbySelectionScreen {
 
         // Only switch screens if we got accepted into the lobby
         if *self.switch.borrow() {
-            app_interface.change_screen("/lobbyselect/lobby".to_string());
+            app_interface.change_screen::<super::LobbyScreen>();
         }
         // If we received a new name, update our name both here and
         // in the global state so it persists across screens

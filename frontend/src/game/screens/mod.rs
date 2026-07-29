@@ -1,5 +1,6 @@
 use crate::game::websocket::{MessageSender, WebSocketConnection};
 use eframe::Frame;
+use std::any::TypeId;
 
 pub mod articles_screen;
 pub mod example_screen;
@@ -53,8 +54,12 @@ impl<'a> AppInterface<'a> {
     pub fn state_mut(&mut self) -> &mut crate::store::ClientState {
         self.app_state
     }
-    pub fn change_screen(&mut self, screen: String) {
-        self.events.push(crate::game::AppEvent::ChangeRoute(screen));
+    pub fn change_screen<T: ScreenDef + 'static>(&mut self) {
+        self.change_screen_id(ScreenId::of::<T>());
+    }
+    pub(crate) fn change_screen_id(&mut self, screen: ScreenId) {
+        self.events
+            .push(crate::game::AppEvent::ChangeScreen(screen));
     }
     pub fn send_msg(&mut self, msg: Frontend2BackendMsg) {
         self.ws.send_msg(msg);
@@ -104,6 +109,16 @@ pub trait ScreenDef {
         Self: Sized;
 }
 
+/// Runtime identity for a registered screen type.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ScreenId(TypeId);
+
+impl ScreenId {
+    pub fn of<T: ScreenDef + 'static>() -> Self {
+        Self(TypeId::of::<T>())
+    }
+}
+
 /// Metadata for screen configuration and display
 #[derive(Clone, Copy)]
 pub struct ScreenMetadata {
@@ -121,22 +136,27 @@ pub struct ScreenMetadata {
 
 /// A registered screen entry holding metadata and a factory
 pub struct RegisteredScreen {
+    pub id: ScreenId,
     pub meta: ScreenMetadata,
     pub factory: fn() -> Box<dyn ScreenWidget>,
 }
 
 /// Screen registry for managing screen instances and metadata
 pub struct ScreenRegistry {
-    by_path: std::collections::HashMap<&'static str, RegisteredScreen>,
+    by_id: std::collections::HashMap<ScreenId, RegisteredScreen>,
+    id_by_path: std::collections::HashMap<&'static str, ScreenId>,
 }
 
 impl ScreenRegistry {
     /// Ergonomic helper to register a screen type implementing ScreenDef
     pub fn register<T: ScreenDef + 'static>(&mut self) {
+        let id = ScreenId::of::<T>();
         let meta = T::metadata();
-        self.by_path.insert(
-            meta.path,
+        self.id_by_path.insert(meta.path, id);
+        self.by_id.insert(
+            id,
             RegisteredScreen {
+                id,
                 meta,
                 factory: T::create,
             },
@@ -145,7 +165,8 @@ impl ScreenRegistry {
 
     pub fn new() -> Self {
         let mut reg = Self {
-            by_path: std::collections::HashMap::new(),
+            by_id: std::collections::HashMap::new(),
+            id_by_path: std::collections::HashMap::new(),
         };
 
         // Register all screens by calling their ScreenDef implementations
@@ -164,33 +185,32 @@ impl ScreenRegistry {
         reg
     }
 
-    /// Resolve metadata by path
-    pub fn meta_by_path(&self, path: &str) -> Option<&ScreenMetadata> {
+    /// Resolve a screen type from a URL path.
+    pub fn id_by_path(&self, path: &str) -> Option<ScreenId> {
         let key = if path.is_empty() { "/" } else { path };
-        self.by_path.get(key).map(|r| &r.meta)
+        self.id_by_path.get(key).copied()
     }
 
-    /// Resolve path from a URL path (identity), for symmetry
-    pub fn path_from_path(&self, path: &str) -> Option<&'static str> {
-        self.meta_by_path(path).map(|m| m.path)
+    /// Resolve metadata by screen type.
+    pub fn meta_by_id(&self, id: ScreenId) -> Option<&ScreenMetadata> {
+        self.by_id.get(&id).map(|r| &r.meta)
     }
 
-    /// Get a screen factory by path
-    pub fn factory_by_path(&self, path: &str) -> Option<fn() -> Box<dyn ScreenWidget>> {
-        let key = if path.is_empty() { "/" } else { path };
-        self.by_path.get(key).map(|r| r.factory)
+    /// Get a screen factory by screen type.
+    pub fn factory_by_id(&self, id: ScreenId) -> Option<fn() -> Box<dyn ScreenWidget>> {
+        self.by_id.get(&id).map(|r| r.factory)
     }
 
-    /// Iterate the menu screens: return metadata with show_in_menu
-    pub fn menu_metas(&self) -> Vec<&ScreenMetadata> {
-        let mut v: Vec<&ScreenMetadata> = self
-            .by_path
+    /// Iterate the menu screens.
+    pub fn menu_entries(&self) -> Vec<(ScreenId, ScreenMetadata)> {
+        let mut v: Vec<(ScreenId, ScreenMetadata)> = self
+            .by_id
             .values()
             .filter(|r| r.meta.show_in_menu)
-            .map(|r| &r.meta)
+            .map(|r| (r.id, r.meta))
             .collect();
         // stable ordering by path for now
-        v.sort_by_key(|m| m.path);
+        v.sort_by_key(|(_, meta)| meta.path);
         v
     }
 }
