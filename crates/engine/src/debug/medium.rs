@@ -1,10 +1,7 @@
 use crate::game_data::{Card, GameData};
 
 fn format_card(card: &Card) -> String {
-    let mut items: Vec<String> = card
-        .iter()
-        .map(|(k, v)| format!("{}: {}", k, v))
-        .collect();
+    let mut items: Vec<String> = card.iter().map(|(k, v)| format!("{}: {}", k, v)).collect();
     items.sort();
     format!("{{{}}}", items.join(", "))
 }

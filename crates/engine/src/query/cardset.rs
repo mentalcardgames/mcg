@@ -22,10 +22,7 @@ impl Evaluator {
                 if let Some(name) = Self::group_location_name(group) {
                     let owned_loc = Self::find_owned_location(&owner_name, name, game_data)
                         .ok_or_else(|| {
-                            format!(
-                                "Location {} not found for owner {}",
-                                name, owner_name
-                            )
+                            format!("Location {} not found for owner {}", name, owner_name)
                         })?;
                     return Ok((owned_loc, game_data.locations[owned_loc].cards.clone()));
                 }

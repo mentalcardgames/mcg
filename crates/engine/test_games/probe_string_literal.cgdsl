@@ -1,0 +1,22 @@
+// Probe: string literal parsing — value = { ident } requires capital letter
+player P1
+turnorder (P:P1)
+location Hand on P:P1
+location Deck on table
+
+card on Deck:
+  Rank(Ace, Two)
+    for Suit(Hearts)
+
+stage Setup for current 1 times {
+    deal 1 from Deck private to Hand
+    end stage
+}
+
+// Test that "Ace" (capital ident) parses as a string literal
+stage TestAce for current 1 times {
+    if (Rank of top(Hand) == "Ace") {
+        score 10 to P:P1
+    }
+    end stage
+}

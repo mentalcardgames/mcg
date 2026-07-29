@@ -28,22 +28,25 @@ Setup rules execute in declaration order before the first stage. They populate
 precedences, point maps, and memories. Each rule is lowered to a
 `Payload::Action(GameRule::SetUp { ... })` edge.
 
-### 1.1 `create players <name>, <name>, ...`
+**NOTE:** The grammar has **no `create` keyword**. Setup rules use bare
+keywords: `player`, `team`, `turnorder`, `location`, `card on Loc:`, etc.
 
-**DSL:** `create players P1, P2, P3`
+### 1.1 `player <name>, <name>, ...`
+
+**DSL:** `player P1, P2, P3`
 
 **Engine:** Calls `GameData::add_player(name)` for each name. Each call appends a
 new `Player` to `players` with `score: 0`, `in_game: true`, empty `owner` and
 `in_stage`. The player's index is also pushed onto `turn_order` (initial
-declaration order). After setup, `CreateTurnorder` can override the turn order.
+declaration order). After setup, `turnorder` can override the turn order.
 
 **Status:** ✅ Implemented
 
 ---
 
-### 1.2 `create teams <name> with <players>`
+### 1.2 `team <name> with <players>`
 
-**DSL:** `create teams T1 with all` / `create team T2 with (P:P1, P:P2)`
+**DSL:** `team T1 with all` / `team T2 with (P:P1, P:P2)`
 
 **Engine:** Calls `quantifier::resolve_player_candidates(&player_collection, gd)`
 to resolve the player collection to a `Vec<usize>` of player indices. Pushes a
@@ -54,9 +57,9 @@ all in-game players in declaration order.
 
 ---
 
-### 1.3 `create turnorder <players>` / `turnorder random <players>`
+### 1.3 `turnorder <players>` / `turnorder <players> random`
 
-**DSL:** `create turnorder all` / `create turnorder random (P:P2, P:P1)`
+**DSL:** `turnorder all` / `turnorder (P:P2, P:P1) random`
 
 **Engine:** Resolves the player collection to a `Vec<usize>` and assigns it to
 `gd.turn_order`, replacing the default declaration-order list. The `random`
@@ -66,9 +69,9 @@ variant shuffles the resolved list via `rand::thread_rng()`.
 
 ---
 
-### 1.4 `create location <name> on <owner>`
+### 1.4 `location <name> on <owner>`
 
-**DSL:** `create location Hand on all` / `create location Stock on Table`
+**DSL:** `location Hand on all` / `location Stock on table`
 
 **Engine:** `resolve_owner_to_names(&owner, gd)` produces a list of owner names
 (`"Table"`, `"P1"`, `"P2"`, ...). For each owner name, calls
@@ -80,27 +83,24 @@ player. Table-owned locations are globally visible.
 
 ---
 
-### 1.5 `create card { attr: val, ... } on <location>`
+### 1.5 `card on <location>: <key>(<value>, ...) [for <key>(<value>, ...)]*`
 
-**DSL:** `create card { Rank: Ace, Suit: Hearts } on Stock`
+**DSL:** `card on Stock: Rank(Ace, Two, Three) for Suit(Hearts, Spades)`
 
 **Engine:** Finds the location by name via `gd.locations.iter().position(|l| l.name == location)`.
-Calls `Evaluator::expand_types(&type_expr)` to expand type definitions (e.g.
-`Rank(A, 2, 3)` → 3 cards). For each expanded card `HashMap`, calls
-`gd.add_card(loc_idx, card)` (which appends to the global `cards` vec) and
-pushes the returned ID into `gd.locations[loc_idx].cards`.
-
-**NOTE:** `add_card` ignores its `_location_id` parameter (invariant I-6). The
-location association is done manually by pushing the card ID into the location's
-`cards` vec.
+Calls `Evaluator::expand_types(&type_expr)` to expand type definitions. The
+`for` clause computes the cartesian product: each dimension produces a set of
+`(key, value)` pairs; the expander combines them. For each expanded card
+`HashMap`, calls `gd.add_card(loc_idx, card)` and pushes the returned ID into
+`gd.locations[loc_idx].cards`.
 
 **Status:** ✅ Implemented
 
 ---
 
-### 1.6 `create combo <name> where <filter>`
+### 1.6 `combo <name> where <filter>`
 
-**DSL:** `create combo TwoOfAKind where Rank: 1 = Rank: 2`
+**DSL:** `combo TwoOfAKind where Rank same`
 
 **Engine:** Pushes `Combo { name, filter }` onto `gd.combos`. The `filter` is
 stored as an AST `FilterExpr` node (lowered from the spanned form). Combos are
@@ -111,9 +111,9 @@ extensions.
 
 ---
 
-### 1.7 `create precedence <name> on <key>(<values>)`
+### 1.7 `precedence <name> on <key>(<values>)`
 
-**DSL:** `create precedence RankOrd on Rank(A, 2, 3, 4, 5, 6, 7, 8, 9, T, J, Q, K)`
+**DSL:** `precedence RankOrd on Rank(A, 2, 3, 4, 5, 6, 7, 8, 9, T, J, Q, K)`
 
 **Engine:** Pushes `Precedence { name, key, values }` onto `gd.precedences`.
 The `key` is the attribute name (e.g. `"Rank"`) and `values` is the ordered
@@ -124,40 +124,45 @@ card attribute. Also supports the shorthand `key_value_list` form.
 
 ---
 
-### 1.8 `create points <name> on <key>(<k>=<v>, ...)`
+### 1.8 `points <name> on <key>(<k>: <int>, ...)`
 
-**DSL:** `create points Values on Rank(A=1, 2=2, ..., K=10)`
+**DSL:** `points Values on Rank(A: 1, Two: 2, ..., K: 10)`
 
-**Engine:** Pushes `PointMap { name, map: HashMap<String, i32> }` onto
+**Engine:** Evaluates each `int_expr` via `Evaluator::eval_int` at setup time
+(`action.rs:169`). Pushes `PointMap { name, map: HashMap<String, i32> }` onto
 `gd.point_maps`. The map keys are compound `"<key>:<value>"` strings (e.g.
-`"Rank:A"` → `1`). All values are initialized to `0` regardless of the value
-expression in the DSL (invariant I-9 / known behavioral quirk).
+`"Rank:A"` → `1`). Also supports the shorthand `key_value_int_list` form.
 
 **Status:** ✅ Implemented (no execution test yet)
 
 ---
 
-### 1.9 `create memory <name> on <owner>` / `with <type>`
+### 1.9 `memory <name> [<expr>] on <owner>`
 
-**DSL:** `create memory m on current` / `create memory m with I: 42 on Table`
+**DSL:** `memory M on current` / `memory InitialScore 42 on table` /
+`memory Name "Ace" on P:P1`
 
-**Engine:** Calls `gd.add_memory(name, owner, memory_type)`. The `memory_type`
-parameter determines the initial `MemoryValue`:
-- `I: <expr>` → `MemoryValue::Int(0)` (NOTE: expression evaluated at setup? No — see I-10)
+**Engine:** Calls `gd.add_memory(key, owner, memory_type)` where `key` is
+`format!("{}_{}", owner_name, name)`. Stores the entry in a global `HashMap`
+(`gd.memories`). The optional type-expression determines the initial
+`MemoryValue`:
+- `Int { int }` → `MemoryValue::Int(0)` (the value is ignored)
+- `String { .. }` → `MemoryValue::String("")`
 - None / other → `MemoryValue::Int(0)`
 
-**NOTE:** `Player` type initializes to `Int(0)` rather than a player-index
-variant. `TeamCollection` initializes to `Int(0)` rather than a collection
-variant. These are known type mismatches (invariant I-10). Reads through
-`eval_player` / `eval_team` on these slots will fail.
+**NOTE:** The grammar has no `with I:` syntax; the type is just a bare
+expression: `memory M 42 on P:P1`. `Player` type initializes to `Int(0)`
+rather than a player-index variant. `TeamCollection` initializes to `Int(0)`
+rather than a collection variant. These are known type mismatches (invariant
+I-10). Reads through `eval_player` / `eval_team` on these slots will fail.
 
 **Status:** ✅ Implemented (no execution test yet)
 
 ---
 
-### 1.10 `create token <name> on <location>`
+### 1.10 `token <quantity> <name> on <location>`
 
-**DSL:** `create token Marker on Table`
+**DSL:** `token 3 Marker on table`
 
 **Engine:** Empty body `{}`. Tokens are not modeled in `GameData`.
 
@@ -359,35 +364,39 @@ player with `in_game && in_stage[current_stage]`. If none found,
 
 ### 3.6 `set memory` / `reset memory`
 
-**DSL:**
+**DSL (approximate — see grammar for exact forms):**
 ```
-m is 42                  ← set memory to Int
-m is "hello"             ← set memory to String
-m is &P:Player1          ← set memory to player name (stored as String)
-m is &T:TeamA            ← set memory to team name
-m is (1, 2, 3)           ← set memory to IntCollection
-m is ("a", "b")          ← set memory to StringCollection
-m is (P:P1, P:P2)        ← set memory to PlayerCollection
-m is &PC:Name of ...     ← set memory to PlayerCollection from memory
-m is &TC:Name of ...     ← NOT IMPLEMENTED (inserts Int(0))
-m is &SC:Name of ...     ← NOT IMPLEMENTED (inserts vec![])
-m is &LC:Name of ...     ← NOT IMPLEMENTED (inserts vec![])
-m is &CS:Name of ...     ← NOT IMPLEMENTED (inserts vec![])
-reset m
+M is 42                  ← Int
+M is "Hello"             ← String
+M is P:Player1           ← Player (stored as String)
+M is T:TeamA             ← Team
+M is (1, 2, 3)           ← IntCollection
+M is ("a", "b")          ← StringCollection
+M is (P:P1, P:P2)        ← PlayerCollection
+reset M
 ```
 
 **Engine:**
-- `SetMemory`: Evaluates the `MemoryType` expression and inserts the result
-  into `gd.memories[m]`. Int, String, Player, and Team variants have full
-  evaluation. PlayerCollection, StringCollection, IntCollection,
-  LocationCollection, and CardSet are stubs that insert empty defaults.
-  TeamCollection inserts `Int(0)` (type mismatch — I-10).
-- `ResetMemory`: Calls `gd.reset_memory(&name)` which zeros the value if it is
-  `MemoryValue::Int`, silently no-ops otherwise.
+- `SetMemory`: Evaluates the `MemoryType` expression. Inserts the result into
+  `gd.memories` under the key `"<CurrentPlayerName>_<memory>"` (i.e., the
+  current player is automatically used as the owner prefix —
+  `action.rs:267`). Int, String, Player (stored as String), and Team
+  variants have full evaluation. PlayerCollection, StringCollection,
+  IntCollection, LocationCollection, CardSet, and TeamCollection are stubs
+  that insert empty or mismatched defaults.
+- `ResetMemory`: Prefixes the memory name with the current player name
+  (`action.rs:277`), then calls `gd.reset_memory(&key)` which zeros the
+  value if it is `MemoryValue::Int`, silently no-ops otherwise.
+- Memory reads (e.g. `&I:M` in a score expression) **require an explicit
+  owner** via `&I:M of <owner>` or `(&I:M of <owner>)`. Bare `&I:M`
+  (without `of`) is valid in the grammar but fails at runtime
+  (`query/mod.rs:197`).
 
 **Status:** ⚠️ Int, String, Player, Team implemented. Collection variants are
 stubs (insert empty defaults). TeamCollection has a type mismatch.
-`reset_memory` only affects Int memories.
+`reset_memory` only affects Int memories. Memory keys are prefixed with the
+current player for write operations, and read operations require explicit
+owner syntax.
 
 ---
 
@@ -451,18 +460,20 @@ and dispatched through `execute_scoring_rule`.
 
 ### 4.2 `score <int_expr> to <memory> of <players>`
 
-**DSL:** `score 5 to m of P1` / `score &I:n to scoreSlot of all`
+**DSL:** `score 5 to M of P1` / `score &I:n to ScoreSlot of all`
 
 **Engine:**
 1. `Evaluator::eval_int(&int_expr, gd)` → `i32`
-2. Writes `MemoryValue::Int(value)` into `gd.memories[memory_key]`
+2. Resolves players to player indices.
+3. For each index `i`: writes `MemoryValue::Int(value)` into
+   `gd.memories["<player_name>_<memory>"]` (per-player keyed —
+   `action.rs:370`).
 
-**NOTE:** The engine's memory is a global `HashMap<String, MemoryValue>`, not
-per-player. If `players` resolves to multiple players, each write overwrites the
-previous. This is a limitation of the current memory model. Player scores are
-**not** modified by this rule.
+**NOTE:** Player scores are **not** modified by this rule; only the memory
+value is written. Each resolved player gets its own key, so multi-player
+targets use separate slots (unlike the old global-slot model).
 
-**Status:** ⚠️ Implemented — global memory only, last-write-wins for multi-player
+**Status:** ✅ Implemented — per-player keyed, no last-write-wins issue
 
 ---
 
@@ -545,35 +556,40 @@ issues `NeedsInput(InputType::Optional(prompt))`. The player returns
 
 ---
 
-### 5.3 `if (<bool_expr>) { ... }` / `unless (<bool_expr>) { ... }`
+### 5.3 `if (<bool_expr>) { ... }`
 
 **DSL:**
 ```
-if (card_set_empty(Hand)) { deal 1 from Stock private to Hand }
-unless (card_set_empty(Stock)) { move top(Stock) to Discard }
+if (Hand empty) { deal 1 from Stock private to Hand }
 ```
 
 **Engine:** Lowers to a `Payload::Condition { expr, negated }` state with
 exactly 2 edges. The interpreter evaluates `eval_bool(&expr, gd)`. The dispatch
 formula is: `should_take_else = result != negated`. If true → `edges[0]`
-(if-body / unless-skip). If false → `edges[1]` (else-skip / unless-body).
+(if-body). If false → `edges[1]` (skip/else).
 
 See invariant I-3 for the inverted edge-indexing relationship between
 `Condition` and `EndCondition`.
+
+**NOTE:** `unless` does **not** exist in the grammar. Use `if (not (<expr>))`
+instead.
 
 **Status:** ✅ Implemented
 
 ---
 
-### 5.4 Trigger Rules (`on enter:`)
+### 5.4 Trigger Rules
 
 **DSL:**
 ```
-stages:
-  Play:
-    on enter:
-      move top(Stock) private to Hand
+trigger {
+    move top(Stock) private to Hand
+}
 ```
+
+Triggers are top-level `flow_component` rules that fire immediately when
+encountered. They can also appear as `on enter:` blocks in stage
+definitions (lowered identically).
 
 **Engine:** The IR builder wraps trigger-rule bodies in `Payload::Trigger` edges.
 In the interpreter, `Payload::Trigger` dispatches identically to `Action` edges
@@ -672,7 +688,7 @@ validates and can issue a new `NeedsInput` on failure.
 
 ### 6.5 `any` in Setup Rules (Rejected)
 
-**DSL:** `create location Hand on any`
+**DSL:** `location Hand on any`
 
 **Engine:** Before dispatching a setup rule edge, the quantifier guard
 (`setup_contains_any`) checks whether any element collection uses
@@ -707,19 +723,20 @@ before any `GameData` mutation occurs (invariant I-20).
 
 | Construct | Status | Reason |
 |-----------|--------|--------|
+| `unless` | ❌ | Not in grammar. Use `if (not (<expr>))`. |
 | `SimStage` (simultaneous play) | ❌ | `build_sim_stage` produces same IR as `SeqStage`. Per-player sub-FSMs not built. B-3. |
 | `for <Y>` clause in stage | ❌ | Parsed into AST, dropped during IR lowering. All players always in-stage. B-1. |
-| `create token on <location>` | ❌ | Tokens not modeled in `GameData`. Empty body. |
+| `token <quantity> <name> on <location>` | ❌ | Tokens not modeled in `GameData`. Empty body. |
 | `flip <cardset> to <status>` | ❌ | Cards have no status field. Empty body. |
 | `place <token> from ... to ...` | ❌ | Tokens not modeled. Empty body. |
 | `bid <quantity>` / `bid memory ...` | ❌ | Semantics never specified. Empty body. |
 | `demand <type>` / `demand memory ...` | ❌ | Semantics never specified. Empty body. |
 | `end game with winner <players>` | ❌ | `GameWithWinner` dispatch is empty. |
-| `score N to <memory> of <players>` | ⚠️ | Global memory only; last-write-wins for multi-player. |
+| `owner of highest/lowest <memory>` | ⚠️ | Key-order bug in `query/player.rs:93`: builds `<mem>_<player>` instead of `<player>_<mem>`, can never match writes from `set_memory`/`score … to memory`. |
+| `score N to <memory> of <players>` | ✅ | Per-player keyed; each resolved player gets its own `<player>_<mem>` slot (no last-write-wins). |
 | `winner is highest/lowest position` | ⚠️ | Interpreted as turn-order index. May not match DSL intent. |
-| `winner is highest/lowest <memory>` | ⚠️ | Global memory slot; same value for all players. |
 | `set memory` collection variants | ⚠️ | PlayerCollection/StringCollection/IntCollection/LocationCollection/CardSet insert empty defaults instead of evaluating. TeamCollection inserts Int(0) (type mismatch). |
-| `reset memory` on non-Int | ⚠️ | Only zeros `MemoryValue::Int`; silently ignores other types. |
+| `reset memory` on non-Int | ⚠️ | Only zeros `MemoryValue::Int`; silently ignores other types. `reset` prefixes key with current player name. |
 | `add_memory` Player/TeamCollection init | ⚠️ | I-10: Player → Int(0), TeamCollection → Int(0). Type mismatch. |
 | `Aggregate` in query evaluator | ⚠️ | `todo!()` panic in `query/player.rs:246`. Reachable via `end game with winner(for all ...)` / `OutOfPlayer`. |
 | `AggregateMemory` in query | ⚠️ | `todo!()` in `int.rs:173`, `int.rs:266`, `string.rs:60`. Multi-owner memory aggregation not implemented. |

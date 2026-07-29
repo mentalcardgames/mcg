@@ -2,10 +2,7 @@ use crate::game_data::{Card, GameData};
 use std::collections::HashMap;
 
 fn format_card(card: &Card) -> String {
-    let mut items: Vec<String> = card
-        .iter()
-        .map(|(k, v)| format!("{}: {}", k, v))
-        .collect();
+    let mut items: Vec<String> = card.iter().map(|(k, v)| format!("{}: {}", k, v)).collect();
     items.sort();
     format!("{{{}}}", items.join(", "))
 }
@@ -23,7 +20,11 @@ fn owner_names(data: &GameData) -> HashMap<usize, String> {
     map
 }
 
-fn location_label(i: usize, location: &crate::game_data::Location, owners: &HashMap<usize, String>) -> String {
+fn location_label(
+    i: usize,
+    location: &crate::game_data::Location,
+    owners: &HashMap<usize, String>,
+) -> String {
     let owner = owners.get(&i).map(|s| s.as_str()).unwrap_or("?");
     format!("{}:{}", owner, location.name)
 }

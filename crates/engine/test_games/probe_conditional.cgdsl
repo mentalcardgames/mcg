@@ -1,0 +1,18 @@
+// Probe: conditional { case bool_expr: ... case else: ... } dispatch
+player P1, P2
+turnorder (P:P1, P:P2)
+
+// Give each player a score so we can test branching
+stage Setup for current 2 times {
+    cycle to next
+}
+
+stage Test for current 1 times {
+    conditional {
+        case:
+            score 1 to P:P1
+        case else:
+            score 2 to P:P1
+    }
+    end stage
+}

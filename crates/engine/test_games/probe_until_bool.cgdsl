@@ -1,0 +1,21 @@
+// Probe: stage with until <bool> exit condition
+// Note: "for <player_expr>" is mandatory before end condition
+// bool for empty check is: Hand empty (not card_set_empty(Hand))
+player P1
+turnorder (P:P1)
+location Hand on P:P1
+location Deck on table
+
+card on Deck:
+  Rank(Ace, Two)
+    for Suit(Hearts)
+
+stage Setup for current 1 times {
+    deal 1 from Deck private to Hand
+    end stage
+}
+
+// This stage should exit immediately because Hand is not empty
+stage Test for current until Hand empty {
+    score 5 to P:P1
+}
