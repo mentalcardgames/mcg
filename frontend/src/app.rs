@@ -5,7 +5,6 @@ use crate::app::websocket::{MessageSender, WebSocketConnection};
 use crate::router::Router;
 use crate::screens::game::GameState;
 use crate::screens::{Game, LobbySelectionScreen, MainMenu};
-use crate::store::ConnectionStatus;
 use crate::widgets::card::DirectoryCardType;
 use crate::widgets::screen::{ScreenDef, ScreenId, ScreenRegistry, ScreenWidget};
 use crate::widgets::theme::*;
@@ -93,7 +92,6 @@ impl<'a> AppInterface<'a> {
     }
     pub fn close_connection(&mut self) {
         self.ws.close();
-        self.app_state.connection.connection_status = ConnectionStatus::Disconnected;
     }
     pub fn state_and_sender(&mut self) -> (&mut ClientState, &dyn MessageSender) {
         (self.app_state, &*self.ws)
@@ -224,8 +222,6 @@ impl App {
     fn dispatch_error_events(&mut self) {
         while let Ok(event) = self.error_receiver.try_recv() {
             sprintln!("WebSocket error event occurred: {:?}", event);
-            self.app_state.connection.connection_status =
-                crate::store::ConnectionStatus::Disconnected;
             self.app_state.ui.last_error = Some("WebSocket connection error.".to_string());
         }
     }
@@ -238,8 +234,6 @@ impl App {
                 event.reason(),
                 event.was_clean()
             );
-            self.app_state.connection.connection_status =
-                ConnectionStatus::Disconnected;
         }
     }
 }

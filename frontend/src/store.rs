@@ -8,14 +8,6 @@ pub struct ClientSettings {
 }
 
 #[derive(Clone, Debug, Default)]
-pub enum ConnectionStatus {
-    #[default]
-    Disconnected,
-    Connecting,
-    Connected,
-}
-
-#[derive(Clone, Debug, Default)]
 pub enum ArticlesLoading {
     #[default]
     NotStarted,
@@ -45,11 +37,6 @@ pub struct GameSessionState {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct ConnectionState {
-    pub connection_status: ConnectionStatus,
-}
-
-#[derive(Clone, Debug, Default)]
 pub struct UIState {
     pub last_error: Option<String>,
     pub last_info: Option<String>,
@@ -62,7 +49,6 @@ pub struct UIState {
 #[derive(Clone, Debug)]
 pub struct ClientState {
     pub session: GameSessionState,
-    pub connection: ConnectionState,
     pub ui: UIState,
     pub settings: ClientSettings,
 }
@@ -102,9 +88,6 @@ impl ClientState {
         ClientState {
             settings: default_settings,
             session: GameSessionState { game_state: None },
-            connection: ConnectionState {
-                connection_status: ConnectionStatus::Disconnected,
-            },
             ui: UIState {
                 last_error: None,
                 last_info: None,

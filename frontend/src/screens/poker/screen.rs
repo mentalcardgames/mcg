@@ -1,6 +1,6 @@
 use crate::app::websocket::MessageSender;
 use crate::app::AppInterface;
-use crate::store::{ClientState, ConnectionStatus};
+use crate::store::ClientState;
 use eframe::Frame;
 use egui::{Context, RichText, Ui};
 use mcg_shared::{Backend2FrontendMsg, PlayerAction, PlayerConfig};
@@ -447,7 +447,6 @@ impl ScreenWidget for PokerOnlineScreen {
     fn on_message(&mut self, app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
         match message {
             Backend2FrontendMsg::State(game_state) => {
-                app_interface.state_mut().connection.connection_status = ConnectionStatus::Connected;
                 app_interface.state_mut().session.game_state = Some(game_state.clone());
                 app_interface.state_mut().ui.last_error = None;
                 app_interface.state_mut().ui.last_info = None;
