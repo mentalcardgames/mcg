@@ -222,7 +222,6 @@ impl App {
     fn dispatch_error_events(&mut self) {
         while let Ok(event) = self.error_receiver.try_recv() {
             sprintln!("WebSocket error event occurred: {:?}", event);
-            self.app_state.ui.last_error = Some("WebSocket connection error.".to_string());
         }
     }
 

@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{vec2, Color32, RichText, ScrollArea};
 use crate::app::AppInterface;
-use crate::store::{ArticlesLoading, ClientState};
+use crate::store::ClientState;
 use std::cell::RefCell;
 use std::rc::Rc;
 use js_sys::futures::spawn_local;
@@ -36,22 +36,20 @@ pub async fn fetch_posts() -> Result<Vec<Post>, String> {
     Ok(posts)
 }
 
-pub fn fetch_articles_effect(
-    state: &mut ClientState,
-    on_done: impl FnOnce(Result<Vec<Post>, String>) + 'static,
-) {
-    state.ui.articles = ArticlesLoading::Loading;
-
-    spawn_local(async move {
-        let result = fetch_posts().await;
-        on_done(result);
-    });
+#[derive(Clone, Debug, Default)]
+pub enum ArticlesLoading {
+    #[default]
+    NotStarted,
+    Loading,
+    Loaded(Vec<Post>),
+    Error(String),
 }
 
 #[derive(Default)]
 pub struct ArticlesScreen {
     #[allow(clippy::type_complexity)]
     pending_result: Rc<RefCell<Option<Result<Vec<Post>, String>>>>,
+    articles: ArticlesLoading,
 }
 
 impl ArticlesScreen {
@@ -80,7 +78,7 @@ impl ArticlesScreen {
             .clicked()
         {
             let pending_result = self.pending_result.clone();
-            fetch_articles_effect(app_state, move |result| {
+            self.fetch_articles_effect(move |result| {
                 *pending_result.borrow_mut() = Some(result);
             });
         }
@@ -109,6 +107,19 @@ impl ArticlesScreen {
             }
         });
     }
+
+    pub fn fetch_articles_effect(
+        &mut self,
+        on_done: impl FnOnce(Result<Vec<Post>, String>) + 'static,
+    ) {
+        self.articles = ArticlesLoading::Loading;
+
+        spawn_local(async move {
+            let result = fetch_posts().await;
+            on_done(result);
+        });
+    }
+
 }
 
 impl ScreenWidget for ArticlesScreen {
@@ -118,9 +129,9 @@ impl ScreenWidget for ArticlesScreen {
 
         if let Some(result) = self.pending_result.borrow_mut().take() {
             match result {
-                Ok(posts) => app_state.ui.articles = ArticlesLoading::Loaded(posts),
+                Ok(posts) => self.articles = ArticlesLoading::Loaded(posts),
                 Err(e) => {
-                    app_state.ui.articles = ArticlesLoading::Error(e);
+                    self.articles = ArticlesLoading::Error(e);
                 }
             }
         }
@@ -135,14 +146,14 @@ impl ScreenWidget for ArticlesScreen {
             );
             ui.add_space(20.0);
 
-            match &app_state.ui.articles {
+            match &self.articles {
                 ArticlesLoading::NotStarted => {
                     if ui
                         .add_sized(vec2(150.0, 40.0), egui::Button::new("Fetch Posts"))
                         .clicked()
                     {
                         let pending_result = self.pending_result.clone();
-                        fetch_articles_effect(app_state, move |result| {
+                        self.fetch_articles_effect(move |result| {
                             *pending_result.borrow_mut() = Some(result);
                         });
                     }
@@ -170,7 +181,7 @@ impl ScreenWidget for ArticlesScreen {
                         .clicked()
                     {
                         let pending_result = self.pending_result.clone();
-                        fetch_articles_effect(app_state, move |result| {
+                        self.fetch_articles_effect(move |result| {
                             *pending_result.borrow_mut() = Some(result);
                         });
                     }

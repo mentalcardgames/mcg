@@ -39,7 +39,7 @@ impl PokerOnlineScreen {
     }
 
     fn draw_error_popup(&mut self, app_state: &mut ClientState, ctx: &Context) {
-        if app_state.ui.last_error.is_none() {
+        if self.connection_manager.last_error.is_none() {
             return;
         }
 
@@ -50,7 +50,7 @@ impl PokerOnlineScreen {
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                if let Some(err) = &app_state.ui.last_error {
+                if let Some(err) = &self.connection_manager.last_error {
                     ui.label(err);
                 }
                 ui.add_space(8.0);
@@ -60,7 +60,7 @@ impl PokerOnlineScreen {
             });
 
         if !open || close_popup {
-            app_state.ui.last_error = None;
+            self.connection_manager.last_error = None;
         }
     }
 
@@ -447,11 +447,11 @@ impl ScreenWidget for PokerOnlineScreen {
         match message {
             Backend2FrontendMsg::UpdatePokerState(game_state) => {
                 self.game_state = Some(game_state);
-                app_interface.state_mut().ui.last_error = None;
-                app_interface.state_mut().ui.last_info = None;
+                self.connection_manager.last_error = None;
+                self.connection_manager.last_info = None;
             }
             Backend2FrontendMsg::Error(error) => {
-                app_interface.state_mut().ui.last_error = Some(error);
+                self.connection_manager.last_error = Some(error);
             }
             Backend2FrontendMsg::OurName(name) => {
                 app_interface.state_mut().settings.name = name;
@@ -500,10 +500,10 @@ impl PokerOnlineScreen {
                 self.render_full_player_setup(ui, ctx, app_state, sender, connected);
             });
 
-        if let Some(err) = &app_state.ui.last_error {
+        if let Some(err) = &self.connection_manager.last_error {
             ui.colored_label(egui::Color32::RED, err);
         }
-        if let Some(info) = &app_state.ui.last_info {
+        if let Some(info) = &self.connection_manager.last_info {
             ui.label(RichText::new(info));
         }
         ui.separator();

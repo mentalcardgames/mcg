@@ -7,6 +7,8 @@ pub struct ConnectionManager {
     edit_server_address: String,
     qr_result_raw: Vec<u8>,
     scanner: QrScannerPopup,
+    pub(crate) last_error: Option<String>,
+    pub(crate) last_info: Option<String>,
 }
 
 impl ConnectionManager {
@@ -15,14 +17,16 @@ impl ConnectionManager {
             edit_server_address: server_address,
             qr_result_raw: Vec::new(),
             scanner: QrScannerPopup::default(),
+            last_error: None,
+            last_info: None,
         }
     }
 
     pub fn connect(&mut self, app_interface: &mut AppInterface) {
         {
             let app_state = app_interface.state_mut();
-            app_state.ui.last_error = None;
-            app_state.ui.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
+            self.last_error = None;
+            self.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
             app_state.settings.server_address = self.edit_server_address.clone();
         }
         app_interface.connect(&self.edit_server_address);

@@ -6,8 +6,60 @@ use crate::sprintln;
 use crate::utils::emoji_hash;
 use crate::widgets::screen::ScreenWidget;
 
-#[derive(Default)]
-pub struct PairingScreen;
+#[derive(Clone, Debug)]
+pub struct PairingPlayer {
+    pub name: String,
+    pub paired: bool,
+}
+
+impl PairingPlayer {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            paired: false,
+        }
+    }
+}
+
+pub struct PairingScreen {
+    pairing_players: Vec<PairingPlayer>,
+    pairing_confirm_player: Option<String>,
+    pairing_confirm_action: Option<bool>,
+}
+
+impl Default for PairingScreen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PairingScreen {
+    pub fn new() -> Self {
+        let players = vec![
+            PairingPlayer::new("Alice"),
+            PairingPlayer::new("Bob"),
+            PairingPlayer::new("Charlie"),
+            PairingPlayer::new("David"),
+            PairingPlayer::new("Eve"),
+            PairingPlayer::new("Frank"),
+            PairingPlayer::new("Grace"),
+            PairingPlayer::new("Heidi"),
+            PairingPlayer::new("Ivan"),
+            PairingPlayer::new("Julia"),
+            PairingPlayer::new("Kevin"),
+            PairingPlayer::new("Laura"),
+            PairingPlayer::new("Michael"),
+            PairingPlayer::new("Natalie"),
+            PairingPlayer::new("Oscar"),
+            PairingPlayer::new("Patricia"),
+        ];
+        Self {
+            pairing_players: players,
+            pairing_confirm_player: None,
+            pairing_confirm_action: None,
+        }
+    }
+}
 
 impl ScreenWidget for PairingScreen {
     fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
@@ -17,8 +69,6 @@ impl ScreenWidget for PairingScreen {
             // Global Back button is provided by the layout
             ui.add_space(0.0);
         });
-
-        let players = app_state.ui.pairing_players.clone();
 
         ScrollArea::vertical()
             .auto_shrink([false, false])
@@ -32,7 +82,7 @@ impl ScreenWidget for PairingScreen {
                         ui.strong("Status");
                         ui.strong("Action");
                         ui.end_row();
-                        for player in players.iter() {
+                        for player in self.pairing_players.iter() {
                             ui.horizontal(|ui| {
                                 let icon = if player.paired { "👥" } else { "👤" };
                                 ui.label(RichText::new(icon).size(24.0));
@@ -60,8 +110,8 @@ impl ScreenWidget for PairingScreen {
                             {
                                 let pname = player.name.clone();
                                 let action = !player.paired;
-                                app_state.ui.pairing_confirm_player = Some(pname.clone());
-                                app_state.ui.pairing_confirm_action = Some(action);
+                                self.pairing_confirm_player = Some(pname.clone());
+                                self.pairing_confirm_action = Some(action);
                             }
                             ui.end_row();
                         }
@@ -70,8 +120,8 @@ impl ScreenWidget for PairingScreen {
 
         // Render confirmation window if requested in shared state
         if let (Some(player_name), Some(pair_action)) = (
-            app_state.ui.pairing_confirm_player.clone(),
-            app_state.ui.pairing_confirm_action,
+            self.pairing_confirm_player.clone(),
+            self.pairing_confirm_action,
         ) {
             let action_text = if pair_action { "pair" } else { "unpair" };
             let player_name_clone = player_name.clone();
@@ -93,8 +143,8 @@ impl ScreenWidget for PairingScreen {
                     ));
                     ui.horizontal(|ui| {
                         if ui.button("Cancel").clicked() {
-                            app_state.ui.pairing_confirm_player = None;
-                            app_state.ui.pairing_confirm_action = None;
+                            self.pairing_confirm_player = None;
+                            self.pairing_confirm_action = None;
                         }
                         let mut perform_action = false;
                         if ui.button("Confirm").clicked() {
@@ -103,7 +153,7 @@ impl ScreenWidget for PairingScreen {
                         if perform_action {
                             let target = player_name_clone.clone();
                             let _pair_action_local = pair_action;
-                            for p in app_state.ui.pairing_players.iter_mut() {
+                            for p in self.pairing_players.iter_mut() {
                                 if p.name == target {
                                     p.paired = pair_action;
                                     sprintln!(
@@ -115,8 +165,8 @@ impl ScreenWidget for PairingScreen {
                                     break;
                                 }
                             }
-                            app_state.ui.pairing_confirm_player = None;
-                            app_state.ui.pairing_confirm_action = None;
+                            self.pairing_confirm_player = None;
+                            self.pairing_confirm_action = None;
                         }
                     });
                 });
