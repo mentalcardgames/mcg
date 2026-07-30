@@ -1,12 +1,52 @@
 use eframe::Frame;
 use egui::{vec2, Color32, RichText, ScrollArea};
-
-use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use crate::articles::Post;
-use crate::effects::fetch_articles_effect;
+use crate::app::AppInterface;
 use crate::store::{ArticlesLoading, ClientState};
 use std::cell::RefCell;
 use std::rc::Rc;
+use js_sys::futures::spawn_local;
+use serde::{Deserialize, Serialize};
+use crate::widgets::screen::ScreenWidget;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Post {
+    #[serde(rename = "userId")]
+    pub user_id: u32,
+    pub id: u32,
+    pub title: String,
+    pub body: String,
+}
+
+pub async fn fetch_posts() -> Result<Vec<Post>, String> {
+    let url = "https://jsonplaceholder.typicode.com/posts/";
+
+    let response = reqwest::get(url)
+        .await
+        .map_err(|e| format!("Failed to fetch posts: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+
+    let posts: Vec<Post> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+    Ok(posts)
+}
+
+pub fn fetch_articles_effect(
+    state: &mut ClientState,
+    on_done: impl FnOnce(Result<Vec<Post>, String>) + 'static,
+) {
+    state.ui.articles = ArticlesLoading::Loading;
+
+    spawn_local(async move {
+        let result = fetch_posts().await;
+        on_done(result);
+    });
+}
 
 #[derive(Default)]
 pub struct ArticlesScreen {

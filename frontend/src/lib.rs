@@ -1,10 +1,8 @@
 //! Client-side (WASM) library for the MCG app.
 
-pub mod articles;
-pub mod effects;
-pub mod game;
-pub mod hardcoded_cards;
-pub mod qr_scanner;
+pub mod app;
+pub mod widgets;
+pub mod screens;
 pub mod router;
 pub mod store;
 pub mod utils;
@@ -13,7 +11,7 @@ pub mod utils;
 use eframe::AppCreator;
 use eframe::{WebOptions, WebRunner};
 use egui_extras::install_image_loaders;
-use game::App;
+use app::App;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 

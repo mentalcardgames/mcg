@@ -20,7 +20,7 @@ MCG is a Rust Cargo workspace for a browser-based card game. The frontend crate 
 - Tests and linting: `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo fmt --all`.
 - Backend configuration: Defaults are generated in `mcg-server.toml` on first run (controls bot count and timing).
 - Architecture intent: Long-term goal is peer-to-peer play—each player runs their own backend; avoid features that assume multiple players share one backend instance.
-- Frontend routing: Screens are registered under `frontend/src/game/screens/`; new screens implement `ScreenDef` and `ScreenWidget` and are added to the registry.
+- Frontend routing: Screens are registered under `frontend/src/screens/`; new screens implement `ScreenDef` and `ScreenWidget` and are added to the registry.
 
 ## Agent Conduct
 

@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{vec2, FontId, RichText};
-
-use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenRegistry, ScreenWidget};
+use crate::widgets::screen::{ScreenRegistry, ScreenWidget};
+use crate::app::AppInterface;
 
 #[derive(Default)]
 pub struct MainMenu {

@@ -1,4 +1,4 @@
-use crate::game::websocket::MessageSender;
+use crate::app::websocket::MessageSender;
 use egui::{Color32, Ui};
 use mcg_shared::{GameStatePublic, PlayerId, PlayerPublic};
 

@@ -8,45 +8,45 @@ The core interaction logic is built around a set of traits and structs that defi
 
 ### Key Traits
 
--   **`ScreenWidget`** @ [frontend/src/game/screens/mod.rs](../frontend/src/game/screens/mod.rs):
+-   **`ScreenWidget`** @ [frontend/src/game/screens/mod.rs](../frontend/src/app/screens/mod.rs):
     -   **Purpose**: Defines the **rendering logic** and behavior of a screen.
     -   **Usage**: Implement this trait to create new views (e.g., Main Menu, Game Setup). The `ui` method, called every frame, handles both logic updates and UI drawing.
-    -   **Navigation**: Screens can request transitions to other screens via the `AppInterface` (passed as a parameter to `ui`). See [AppInterface](../frontend/src/game/screens/mod.rs).
+    -   **Navigation**: Screens can request transitions to other screens via the `AppInterface` (passed as a parameter to `ui`). See [AppInterface](../frontend/src/app/screens/mod.rs).
 
--   **`ScreenDef`** @ [frontend/src/game/screens/mod.rs](../frontend/src/game/screens/mod.rs):
+-   **`ScreenDef`** @ [frontend/src/game/screens/mod.rs](../frontend/src/app/screens/mod.rs):
     -   **Purpose**: Defines the **metadata** and factory for a screen.
     -   **Usage**: Implement this to provide static information (path, display name, icon) and a constructor function. This allows the `ScreenRegistry` to list and instantiate screens dynamically.
 
--   **`CardEncoding`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
+-   **`CardEncoding`** @ [frontend/src/game/card.rs](../frontend/src/app/card.rs):
     -   **Purpose**: Acts as an interface to make custom types accessible as cards for mental card games in academia.
     -   **Usage**: Implement this in order to translate specific cards (e.g., Suit/Rank, ID) into an encoding used by mental card games. It provides operations like to both check whether a card is masked (face down) or open (face up) and to mask or unmask it.
 
--   **`CardConfig`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
+-   **`CardConfig`** @ [frontend/src/game/card.rs](../frontend/src/app/card.rs):
     -   **Purpose**: Defines the visual representation of a card.
     -   **Usage**: Implement this to tell the system how to render a card specifically. It maps the logical `CardEncoding` to an `egui::Image`.
 
--   **`FieldWidget`** @ [frontend/src/game/field.rs](../frontend/src/game/field.rs):
+-   **`FieldWidget`** @ [frontend/src/game/field.rs](../frontend/src/app/field.rs):
     -   **Purpose**: Defines a container that holds cards.
     -   **Usage**: Used to render areas where cards exist, such as a draw pile, discard pile, or a player's hand.
 
 ### Core Structs & Modules
 
--   **`App`** @ [frontend/src/game.rs](../frontend/src/game.rs):
+-   **`App`** @ [frontend/src/game.rs](../frontend/src/app.rs):
     -   The main entry point that manages the registration and switching of `ScreenWidget`s via the `ScreenRegistry`.
     -   **Entry Point**: The `update` method (from the `eframe::App` trait) is the main loop where the application state is updated and the UI is rendered.
 
 - **`ClientState`** @ [frontend/src/store.rs](../frontend/src/store.rs):
     - Holds the important state information of the client e.g. backend address, network messages, etc.
 
--   **`SimpleField`** @ [frontend/src/game/field.rs](../frontend/src/game/field.rs):
+-   **`SimpleField`** @ [frontend/src/game/field.rs](../frontend/src/app/field.rs):
     -   A full implementation of `FieldWidget`.
     -   **Purpose**: Serves as a default container for card storage.
     -   **Features**: Supports `Stack` (cards on top of each other) and `Horizontal` (cards side-by-side) layouts. Handles the drag-and-drop logic for cards within or between fields.
 
--   **`SimpleCard`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
+-   **`SimpleCard`** @ [frontend/src/game/card.rs](../frontend/src/app/card.rs):
     -   An implementation of `CardEncoding` that enumerate cards by a number and support masking and unmasking operations.
 
--   **`DirectoryCardType`** @ [frontend/src/game/card.rs](../frontend/src/game/card.rs):
+-   **`DirectoryCardType`** @ [frontend/src/game/card.rs](../frontend/src/app/card.rs):
     -   A full implementation of `CardConfig` used for `SimpleCard`.
     -   **Features**: Configuring a deck where card images are loaded from the backend at a specific directory.
 
@@ -68,7 +68,7 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
 }
 ```
 
-Once started, the application enters its main loop. The `App` struct (in `frontend/src/game.rs`) implements `eframe::App`, and its `update` method is called every frame by the browser/renderer.
+Once started, the application enters its main loop. The `App` struct (in `../frontend/src/app.rs`) implements `eframe::App`, and its `update` method is called every frame by the browser/renderer.
 
 -   **`App::new`**: Initializes the global state (`ClientState`), registers screens, and sets up the router.
 -   **`App::update`**: 
@@ -89,7 +89,7 @@ Local state (like specific UI toggles or temporary input buffers) should remain 
 
 ### Networking (Backend Connection)
 
-Communication with the backend is handled via WebSockets using the `WebSocketConnection` struct (in `frontend/src/game/websocket.rs`).
+Communication with the backend is handled via WebSockets using the `WebSocketConnection` struct (in `../frontend/src/app/websocket.rs`).
 
 #### Connecting
 
@@ -131,7 +131,7 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
 1.  **The Payload (`DNDSelector`)**:
     We define a specific payload type that carries information about what is being dragged.
     ```rust
-    // frontend/src/game/screens/game.rs
+    // frontend/src/app/screens/app
     pub enum DNDSelector {
         Player(usize, usize), // (Player Index, Card Index)
         Stack,                // From the top of the stack
@@ -142,7 +142,7 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
 2.  **The Source (SimpleField)**:
     When drawing the field, if a user starts dragging a card, the field acts as the source and sets the payload.
     ```rust
-    // frontend/src/game/field.rs @ SimpleField::draw_horizontal
+    // frontend/src/app/field.rs @ SimpleField::draw_horizontal
     if ui.response().drag_started() {
         // Set the payload to indicate WHICH card is being dragged
         ui.response().dnd_set_drag_payload(DNDSelector::Index(idx));
@@ -152,7 +152,7 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
 3.  **The Detection (Game Loop)**:
     In your main game loop (`ScreenWidget::ui`), you check if a payload was released over a specific area (the drop target).
     ```rust
-    // frontend/src/game/screens/game.rs @ impl ScreenWidget::ui
+    // frontend/src/app/screens/app @ impl ScreenWidget::ui
     // Draw the stack (the drop target)
     let response = ui.add(stack.draw());
 
@@ -166,7 +166,7 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
 4.  **The Mutation**:
     Finally, you resolve the move by modifying the game state. This usually happens at the end of the update loop.
     ```rust
-    // frontend/src/game/screens/game.rs @ impl ScreenWidget::ui
+    // frontend/src/app/screens/app @ impl ScreenWidget::ui
     if let (Some(source), Some(destination)) = (self.drag, self.drop) {
         // Move the card data from source field to destination field
         game_state.move_card(source, destination);
@@ -217,7 +217,7 @@ Screens are distinct views (e.g., Main Menu, Poker Table, QR Scanner). To add a 
 
 1.  **Create the Screen Struct**: Implement `ScreenWidget` (for rendering) and `ScreenDef` (for registration). Alternatively you can use the `impl_screen_def!` macro to generate the `ScreenDef` implementation.
     ```rust
-    // frontend/src/game/screens/my_screen.rs
+    // frontend/src/app/screens/my_screen.rs
     pub struct MyScreen;
     
     impl ScreenWidget for MyScreen {
@@ -243,9 +243,9 @@ Screens are distinct views (e.g., Main Menu, Poker Table, QR Scanner). To add a 
     }
     ```
 
-2.  **Register the Screen**: Add it to `ScreenRegistry::new` in `frontend/src/game/screens/mod.rs`.
+2.  **Register the Screen**: Add it to `ScreenRegistry::new` in `../frontend/src/app/screens/mod.rs`.
     ```rust
-    // frontend/src/game/screens/mod.rs
+    // frontend/src/app/screens/mod.rs
     pub fn new() -> Self {
         // ...
         reg.register::<MyScreen>();
@@ -259,7 +259,7 @@ The trait `CardEncoding` is used as an interface to provide data that can be use
 The trait `CardConfig` is used for visual rendering. The key point is to return `egui::Image` in the `CardConfig::img` method so the systems knows which image to display as your card.
 
 ```rust
-// frontend/src/game/card/my_card.rs
+// frontend/src/app/card/my_card.rs
 struct MyCard { id: usize }
 impl CardEncoding for MyCard { ... }
 
@@ -277,7 +277,7 @@ impl CardConfig for MyCardVisuals {
 With `SimpleField` you can create horizontal or stacked layouts. For more complex layouts, for a game like **Solitaire** where you need vertical columns of cards, you need to create a new struct that implements `FieldWidget`.
 
 ```rust
-// frontend/src/game/field/vertical_field.rs
+// frontend/src/app/field/vertical_field.rs
 struct VerticalField { ... }
 impl FieldWidget for VerticalField {
     fn draw(&self) -> impl egui::Widget {

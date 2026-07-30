@@ -1,4 +1,4 @@
-use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
+use crate::app::AppInterface;
 use crate::sprintln;
 use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
 use image::{ImageBuffer, Luma};
@@ -11,6 +11,7 @@ use qrcode::QrCode;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 
 #[derive(Default)]
 pub struct QrTestTransmit {

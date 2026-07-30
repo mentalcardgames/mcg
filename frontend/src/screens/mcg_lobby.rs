@@ -1,11 +1,11 @@
-use super::{ScreenDef, ScreenMetadata};
-use crate::game::{AppInterface, ScreenWidget};
+use crate::app::AppInterface;
 use crate::sprintln;
 use egui::{RichText, TextureOptions};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use qrcode::QrCode;
 use std::cell::RefCell;
 use std::rc::Rc;
+use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 
 pub struct LobbyScreen {
     qr_payload: Rc<RefCell<Option<String>>>,

@@ -1,6 +1,6 @@
 //! Betting controls and interface for poker games.
 
-use crate::game::websocket::MessageSender;
+use crate::app::websocket::MessageSender;
 use egui::{RichText, Ui};
 use mcg_shared::{Frontend2BackendMsg, GameStatePublic, PlayerAction, PlayerId, PlayerPublic};
 

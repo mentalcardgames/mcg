@@ -83,7 +83,7 @@ The frontend has been modified to support this "Test Mode". You can find the res
 -   Reads pixel data from canvas and passes it to the `rqrr` library (Rust QR reader).
 -   **Performance**: Scanning happens periodically (e.g., every 5th frame) to avoid blocking the UI thread.
 
-### Receiving (`frontend/src/game/screens/qr_test_receive.rs`)
+### Receiving (`../frontend/src/app/screens/qr_test_receive.rs`)
 -   Displays a "Scan QR" popup.
 -   When a QR is detected:
     1.  Raw bytes are extracted and converted to a `Frame`.
@@ -91,7 +91,7 @@ The frontend has been modified to support this "Test Mode". You can find the res
     3.  UI shows "Rank" (number of useful equations) vs "Needed".
     4.  When full rank is achieved, the message is requested and displayed or saved.
 
-### Transmitting (`frontend/src/game/screens/qr_test_transmit.rs`)
+### Transmitting (`../frontend/src/app/screens/qr_test_transmit.rs`)
 -   Requests data (e.g., a file) from the backend via HTTP or an ad-hoc request mechanism, or accepts plain text input.
 -   Pushes the data to the sender's `Epoch` via `write`.
 -   Continuously renders the `Frame` produced by `pop_recent_frame()` into an `egui::Image` overlayed on screen.

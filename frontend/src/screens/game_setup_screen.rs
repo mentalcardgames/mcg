@@ -2,9 +2,11 @@ use eframe::Frame;
 use egui::{vec2, Align, Layout, UiBuilder};
 use std::rc::Rc;
 
-use super::{AppInterface, DirectoryCardType, GameState, ScreenDef, ScreenMetadata, ScreenWidget};
-use crate::game::card::{CardConfig, SimpleCard};
-use crate::game::field::{SimpleField, SimpleFieldKind::Stack};
+use crate::app::AppInterface;
+use crate::screens::game::GameState;
+use crate::widgets::card::{CardConfig, DirectoryCardType, SimpleCard};
+use crate::widgets::field::{SimpleField, SimpleFieldKind::Stack};
+use crate::widgets::screen::ScreenWidget;
 
 pub struct GameSetupScreen {
     pub card_config: Option<DirectoryCardType>,
@@ -15,9 +17,9 @@ impl GameSetupScreen {
     pub fn new() -> Self {
         let card_config = None;
         let players = 2;
-        let theme_index = crate::hardcoded_cards::AVAILABLE_THEMES
+        let theme_index = crate::widgets::hardcoded_cards::AVAILABLE_THEMES
             .iter()
-            .position(|&t| t == crate::hardcoded_cards::DEFAULT_THEME)
+            .position(|&t| t == crate::widgets::hardcoded_cards::DEFAULT_THEME)
             .unwrap_or(0);
         let mut screen = Self {
             card_config,
@@ -25,9 +27,9 @@ impl GameSetupScreen {
             theme_index,
         };
         // Ensure a default deck is set for runtime-created screens
-        crate::hardcoded_cards::set_deck_by_theme(
+        crate::widgets::hardcoded_cards::set_deck_by_theme(
             &mut screen.card_config,
-            crate::hardcoded_cards::DEFAULT_THEME,
+            crate::widgets::hardcoded_cards::DEFAULT_THEME,
         );
         screen
     }
@@ -87,11 +89,11 @@ impl ScreenWidget for GameSetupScreen {
                         ui.label("Theme:");
                         egui::ComboBox::new("theme_selector", "Theme")
                             .selected_text(
-                                crate::hardcoded_cards::AVAILABLE_THEMES[self.theme_index],
+                                crate::widgets::hardcoded_cards::AVAILABLE_THEMES[self.theme_index],
                             )
                             .show_ui(ui, |ui| {
                                 for (i, theme) in
-                                    crate::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate()
+                                    crate::widgets::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate()
                                 {
                                     let theme_name = match *theme {
                                         "img_cards" => "Standard Cards",
@@ -103,9 +105,9 @@ impl ScreenWidget for GameSetupScreen {
                                         .clicked()
                                     {
                                         self.theme_index = i;
-                                        let theme_str = crate::hardcoded_cards::AVAILABLE_THEMES
+                                        let theme_str = crate::widgets::hardcoded_cards::AVAILABLE_THEMES
                                             [self.theme_index];
-                                        crate::hardcoded_cards::set_deck_by_theme(
+                                        crate::widgets::hardcoded_cards::set_deck_by_theme(
                                             &mut self.card_config,
                                             theme_str,
                                         );

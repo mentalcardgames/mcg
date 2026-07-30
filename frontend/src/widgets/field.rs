@@ -1,7 +1,7 @@
-use crate::game::card::SimpleCard::Open;
-use crate::game::card::{CardConfig, CardEncoding};
-use crate::game::screens::DNDSelector;
+use crate::screens::game::DNDSelector;
 use crate::sprintln;
+use crate::widgets::card::SimpleCard::Open;
+use crate::widgets::card::{CardConfig, CardEncoding};
 use eframe::emath::{vec2, Rect};
 use egui::{frame, Color32, Sense, Vec2};
 use std::cell::RefCell;

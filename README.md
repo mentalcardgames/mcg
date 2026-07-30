@@ -71,7 +71,7 @@ Output
 The client uses a small screen registry and two traits to separate compile-time metadata from runtime UI state: ScreenDef (provides metadata() and create()) and ScreenWidget (the object-safe runtime UI trait: ui()). To add a new screen follow these steps:
 
 1) Create the screen module and type
-- Add a new file under `frontend/src/game/screens/`, e.g. `my_new_screen.rs`.
+- Add a new file under `frontend/src/app/screens/`, e.g. `my_new_screen.rs`.
 - Implement a struct to hold the screen's runtime state and implement the ScreenWidget trait for it.
 - Implement the ScreenDef trait for the type to provide ScreenMetadata and a factory (create()).
 
@@ -119,7 +119,7 @@ impl ScreenDef for MyNewScreen {
 - Add the module declaration and a public re-export in `client/src/game/screens/mod.rs` so the registry and other code can find it.
 - Register the screen in the ScreenRegistry by adding a RegisteredScreen entry to the `regs` slice in `ScreenRegistry::new()` (see the existing pattern in that file).
 
-Example edits to `frontend/src/game/screens/mod.rs`:
+Example edits to `frontend/src/app/screens/mod.rs`:
 
 ```rust
 // at the top, add:

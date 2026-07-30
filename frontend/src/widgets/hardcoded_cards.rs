@@ -1,6 +1,6 @@
-use crate::game::card::DirectoryCardType;
-use crate::game::card::CARD_NATURAL_SIZE;
 use crate::sprintln;
+use crate::widgets::card::DirectoryCardType;
+use crate::widgets::card::CARD_NATURAL_SIZE;
 
 pub const AVAILABLE_THEMES: &[&str] = &["img_cards", "alt_cards"];
 pub const DEFAULT_THEME: &str = "img_cards";

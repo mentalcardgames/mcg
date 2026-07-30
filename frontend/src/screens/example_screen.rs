@@ -1,7 +1,8 @@
 use eframe::Frame;
 use egui::{vec2, FontId, RichText};
-
-use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
+use crate::widgets::screen::ScreenWidget;
+use crate::app::AppInterface;
+use crate::screens::MainMenu;
 
 #[derive(Default)]
 pub struct ExampleScreen {
@@ -71,7 +72,7 @@ impl ScreenWidget for ExampleScreen {
                     )
                     .clicked()
                 {
-                    app_interface.change_screen::<super::MainMenu>();
+                    app_interface.change_screen::<MainMenu>();
                 }
 
                 ui.add_space(20.0);

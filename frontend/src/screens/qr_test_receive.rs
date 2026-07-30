@@ -1,5 +1,6 @@
-use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use crate::qr_scanner::QrScannerPopup;
+use crate::app::AppInterface;
+use crate::widgets::qr_scanner::QrScannerPopup;
+use crate::widgets::screen::ScreenWidget;
 use egui::{TextEdit, TextStyle};
 use mcg_qr_comm::data_structures::Frame;
 use mcg_qr_comm::network_coding::Epoch;

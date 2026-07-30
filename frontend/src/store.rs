@@ -1,5 +1,5 @@
-use crate::articles::Post;
-use mcg_shared::{Backend2FrontendMsg, GameStatePublic};
+use crate::screens::articles_screen::Post;
+use mcg_shared::GameStatePublic;
 
 #[derive(Clone, Default, Debug)]
 pub struct ClientSettings {

@@ -1,6 +1,7 @@
-use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use crate::qr_scanner::QrScannerPopup;
+use crate::app::AppInterface;
 use crate::sprintln;
+use crate::widgets::qr_scanner::QrScannerPopup;
+use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 use egui::TextureOptions;
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use qrcode::QrCode;

@@ -1,11 +1,10 @@
-use crate::game::screens::{ScreenDef, ScreenMetadata};
-use crate::game::websocket::MessageSender;
-use crate::game::{AppInterface, ScreenWidget};
+use crate::app::websocket::MessageSender;
+use crate::app::AppInterface;
 use crate::store::{ClientState, ConnectionStatus};
 use eframe::Frame;
 use egui::{Context, RichText, Ui};
 use mcg_shared::{Backend2FrontendMsg, PlayerAction, PlayerConfig};
-
+use crate::widgets::screen::ScreenWidget;
 use super::betting_controls::BettingControls;
 use super::connection_manager::ConnectionManager;
 use super::player_manager::{render_player_setup, PlayerManager};
@@ -448,16 +447,16 @@ impl ScreenWidget for PokerOnlineScreen {
     fn on_message(&mut self, app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
         match message {
             Backend2FrontendMsg::State(game_state) => {
-                app_interface.app_state.connection.connection_status = ConnectionStatus::Connected;
-                app_interface.app_state.session.game_state = Some(game_state.clone());
-                app_interface.app_state.ui.last_error = None;
-                app_interface.app_state.ui.last_info = None;
+                app_interface.state_mut().connection.connection_status = ConnectionStatus::Connected;
+                app_interface.state_mut().session.game_state = Some(game_state.clone());
+                app_interface.state_mut().ui.last_error = None;
+                app_interface.state_mut().ui.last_info = None;
             }
             Backend2FrontendMsg::Error(error) => {
-                app_interface.app_state.ui.last_error = Some(error.clone());
+                app_interface.state_mut().ui.last_error = Some(error.clone());
             }
             Backend2FrontendMsg::OurName(name) => {
-                app_interface.app_state.settings.name = name.clone();
+                app_interface.state_mut().settings.name = name.clone();
             }
             _ => {}
         }

@@ -1,12 +1,14 @@
 use egui::{ComboBox, RichText};
 use std::rc::Rc;
 
-use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use crate::game::GameType;
-use crate::qr_scanner::QrScannerPopup;
+use crate::app::AppInterface;
+use crate::app::GameType;
 use crate::sprintln;
+use crate::widgets::qr_scanner::QrScannerPopup;
+use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use std::cell::RefCell;
+use crate::screens::LobbyScreen;
 
 pub struct LobbySelectionScreen {
     pub players: usize,
@@ -119,14 +121,14 @@ impl ScreenWidget for LobbySelectionScreen {
                     eprintln!("Hosting Poker game with max {} players", self.players);
                     let msg = Frontend2BackendMsg::LobbyOpen("Poker".to_string());
                     app_interface.send_msg(msg);
-                    app_interface.change_screen::<super::LobbyScreen>();
+                    app_interface.change_screen::<LobbyScreen>();
                 }
                 GameType::Blackjack => {
                     // Transition to blackjack lobby setup
                     eprintln!("Hosting Blackjack game with max {} players", self.players);
                     let msg = Frontend2BackendMsg::LobbyOpen("Blackjack".to_string());
                     app_interface.send_msg(msg);
-                    app_interface.change_screen::<super::LobbyScreen>();
+                    app_interface.change_screen::<LobbyScreen>();
                 }
             }
         }
@@ -167,7 +169,7 @@ impl ScreenWidget for LobbySelectionScreen {
 
         // Only switch screens if we got accepted into the lobby
         if *self.switch.borrow() {
-            app_interface.change_screen::<super::LobbyScreen>();
+            app_interface.change_screen::<LobbyScreen>();
         }
         // If we received a new name, update our name both here and
         // in the global state so it persists across screens

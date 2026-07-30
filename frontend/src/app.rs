@@ -1,25 +1,27 @@
-pub mod card;
-pub mod field;
 pub mod screens;
-pub mod theme;
 pub mod websocket;
+
+use crate::app::websocket::{MessageSender, WebSocketConnection};
 use crate::router::Router;
+use crate::screens::game::GameState;
+use crate::screens::{Game, LobbySelectionScreen, MainMenu};
+use crate::store::ConnectionStatus;
+use crate::widgets::card::DirectoryCardType;
+use crate::widgets::screen::{ScreenDef, ScreenId, ScreenRegistry, ScreenWidget};
+use crate::widgets::theme::*;
 use crate::{
-    game::{card::DirectoryCardType, screens::Game},
     sprintln,
     store::ClientState,
 };
 use egui::Context;
-use mcg_shared::Backend2FrontendMsg;
-use screens::{AppInterface, MainMenu, ScreenId, ScreenWidget};
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig};
 use std::sync::mpsc::{self, Receiver};
-use theme::*;
 
 /// Events that can be sent between screens
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     ChangeScreen(ScreenId),
-    StartGame(screens::GameState<screens::DirectoryCardType>),
+    StartGame(GameState<DirectoryCardType>),
     ExitGame,
 }
 
@@ -39,6 +41,65 @@ pub enum GameType {
     // Add more game types here
 }
 
+pub struct AppInterface<'a> {
+    events: &'a mut Vec<AppEvent>,
+    app_state: &'a mut ClientState,
+    ws: &'a mut WebSocketConnection,
+}
+impl<'a> AppInterface<'a> {
+    pub fn new(
+        events: &'a mut Vec<AppEvent>,
+        client_state: &'a mut ClientState,
+        websocket: &'a mut WebSocketConnection,
+    ) -> Self {
+        Self {
+            events,
+            app_state: client_state,
+            ws: websocket,
+        }
+    }
+    pub fn state(&mut self) -> &ClientState {
+        self.app_state
+    }
+    pub fn state_mut(&mut self) -> &mut ClientState {
+        self.app_state
+    }
+    pub fn change_screen<T: ScreenDef + 'static>(&mut self) {
+        self.change_screen_id(ScreenId::of::<T>());
+    }
+    pub(crate) fn change_screen_id(&mut self, screen: ScreenId) {
+        self.events
+            .push(AppEvent::ChangeScreen(screen));
+    }
+    pub fn send_msg(&mut self, msg: Frontend2BackendMsg) {
+        self.ws.send_msg(msg);
+    }
+    /// This starts a drag and drop app
+    pub fn start_game(&mut self, config: GameState<DirectoryCardType>) {
+        self.events.push(AppEvent::StartGame(config));
+    }
+    /// This starts the static poker implementation
+    pub fn create_game(&mut self, config: Vec<PlayerConfig>) {
+        self.ws.create_game(config)
+    }
+    pub fn exit_game(&mut self) {
+        self.events.push(AppEvent::ExitGame);
+    }
+    pub fn is_connected(&self) -> bool {
+        self.ws.is_connected()
+    }
+    pub fn connect(&mut self, address: &str) {
+        self.ws.connect(address)
+    }
+    pub fn close_connection(&mut self) {
+        self.ws.close();
+        self.app_state.connection.connection_status = ConnectionStatus::Disconnected;
+    }
+    pub fn state_and_sender(&mut self) -> (&mut ClientState, &dyn MessageSender) {
+        (self.app_state, &*self.ws)
+    }
+}
+
 /// Application UI/Screen manager
 pub struct App {
     // current screen type
@@ -46,7 +107,7 @@ pub struct App {
     // lazily-created screens by type
     screens: std::collections::HashMap<ScreenId, Box<dyn ScreenWidget>>,
     // single shared screen registry
-    screen_registry: screens::ScreenRegistry,
+    screen_registry: ScreenRegistry,
 
     // Global settings UI state
     settings_open: bool,
@@ -70,18 +131,10 @@ impl Default for App {
 
 impl App {
     pub fn new() -> Self {
-        // Initialize typed screens
-        let mut game_setup = screens::GameSetupScreen::new();
-        crate::hardcoded_cards::set_deck_by_theme(
-            &mut game_setup.card_config,
-            crate::hardcoded_cards::DEFAULT_THEME,
-        );
-        crate::hardcoded_cards::set_deck_by_theme(&mut game_setup.card_config, "alt_cards");
-
         let router = Router::new().ok();
 
         let current_path = router.as_ref().map(|r| r.current_path()).unwrap_or("/");
-        let screen_registry = screens::ScreenRegistry::new();
+        let screen_registry = ScreenRegistry::new();
         let current_screen_id = screen_registry
             .id_by_path(current_path)
             .unwrap_or_else(ScreenId::of::<MainMenu>);
@@ -102,7 +155,7 @@ impl App {
             },
             app_state,
             router,
-            ws_connection: websocket::WebSocketConnection::new(
+            ws_connection: WebSocketConnection::new(
                 message_sender,
                 error_sender,
                 close_sender,
@@ -191,7 +244,7 @@ impl App {
                 event.was_clean()
             );
             self.app_state.connection.connection_status =
-                crate::store::ConnectionStatus::Disconnected;
+                ConnectionStatus::Disconnected;
         }
     }
 }
@@ -221,7 +274,7 @@ impl App {
                             if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
                                 if self.current_path().starts_with("/lobbyselect/") {
                                     let lobby_selection =
-                                        ScreenId::of::<screens::LobbySelectionScreen>();
+                                        ScreenId::of::<LobbySelectionScreen>();
                                     events.push(AppEvent::ChangeScreen(lobby_selection));
                                 } else {
                                     events.push(AppEvent::ChangeScreen(ScreenId::of::<MainMenu>()));

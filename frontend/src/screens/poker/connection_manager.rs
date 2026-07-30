@@ -1,6 +1,6 @@
-use crate::game::AppInterface;
-use crate::qr_scanner::QrScannerPopup;
+use crate::app::AppInterface;
 use crate::store::{ClientState, ConnectionStatus};
+use crate::widgets::qr_scanner::QrScannerPopup;
 use egui::{Color32, Context, RichText, Ui};
 
 pub struct ConnectionManager {

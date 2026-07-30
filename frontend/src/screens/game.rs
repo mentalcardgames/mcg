@@ -1,9 +1,9 @@
 use eframe::Frame;
 use egui::{Align, Layout, Rect, UiBuilder};
-
-use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use crate::game::card::{CardConfig, SimpleCard};
-use crate::game::field::{FieldWidget, SimpleField};
+use crate::app::AppInterface;
+use crate::widgets::card::{CardConfig, DirectoryCardType, SimpleCard};
+use crate::widgets::field::{FieldWidget, SimpleField};
+use crate::widgets::screen::ScreenWidget;
 
 #[derive(Default)]
 pub struct Game<C: CardConfig> {
@@ -59,8 +59,6 @@ impl<C: CardConfig> GameState<C> {
         };
     }
 }
-
-pub type DirectoryCardType = crate::game::card::DirectoryCardType;
 
 impl ScreenWidget for Game<DirectoryCardType> {
     fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {

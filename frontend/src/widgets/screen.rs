@@ -1,94 +1,12 @@
-use crate::game::websocket::{MessageSender, WebSocketConnection};
-use eframe::Frame;
-use std::any::TypeId;
-
-pub mod articles_screen;
-pub mod example_screen;
-pub mod game;
-pub mod game_setup_screen;
-pub mod lobby_setup;
-pub mod main_menu;
-pub mod mcg_lobby;
-pub mod pairing_screen;
-
-pub mod poker;
-pub mod qr_test;
-pub mod qr_test_receive;
-pub mod qr_test_transmit;
-
-use crate::game::screens::qr_test_receive::QrTestReceive;
-use crate::game::screens::qr_test_transmit::QrTestTransmit;
-pub use articles_screen::ArticlesScreen;
+use crate::screens::{ArticlesScreen, ExampleScreen, Game, GameSetupScreen, LobbyScreen, LobbySelectionScreen, MainMenu, PairingScreen, PokerOnlineScreen, QrScreen};
+use crate::app::AppInterface;
+use crate::screens::qr_test_receive::QrTestReceive;
+use crate::screens::qr_test_transmit::QrTestTransmit;
+use crate::widgets::card::DirectoryCardType;
 use downcast_rs::{impl_downcast, Downcast};
-pub use example_screen::ExampleScreen;
-pub use game::{DNDSelector, DirectoryCardType, Game, GameState};
-pub use game_setup_screen::GameSetupScreen;
-pub use lobby_setup::LobbySelectionScreen;
-pub use main_menu::MainMenu;
-pub use mcg_lobby::LobbyScreen;
-use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig};
-pub use pairing_screen::PairingScreen;
-pub use poker::PokerOnlineScreen;
-pub use qr_test::QrScreen;
-
-pub struct AppInterface<'a> {
-    events: &'a mut Vec<crate::game::AppEvent>,
-    app_state: &'a mut crate::store::ClientState,
-    ws: &'a mut WebSocketConnection,
-}
-impl<'a> AppInterface<'a> {
-    pub fn new(
-        events: &'a mut Vec<crate::game::AppEvent>,
-        client_state: &'a mut crate::store::ClientState,
-        websocket: &'a mut WebSocketConnection,
-    ) -> Self {
-        Self {
-            events,
-            app_state: client_state,
-            ws: websocket,
-        }
-    }
-    pub fn state(&mut self) -> &crate::store::ClientState {
-        self.app_state
-    }
-    pub fn state_mut(&mut self) -> &mut crate::store::ClientState {
-        self.app_state
-    }
-    pub fn change_screen<T: ScreenDef + 'static>(&mut self) {
-        self.change_screen_id(ScreenId::of::<T>());
-    }
-    pub(crate) fn change_screen_id(&mut self, screen: ScreenId) {
-        self.events
-            .push(crate::game::AppEvent::ChangeScreen(screen));
-    }
-    pub fn send_msg(&mut self, msg: Frontend2BackendMsg) {
-        self.ws.send_msg(msg);
-    }
-    /// This starts a drag and drop game
-    pub fn start_game(&mut self, config: GameState<DirectoryCardType>) {
-        self.events.push(crate::game::AppEvent::StartGame(config));
-    }
-    /// This starts the static poker implementation
-    pub fn create_game(&mut self, config: Vec<PlayerConfig>) {
-        self.ws.create_game(config)
-    }
-    pub fn exit_game(&mut self) {
-        self.events.push(crate::game::AppEvent::ExitGame);
-    }
-    pub fn is_connected(&self) -> bool {
-        self.ws.is_connected()
-    }
-    pub fn connect(&mut self, address: &str) {
-        self.ws.connect(address)
-    }
-    pub fn close_connection(&mut self) {
-        self.ws.close();
-        self.app_state.connection.connection_status = crate::store::ConnectionStatus::Disconnected;
-    }
-    pub fn state_and_sender(&mut self) -> (&mut crate::store::ClientState, &dyn MessageSender) {
-        (self.app_state, &*self.ws)
-    }
-}
+use eframe::Frame;
+use mcg_shared::Backend2FrontendMsg;
+use std::any::TypeId;
 
 /// Object-safe runtime trait for drawing a screen
 pub trait ScreenWidget: Downcast {
@@ -224,12 +142,12 @@ impl Default for ScreenRegistry {
 #[macro_export]
 macro_rules! impl_screen_def {
     ($type:ty, $path:literal, $display_name:literal, $icon:literal, $description:literal, $show_in_menu:expr) => {
-        impl ScreenDef for $type {
-            fn metadata() -> ScreenMetadata
+        impl $crate::widgets::screen::ScreenDef for $type {
+            fn metadata() -> $crate::widgets::screen::ScreenMetadata
             where
                 Self: Sized,
             {
-                ScreenMetadata {
+                $crate::widgets::screen::ScreenMetadata {
                     path: $path,
                     display_name: $display_name,
                     icon: $icon,
@@ -238,7 +156,7 @@ macro_rules! impl_screen_def {
                 }
             }
 
-            fn create() -> Box<dyn ScreenWidget>
+            fn create() -> Box<dyn $crate::widgets::screen::ScreenWidget>
             where
                 Self: Sized,
             {
