@@ -76,7 +76,7 @@ pub fn calculate_dpi_scale() -> f32 {
 pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     let init = Box::new(|cc: &eframe::CreationContext| {
         install_image_loaders(&cc.egui_ctx);
-        let app = App::new();
+        let app = App::new(cc.egui_ctx.clone());
         let game: Box<dyn eframe::App> = Box::new(app);
         Ok(game)
     });

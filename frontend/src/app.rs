@@ -123,14 +123,8 @@ pub struct App {
     close_receiver: Receiver<web_sys::CloseEvent>,
 }
 
-impl Default for App {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl App {
-    pub fn new() -> Self {
+    pub fn new(egui_ctx: Context) -> Self {
         let router = Router::new().ok();
 
         let current_path = router.as_ref().map(|r| r.current_path()).unwrap_or("/");
@@ -159,6 +153,7 @@ impl App {
                 message_sender,
                 error_sender,
                 close_sender,
+                egui_ctx,
             ),
             message_receiver,
             error_receiver,
@@ -439,9 +434,5 @@ impl eframe::App for App {
                 }
             }
         }
-
-        // Request continuous repaints for real-time updates (WebSocket messages, animations, etc.)
-        // This is the standard approach for egui applications that need real-time updates
-        ctx.request_repaint();
     }
 }

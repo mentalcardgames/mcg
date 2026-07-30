@@ -1,5 +1,6 @@
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig};
 use std::sync::mpsc::Sender;
+use egui::Context;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
@@ -19,6 +20,7 @@ pub struct WebSocketConnection {
     _onmessage: Option<Closure<dyn FnMut(MessageEvent)>>,
     _onerror: Option<Closure<dyn FnMut(Event)>>,
     _onclose: Option<Closure<dyn FnMut(CloseEvent)>>,
+    egui_ctx: Context,
 }
 
 impl WebSocketConnection {
@@ -26,6 +28,7 @@ impl WebSocketConnection {
         message_sender: Sender<Backend2FrontendMsg>,
         error_sender: Sender<Event>,
         close_sender: Sender<CloseEvent>,
+        egui_ctx: Context,
     ) -> Self {
         Self {
             ws: None,
@@ -36,6 +39,7 @@ impl WebSocketConnection {
             _onmessage: None,
             _onerror: None,
             _onclose: None,
+            egui_ctx,
         }
     }
 
@@ -63,12 +67,14 @@ impl WebSocketConnection {
                 ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
 
                 let message_sender = self.message_sender.clone();
+                let ctx_clone = self.egui_ctx.clone();
                 let onmessage =
                     Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
                         if let Some(text) = event.data().as_string() {
                             match serde_json::from_str::<Backend2FrontendMsg>(&text) {
                                 Ok(message) => {
                                     let _ = message_sender.send(message);
+                                    ctx_clone.request_repaint();
                                 }
                                 Err(error) => web_sys::console::error_1(
                                     &format!("Failed to deserialize server message: {error:?}")

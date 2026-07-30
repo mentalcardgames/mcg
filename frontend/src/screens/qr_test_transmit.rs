@@ -11,6 +11,7 @@ use qrcode::QrCode;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::time::Duration;
 use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 
 #[derive(Default)]
@@ -110,6 +111,7 @@ impl ScreenWidget for QrTestTransmit {
                         self.gen_new_code();
                     }
                     self.show_next_code(&ctx);
+                    ctx.request_repaint_after(Duration::from_millis(100));
                 }
             }
             if ui.button("Stop").clicked() {
