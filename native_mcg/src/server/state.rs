@@ -10,7 +10,7 @@ use mcg_shared::{Card, CardRank, CardSuit, PlayerId};
 use crate::bot::BotManager;
 use crate::game::{Game, Player};
 use crate::pretty;
-use mcg_shared::GameStatePublic;
+use mcg_shared::PokerStatePublic;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast;
@@ -130,7 +130,7 @@ impl Default for AppState {
 /// Represents a subscription to broadcast state updates.
 pub struct Subscription {
     pub receiver: broadcast::Receiver<mcg_shared::Backend2FrontendMsg>,
-    pub initial_state: Option<GameStatePublic>,
+    pub initial_state: Option<PokerStatePublic>,
 }
 
 /// Register a connection as a broadcast subscriber and capture the current state.
@@ -193,7 +193,7 @@ pub async fn create_new_game(
     Ok(())
 }
 
-pub async fn current_state_public(state: &AppState) -> Option<GameStatePublic> {
+pub async fn current_state_public(state: &AppState) -> Option<PokerStatePublic> {
     let lobby_r = state.lobby.read().await;
     if let Some(game) = &lobby_r.game {
         let gs = game.public();
@@ -235,7 +235,7 @@ pub async fn broadcast_state(state: &AppState) {
             gs.stage,
             current_player_name
         );
-        let _ = state.broadcaster.send(mcg_shared::Backend2FrontendMsg::State(gs));
+        let _ = state.broadcaster.send(mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs));
     }
 }
 
@@ -301,7 +301,7 @@ async fn execute_player_action(
         Ok(()) => {
             broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
-                mcg_shared::Backend2FrontendMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
                 mcg_shared::Backend2FrontendMsg::Error("No active game after action".into())
             }
@@ -314,7 +314,7 @@ async fn execute_player_action(
 async fn fetch_current_state(state: &AppState) -> mcg_shared::Backend2FrontendMsg {
     if let Some(gs) = current_state_public(state).await {
         broadcast_state(state).await;
-        mcg_shared::Backend2FrontendMsg::State(gs)
+        mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
     } else {
         mcg_shared::Backend2FrontendMsg::Error("No active game. Please start a new game first.".into())
     }
@@ -336,7 +336,7 @@ async fn advance_to_next_hand(state: &AppState) -> mcg_shared::Backend2FrontendM
         Ok(()) => {
             broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
-                mcg_shared::Backend2FrontendMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
                 mcg_shared::Backend2FrontendMsg::Error("No active game after starting next hand".into())
             }
@@ -354,7 +354,7 @@ async fn create_game_session(
         Ok(()) => {
             broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
-                mcg_shared::Backend2FrontendMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
                 mcg_shared::Backend2FrontendMsg::Error(
                     "Failed to produce initial state after creating game".into(),
@@ -380,7 +380,7 @@ async fn import_game_state(
             broadcast_state(app_state).await;
             if let Some(gs) = current_state_public(app_state).await {
                 tracing::info!("Game state replaced via PushState from peer");
-                mcg_shared::Backend2FrontendMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
                 mcg_shared::Backend2FrontendMsg::Error("Failed to produce state after PushState".into())
             }

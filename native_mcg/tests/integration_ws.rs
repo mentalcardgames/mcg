@@ -100,7 +100,7 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
         {
             if let tokio_tungstenite::tungstenite::Message::Text(txt) = msg {
                 if let Ok(sm) = serde_json::from_str::<Backend2FrontendMsg>(&txt) {
-                    if let Backend2FrontendMsg::State(_) = sm {
+                    if let Backend2FrontendMsg::UpdatePokerState(_) = sm {
                         got_state = true;
                         break;
                     }

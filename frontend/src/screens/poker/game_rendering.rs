@@ -1,8 +1,8 @@
 use crate::app::websocket::MessageSender;
 use egui::{Color32, Ui};
-use mcg_shared::{GameStatePublic, PlayerId, PlayerPublic};
+use mcg_shared::{PokerStatePublic, PlayerId, PlayerPublic};
 
-pub fn render_showdown_banner(ui: &mut Ui, state: &GameStatePublic, preferred_player: PlayerId) {
+pub fn render_showdown_banner(ui: &mut Ui, state: &PokerStatePublic, preferred_player: PlayerId) {
     if state.stage == mcg_shared::Stage::Showdown {
         let you_won = state.winner_ids.contains(&preferred_player);
         if you_won {
@@ -23,7 +23,7 @@ pub fn render_showdown_banner(ui: &mut Ui, state: &GameStatePublic, preferred_pl
     }
 }
 
-pub fn render_table_panel(ui: &mut Ui, state: &GameStatePublic, preferred_player: PlayerId) {
+pub fn render_table_panel(ui: &mut Ui, state: &PokerStatePublic, preferred_player: PlayerId) {
     ui.group(|ui| {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Pot:").strong());
@@ -75,7 +75,7 @@ pub fn render_table_panel(ui: &mut Ui, state: &GameStatePublic, preferred_player
 
 pub fn render_player_status_and_bet(
     ui: &mut Ui,
-    state: &GameStatePublic,
+    state: &PokerStatePublic,
     p: &PlayerPublic,
     preferred_player: PlayerId,
 ) {
@@ -109,7 +109,7 @@ pub fn render_player_status_and_bet(
 
 pub fn render_my_cards_and_actions(
     ui: &mut Ui,
-    state: &GameStatePublic,
+    state: &PokerStatePublic,
     p: &PlayerPublic,
     preferred_player: PlayerId,
     poker_screen: &mut dyn PokerScreenActions,
@@ -149,7 +149,7 @@ pub fn render_my_cards_and_actions(
 
 pub fn render_player(
     ui: &mut Ui,
-    state: &GameStatePublic,
+    state: &PokerStatePublic,
     p: &PlayerPublic,
     preferred_player: PlayerId,
     poker_screen: &mut dyn PokerScreenActions,
@@ -175,7 +175,7 @@ pub fn render_player(
 
 pub fn render_players_panel(
     ui: &mut Ui,
-    state: &GameStatePublic,
+    state: &PokerStatePublic,
     preferred_player: PlayerId,
     poker_screen: &mut dyn PokerScreenActions,
     sender: &dyn MessageSender,
@@ -189,7 +189,7 @@ pub fn render_players_panel(
 
 pub fn render_panels(
     ui: &mut Ui,
-    state: &GameStatePublic,
+    state: &PokerStatePublic,
     preferred_player: PlayerId,
     poker_screen: &mut dyn PokerScreenActions,
     sender: &dyn MessageSender,
@@ -212,7 +212,7 @@ pub trait PokerScreenActions {
     fn render_action_buttons(
         &mut self,
         ui: &mut Ui,
-        state: &GameStatePublic,
+        state: &PokerStatePublic,
         player_id: mcg_shared::PlayerId,
         enabled: bool,
         sender: &dyn MessageSender,
@@ -220,7 +220,7 @@ pub trait PokerScreenActions {
     fn render_action_row(
         &mut self,
         ui: &mut Ui,
-        state: &GameStatePublic,
+        state: &PokerStatePublic,
         player_id: mcg_shared::PlayerId,
         enabled: bool,
         show_next: bool,

@@ -2,7 +2,7 @@
 
 use crate::app::websocket::MessageSender;
 use egui::{RichText, Ui};
-use mcg_shared::{Frontend2BackendMsg, GameStatePublic, PlayerAction, PlayerId, PlayerPublic};
+use mcg_shared::{Frontend2BackendMsg, PokerStatePublic, PlayerAction, PlayerId, PlayerPublic};
 
 /// Manages betting controls state for the poker interface
 #[derive(Clone, Debug, Default)]
@@ -21,7 +21,7 @@ pub struct BettingControls {
 
 impl BettingControls {
     /// Update betting controls based on current game state and player
-    pub fn update_from_game_state(&mut self, state: &GameStatePublic, player_id: PlayerId) {
+    pub fn update_from_game_state(&mut self, state: &PokerStatePublic, player_id: PlayerId) {
         if let Some(player) = state.players.iter().find(|p| p.id == player_id) {
             self.max_raise = player.stack;
             self.min_raise = if state.current_bet == 0 {
@@ -44,7 +44,7 @@ impl BettingControls {
     }
 
     /// Calculate the call amount for a player
-    pub fn calculate_call_amount(state: &GameStatePublic, player_id: PlayerId) -> u32 {
+    pub fn calculate_call_amount(state: &PokerStatePublic, player_id: PlayerId) -> u32 {
         if let Some(player) = state.players.iter().find(|p| p.id == player_id) {
             state.current_bet.saturating_sub(player.bet_this_round)
         } else {
@@ -56,7 +56,7 @@ impl BettingControls {
     pub fn render_betting_controls(
         &mut self,
         ui: &mut Ui,
-        state: &GameStatePublic,
+        state: &PokerStatePublic,
         player_id: PlayerId,
         player: &PlayerPublic,
         conn: &dyn MessageSender,
@@ -85,7 +85,7 @@ impl BettingControls {
     fn render_opening_bet_controls(
         &mut self,
         ui: &mut Ui,
-        state: &GameStatePublic,
+        state: &PokerStatePublic,
         player_id: PlayerId,
         min_bet: u32,
         max_bet: u32,
@@ -165,7 +165,7 @@ impl BettingControls {
     fn render_raise_controls(
         &mut self,
         ui: &mut Ui,
-        state: &GameStatePublic,
+        state: &PokerStatePublic,
         player_id: PlayerId,
         min_bet: u32,
         max_bet: u32,

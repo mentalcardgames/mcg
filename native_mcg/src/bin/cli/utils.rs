@@ -1,6 +1,6 @@
 use std::io::IsTerminal;
 
-use mcg_shared::{GameStatePublic, PlayerConfig, Backend2FrontendMsg};
+use mcg_shared::{PokerStatePublic, PlayerConfig, Backend2FrontendMsg};
 
 use native_mcg::pretty::{format_event_human, format_state_human, format_table_header};
 
@@ -14,7 +14,7 @@ pub struct MessagePrinter {
     json: bool,
     mode: DisplayMode,
     last_printed: usize,
-    latest_state: Option<GameStatePublic>,
+    latest_state: Option<PokerStatePublic>,
 }
 
 impl MessagePrinter {
@@ -29,7 +29,7 @@ impl MessagePrinter {
 
     pub fn handle(&mut self, msg: &Backend2FrontendMsg) {
         match msg {
-            Backend2FrontendMsg::State(gs) => {
+            Backend2FrontendMsg::UpdatePokerState(gs) => {
                 self.latest_state = Some(gs.clone());
                 match self.mode {
                     DisplayMode::FullState => self.print_full_state(gs),
@@ -50,7 +50,7 @@ impl MessagePrinter {
         }
     }
 
-    fn print_full_state(&self, gs: &GameStatePublic) {
+    fn print_full_state(&self, gs: &PokerStatePublic) {
         if self.json {
             match serde_json::to_string_pretty(gs) {
                 Ok(json_str) => println!("{}", json_str),
@@ -62,7 +62,7 @@ impl MessagePrinter {
         }
     }
 
-    fn print_incremental(&mut self, gs: &GameStatePublic) {
+    fn print_incremental(&mut self, gs: &PokerStatePublic) {
         if self.json {
             match serde_json::to_string_pretty(gs) {
                 Ok(json_str) => println!("{}", json_str),

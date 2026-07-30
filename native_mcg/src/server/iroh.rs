@@ -566,7 +566,7 @@ where
             }
             let sub = subscribe_connection(state).await;
             if let Some(gs) = sub.initial_state {
-                send_server_msg_to_writer(send, &Backend2FrontendMsg::State(gs)).await?;
+                send_server_msg_to_writer(send, &Backend2FrontendMsg::UpdatePokerState(gs)).await?;
             }
             *subscription = Some(sub.receiver);
             Ok(true)

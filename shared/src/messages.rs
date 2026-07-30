@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 /// Complete public view of the game state
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GameStatePublic {
+pub struct PokerStatePublic {
     pub players: Vec<PlayerPublic>,
     pub community: Vec<Card>,
     pub pot: u32,
@@ -68,7 +68,7 @@ pub enum Frontend2BackendMsg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Backend2FrontendMsg {
-    State(GameStatePublic),
+    UpdatePokerState(PokerStatePublic),
     Error(String),
     Pong,
     TicketValue(String),

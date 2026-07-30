@@ -1,7 +1,7 @@
 use crate::app::AppInterface;
 use crate::store::ClientState;
 use crate::widgets::qr_scanner::QrScannerPopup;
-use egui::{Color32, Context, RichText, Ui};
+use egui::{Context, Ui};
 
 pub struct ConnectionManager {
     edit_server_address: String,
@@ -26,46 +26,6 @@ impl ConnectionManager {
             app_state.settings.server_address = self.edit_server_address.clone();
         }
         app_interface.connect(&self.edit_server_address);
-    }
-
-    pub fn render_header(&mut self, app_state: &mut ClientState, ui: &mut Ui, ctx: &Context) {
-        ui.horizontal(|ui| {
-            ui.heading("Poker Online");
-            ui.add_space(16.0);
-            if let Some(s) = &app_state.session.game_state {
-                ui.label(super::ui_components::stage_badge(s.stage));
-                ui.add_space(8.0);
-            }
-        });
-
-        let default_open = app_state.session.game_state.is_none();
-        egui::CollapsingHeader::new("Connection & session")
-            .default_open(default_open)
-            .show(ui, |ui| {
-                let mut connect_clicked = false;
-                let mut disconnect_clicked = false;
-                self.render_connection_controls(
-                    app_state,
-                    ui,
-                    ctx,
-                    &mut connect_clicked,
-                    &mut disconnect_clicked,
-                );
-            });
-
-        egui::CollapsingHeader::new("Player Setup")
-            .default_open(false)
-            .show(ui, |ui| {
-                super::player_manager::render_player_setup(ui, ctx);
-            });
-
-        if let Some(err) = &app_state.ui.last_error {
-            ui.colored_label(Color32::RED, err);
-        }
-        if let Some(info) = &app_state.ui.last_info {
-            ui.label(RichText::new(info));
-        }
-        ui.separator();
     }
 
     pub fn render_connection_controls(

@@ -102,7 +102,7 @@ async fn process_websocket_text(
             }
             let sub = subscribe_connection(state).await;
             if let Some(gs) = sub.initial_state {
-                send_ws(socket, &mcg_shared::Backend2FrontendMsg::State(gs)).await;
+                send_ws(socket, &mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)).await;
             }
             *subscription = Some(sub.receiver);
         }

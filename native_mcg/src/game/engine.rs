@@ -1,7 +1,7 @@
 //! Core Game and Player definitions + constructors and small helpers.
 
 use anyhow::{Context, Result};
-use mcg_shared::{ActionEvent, Card, GameStatePublic, PlayerId, PlayerPublic, Stage};
+use mcg_shared::{ActionEvent, Card, PokerStatePublic, PlayerId, PlayerPublic, Stage};
 
 #[cfg(test)]
 use mcg_shared::{CardRank, CardSuit};
@@ -147,7 +147,7 @@ impl Game {
         Ok(g)
     }
 
-    pub fn public(&self) -> GameStatePublic {
+    pub fn public(&self) -> PokerStatePublic {
         let players = self
             .players
             .iter()
@@ -163,7 +163,7 @@ impl Game {
             })
             .collect();
 
-        GameStatePublic {
+        PokerStatePublic {
             players,
             community: self.community.clone(),
             pot: self.pot,

@@ -3,7 +3,7 @@ use crate::app::AppInterface;
 use crate::store::ClientState;
 use eframe::Frame;
 use egui::{Context, RichText, Ui};
-use mcg_shared::{Backend2FrontendMsg, PlayerAction, PlayerConfig};
+use mcg_shared::{Backend2FrontendMsg, PlayerAction, PlayerConfig, PokerStatePublic};
 use crate::widgets::screen::ScreenWidget;
 use super::betting_controls::BettingControls;
 use super::connection_manager::ConnectionManager;
@@ -22,6 +22,7 @@ pub struct PokerOnlineScreen {
     connection_manager: ConnectionManager,
     player_manager: PlayerManager,
     betting_controls: BettingControls,
+    game_state: Option<PokerStatePublic>,
 }
 
 impl PokerOnlineScreen {
@@ -33,6 +34,7 @@ impl PokerOnlineScreen {
             connection_manager: ConnectionManager::new(Self::DEFAULT_SERVER_ADDRESS.to_string()),
             player_manager: PlayerManager::new(),
             betting_controls: BettingControls::default(),
+            game_state: None,
         }
     }
 
@@ -64,10 +66,6 @@ impl PokerOnlineScreen {
 
     fn connect(&mut self, app_interface: &mut AppInterface) {
         self.connection_manager.connect(app_interface);
-    }
-
-    fn disconnect(&mut self, app_interface: &mut AppInterface) {
-        app_interface.close_connection();
     }
 
     fn render_full_player_setup(
@@ -301,7 +299,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
     fn render_action_buttons(
         &mut self,
         ui: &mut egui::Ui,
-        state: &mcg_shared::GameStatePublic,
+        state: &mcg_shared::PokerStatePublic,
         player_id: mcg_shared::PlayerId,
         enabled: bool,
         sender: &dyn MessageSender,
@@ -374,7 +372,7 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
     fn render_action_row(
         &mut self,
         ui: &mut egui::Ui,
-        state: &mcg_shared::GameStatePublic,
+        state: &mcg_shared::PokerStatePublic,
         player_id: mcg_shared::PlayerId,
         enabled: bool,
         show_next: bool,
@@ -419,19 +417,20 @@ impl ScreenWidget for PokerOnlineScreen {
                 connected,
             );
 
-            if let Some(state) = &app_state.session.game_state {
+            if let Some(state) = self.game_state.take() {
                 super::game_rendering::render_showdown_banner(
                     ui,
-                    state,
+                    &state,
                     self.player_manager.get_preferred_player(),
                 );
                 super::game_rendering::render_panels(
                     ui,
-                    state,
+                    &state,
                     self.player_manager.get_preferred_player(),
                     self,
                     sender,
                 );
+                self.game_state.replace(state);
             } else {
                 ui.label("No state yet. Click Connect to start a session.");
             }
@@ -441,21 +440,21 @@ impl ScreenWidget for PokerOnlineScreen {
             self.connect(app_interface);
         }
         if connection_actions.1 {
-            self.disconnect(app_interface);
+            app_interface.close_connection();
         }
     }
     fn on_message(&mut self, app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
         match message {
-            Backend2FrontendMsg::State(game_state) => {
-                app_interface.state_mut().session.game_state = Some(game_state.clone());
+            Backend2FrontendMsg::UpdatePokerState(game_state) => {
+                self.game_state = Some(game_state);
                 app_interface.state_mut().ui.last_error = None;
                 app_interface.state_mut().ui.last_info = None;
             }
             Backend2FrontendMsg::Error(error) => {
-                app_interface.state_mut().ui.last_error = Some(error.clone());
+                app_interface.state_mut().ui.last_error = Some(error);
             }
             Backend2FrontendMsg::OurName(name) => {
-                app_interface.state_mut().settings.name = name.clone();
+                app_interface.state_mut().settings.name = name;
             }
             _ => {}
         }
@@ -476,13 +475,13 @@ impl PokerOnlineScreen {
         ui.horizontal(|ui| {
             ui.heading("Poker Online");
             ui.add_space(16.0);
-            if let Some(s) = &app_state.session.game_state {
+            if let Some(s) = &self.game_state {
                 ui.label(super::ui_components::stage_badge(s.stage));
                 ui.add_space(8.0);
             }
         });
 
-        let default_open = app_state.session.game_state.is_none();
+        let default_open = self.game_state.is_none();
         egui::CollapsingHeader::new("Connection & session")
             .default_open(default_open)
             .show(ui, |ui| {

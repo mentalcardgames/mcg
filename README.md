@@ -56,7 +56,7 @@ Commands (examples)
 
 Output
 - Default: a concise, colorized summary with stage, pot, players (including whose turn), board and your cards (if available), and a readable action log.
-- With `--json`: pretty-printed `GameStatePublic` JSON.
+- With `--json`: pretty-printed `PokerStatePublic` JSON.
 
 ## Workspace layout
 

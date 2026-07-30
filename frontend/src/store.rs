@@ -1,5 +1,4 @@
 use crate::screens::articles_screen::Post;
-use mcg_shared::GameStatePublic;
 
 #[derive(Clone, Default, Debug)]
 pub struct ClientSettings {
@@ -32,11 +31,6 @@ impl PairingPlayer {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct GameSessionState {
-    pub game_state: Option<GameStatePublic>,
-}
-
-#[derive(Clone, Debug, Default)]
 pub struct UIState {
     pub last_error: Option<String>,
     pub last_info: Option<String>,
@@ -48,7 +42,6 @@ pub struct UIState {
 
 #[derive(Clone, Debug)]
 pub struct ClientState {
-    pub session: GameSessionState,
     pub ui: UIState,
     pub settings: ClientSettings,
 }
@@ -87,7 +80,6 @@ impl ClientState {
 
         ClientState {
             settings: default_settings,
-            session: GameSessionState { game_state: None },
             ui: UIState {
                 last_error: None,
                 last_info: None,

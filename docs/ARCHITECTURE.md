@@ -78,7 +78,7 @@ The system supports multiple transport layers:
 ### 1. Frontend (`frontend/`)
 The frontend is the user's entry point. It handles:
 - **Rendering**: Uses `egui` immediate mode GUI.
-- **State Management**: Holds a local replica of `GameStatePublic`.
+- **State Management**: Holds a local replica of `PokerStatePublic`.
 - **Routing**: Manages screens (`/receive`, `/transmit`, `/game`, etc.) via a registry.
 - **Camera/QR**: Wraps browser media APIs (via `web-sys`) to capture video frames for QR scanning.
 

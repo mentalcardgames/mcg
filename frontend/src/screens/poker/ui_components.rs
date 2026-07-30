@@ -1,6 +1,6 @@
 use egui::{Color32, RichText, Ui, WidgetText};
 use mcg_shared::{
-    ActionEvent, ActionKind, BlindKind, Card, GameAction, GameStatePublic, HandResult, PlayerId,
+    ActionEvent, ActionKind, BlindKind, Card, GameAction, PokerStatePublic, HandResult, PlayerId,
     PlayerPublic, Stage,
 };
 
@@ -73,7 +73,7 @@ pub fn stage_to_str(stage: Stage) -> &'static str {
     }
 }
 
-pub fn format_game_for_clipboard(state: &GameStatePublic, you: PlayerId) -> String {
+pub fn format_game_for_clipboard(state: &PokerStatePublic, you: PlayerId) -> String {
     let mut out = String::new();
 
     format_game_summary(&mut out, state, you);
@@ -84,7 +84,7 @@ pub fn format_game_for_clipboard(state: &GameStatePublic, you: PlayerId) -> Stri
     out
 }
 
-fn format_game_summary(out: &mut String, state: &GameStatePublic, you: PlayerId) {
+fn format_game_summary(out: &mut String, state: &PokerStatePublic, you: PlayerId) {
     out.push_str("Game summary\n");
     out.push_str(&format!("Stage: {}\n", stage_to_str(state.stage)));
     out.push_str(&format!("Pot: {}\n", state.pot));
@@ -103,7 +103,7 @@ fn format_game_summary(out: &mut String, state: &GameStatePublic, you: PlayerId)
     out.push('\n');
 }
 
-fn format_players_section(out: &mut String, state: &GameStatePublic, you: PlayerId) {
+fn format_players_section(out: &mut String, state: &PokerStatePublic, you: PlayerId) {
     out.push_str("Players\n");
     for p in state.players.iter() {
         format_player_entry(out, state, p, you);
@@ -113,7 +113,7 @@ fn format_players_section(out: &mut String, state: &GameStatePublic, you: Player
 
 fn format_player_entry(
     out: &mut String,
-    state: &GameStatePublic,
+    state: &PokerStatePublic,
     player: &PlayerPublic,
     you: PlayerId,
 ) {
@@ -144,7 +144,7 @@ fn format_player_entry(
     }
 }
 
-fn format_board_section(out: &mut String, state: &GameStatePublic) {
+fn format_board_section(out: &mut String, state: &PokerStatePublic) {
     out.push_str("Board\n");
     if state.community.is_empty() {
         out.push_str("- (no community cards yet)\n");
@@ -160,14 +160,14 @@ fn format_board_section(out: &mut String, state: &GameStatePublic) {
     out.push('\n');
 }
 
-fn format_action_log(out: &mut String, state: &GameStatePublic) {
+fn format_action_log(out: &mut String, state: &PokerStatePublic) {
     out.push_str("Action log (chronological)\n");
     for entry in &state.action_log {
         format_action_log_entry(out, entry, state);
     }
 }
 
-fn format_action_log_entry(out: &mut String, entry: &ActionEvent, state: &GameStatePublic) {
+fn format_action_log_entry(out: &mut String, entry: &ActionEvent, state: &PokerStatePublic) {
     match entry {
         ActionEvent::PlayerAction { player_id, action } => {
             format_player_action_entry(out, *player_id, action, state);
@@ -182,7 +182,7 @@ fn format_player_action_entry(
     out: &mut String,
     player_id: PlayerId,
     action: &ActionKind,
-    state: &GameStatePublic,
+    state: &PokerStatePublic,
 ) {
     let who_name = name_of(&state.players, player_id);
     match action {
@@ -210,7 +210,7 @@ fn format_blind_entry(out: &mut String, who_name: &str, kind: &BlindKind, amount
     }
 }
 
-fn format_game_action_entry(out: &mut String, game_action: &GameAction, state: &GameStatePublic) {
+fn format_game_action_entry(out: &mut String, game_action: &GameAction, state: &PokerStatePublic) {
     match game_action {
         GameAction::StageChanged(s) => {
             out.push_str(&format!("== Stage: {} ==\\n", stage_to_str(*s)));
@@ -252,7 +252,7 @@ fn format_community_cards_entry(out: &mut String, cards: &[Card]) {
     }
 }
 
-fn format_showdown_entry(out: &mut String, hand_results: &[HandResult], state: &GameStatePublic) {
+fn format_showdown_entry(out: &mut String, hand_results: &[HandResult], state: &PokerStatePublic) {
     if hand_results.is_empty() {
         out.push_str("- Showdown\n");
     } else {
@@ -274,7 +274,7 @@ fn format_pot_awarded_entry(
     out: &mut String,
     winners: &[PlayerId],
     amount: &u32,
-    state: &GameStatePublic,
+    state: &PokerStatePublic,
 ) {
     let names = winners
         .iter()

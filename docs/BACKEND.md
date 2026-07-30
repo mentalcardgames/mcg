@@ -1,6 +1,6 @@
 # native_mcg
 
-**native_mcg** is the backend for the MCG (Mental Card Game) poker server. It is a Rust async server built with **Tokio** and **Axum**. It serves the Web UI (HTML, WASM, and media), exposes a **WebSocket** endpoint (`/ws`) and an **HTTP API** (`/api/message`) for the frontend, and optionally an **Iroh** QUIC transport for peer-to-peer or remote clients. The protocol and domain types (`Frontend2BackendMsg`, `Backend2FrontendMsg`, `GameStatePublic`, etc.) live in the **mcg-shared** crate; both the backend and the frontend depend on it.
+**native_mcg** is the backend for the MCG (Mental Card Game) poker server. It is a Rust async server built with **Tokio** and **Axum**. It serves the Web UI (HTML, WASM, and media), exposes a **WebSocket** endpoint (`/ws`) and an **HTTP API** (`/api/message`) for the frontend, and optionally an **Iroh** QUIC transport for peer-to-peer or remote clients. The protocol and domain types (`Frontend2BackendMsg`, `Backend2FrontendMsg`, `PokerStatePublic`, etc.) live in the **mcg-shared** crate; both the backend and the frontend depend on it.
 
 ## Architecture & API
 
@@ -68,7 +68,7 @@ pub async fn dispatch_client_message(state: &AppState, cm: Frontend2BackendMsg) 
 When the game state is modified (e.g., via `apply_action_to_game`), the server needs to inform connected clients.
 
 1. **Broadcast Call**: The handler calls `broadcast_state(state)`.
-2. **Channel Push**: This serializes the public projection of the game (`GameStatePublic`) and sends `Backend2FrontendMsg::State` over the `tokio::sync::broadcast` channel located in `AppState`.
+2. **Channel Push**: This serializes the public projection of the game (`PokerStatePublic`) and sends `Backend2FrontendMsg::State` over the `tokio::sync::broadcast` channel located in `AppState`.
 3. **Transport Delivery**: Long-lived transports (like the WebSocket event loop in `manage_websocket`) `select!` on this channel receiver and immediately push the new state down the socket to the client. HTTP clients do not receive push notifications.
 
 ### Connections with other nodes
