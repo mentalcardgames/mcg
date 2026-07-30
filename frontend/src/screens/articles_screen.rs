@@ -1,12 +1,11 @@
+use crate::app::FrontendInterface;
+use crate::widgets::screen::ScreenWidget;
 use eframe::Frame;
 use egui::{vec2, Color32, RichText, ScrollArea};
-use crate::app::AppInterface;
-use crate::store::ClientState;
-use std::cell::RefCell;
-use std::rc::Rc;
 use js_sys::futures::spawn_local;
 use serde::{Deserialize, Serialize};
-use crate::widgets::screen::ScreenWidget;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Post {
@@ -68,7 +67,6 @@ impl ArticlesScreen {
 
     fn render_posts_list(
         &mut self,
-        app_state: &mut ClientState,
         ui: &mut egui::Ui,
         posts: &[Post],
         _ctx: &egui::Context,
@@ -123,10 +121,8 @@ impl ArticlesScreen {
 }
 
 impl ScreenWidget for ArticlesScreen {
-    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(&mut self, _app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
-        let app_state = app_interface.state_mut();
-
         if let Some(result) = self.pending_result.borrow_mut().take() {
             match result {
                 Ok(posts) => self.articles = ArticlesLoading::Loaded(posts),
@@ -171,7 +167,7 @@ impl ScreenWidget for ArticlesScreen {
                 }
                 ArticlesLoading::Loaded(posts) => {
                     let posts = posts.clone();
-                    self.render_posts_list(app_state, ui, &posts, &ctx);
+                    self.render_posts_list(ui, &posts, &ctx);
                 }
                 ArticlesLoading::Error(err) => {
                     let err = err.clone();
@@ -187,7 +183,6 @@ impl ScreenWidget for ArticlesScreen {
                     }
                 }
             }
-
             ui.add_space(50.0);
         });
     }

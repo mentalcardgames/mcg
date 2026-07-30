@@ -1,13 +1,12 @@
-use crate::app::websocket::MessageSender;
-use crate::app::AppInterface;
-use crate::store::ClientState;
-use eframe::Frame;
-use egui::{Context, RichText, Ui};
-use mcg_shared::{Backend2FrontendMsg, PlayerAction, PlayerConfig, PokerStatePublic};
-use crate::widgets::screen::ScreenWidget;
 use super::betting_controls::BettingControls;
 use super::connection_manager::ConnectionManager;
 use super::player_manager::{render_player_setup, PlayerManager};
+use crate::app::websocket::MessageSender;
+use crate::app::FrontendInterface;
+use crate::widgets::screen::ScreenWidget;
+use eframe::Frame;
+use egui::{Context, RichText, Ui};
+use mcg_shared::{Backend2FrontendMsg, PlayerAction, PlayerConfig, PokerStatePublic};
 
 #[derive(Default)]
 struct PlayerTableEdits {
@@ -38,7 +37,7 @@ impl PokerOnlineScreen {
         }
     }
 
-    fn draw_error_popup(&mut self, app_state: &mut ClientState, ctx: &Context) {
+    fn draw_error_popup(&mut self, ctx: &Context) {
         if self.connection_manager.last_error.is_none() {
             return;
         }
@@ -64,7 +63,7 @@ impl PokerOnlineScreen {
         }
     }
 
-    fn connect(&mut self, app_interface: &mut AppInterface) {
+    fn connect(&mut self, app_interface: &mut FrontendInterface) {
         self.connection_manager.connect(app_interface);
     }
 
@@ -72,7 +71,6 @@ impl PokerOnlineScreen {
         &mut self,
         ui: &mut Ui,
         ctx: &Context,
-        app_state: &mut ClientState,
         sender: &dyn MessageSender,
         connected: bool,
     ) {
@@ -85,7 +83,7 @@ impl PokerOnlineScreen {
         self.render_add_player_section(ui);
         ui.add_space(16.0);
 
-        self.render_start_game_button(ui, app_state, ctx, sender, connected);
+        self.render_start_game_button(ui, ctx, sender, connected);
         self.add_game_instructions(ui);
     }
 
@@ -251,7 +249,6 @@ impl PokerOnlineScreen {
     fn render_start_game_button(
         &mut self,
         ui: &mut Ui,
-        _app_state: &mut ClientState,
         _ctx: &Context,
         sender: &dyn MessageSender,
         connected: bool,
@@ -398,18 +395,17 @@ impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
 }
 
 impl ScreenWidget for PokerOnlineScreen {
-    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(&mut self, app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let ctx = ui.ctx().clone();
         // Check for button clicks
         let mut connection_actions = (false, false);
         let connected = app_interface.is_connected();
 
         {
-            let (app_state, sender) = app_interface.state_and_sender();
-            self.draw_error_popup(app_state, &ctx);
+            let sender = app_interface.message_sender();
+            self.draw_error_popup(&ctx);
 
             self.render_header_with_controls(
-                app_state,
                 ui,
                 &ctx,
                 &mut connection_actions,
@@ -443,7 +439,7 @@ impl ScreenWidget for PokerOnlineScreen {
             app_interface.close_connection();
         }
     }
-    fn on_message(&mut self, app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
+    fn on_message(&mut self, app_interface: &mut FrontendInterface, message: Backend2FrontendMsg) {
         match message {
             Backend2FrontendMsg::UpdatePokerState(game_state) => {
                 self.game_state = Some(game_state);
@@ -454,7 +450,7 @@ impl ScreenWidget for PokerOnlineScreen {
                 self.connection_manager.last_error = Some(error);
             }
             Backend2FrontendMsg::OurName(name) => {
-                app_interface.state_mut().settings.name = name;
+                app_interface.state_mut().name = name;
             }
             _ => {}
         }
@@ -465,7 +461,6 @@ impl ScreenWidget for PokerOnlineScreen {
 impl PokerOnlineScreen {
     fn render_header_with_controls(
         &mut self,
-        app_state: &mut ClientState,
         ui: &mut Ui,
         ctx: &Context,
         connection_actions: &mut (bool, bool),
@@ -486,7 +481,6 @@ impl PokerOnlineScreen {
             .default_open(default_open)
             .show(ui, |ui| {
                 self.connection_manager.render_connection_controls(
-                    app_state,
                     ui,
                     ctx,
                     &mut connection_actions.0,
@@ -497,7 +491,7 @@ impl PokerOnlineScreen {
         egui::CollapsingHeader::new("Player Setup")
             .default_open(false)
             .show(ui, |ui| {
-                self.render_full_player_setup(ui, ctx, app_state, sender, connected);
+                self.render_full_player_setup(ui, ctx, sender, connected);
             });
 
         if let Some(err) = &self.connection_manager.last_error {

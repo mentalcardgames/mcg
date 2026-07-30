@@ -1,4 +1,4 @@
-use crate::app::AppInterface;
+use crate::app::FrontendInterface;
 use crate::widgets::qr_scanner::QrScannerPopup;
 use crate::widgets::screen::ScreenWidget;
 use egui::{TextEdit, TextStyle};
@@ -17,7 +17,7 @@ pub struct QrTestReceive {
 impl ScreenWidget for QrTestReceive {
     fn ui(
         &mut self,
-        _app_interface: &mut AppInterface,
+        _app_interface: &mut FrontendInterface,
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {

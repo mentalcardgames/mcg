@@ -1,14 +1,21 @@
 use egui::{ComboBox, RichText};
 use std::rc::Rc;
 
-use crate::app::AppInterface;
-use crate::app::GameType;
+use crate::app::FrontendInterface;
 use crate::sprintln;
 use crate::widgets::qr_scanner::QrScannerPopup;
 use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use std::cell::RefCell;
 use crate::screens::LobbyScreen;
+
+#[derive(PartialEq, Debug, Clone, Copy, Default)]
+pub enum GameType {
+    #[default]
+    Poker,
+    Blackjack,
+    // Add more game types here
+}
 
 pub struct LobbySelectionScreen {
     pub players: usize,
@@ -43,19 +50,19 @@ impl Default for LobbySelectionScreen {
 impl ScreenWidget for LobbySelectionScreen {
     fn ui(
         &mut self,
-        app_interface: &mut AppInterface,
+        app_interface: &mut FrontendInterface,
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
         let before = self.game_type;
         // If user set a name in the previous screen, apply it to the local player entry once.
         if !self.initialized {
-            let global = app_interface.state().settings.name.clone();
+            let global = app_interface.state().name.clone();
             if !global.trim().is_empty() {
                 self.player_name = global;
             }
 
-            let server = app_interface.state().settings.server_address.clone();
+            let server = app_interface.state().server_address.clone();
             if !app_interface.is_connected() {
                 app_interface.connect(&server);
             }
@@ -114,7 +121,7 @@ impl ScreenWidget for LobbySelectionScreen {
             let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
             app_interface.send_msg(msg);
             // Persist chosen name into global client state prior to join
-            app_interface.state_mut().settings.name = self.player_name.clone();
+            app_interface.state_mut().name = self.player_name.clone();
             match self.game_type {
                 GameType::Poker => {
                     // Transition to poker lobby setup
@@ -158,7 +165,7 @@ impl ScreenWidget for LobbySelectionScreen {
         if self.input.starts_with("endpoint") {
             tracing::info!("Sending endpoint ticket to server: {}", self.input);
             // Persist chosen name into global client state prior to join
-            app_interface.state_mut().settings.name = self.player_name.clone();
+            app_interface.state_mut().name = self.player_name.clone();
             let ticket = self.input.clone();
             let msg = Frontend2BackendMsg::PlayerName(self.player_name.clone());
             app_interface.send_msg(msg);
@@ -182,7 +189,7 @@ impl ScreenWidget for LobbySelectionScreen {
         };
 
         if let Some(name) = name_opt {
-            app_interface.state_mut().settings.name = name.clone();
+            app_interface.state_mut().name = name.clone();
             self.player_name = name.clone();
 
             if let Ok(mut storage) = self.name_storage.try_borrow_mut() {
@@ -190,11 +197,11 @@ impl ScreenWidget for LobbySelectionScreen {
             }
         }
     }
-    fn on_exit(&mut self, app_interface: &mut AppInterface) {
+    fn on_exit(&mut self, app_interface: &mut FrontendInterface) {
         // Persist name when leaving this screen
-        app_interface.state_mut().settings.name = self.player_name.clone();
+        app_interface.state_mut().name = self.player_name.clone();
     }
-    fn on_message(&mut self, _app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
+    fn on_message(&mut self, _app_interface: &mut FrontendInterface, message: Backend2FrontendMsg) {
         match message {
             Backend2FrontendMsg::OurName(name) => {
                 sprintln!("Got our name from the server:\n\t- {:?}", name);

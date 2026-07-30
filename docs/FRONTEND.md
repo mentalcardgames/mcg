@@ -11,7 +11,7 @@ The core interaction logic is built around a set of traits and structs that defi
 -   **`ScreenWidget`** @ [frontend/src/game/screens/mod.rs](../frontend/src/app/screens/mod.rs):
     -   **Purpose**: Defines the **rendering logic** and behavior of a screen.
     -   **Usage**: Implement this trait to create new views (e.g., Main Menu, Game Setup). The `ui` method, called every frame, handles both logic updates and UI drawing.
-    -   **Navigation**: Screens can request transitions to other screens via the `AppInterface` (passed as a parameter to `ui`). See [AppInterface](../frontend/src/app/screens/mod.rs).
+    -   **Navigation**: Screens can request transitions to other screens via the `FrontendInterface` (passed as a parameter to `ui`). See [AppInterface](../frontend/src/app/screens/mod.rs).
 
 -   **`ScreenDef`** @ [frontend/src/game/screens/mod.rs](../frontend/src/app/screens/mod.rs):
     -   **Purpose**: Defines the **metadata** and factory for a screen.
@@ -31,11 +31,11 @@ The core interaction logic is built around a set of traits and structs that defi
 
 ### Core Structs & Modules
 
--   **`App`** @ [frontend/src/game.rs](../frontend/src/app.rs):
+-   **`FrontendApp`** @ [frontend/src/game.rs](../frontend/src/app.rs):
     -   The main entry point that manages the registration and switching of `ScreenWidget`s via the `ScreenRegistry`.
     -   **Entry Point**: The `update` method (from the `eframe::App` trait) is the main loop where the application state is updated and the UI is rendered.
 
-- **`ClientState`** @ [frontend/src/store.rs](../frontend/src/store.rs):
+- **`FrontendState`** @ [frontend/src/store.rs](../frontend/src/store.rs):
     - Holds the important state information of the client e.g. backend address, network messages, etc.
 
 -   **`SimpleField`** @ [frontend/src/game/field.rs](../frontend/src/app/field.rs):
@@ -68,9 +68,9 @@ pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
 }
 ```
 
-Once started, the application enters its main loop. The `App` struct (in `../frontend/src/app.rs`) implements `eframe::App`, and its `update` method is called every frame by the browser/renderer.
+Once started, the application enters its main loop. The `FrontendApp` struct (in `../frontend/src/app.rs`) implements `eframe::App`, and its `update` method is called every frame by the browser/renderer.
 
--   **`App::new`**: Initializes the global state (`ClientState`), registers screens, and sets up the router.
+-   **`App::new`**: Initializes the global state (`FrontendState`), registers screens, and sets up the router.
 -   **`App::update`**: 
     1.  Processes pending messages (from WebSocket/Network). This is currently omitted.
     2.  Handles URL changes (routing).
@@ -79,11 +79,11 @@ Once started, the application enters its main loop. The `App` struct (in `../fro
 
 ### Event Handling
 
-The `AppInterface` struct is passed to every screen's `ui` method. It holds a mutable reference to the `AppEvent` queue. Screens push events (like `ChangeRoute` or `StartGame`) to this queue. After the screen's `ui` method returns, `App::update` drains this queue and executes the events. This pattern avoids borrow checker conflicts where a screen tries to mutate the `App` that owns it.
+The `FrontendInterface` struct is passed to every screen's `ui` method. It holds a mutable reference to the `FrontendEvent` queue. Screens push events (like `ChangeRoute` or `StartGame`) to this queue. After the screen's `ui` method returns, `App::update` drains this queue and executes the events. This pattern avoids borrow checker conflicts where a screen tries to mutate the `FrontendApp` that owns it.
 
 ### State Management
 
-Global state is held in `ClientState` (in `frontend/src/store.rs`). It contains data shared across the application, such as the current game state, connection status, and player settings. It is accessible via `AppInterface.state()` in any screen.
+Global state is held in `FrontendState` (in `frontend/src/store.rs`). It contains data shared across the application, such as the current game state, connection status, and player settings. It is accessible via `AppInterface.state()` in any screen.
 
 Local state (like specific UI toggles or temporary input buffers) should remain inside the specific `ScreenWidget` struct.
 

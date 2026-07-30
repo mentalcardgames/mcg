@@ -1,5 +1,4 @@
-use crate::app::AppInterface;
-use crate::store::ClientState;
+use crate::app::FrontendInterface;
 use crate::widgets::qr_scanner::QrScannerPopup;
 use egui::{Context, Ui};
 
@@ -22,19 +21,18 @@ impl ConnectionManager {
         }
     }
 
-    pub fn connect(&mut self, app_interface: &mut AppInterface) {
+    pub fn connect(&mut self, app_interface: &mut FrontendInterface) {
         {
             let app_state = app_interface.state_mut();
             self.last_error = None;
             self.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
-            app_state.settings.server_address = self.edit_server_address.clone();
+            app_state.server_address = self.edit_server_address.clone();
         }
         app_interface.connect(&self.edit_server_address);
     }
 
     pub fn render_connection_controls(
         &mut self,
-        _app_state: &mut ClientState,
         ui: &mut Ui,
         ctx: &Context,
         connect_clicked: &mut bool,

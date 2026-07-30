@@ -192,7 +192,7 @@ impl PlayerManager {
         }
         self.players.push(PlayerConfig {
             id: mcg_shared::PlayerId(self.next_player_id),
-            name: name,
+            name,
             is_bot: false,
         });
         self.next_player_id += 1;

@@ -1,5 +1,5 @@
 use crate::screens::{ArticlesScreen, ExampleScreen, Game, GameSetupScreen, LobbyScreen, LobbySelectionScreen, MainMenu, PairingScreen, PokerOnlineScreen, QrScreen};
-use crate::app::AppInterface;
+use crate::app::FrontendInterface;
 use crate::screens::qr_test_receive::QrTestReceive;
 use crate::screens::qr_test_transmit::QrTestTransmit;
 use crate::widgets::card::DirectoryCardType;
@@ -10,10 +10,10 @@ use std::any::TypeId;
 
 /// Object-safe runtime trait for drawing a screen
 pub trait ScreenWidget: Downcast {
-    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, frame: &mut Frame);
+    fn ui(&mut self, interface: &mut FrontendInterface, ui: &mut egui::Ui, frame: &mut Frame);
     /// Called when the screen is about to be exited. Implement to clean up resources.
-    fn on_exit(&mut self, _app_interface: &mut AppInterface) {}
-    fn on_message(&mut self, _app_interface: &mut AppInterface, _message: Backend2FrontendMsg) {}
+    fn on_exit(&mut self, _interface: &mut FrontendInterface) {}
+    fn on_message(&mut self, _interface: &mut FrontendInterface, _message: Backend2FrontendMsg) {}
 }
 impl_downcast!(ScreenWidget);
 

@@ -1,4 +1,4 @@
-use crate::app::AppInterface;
+use crate::app::FrontendInterface;
 use crate::sprintln;
 use egui::{RichText, TextureOptions};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
@@ -32,13 +32,13 @@ impl Default for LobbyScreen {
 impl ScreenWidget for LobbyScreen {
     fn ui(
         &mut self,
-        app_interface: &mut AppInterface,
+        app_interface: &mut FrontendInterface,
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
         // Lazy init: connect through the application-owned WebSocket.
         if !self.initialized {
-            let server = app_interface.state().settings.server_address.clone();
+            let server = app_interface.state().server_address.clone();
             if !app_interface.is_connected() {
                 app_interface.connect(&server);
             }
@@ -70,11 +70,11 @@ impl ScreenWidget for LobbyScreen {
 
         // If we got a name from the backend, apply it to our local player entry and settings.
         if let Some(new_name) = self.our_name_pending.borrow_mut().take() {
-            app_interface.state_mut().settings.name = new_name;
+            app_interface.state_mut().name = new_name;
         }
 
         // If user set a name in the previous screen, apply it to the local player entry once.
-        let chosen_name = app_interface.state().settings.name.clone();
+        let chosen_name = app_interface.state().name.clone();
         if !chosen_name.is_empty() {
             // Only add the chosen name once at the start if the list is currently empty
             let mut players_b = self.players.borrow_mut();
@@ -174,13 +174,13 @@ impl ScreenWidget for LobbyScreen {
         }
     }
 
-    fn on_exit(&mut self, app_interface: &mut AppInterface) {
+    fn on_exit(&mut self, app_interface: &mut FrontendInterface) {
         // Tell others we wish to disconnect
         let msg = Frontend2BackendMsg::Disconnect;
         app_interface.send_msg(msg);
     }
 
-    fn on_message(&mut self, _app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
+    fn on_message(&mut self, _app_interface: &mut FrontendInterface, message: Backend2FrontendMsg) {
         match message {
             Backend2FrontendMsg::TicketValue(ticket) => {
                 sprintln!("Got a ticket value:\n\t- {:?}", ticket);

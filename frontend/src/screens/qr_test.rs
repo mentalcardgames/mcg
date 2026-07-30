@@ -1,4 +1,4 @@
-use crate::app::AppInterface;
+use crate::app::FrontendInterface;
 use crate::sprintln;
 use crate::widgets::qr_scanner::QrScannerPopup;
 use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
@@ -20,7 +20,7 @@ pub struct QrScreen {
 impl ScreenWidget for QrScreen {
     fn ui(
         &mut self,
-        app_interface: &mut AppInterface,
+        app_interface: &mut FrontendInterface,
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
@@ -28,7 +28,7 @@ impl ScreenWidget for QrScreen {
 
         // Lazy connect using central WebSocket
         if !self.initialized {
-            let server = app_interface.state().settings.server_address.clone();
+            let server = app_interface.state().server_address.clone();
             if !app_interface.is_connected() {
                 app_interface.connect(&server);
             }
@@ -76,7 +76,7 @@ impl ScreenWidget for QrScreen {
         }
     }
 
-    fn on_message(&mut self, _app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
+    fn on_message(&mut self, _app_interface: &mut FrontendInterface, message: Backend2FrontendMsg) {
         match message {
             Backend2FrontendMsg::TicketValue(ticket) => {
                 sprintln!("Got a ticket value:\n\t- {:?}", ticket);

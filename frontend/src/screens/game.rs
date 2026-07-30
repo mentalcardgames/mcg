@@ -1,6 +1,6 @@
 use eframe::Frame;
 use egui::{Align, Layout, Rect, UiBuilder};
-use crate::app::AppInterface;
+use crate::app::FrontendInterface;
 use crate::widgets::card::{CardConfig, DirectoryCardType, SimpleCard};
 use crate::widgets::field::{FieldWidget, SimpleField};
 use crate::widgets::screen::ScreenWidget;
@@ -61,7 +61,7 @@ impl<C: CardConfig> GameState<C> {
 }
 
 impl ScreenWidget for Game<DirectoryCardType> {
-    fn ui(&mut self, _app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(&mut self, _app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let mut rect = ui.max_rect();
         let width = rect.width() / 3.0;
         rect.set_left(width);

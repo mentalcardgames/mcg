@@ -2,7 +2,7 @@ use eframe::Frame;
 use egui::{vec2, Align, Layout, UiBuilder};
 use std::rc::Rc;
 
-use crate::app::AppInterface;
+use crate::app::FrontendInterface;
 use crate::screens::game::GameState;
 use crate::widgets::card::{CardConfig, DirectoryCardType, SimpleCard};
 use crate::widgets::field::{SimpleField, SimpleFieldKind::Stack};
@@ -64,7 +64,7 @@ impl Default for GameSetupScreen {
     }
 }
 impl ScreenWidget for GameSetupScreen {
-    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(&mut self, app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         let mut rect = ui.max_rect();
         let width = rect.width() / 3.0;
         rect.set_left(width);

@@ -1,15 +1,13 @@
 use eframe::Frame;
 use egui::{vec2, FontId, RichText};
-use crate::widgets::screen::{ScreenRegistry, ScreenWidget};
-use crate::app::AppInterface;
+use crate::widgets::screen::ScreenWidget;
+use crate::app::FrontendInterface;
 
 #[derive(Default)]
-pub struct MainMenu {
-    screen_registry: ScreenRegistry,
-}
+pub struct MainMenu;
 
 impl ScreenWidget for MainMenu {
-    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(&mut self, app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         // Center content both vertically and horizontally
         ui.centered_and_justified(|ui| {
             // Add margins around the main menu content
@@ -33,7 +31,7 @@ impl ScreenWidget for MainMenu {
                         let button_size = vec2(180.0, 80.0);
 
                         // Generate buttons from screen registry
-                        let menu = self.screen_registry.menu_entries();
+                        let menu = app_interface.state().screen_registry.menu_entries();
                         for (screen_id, meta) in menu {
                             let label = format!("{} {}", meta.icon, meta.display_name);
 

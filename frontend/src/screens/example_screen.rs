@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{vec2, FontId, RichText};
 use crate::widgets::screen::ScreenWidget;
-use crate::app::AppInterface;
+use crate::app::FrontendInterface;
 use crate::screens::MainMenu;
 
 #[derive(Default)]
@@ -11,7 +11,7 @@ pub struct ExampleScreen {
 }
 
 impl ScreenWidget for ExampleScreen {
-    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(&mut self, app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         ui.centered_and_justified(|ui| {
             ui.vertical_centered(|ui| {
                 // Title

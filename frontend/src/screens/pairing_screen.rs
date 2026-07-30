@@ -1,7 +1,7 @@
 use eframe::Frame;
 use egui::{vec2, Align, Button, Color32, Grid, Layout, RichText, ScrollArea};
 
-use crate::app::AppInterface;
+use crate::app::FrontendInterface;
 use crate::sprintln;
 use crate::utils::emoji_hash;
 use crate::widgets::screen::ScreenWidget;
@@ -62,8 +62,7 @@ impl PairingScreen {
 }
 
 impl ScreenWidget for PairingScreen {
-    fn ui(&mut self, app_interface: &mut AppInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
-        let app_state = &mut app_interface.state_mut();
+    fn ui(&mut self, _app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
         ui.heading("Player Pairing");
         ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
             // Global Back button is provided by the layout

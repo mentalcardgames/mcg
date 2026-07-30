@@ -1,4 +1,4 @@
-use crate::app::AppInterface;
+use crate::app::FrontendInterface;
 use crate::sprintln;
 use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
 use image::{ImageBuffer, Luma};
@@ -54,7 +54,7 @@ impl QrTestTransmit {
 impl ScreenWidget for QrTestTransmit {
     fn ui(
         &mut self,
-        app_interface: &mut AppInterface,
+        app_interface: &mut FrontendInterface,
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
@@ -62,7 +62,7 @@ impl ScreenWidget for QrTestTransmit {
 
         // Lazy connect using central WebSocket
         if !self.initialized {
-            let server = app_interface.state().settings.server_address.clone();
+            let server = app_interface.state().server_address.clone();
             if !app_interface.is_connected() {
                 app_interface.connect(&server);
             }
@@ -142,7 +142,7 @@ impl ScreenWidget for QrTestTransmit {
         }
     }
 
-    fn on_message(&mut self, _app_interface: &mut AppInterface, message: Backend2FrontendMsg) {
+    fn on_message(&mut self, _app_interface: &mut FrontendInterface, message: Backend2FrontendMsg) {
         match message {
             Backend2FrontendMsg::QrRes(content) => {
                 let text = String::from_utf8_lossy(&content);
