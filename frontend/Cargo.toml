@@ -38,6 +38,7 @@ web-sys = { version = "0.3.77", features = [
     "Url",
     "PopStateEvent",
     "EventListener",
+    "VideoFacingModeEnum",
 ] }
 egui = "0.32.3"
 eframe = "0.32.3"

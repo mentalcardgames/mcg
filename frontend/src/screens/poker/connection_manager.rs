@@ -1,11 +1,10 @@
 use crate::app::FrontendInterface;
-use crate::widgets::qr_scanner::QrScannerPopup;
+use crate::widgets::qr_scanner::{QrDecodeTarget, QrScanner};
 use egui::{Context, Ui};
 
 pub struct ConnectionManager {
     edit_server_address: String,
-    qr_result_raw: Vec<u8>,
-    scanner: QrScannerPopup,
+    scanner: QrScanner,
     pub(crate) last_error: Option<String>,
     pub(crate) last_info: Option<String>,
 }
@@ -14,8 +13,7 @@ impl ConnectionManager {
     pub fn new(server_address: String) -> Self {
         Self {
             edit_server_address: server_address,
-            qr_result_raw: Vec::new(),
-            scanner: QrScannerPopup::default(),
+            scanner: QrScanner::default(),
             last_error: None,
             last_info: None,
         }
@@ -56,8 +54,7 @@ impl ConnectionManager {
                     self.scanner.button_and_popup(
                         ui,
                         ctx,
-                        &mut self.edit_server_address,
-                        &mut self.qr_result_raw,
+                        QrDecodeTarget::String(&mut self.edit_server_address),
                     );
                 });
             });
@@ -69,8 +66,7 @@ impl ConnectionManager {
                 self.scanner.button_and_popup(
                     ui,
                     ctx,
-                    &mut self.edit_server_address,
-                    &mut self.qr_result_raw,
+                    QrDecodeTarget::String(&mut self.edit_server_address),
                 );
                 ui.add_space(12.0);
                 if ui.button("Connect").clicked() {

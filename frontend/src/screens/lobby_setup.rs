@@ -2,12 +2,12 @@ use egui::{ComboBox, RichText};
 use std::rc::Rc;
 
 use crate::app::FrontendInterface;
+use crate::screens::LobbyScreen;
 use crate::sprintln;
-use crate::widgets::qr_scanner::QrScannerPopup;
+use crate::widgets::qr_scanner::{QrDecodeTarget, QrScanner};
 use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use std::cell::RefCell;
-use crate::screens::LobbyScreen;
 
 #[derive(PartialEq, Debug, Clone, Copy, Default)]
 pub enum GameType {
@@ -21,9 +21,8 @@ pub struct LobbySelectionScreen {
     pub players: usize,
     pub game_type: GameType,
     input: String,
-    scanner: QrScannerPopup,
+    scanner: QrScanner,
     name_storage: Rc<RefCell<Option<String>>>,
-    raw: Vec<u8>,
     player_name: String,
     initialized: bool,
     switch: Rc<RefCell<bool>>,
@@ -36,9 +35,8 @@ impl Default for LobbySelectionScreen {
             players: 2,
             game_type: GameType::default(),
             input: String::new(),
-            scanner: QrScannerPopup::default(),
+            scanner: QrScanner::default(),
             name_storage: Rc::new(RefCell::new(None)),
-            raw: Vec::new(),
             player_name: String::new(),
             initialized: false,
             switch: Rc::new(RefCell::new(false)),
@@ -145,7 +143,7 @@ impl ScreenWidget for LobbySelectionScreen {
         ui.add_space(12.0);
         let ctx = ui.ctx().clone();
         self.scanner
-            .button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
+            .button_and_popup(ui, &ctx, QrDecodeTarget::String(&mut self.input));
 
         ui.add_space(8.0);
         ui.label("Click 'Scan QR' to connect to another player's lobby by scanning a QR code!");

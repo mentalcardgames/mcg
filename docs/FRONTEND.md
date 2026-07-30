@@ -181,9 +181,9 @@ This separation allows for validation logic (e.g., checking if a move is legal b
 
 ### QR Code Scanning
 
-The project uses the `QrScannerPopup` struct (in `frontend/src/qr_scanner.rs`) to handle camera input and QR detection directly in the browser.
+The project uses the `QrScanner` struct (in `frontend/src/qr_scanner.rs`) to handle camera input and QR detection directly in the browser.
 
--   **Usage**: The `QrScannerPopup` manages the camera and updates a target string buffer with the result.
+-   **Usage**: The `QrScanner` manages the camera and updates a target string buffer with the result.
 -   **Integration**:
     ```rust
     // In your screen struct

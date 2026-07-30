@@ -1,5 +1,5 @@
 use crate::app::FrontendInterface;
-use crate::widgets::qr_scanner::QrScannerPopup;
+use crate::widgets::qr_scanner::{QrDecodeTarget, QrScanner};
 use crate::widgets::screen::ScreenWidget;
 use egui::{TextEdit, TextStyle};
 use mcg_qr_comm::data_structures::Frame;
@@ -10,7 +10,7 @@ use mcg_qr_comm::FRAME_SIZE_BYTES;
 pub struct QrTestReceive {
     frame_buffer: Vec<u8>,
     epoch: Epoch,
-    scanner: QrScannerPopup,
+    scanner: QrScanner,
     matrix: String,
 }
 
@@ -26,7 +26,7 @@ impl ScreenWidget for QrTestReceive {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             self.scanner
-                .button_and_popup(ui, &ctx, &mut String::new(), &mut self.frame_buffer);
+                .button_and_popup(ui, &ctx, QrDecodeTarget::Binary(&mut self.frame_buffer));
             if ui.button("Sweep upwards").clicked() {
                 self.epoch.matrix.sweep_upwards();
             }

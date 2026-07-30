@@ -1,6 +1,6 @@
 use crate::app::FrontendInterface;
 use crate::sprintln;
-use crate::widgets::qr_scanner::QrScannerPopup;
+use crate::widgets::qr_scanner::{QrDecodeTarget, QrScanner};
 use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 use egui::TextureOptions;
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
@@ -11,9 +11,8 @@ use std::rc::Rc;
 #[derive(Default)]
 pub struct QrScreen {
     input: String,
-    scanner: QrScannerPopup,
+    scanner: QrScanner,
     qr_payload: Rc<RefCell<Option<String>>>,
-    raw: Vec<u8>,
     initialized: bool,
 }
 
@@ -40,7 +39,7 @@ impl ScreenWidget for QrScreen {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             self.scanner
-                .button_and_popup(ui, &ctx, &mut self.input, &mut self.raw);
+                .button_and_popup(ui, &ctx, QrDecodeTarget::String(&mut self.input));
             if ui.button("Generate Endpoint Ticket QR Code").clicked() {
                 let msg = Frontend2BackendMsg::GetTicket;
                 app_interface.send_msg(msg);
