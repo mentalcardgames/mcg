@@ -2,6 +2,7 @@ pub mod bot;
 pub mod cli;
 pub mod config;
 pub mod game;
+pub mod network;
 pub mod poker;
 pub mod pretty;
 pub mod public;
