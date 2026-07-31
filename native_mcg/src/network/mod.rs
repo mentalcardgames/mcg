@@ -5,5 +5,7 @@
 //! [`NetworkEvent`] values instead of accessing application state directly.
 
 mod types;
+mod websocket;
 
 pub use types::{ConnectionId, NetworkEvent};
+pub use websocket::run_websocket_actor;
