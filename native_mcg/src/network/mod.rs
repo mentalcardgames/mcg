@@ -7,5 +7,8 @@
 mod types;
 mod websocket;
 
-pub use types::{ConnectionId, NetworkEvent};
+pub use types::{
+    ConnectionCloseReason, ConnectionId, ConnectionInfo, ConnectionRole, FrontendConnectionCommand,
+    NetworkCommand, NetworkEvent, TransportKind,
+};
 pub use websocket::run_websocket_actor;

@@ -1,9 +1,12 @@
-use axum::extract::ws::{Message, WebSocket};
+use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use futures::{SinkExt, StreamExt};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use tokio::sync::mpsc;
 
-use super::{ConnectionId, NetworkEvent};
+use super::{
+    ConnectionCloseReason, ConnectionId, ConnectionInfo, ConnectionRole, FrontendConnectionCommand,
+    NetworkEvent, TransportKind,
+};
 
 /// Runs one frontend WebSocket connection.
 ///
@@ -14,12 +17,27 @@ pub async fn run_websocket_actor(
     connection_id: ConnectionId,
     socket: WebSocket,
     event_tx: mpsc::Sender<NetworkEvent>,
-    mut outbound_rx: mpsc::Receiver<Backend2FrontendMsg>,
+    mut outbound_rx: mpsc::Receiver<FrontendConnectionCommand>,
 ) {
     let (mut writer, mut reader) = socket.split();
+    let connection = ConnectionInfo {
+        id: connection_id,
+        role: ConnectionRole::Frontend,
+        transport: TransportKind::WebSocket,
+    };
+
+    // Respond success with starting the actor loop
+    if event_tx
+        .send(NetworkEvent::ConnectionOpened { connection })
+        .await
+        .is_err()
+    {
+        tracing::debug!(%connection_id, "network event receiver dropped before WebSocket actor started");
+        return;
+    }
     tracing::info!(%connection_id, "WebSocket connection actor started");
 
-    loop {
+    let close_reason = loop {
         tokio::select! {
             incoming = reader.next() => {
                 match incoming {
@@ -32,7 +50,7 @@ pub async fn run_websocket_actor(
                                 };
                                 if event_tx.send(event).await.is_err() {
                                     tracing::debug!(%connection_id, "network event receiver dropped");
-                                    break;
+                                    break ConnectionCloseReason::EventReceiverClosed;
                                 }
                             }
                             Err(error) => {
@@ -40,8 +58,8 @@ pub async fn run_websocket_actor(
                                 let response = Backend2FrontendMsg::Error(
                                     "Malformed Frontend2BackendMsg JSON".into(),
                                 );
-                                if !send_backend_message(&mut writer, connection_id, &response).await {
-                                    break;
+                                if let Err(error) = send_backend_message(&mut writer, connection_id, &response).await {
+                                    break ConnectionCloseReason::TransportError(error.to_string());
                                 }
                             }
                         }
@@ -49,27 +67,45 @@ pub async fn run_websocket_actor(
                     Some(Ok(Message::Binary(_)))
                     | Some(Ok(Message::Ping(_)))
                     | Some(Ok(Message::Pong(_))) => {}
-                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
+                    Some(Ok(Message::Close(_))) | None => {
+                        break ConnectionCloseReason::RemoteClosed;
+                    }
+                    Some(Err(error)) => {
+                        break ConnectionCloseReason::TransportError(error.to_string());
+                    }
                 }
             }
             outgoing = outbound_rx.recv() => {
                 match outgoing {
-                    Some(message) => {
-                        if !send_backend_message(&mut writer, connection_id, &message).await {
-                            break;
+                    Some(FrontendConnectionCommand::Send(message)) => {
+                        if let Err(error) = send_backend_message(&mut writer, connection_id, &message).await {
+                            break ConnectionCloseReason::TransportError(error.to_string());
                         }
+                    }
+                    Some(FrontendConnectionCommand::Close { reason }) => {
+                        let frame = CloseFrame {
+                            code: 1000,
+                            reason: reason.clone().into(),
+                        };
+                        if let Err(error) = writer.send(Message::Close(Some(frame))).await {
+                            break ConnectionCloseReason::TransportError(error.to_string());
+                        }
+                        break ConnectionCloseReason::LocalRequest(reason);
                     }
                     None => {
                         tracing::debug!(%connection_id, "WebSocket outbound channel closed");
-                        break;
+                        break ConnectionCloseReason::OutboundChannelClosed;
                     }
                 }
             }
         }
-    }
+    };
 
     let _ = event_tx
-        .send(NetworkEvent::ConnectionClosed { connection_id })
+        .send(NetworkEvent::ConnectionClosed {
+            connection_id,
+            reason: close_reason,
+        })
         .await;
     tracing::info!(%connection_id, "WebSocket connection actor stopped");
 }
@@ -78,21 +114,16 @@ async fn send_backend_message(
     writer: &mut futures::stream::SplitSink<WebSocket, Message>,
     connection_id: ConnectionId,
     message: &Backend2FrontendMsg,
-) -> bool {
+) -> Result<(), axum::Error> {
     let text = match serde_json::to_string(message) {
         Ok(text) => text,
         Err(error) => {
             tracing::error!(%connection_id, %error, "failed to serialize backend WebSocket message");
-            return true;
+            return Ok(());
         }
     };
 
-    if let Err(error) = writer.send(Message::Text(text)).await {
-        tracing::debug!(%connection_id, %error, "failed to write WebSocket message");
-        return false;
-    }
-
-    true
+    writer.send(Message::Text(text)).await
 }
 
 #[cfg(test)]
@@ -116,7 +147,7 @@ mod tests {
     #[derive(Clone)]
     struct TestState {
         event_tx: mpsc::Sender<NetworkEvent>,
-        outbound_rx: Arc<Mutex<Option<mpsc::Receiver<Backend2FrontendMsg>>>>,
+        outbound_rx: Arc<Mutex<Option<mpsc::Receiver<FrontendConnectionCommand>>>>,
     }
 
     async fn test_ws_handler(
@@ -153,6 +184,20 @@ mod tests {
         let url = format!("ws://{address}/ws");
         let (mut client, _) = tokio_tungstenite::connect_async(url).await?;
 
+        let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+            .await?
+            .expect("actor should report the open connection");
+        assert!(matches!(
+            event,
+            NetworkEvent::ConnectionOpened {
+                connection: ConnectionInfo {
+                    id,
+                    role: ConnectionRole::Frontend,
+                    transport: TransportKind::WebSocket,
+                }
+            } if id == ConnectionId::new(17)
+        ));
+
         client
             .send(TungsteniteMessage::Text("not valid JSON".into()))
             .await?;
@@ -184,7 +229,9 @@ mod tests {
             } if connection_id == ConnectionId::new(17)
         ));
 
-        outbound_tx.send(Backend2FrontendMsg::Pong).await?;
+        outbound_tx
+            .send(FrontendConnectionCommand::Send(Backend2FrontendMsg::Pong))
+            .await?;
         let outbound_message = tokio::time::timeout(Duration::from_secs(1), client.next())
             .await?
             .expect("WebSocket should remain open")?;
@@ -196,14 +243,26 @@ mod tests {
             Backend2FrontendMsg::Pong
         ));
 
-        client.close(None).await?;
+        outbound_tx
+            .send(FrontendConnectionCommand::Close {
+                reason: "test shutdown".into(),
+            })
+            .await?;
+        let close_message = tokio::time::timeout(Duration::from_secs(1), client.next())
+            .await?
+            .expect("WebSocket should send a close frame")?;
+        assert!(matches!(close_message, TungsteniteMessage::Close(_)));
+
         let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
             .await?
             .expect("actor should report the closed connection");
         assert!(matches!(
             event,
-            NetworkEvent::ConnectionClosed { connection_id }
-                if connection_id == ConnectionId::new(17)
+            NetworkEvent::ConnectionClosed {
+                connection_id,
+                reason: ConnectionCloseReason::LocalRequest(reason),
+            } if connection_id == ConnectionId::new(17)
+                && reason == "test shutdown"
         ));
 
         server.abort();
