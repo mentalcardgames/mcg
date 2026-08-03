@@ -7,10 +7,8 @@ use tokio::sync::mpsc;
 
 use crate::transport::send_peer_msg_to_writer;
 
-use super::{
-    ConnectionCloseReason, ConnectionId, ConnectionInfo, ConnectionRole, NetworkEvent,
-    PeerConnectionCommand, PeerId, TransportKind,
-};
+use super::types::ActorEvent;
+use super::{ConnectionCloseReason, ConnectionId, PeerConnectionCommand, PeerId};
 
 pub(super) const IROH_ALPN: &[u8] = b"mcg/iroh/1";
 
@@ -70,27 +68,19 @@ impl IrohConnector for IrohEndpointConnector {
 /// Stream establishment remains the responsibility of the Iroh endpoint
 /// owner. The actor only translates newline-delimited peer messages and has no
 /// access to application state or connection policy.
-pub async fn run_iroh_peer_actor<R, W>(
+pub(super) async fn run_iroh_peer_actor<R, W>(
     connection_id: ConnectionId,
-    peer_id: PeerId,
     reader: R,
     mut writer: W,
-    event_tx: mpsc::Sender<NetworkEvent>,
+    event_tx: mpsc::Sender<ActorEvent>,
     mut command_rx: mpsc::Receiver<PeerConnectionCommand>,
 ) where
     R: AsyncRead + Unpin + Send,
     W: AsyncWrite + Unpin + Send,
 {
-    let connection = ConnectionInfo {
-        id: connection_id,
-        role: ConnectionRole::Peer,
-        transport: TransportKind::Iroh,
-        peer_id: Some(peer_id),
-    };
-
     // Respond success with starting the actor loop
     if event_tx
-        .send(NetworkEvent::ConnectionOpened { connection })
+        .send(ActorEvent::Ready { connection_id })
         .await
         .is_err()
     {
@@ -112,7 +102,7 @@ pub async fn run_iroh_peer_actor<R, W>(
 
                         match serde_json::from_str::<Peer2PeerMsg>(line) {
                             Ok(message) => {
-                                let event = NetworkEvent::PeerMessage {
+                                let event = ActorEvent::PeerMessage {
                                     connection_id,
                                     message,
                                 };
@@ -152,7 +142,7 @@ pub async fn run_iroh_peer_actor<R, W>(
     };
 
     let _ = event_tx
-        .send(NetworkEvent::ConnectionClosed {
+        .send(ActorEvent::Closed {
             connection_id,
             reason: close_reason,
         })
@@ -179,10 +169,8 @@ mod tests {
         let (event_tx, mut event_rx) = mpsc::channel(8);
         let (command_tx, command_rx) = mpsc::channel(8);
         let connection_id = ConnectionId::new(23);
-        let peer_id = PeerId::new("test-peer-23");
         let actor_task = tokio::spawn(run_iroh_peer_actor(
             connection_id,
-            peer_id.clone(),
             actor_reader,
             actor_writer,
             event_tx,
@@ -194,14 +182,7 @@ mod tests {
             .expect("actor should report its open connection");
         assert!(matches!(
             opened,
-            NetworkEvent::ConnectionOpened {
-                connection: ConnectionInfo {
-                    id,
-                    role: ConnectionRole::Peer,
-                    transport: TransportKind::Iroh,
-                    peer_id: Some(opened_peer_id),
-                }
-            } if id == connection_id && opened_peer_id == peer_id
+            ActorEvent::Ready { connection_id: opened_id } if opened_id == connection_id
         ));
 
         remote_writer
@@ -212,7 +193,7 @@ mod tests {
             .expect("actor should emit a peer message");
         assert!(matches!(
             incoming,
-            NetworkEvent::PeerMessage {
+            ActorEvent::PeerMessage {
                 connection_id: source,
                 message: Peer2PeerMsg::Ping,
             } if source == connection_id
@@ -238,7 +219,7 @@ mod tests {
             .expect("actor should report its closed connection");
         assert!(matches!(
             closed,
-            NetworkEvent::ConnectionClosed {
+            ActorEvent::Closed {
                 connection_id: closed_id,
                 reason: ConnectionCloseReason::LocalRequest(reason),
             } if closed_id == connection_id && reason == "peer actor test shutdown"
@@ -257,7 +238,6 @@ mod tests {
         let connection_id = ConnectionId::new(31);
         let actor_task = tokio::spawn(run_iroh_peer_actor(
             connection_id,
-            PeerId::new("test-peer-31"),
             actor_reader,
             actor_writer,
             event_tx,
@@ -267,7 +247,7 @@ mod tests {
         let opened = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
             .await?
             .expect("actor should report its open connection");
-        assert!(matches!(opened, NetworkEvent::ConnectionOpened { .. }));
+        assert!(matches!(opened, ActorEvent::Ready { .. }));
 
         remote_stream
             .write_all(
@@ -283,7 +263,7 @@ mod tests {
             .expect("actor should reject a frontend protocol message");
         assert!(matches!(
             closed,
-            NetworkEvent::ConnectionClosed {
+            ActorEvent::Closed {
                 connection_id: closed_id,
                 reason: ConnectionCloseReason::ProtocolError(_),
             } if closed_id == connection_id

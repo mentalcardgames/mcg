@@ -8,11 +8,15 @@ use iroh::endpoint::Endpoint;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
 
-use super::iroh::{IrohConnectError, IrohConnector, IrohEndpointConnector, PeerReader, PeerWriter};
+use super::iroh::{
+    run_iroh_peer_actor, IrohConnectError, IrohConnector, IrohEndpointConnector, PeerReader,
+    PeerWriter,
+};
+use super::types::ActorEvent;
+use super::websocket::run_websocket_actor;
 use super::{
-    run_iroh_peer_actor, run_websocket_actor, ConnectionId, ConnectionRole,
-    FrontendConnectionCommand, NetworkCommand, NetworkEvent, PeerConnectionCommand, PeerId,
-    TransportKind,
+    ConnectionId, FrontendConnectionCommand, NetworkCommand, NetworkEvent, PeerConnectionCommand,
+    PeerId, ProtocolRole, TransportKind,
 };
 
 const DEFAULT_CONTROL_CHANNEL_CAPACITY: usize = 256;
@@ -26,8 +30,8 @@ pub enum NetworkError {
     ConnectionNotFound(ConnectionId),
     ProtocolMismatch {
         connection_id: ConnectionId,
-        expected: ConnectionRole,
-        actual: ConnectionRole,
+        expected: ProtocolRole,
+        actual: ProtocolRole,
     },
     ConnectionBackpressured(ConnectionId),
     ConnectionActorStopped(ConnectionId),
@@ -195,10 +199,10 @@ impl NetworkHandle {
 
 /// Owns active connection handles and routes commands and actor events.
 pub struct NetworkSupervisor {
-    /// Output for connection actors to report NetworkEvents.
-    actor_event_tx: mpsc::Sender<NetworkEvent>,
-    /// Input of NetworkEvents.
-    actor_event_rx: mpsc::Receiver<NetworkEvent>,
+    /// Output for connection actors to report internal events.
+    actor_event_tx: mpsc::Sender<ActorEvent>,
+    /// Input of internal connection actor events.
+    actor_event_rx: mpsc::Receiver<ActorEvent>,
     /// Output for forwarding NetworkEvents from actors towards Controller.
     application_event_tx: mpsc::Sender<NetworkEvent>,
     /// Requests from NetworkHandles.
@@ -264,14 +268,15 @@ impl NetworkSupervisor {
                     };
                     self.handle_request(request);
                 }
-                // Forward NetworkEvents out of NetworkSupervisor
+                // Enrich internal actor events with supervisor-owned metadata.
                 event = self.actor_event_rx.recv() => {
                     let Some(event) = event else {
                         break;
                     };
-                    self.handle_actor_event(&event);
-                    if self.application_event_tx.send(event).await.is_err() {
-                        break;
+                    if let Some(event) = self.handle_actor_event(event) {
+                        if self.application_event_tx.send(event).await.is_err() {
+                            break;
+                        }
                     }
                 }
                 result = self.iroh_connect_result_rx.recv() => {
@@ -391,8 +396,13 @@ impl NetworkSupervisor {
         let (command_tx, command_rx) = mpsc::channel(self.connection_channel_capacity);
         let actor_event_tx = self.actor_event_tx.clone();
 
-        self.connections
-            .insert(connection_id, ManagedConnection::Frontend { command_tx });
+        self.connections.insert(
+            connection_id,
+            ManagedConnection {
+                transport: TransportKind::WebSocket,
+                target: ManagedTarget::Frontend { command_tx },
+            },
+        );
         tokio::spawn(run_websocket_actor(
             connection_id,
             socket,
@@ -413,11 +423,18 @@ impl NetworkSupervisor {
         let (command_tx, command_rx) = mpsc::channel(self.connection_channel_capacity);
         let actor_event_tx = self.actor_event_tx.clone();
 
-        self.connections
-            .insert(connection_id, ManagedConnection::Peer { command_tx });
+        self.connections.insert(
+            connection_id,
+            ManagedConnection {
+                transport: TransportKind::Iroh,
+                target: ManagedTarget::Peer {
+                    peer_id,
+                    command_tx,
+                },
+            },
+        );
         tokio::spawn(run_iroh_peer_actor(
             connection_id,
-            peer_id,
             reader,
             writer,
             actor_event_tx,
@@ -463,12 +480,12 @@ impl NetworkSupervisor {
             .connections
             .get(&connection_id)
             .ok_or(NetworkError::ConnectionNotFound(connection_id))?;
-        let command_tx = match connection {
-            ManagedConnection::Frontend { command_tx } => command_tx.clone(),
-            ManagedConnection::Peer { .. } => {
+        let command_tx = match &connection.target {
+            ManagedTarget::Frontend { command_tx } => command_tx.clone(),
+            ManagedTarget::Peer { .. } => {
                 return Err(NetworkError::ProtocolMismatch {
                     connection_id,
-                    expected: ConnectionRole::Frontend,
+                    expected: ProtocolRole::Frontend,
                     actual: connection.role(),
                 });
             }
@@ -486,12 +503,12 @@ impl NetworkSupervisor {
             .connections
             .get(&connection_id)
             .ok_or(NetworkError::ConnectionNotFound(connection_id))?;
-        let command_tx = match connection {
-            ManagedConnection::Peer { command_tx } => command_tx.clone(),
-            ManagedConnection::Frontend { .. } => {
+        let command_tx = match &connection.target {
+            ManagedTarget::Peer { command_tx, .. } => command_tx.clone(),
+            ManagedTarget::Frontend { .. } => {
                 return Err(NetworkError::ProtocolMismatch {
                     connection_id,
-                    expected: ConnectionRole::Peer,
+                    expected: ProtocolRole::Peer,
                     actual: connection.role(),
                 });
             }
@@ -511,13 +528,13 @@ impl NetworkSupervisor {
             .cloned()
             .ok_or(NetworkError::ConnectionNotFound(connection_id))?;
 
-        match connection {
-            ManagedConnection::Frontend { command_tx } => self.try_send(
+        match connection.target {
+            ManagedTarget::Frontend { command_tx } => self.try_send(
                 connection_id,
                 command_tx,
                 FrontendConnectionCommand::Close { reason },
             ),
-            ManagedConnection::Peer { command_tx } => self.try_send(
+            ManagedTarget::Peer { command_tx, .. } => self.try_send(
                 connection_id,
                 command_tx,
                 PeerConnectionCommand::Close { reason },
@@ -543,9 +560,39 @@ impl NetworkSupervisor {
         }
     }
 
-    fn handle_actor_event(&mut self, event: &NetworkEvent) {
-        if let NetworkEvent::ConnectionClosed { connection_id, .. } = event {
-            self.connections.remove(connection_id);
+    fn handle_actor_event(&mut self, event: ActorEvent) -> Option<NetworkEvent> {
+        match event {
+            ActorEvent::Ready { connection_id } => {
+                let Some(connection) = self.connections.get(&connection_id) else {
+                    tracing::warn!(%connection_id, "ready event belongs to an unknown connection");
+                    return None;
+                };
+                Some(connection.connected_event(connection_id))
+            }
+            ActorEvent::FrontendMessage {
+                connection_id,
+                message,
+            } => Some(NetworkEvent::FrontendMessage {
+                connection_id,
+                message,
+            }),
+            ActorEvent::PeerMessage {
+                connection_id,
+                message,
+            } => Some(NetworkEvent::PeerMessage {
+                connection_id,
+                message,
+            }),
+            ActorEvent::Closed {
+                connection_id,
+                reason,
+            } => {
+                self.connections.remove(&connection_id);
+                Some(NetworkEvent::ConnectionClosed {
+                    connection_id,
+                    reason,
+                })
+            }
         }
     }
 }
@@ -582,20 +629,41 @@ struct IrohConnectResult {
 }
 
 #[derive(Clone)]
-enum ManagedConnection {
+struct ManagedConnection {
+    transport: TransportKind,
+    target: ManagedTarget,
+}
+
+#[derive(Clone)]
+enum ManagedTarget {
     Frontend {
         command_tx: mpsc::Sender<FrontendConnectionCommand>,
     },
     Peer {
+        peer_id: PeerId,
         command_tx: mpsc::Sender<PeerConnectionCommand>,
     },
 }
 
 impl ManagedConnection {
-    fn role(&self) -> ConnectionRole {
-        match self {
-            Self::Frontend { .. } => ConnectionRole::Frontend,
-            Self::Peer { .. } => ConnectionRole::Peer,
+    fn role(&self) -> ProtocolRole {
+        match &self.target {
+            ManagedTarget::Frontend { .. } => ProtocolRole::Frontend,
+            ManagedTarget::Peer { .. } => ProtocolRole::Peer,
+        }
+    }
+
+    fn connected_event(&self, connection_id: ConnectionId) -> NetworkEvent {
+        match &self.target {
+            ManagedTarget::Frontend { .. } => NetworkEvent::FrontendConnected {
+                connection_id,
+                transport: self.transport,
+            },
+            ManagedTarget::Peer { peer_id, .. } => NetworkEvent::PeerConnected {
+                connection_id,
+                peer_id: peer_id.clone(),
+                transport: self.transport,
+            },
         }
     }
 }
@@ -619,7 +687,7 @@ mod tests {
     use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 
     use super::*;
-    use crate::network::{ConnectionCloseReason, ConnectionInfo, TransportKind};
+    use crate::network::{ConnectionCloseReason, TransportKind};
 
     struct OneShotIrohConnector {
         peer_id: PeerId,
@@ -670,15 +738,10 @@ mod tests {
             .await?
             .expect("supervisor should forward the open event");
         let connection_id = match opened {
-            NetworkEvent::ConnectionOpened {
-                connection:
-                    ConnectionInfo {
-                        id,
-                        role: ConnectionRole::Frontend,
-                        transport: TransportKind::WebSocket,
-                        peer_id: None,
-                    },
-            } => id,
+            NetworkEvent::FrontendConnected {
+                connection_id,
+                transport: TransportKind::WebSocket,
+            } => connection_id,
             other => panic!("unexpected event: {other:?}"),
         };
 
@@ -725,8 +788,8 @@ mod tests {
             mismatch,
             Err(NetworkError::ProtocolMismatch {
                 connection_id,
-                expected: ConnectionRole::Peer,
-                actual: ConnectionRole::Frontend,
+                expected: ProtocolRole::Peer,
+                actual: ProtocolRole::Frontend,
             })
         );
 
@@ -810,14 +873,11 @@ mod tests {
             .expect("supervisor should forward the open event");
         assert!(matches!(
             opened,
-            NetworkEvent::ConnectionOpened {
-                connection: ConnectionInfo {
-                    id,
-                    role: ConnectionRole::Peer,
-                    transport: TransportKind::Iroh,
-                    peer_id: Some(opened_peer_id),
-                },
-            } if id == connection_id && opened_peer_id == peer_id
+            NetworkEvent::PeerConnected {
+                connection_id: opened_id,
+                peer_id: opened_peer_id,
+                transport: TransportKind::Iroh,
+            } if opened_id == connection_id && opened_peer_id == peer_id
         ));
 
         remote_writer
@@ -857,8 +917,8 @@ mod tests {
             mismatch,
             Err(NetworkError::ProtocolMismatch {
                 connection_id,
-                expected: ConnectionRole::Frontend,
-                actual: ConnectionRole::Peer,
+                expected: ProtocolRole::Frontend,
+                actual: ProtocolRole::Peer,
             })
         );
 

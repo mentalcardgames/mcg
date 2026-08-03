@@ -3,33 +3,24 @@ use futures::{SinkExt, StreamExt};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use tokio::sync::mpsc;
 
-use super::{
-    ConnectionCloseReason, ConnectionId, ConnectionInfo, ConnectionRole, FrontendConnectionCommand,
-    NetworkEvent, TransportKind,
-};
+use super::types::ActorEvent;
+use super::{ConnectionCloseReason, ConnectionId, FrontendConnectionCommand};
 
 /// Runs one frontend WebSocket connection.
 ///
-/// The actor translates WebSocket frames into typed [`NetworkEvent`] values
+/// The actor translates WebSocket frames into typed [`ActorEvent`] values
 /// and writes application responses received through its private outbound
 /// channel. It deliberately has no access to application state.
-pub async fn run_websocket_actor(
+pub(super) async fn run_websocket_actor(
     connection_id: ConnectionId,
     socket: WebSocket,
-    event_tx: mpsc::Sender<NetworkEvent>,
+    event_tx: mpsc::Sender<ActorEvent>,
     mut outbound_rx: mpsc::Receiver<FrontendConnectionCommand>,
 ) {
     let (mut writer, mut reader) = socket.split();
-    let connection = ConnectionInfo {
-        id: connection_id,
-        role: ConnectionRole::Frontend,
-        transport: TransportKind::WebSocket,
-        peer_id: None,
-    };
-
     // Respond success with starting the actor loop
     if event_tx
-        .send(NetworkEvent::ConnectionOpened { connection })
+        .send(ActorEvent::Ready { connection_id })
         .await
         .is_err()
     {
@@ -45,7 +36,7 @@ pub async fn run_websocket_actor(
                     Some(Ok(Message::Text(text))) => {
                         match serde_json::from_str::<Frontend2BackendMsg>(&text) {
                             Ok(message) => {
-                                let event = NetworkEvent::FrontendMessage {
+                                let event = ActorEvent::FrontendMessage {
                                     connection_id,
                                     message,
                                 };
@@ -103,7 +94,7 @@ pub async fn run_websocket_actor(
     };
 
     let _ = event_tx
-        .send(NetworkEvent::ConnectionClosed {
+        .send(ActorEvent::Closed {
             connection_id,
             reason: close_reason,
         })
@@ -147,7 +138,7 @@ mod tests {
 
     #[derive(Clone)]
     struct TestState {
-        event_tx: mpsc::Sender<NetworkEvent>,
+        event_tx: mpsc::Sender<ActorEvent>,
         outbound_rx: Arc<Mutex<Option<mpsc::Receiver<FrontendConnectionCommand>>>>,
     }
 
@@ -190,14 +181,7 @@ mod tests {
             .expect("actor should report the open connection");
         assert!(matches!(
             event,
-            NetworkEvent::ConnectionOpened {
-                connection: ConnectionInfo {
-                    id,
-                    role: ConnectionRole::Frontend,
-                    transport: TransportKind::WebSocket,
-                    peer_id: None,
-                }
-            } if id == ConnectionId::new(17)
+            ActorEvent::Ready { connection_id } if connection_id == ConnectionId::new(17)
         ));
 
         client
@@ -225,7 +209,7 @@ mod tests {
             .expect("actor should emit a frontend event");
         assert!(matches!(
             event,
-            NetworkEvent::FrontendMessage {
+            ActorEvent::FrontendMessage {
                 connection_id,
                 message: Frontend2BackendMsg::Ping,
             } if connection_id == ConnectionId::new(17)
@@ -260,7 +244,7 @@ mod tests {
             .expect("actor should report the closed connection");
         assert!(matches!(
             event,
-            NetworkEvent::ConnectionClosed {
+            ActorEvent::Closed {
                 connection_id,
                 reason: ConnectionCloseReason::LocalRequest(reason),
             } if connection_id == ConnectionId::new(17)

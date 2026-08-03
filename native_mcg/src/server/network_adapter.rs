@@ -4,7 +4,7 @@ use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::network::{
-    ConnectionId, ConnectionRole, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle, PeerId,
+    ConnectionId, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle, PeerId,
 };
 
 use super::state::{current_state_public, dispatch_client_message, AppState, PeerInfo};
@@ -84,30 +84,24 @@ impl LegacyBackendAdapter {
 
     async fn handle_network_event(&mut self, event: NetworkEvent) -> bool {
         match event {
-            NetworkEvent::ConnectionOpened { connection } => {
+            NetworkEvent::FrontendConnected {
+                connection_id,
+                transport,
+            } => {
                 tracing::debug!(
-                    connection_id = %connection.id,
-                    role = ?connection.role,
-                    transport = ?connection.transport,
-                    "network connection opened"
+                    %connection_id,
+                    ?transport,
+                    "frontend connection opened"
                 );
-                match (connection.role, connection.peer_id) {
-                    (ConnectionRole::Peer, Some(peer_id)) => {
-                        self.peer_ids.insert(connection.id, peer_id);
-                    }
-                    (ConnectionRole::Frontend, None) => {}
-                    (role, peer_id) => {
-                        tracing::error!(
-                            connection_id = %connection.id,
-                            ?role,
-                            ?peer_id,
-                            "network connection has inconsistent peer metadata"
-                        );
-                        return self
-                            .close_connection(connection.id, "inconsistent peer metadata".into())
-                            .await;
-                    }
-                }
+                true
+            }
+            NetworkEvent::PeerConnected {
+                connection_id,
+                peer_id,
+                transport,
+            } => {
+                tracing::debug!(%connection_id, %peer_id, ?transport, "peer connection opened");
+                self.peer_ids.insert(connection_id, peer_id);
                 true
             }
             NetworkEvent::ConnectionClosed {

@@ -52,7 +52,7 @@ impl fmt::Display for PeerId {
 
 /// Application protocol spoken by a connection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ConnectionRole {
+pub enum ProtocolRole {
     Frontend,
     Peer,
 }
@@ -62,15 +62,6 @@ pub enum ConnectionRole {
 pub enum TransportKind {
     WebSocket,
     Iroh,
-}
-
-/// Stable metadata associated with one open connection.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ConnectionInfo {
-    pub id: ConnectionId,
-    pub role: ConnectionRole,
-    pub transport: TransportKind,
-    pub peer_id: Option<PeerId>,
 }
 
 /// Reason why a previously open connection actor stopped.
@@ -115,14 +106,23 @@ pub enum NetworkCommand {
     },
 }
 
-/// Typed events emitted by network connection actors.
+/// Typed events emitted by the network supervisor towards application code.
 ///
 /// Application code consumes these events and decides how to respond. Network
 /// actors do not access the lobby, game, or other application state directly.
 #[derive(Clone, Debug)]
 pub enum NetworkEvent {
-    /// A connection actor is ready to exchange typed messages.
-    ConnectionOpened { connection: ConnectionInfo },
+    /// A frontend connection actor is ready to exchange typed messages.
+    FrontendConnected {
+        connection_id: ConnectionId,
+        transport: TransportKind,
+    },
+    /// A peer connection actor is ready to exchange typed messages.
+    PeerConnected {
+        connection_id: ConnectionId,
+        peer_id: PeerId,
+        transport: TransportKind,
+    },
     /// A frontend message received on a concrete connection.
     FrontendMessage {
         connection_id: ConnectionId,
@@ -135,6 +135,26 @@ pub enum NetworkEvent {
     },
     /// The transport connection ended and must be removed from its owner.
     ConnectionClosed {
+        connection_id: ConnectionId,
+        reason: ConnectionCloseReason,
+    },
+}
+
+/// Internal events emitted by connection actors towards the supervisor.
+#[derive(Debug)]
+pub(super) enum ActorEvent {
+    Ready {
+        connection_id: ConnectionId,
+    },
+    FrontendMessage {
+        connection_id: ConnectionId,
+        message: Frontend2BackendMsg,
+    },
+    PeerMessage {
+        connection_id: ConnectionId,
+        message: Peer2PeerMsg,
+    },
+    Closed {
         connection_id: ConnectionId,
         reason: ConnectionCloseReason,
     },
@@ -172,17 +192,20 @@ mod tests {
     }
 
     #[test]
-    fn connection_metadata_keeps_protocol_role_separate_from_transport() {
-        let connection = ConnectionInfo {
-            id: ConnectionId::new(9),
-            role: ConnectionRole::Frontend,
+    fn peer_connected_event_requires_a_peer_id() {
+        let event = NetworkEvent::PeerConnected {
+            connection_id: ConnectionId::new(9),
+            peer_id: PeerId::new("peer-9"),
             transport: TransportKind::WebSocket,
-            peer_id: None,
         };
 
-        assert_eq!(connection.id, ConnectionId::new(9));
-        assert_eq!(connection.role, ConnectionRole::Frontend);
-        assert_eq!(connection.transport, TransportKind::WebSocket);
-        assert_eq!(connection.peer_id, None);
+        assert!(matches!(
+            event,
+            NetworkEvent::PeerConnected {
+                connection_id,
+                peer_id,
+                transport: TransportKind::WebSocket,
+            } if connection_id == ConnectionId::new(9) && peer_id == PeerId::new("peer-9")
+        ));
     }
 }
