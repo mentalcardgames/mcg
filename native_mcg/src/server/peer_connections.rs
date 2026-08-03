@@ -7,7 +7,9 @@ use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::Peer2PeerMsg;
 use tokio::sync::Mutex;
 
-use crate::network::{ConnectionId, NetworkCommand, NetworkError, NetworkHandle, PeerId};
+use crate::network::{
+    ConnectionId, NetworkCommand, NetworkError, NetworkHandle, PeerConnectionDirection, PeerId,
+};
 
 use super::state::AppState;
 
@@ -52,7 +54,13 @@ pub(super) struct EstablishedPeer {
 #[derive(Default)]
 struct PeerConnectionState {
     pending: HashSet<PeerId>,
-    active: HashMap<ConnectionId, PeerId>,
+    active: HashMap<ConnectionId, ActivePeerConnection>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ActivePeerConnection {
+    peer_id: PeerId,
+    direction: PeerConnectionDirection,
 }
 
 /// Coordinates application-level outgoing peer connections for every caller.
@@ -89,17 +97,32 @@ impl PeerConnectionService {
         {
             let mut registry = self.registry.lock().await;
             if registry.pending.contains(&peer_id)
-                || registry.active.values().any(|known| known == &peer_id)
+                || registry
+                    .active
+                    .values()
+                    .any(|known| known.peer_id == peer_id)
             {
                 return Err(PeerConnectionError::DuplicatePeer(peer_id));
             }
             registry.pending.insert(peer_id.clone());
         }
 
-        let result = self.establish_and_introduce(ticket).await;
+        let result = self.network.connect_iroh_peer(ticket).await;
         match result {
-            Ok(connection_id) => {
-                self.connection_opened(connection_id, peer_id.clone()).await;
+            Ok(opened_connection_id) => {
+                let connection_id = self
+                    .connection_opened(
+                        opened_connection_id,
+                        peer_id.clone(),
+                        PeerConnectionDirection::Outgoing,
+                    )
+                    .await;
+                if connection_id == opened_connection_id {
+                    if let Err(error) = self.introduce(connection_id).await {
+                        self.connection_closed(connection_id).await;
+                        return Err(error.into());
+                    }
+                }
                 Ok(EstablishedPeer {
                     connection_id,
                     peer_id,
@@ -112,10 +135,76 @@ impl PeerConnectionService {
         }
     }
 
-    pub(super) async fn connection_opened(&self, connection_id: ConnectionId, peer_id: PeerId) {
-        let mut registry = self.registry.lock().await;
-        registry.pending.remove(&peer_id);
-        registry.active.insert(connection_id, peer_id);
+    pub(super) async fn connection_opened(
+        &self,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
+        direction: PeerConnectionDirection,
+    ) -> ConnectionId {
+        let preferred_direction = self
+            .local_peer_id()
+            .await
+            .and_then(|local_peer_id| preferred_direction(&local_peer_id, &peer_id));
+        let (winner, loser) = {
+            let mut registry = self.registry.lock().await;
+            registry.pending.remove(&peer_id);
+
+            if registry.active.contains_key(&connection_id) {
+                return connection_id;
+            }
+
+            let existing = registry
+                .active
+                .iter()
+                .find(|(_, connection)| connection.peer_id == peer_id)
+                .map(|(connection_id, connection)| (*connection_id, connection.clone()));
+
+            match existing {
+                None => {
+                    registry.active.insert(
+                        connection_id,
+                        ActivePeerConnection {
+                            peer_id: peer_id.clone(),
+                            direction,
+                        },
+                    );
+                    (connection_id, None)
+                }
+                Some((existing_id, existing_connection)) => {
+                    let new_is_preferred = preferred_direction == Some(direction)
+                        && preferred_direction != Some(existing_connection.direction);
+                    if new_is_preferred {
+                        registry.active.remove(&existing_id);
+                        registry.active.insert(
+                            connection_id,
+                            ActivePeerConnection {
+                                peer_id: peer_id.clone(),
+                                direction,
+                            },
+                        );
+                        (connection_id, Some(existing_id))
+                    } else {
+                        (existing_id, Some(connection_id))
+                    }
+                }
+            }
+        };
+
+        if let Some(loser) = loser {
+            tracing::info!(%peer_id, %winner, %loser, ?preferred_direction, "closing duplicate peer connection");
+            if let Err(error) = self
+                .network
+                .send_command(NetworkCommand::CloseConnection {
+                    connection_id: loser,
+                    reason: format!("duplicate peer connection; keeping {winner}"),
+                })
+                .await
+            {
+                tracing::warn!(%peer_id, connection_id = %loser, %error, "failed to close duplicate peer connection");
+            }
+        }
+
+        winner
     }
 
     pub(super) async fn connection_closed(&self, connection_id: ConnectionId) {
@@ -129,12 +218,6 @@ impl PeerConnectionService {
             .await
             .as_deref()
             .and_then(|ticket| peer_id_from_ticket(ticket).ok())
-    }
-
-    async fn establish_and_introduce(&self, ticket: String) -> Result<ConnectionId, NetworkError> {
-        let connection_id = self.network.connect_iroh_peer(ticket).await?;
-        self.introduce(connection_id).await?;
-        Ok(connection_id)
     }
 
     async fn introduce(&self, connection_id: ConnectionId) -> Result<(), NetworkError> {
@@ -163,6 +246,19 @@ impl PeerConnectionService {
     }
 }
 
+fn preferred_direction(
+    local_peer_id: &PeerId,
+    remote_peer_id: &PeerId,
+) -> Option<PeerConnectionDirection> {
+    use std::cmp::Ordering;
+
+    match local_peer_id.cmp(remote_peer_id) {
+        Ordering::Less => Some(PeerConnectionDirection::Outgoing),
+        Ordering::Greater => Some(PeerConnectionDirection::Incoming),
+        Ordering::Equal => None,
+    }
+}
+
 pub(super) fn peer_id_from_ticket(ticket: &str) -> Result<PeerId, NetworkError> {
     let ticket = EndpointTicket::deserialize(ticket)
         .map_err(|error| NetworkError::InvalidPeerTicket(error.to_string()))?;
@@ -186,7 +282,7 @@ mod tests {
         let state = AppState::new(Config::default(), None);
         state.lobby.write().await.our_name = "Bob".into();
         *state.ticket.write().await = Some("bob-ticket".into());
-        let (event_tx, _event_rx) = mpsc::channel::<NetworkEvent>(16);
+        let (event_tx, mut event_rx) = mpsc::channel::<NetworkEvent>(16);
         let (supervisor, network) = NetworkSupervisor::new(event_tx);
         let supervisor_task = tokio::spawn(supervisor.run());
         let service = PeerConnectionService::new(state, network.clone());
@@ -196,8 +292,19 @@ mod tests {
         let mut remote_reader = BufReader::new(remote_reader);
         let peer_id = PeerId::new(iroh::SecretKey::from_bytes(&[9; 32]).public().to_string());
         let connection_id = network
-            .register_iroh_peer(peer_id, actor_reader, actor_writer)
+            .register_incoming_iroh_peer(peer_id, actor_reader, actor_writer)
             .await?;
+        let opened = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+            .await?
+            .expect("supervisor should publish the incoming peer connection");
+        assert!(matches!(
+            opened,
+            NetworkEvent::PeerConnected {
+                connection_id: opened_id,
+                direction: PeerConnectionDirection::Incoming,
+                ..
+            } if opened_id == connection_id
+        ));
 
         service.introduce(connection_id).await?;
 
@@ -226,7 +333,11 @@ mod tests {
         let ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).serialize();
         let connection_id = ConnectionId::new(41);
         service
-            .connection_opened(connection_id, peer_id.clone())
+            .connection_opened(
+                connection_id,
+                peer_id.clone(),
+                PeerConnectionDirection::Incoming,
+            )
             .await;
 
         assert_eq!(
@@ -241,6 +352,83 @@ mod tests {
                 NetworkError::TransportUnavailable(TransportKind::Iroh)
             ))
         );
+
+        supervisor_task.abort();
+        let _ = supervisor_task.await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simultaneous_cross_connect_keeps_the_same_physical_connection() -> Result<()> {
+        let first_endpoint = iroh::SecretKey::from_bytes(&[11; 32]).public();
+        let second_endpoint = iroh::SecretKey::from_bytes(&[12; 32]).public();
+        let (lower_endpoint, higher_endpoint) = if first_endpoint < second_endpoint {
+            (first_endpoint, second_endpoint)
+        } else {
+            (second_endpoint, first_endpoint)
+        };
+        let lower_peer = PeerId::new(lower_endpoint.to_string());
+        let higher_peer = PeerId::new(higher_endpoint.to_string());
+        let (event_tx, _event_rx) = mpsc::channel::<NetworkEvent>(16);
+        let (supervisor, network) = NetworkSupervisor::new(event_tx);
+        let supervisor_task = tokio::spawn(supervisor.run());
+
+        let lower_state = AppState::new(Config::default(), None);
+        *lower_state.ticket.write().await =
+            Some(EndpointTicket::new(iroh::EndpointAddr::new(lower_endpoint)).serialize());
+        let lower_service = PeerConnectionService::new(lower_state, network.clone());
+        let lower_incoming = ConnectionId::new(51);
+        let lower_outgoing = ConnectionId::new(52);
+        assert_eq!(
+            lower_service
+                .connection_opened(
+                    lower_incoming,
+                    higher_peer.clone(),
+                    PeerConnectionDirection::Incoming,
+                )
+                .await,
+            lower_incoming
+        );
+        assert_eq!(
+            lower_service
+                .connection_opened(
+                    lower_outgoing,
+                    higher_peer.clone(),
+                    PeerConnectionDirection::Outgoing,
+                )
+                .await,
+            lower_outgoing
+        );
+
+        let higher_state = AppState::new(Config::default(), None);
+        *higher_state.ticket.write().await =
+            Some(EndpointTicket::new(iroh::EndpointAddr::new(higher_endpoint)).serialize());
+        let higher_service = PeerConnectionService::new(higher_state, network);
+        let higher_incoming = ConnectionId::new(61);
+        let higher_outgoing = ConnectionId::new(62);
+        assert_eq!(
+            higher_service
+                .connection_opened(
+                    higher_incoming,
+                    lower_peer.clone(),
+                    PeerConnectionDirection::Incoming,
+                )
+                .await,
+            higher_incoming
+        );
+        assert_eq!(
+            higher_service
+                .connection_opened(
+                    higher_outgoing,
+                    lower_peer,
+                    PeerConnectionDirection::Outgoing,
+                )
+                .await,
+            higher_incoming
+        );
+
+        assert_eq!(lower_service.registry.lock().await.active.len(), 1);
+        assert_eq!(higher_service.registry.lock().await.active.len(), 1);
 
         supervisor_task.abort();
         let _ = supervisor_task.await;

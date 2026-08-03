@@ -13,5 +13,5 @@ mod websocket;
 pub use supervisor::{NetworkError, NetworkHandle, NetworkSupervisor};
 pub use types::{
     ConnectionCloseReason, ConnectionId, FrontendConnectionCommand, NetworkCommand, NetworkEvent,
-    PeerConnectionCommand, PeerId, ProtocolRole, TransportKind,
+    PeerConnectionCommand, PeerConnectionDirection, PeerId, ProtocolRole, TransportKind,
 };

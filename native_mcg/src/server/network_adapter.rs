@@ -132,12 +132,18 @@ impl LegacyBackendAdapter {
                 connection_id,
                 peer_id,
                 transport,
+                direction,
             } => {
-                tracing::debug!(%connection_id, %peer_id, ?transport, "peer connection opened");
-                self.peer_connections
-                    .connection_opened(connection_id, peer_id.clone())
+                let winner = self
+                    .peer_connections
+                    .connection_opened(connection_id, peer_id.clone(), direction)
                     .await;
-                self.peer_ids.insert(connection_id, peer_id);
+                if winner == connection_id {
+                    tracing::debug!(%connection_id, %peer_id, ?transport, ?direction, "peer connection opened");
+                    self.peer_ids.insert(connection_id, peer_id);
+                } else {
+                    tracing::debug!(%connection_id, %peer_id, %winner, ?transport, ?direction, "duplicate peer connection rejected");
+                }
                 true
             }
             NetworkEvent::ConnectionClosed {
@@ -476,8 +482,6 @@ impl LegacyBackendAdapter {
     async fn handle_peer_connect_result(&mut self, result: PeerConnectResult) -> bool {
         match result.result {
             Ok(peer) => {
-                self.peer_ids
-                    .insert(peer.connection_id, peer.peer_id.clone());
                 tracing::info!(connection_id = %peer.connection_id, peer_id = %peer.peer_id, "outgoing Iroh peer connected and introduced");
                 true
             }
@@ -658,7 +662,7 @@ mod tests {
         let peer_id = PeerId::new(endpoint_id.to_string());
 
         network
-            .register_iroh_peer(peer_id, actor_reader, actor_writer)
+            .register_incoming_iroh_peer(peer_id, actor_reader, actor_writer)
             .await?;
         remote_writer
             .write_all(

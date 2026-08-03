@@ -64,6 +64,13 @@ pub enum TransportKind {
     Iroh,
 }
 
+/// Side that initiated an established peer connection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PeerConnectionDirection {
+    Incoming,
+    Outgoing,
+}
+
 /// Reason why a previously open connection actor stopped.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ConnectionCloseReason {
@@ -122,6 +129,7 @@ pub enum NetworkEvent {
         connection_id: ConnectionId,
         peer_id: PeerId,
         transport: TransportKind,
+        direction: PeerConnectionDirection,
     },
     /// A frontend message received on a concrete connection.
     FrontendMessage {
@@ -196,7 +204,8 @@ mod tests {
         let event = NetworkEvent::PeerConnected {
             connection_id: ConnectionId::new(9),
             peer_id: PeerId::new("peer-9"),
-            transport: TransportKind::WebSocket,
+            transport: TransportKind::Iroh,
+            direction: PeerConnectionDirection::Incoming,
         };
 
         assert!(matches!(
@@ -204,7 +213,8 @@ mod tests {
             NetworkEvent::PeerConnected {
                 connection_id,
                 peer_id,
-                transport: TransportKind::WebSocket,
+                transport: TransportKind::Iroh,
+                direction: PeerConnectionDirection::Incoming,
             } if connection_id == ConnectionId::new(9) && peer_id == PeerId::new("peer-9")
         ));
     }

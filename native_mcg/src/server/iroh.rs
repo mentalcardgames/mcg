@@ -172,7 +172,7 @@ async fn register_incoming_iroh_connection(
         .await
         .context("accepting incoming Iroh bidirectional stream")?;
     let connection_id = network
-        .register_iroh_peer(peer_id.clone(), reader, writer)
+        .register_incoming_iroh_peer(peer_id.clone(), reader, writer)
         .await
         .context("registering incoming Iroh peer with network supervisor")?;
 

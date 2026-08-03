@@ -16,7 +16,7 @@ use super::types::ActorEvent;
 use super::websocket::run_websocket_actor;
 use super::{
     ConnectionId, FrontendConnectionCommand, NetworkCommand, NetworkEvent, PeerConnectionCommand,
-    PeerId, ProtocolRole, TransportKind,
+    PeerConnectionDirection, PeerId, ProtocolRole, TransportKind,
 };
 
 const DEFAULT_CONTROL_CHANNEL_CAPACITY: usize = 256;
@@ -155,7 +155,7 @@ impl NetworkHandle {
     }
 
     /// Registers an established Iroh peer stream with the supervisor.
-    pub async fn register_iroh_peer<R, W>(
+    pub async fn register_incoming_iroh_peer<R, W>(
         &self,
         peer_id: PeerId,
         reader: R,
@@ -167,7 +167,7 @@ impl NetworkHandle {
     {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
-            .send(SupervisorRequest::RegisterIrohPeer {
+            .send(SupervisorRequest::RegisterIncomingIrohPeer {
                 peer_id,
                 reader: Box::new(reader),
                 writer: Box::new(writer),
@@ -313,13 +313,18 @@ impl NetworkSupervisor {
                 let result = self.register_websocket(*socket);
                 let _ = response_tx.send(result);
             }
-            SupervisorRequest::RegisterIrohPeer {
+            SupervisorRequest::RegisterIncomingIrohPeer {
                 peer_id,
                 reader,
                 writer,
                 response_tx,
             } => {
-                let result = self.register_iroh_peer(peer_id, reader, writer);
+                let result = self.register_iroh_peer(
+                    peer_id,
+                    PeerConnectionDirection::Incoming,
+                    reader,
+                    writer,
+                );
                 let _ = response_tx.send(result);
             }
             SupervisorRequest::Execute {
@@ -373,7 +378,9 @@ impl NetworkSupervisor {
 
     fn handle_iroh_connect_result(&mut self, result: IrohConnectResult) {
         let connection = match result.result {
-            Ok((peer_id, reader, writer)) => self.register_iroh_peer(peer_id, reader, writer),
+            Ok((peer_id, reader, writer)) => {
+                self.register_iroh_peer(peer_id, PeerConnectionDirection::Outgoing, reader, writer)
+            }
             Err(IrohConnectError::InvalidTicket(message)) => {
                 Err(NetworkError::InvalidPeerTicket(message))
             }
@@ -416,6 +423,7 @@ impl NetworkSupervisor {
     fn register_iroh_peer(
         &mut self,
         peer_id: PeerId,
+        direction: PeerConnectionDirection,
         reader: PeerReader,
         writer: PeerWriter,
     ) -> Result<ConnectionId, NetworkError> {
@@ -429,6 +437,7 @@ impl NetworkSupervisor {
                 transport: TransportKind::Iroh,
                 target: ManagedTarget::Peer {
                     peer_id,
+                    direction,
                     command_tx,
                 },
             },
@@ -611,7 +620,7 @@ enum SupervisorRequest {
         socket: Box<WebSocket>,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
-    RegisterIrohPeer {
+    RegisterIncomingIrohPeer {
         peer_id: PeerId,
         reader: Box<dyn AsyncRead + Unpin + Send>,
         writer: Box<dyn AsyncWrite + Unpin + Send>,
@@ -641,6 +650,7 @@ enum ManagedTarget {
     },
     Peer {
         peer_id: PeerId,
+        direction: PeerConnectionDirection,
         command_tx: mpsc::Sender<PeerConnectionCommand>,
     },
 }
@@ -659,10 +669,13 @@ impl ManagedConnection {
                 connection_id,
                 transport: self.transport,
             },
-            ManagedTarget::Peer { peer_id, .. } => NetworkEvent::PeerConnected {
+            ManagedTarget::Peer {
+                peer_id, direction, ..
+            } => NetworkEvent::PeerConnected {
                 connection_id,
                 peer_id: peer_id.clone(),
                 transport: self.transport,
+                direction: *direction,
             },
         }
     }
@@ -877,6 +890,7 @@ mod tests {
                 connection_id: opened_id,
                 peer_id: opened_peer_id,
                 transport: TransportKind::Iroh,
+                direction: PeerConnectionDirection::Outgoing,
             } if opened_id == connection_id && opened_peer_id == peer_id
         ));
 
