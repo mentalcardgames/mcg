@@ -1,6 +1,7 @@
 // Run and routing helpers (build_router, run_server, SPA handlers).
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use axum::{
     extract::FromRef,
@@ -22,7 +23,7 @@ const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
 struct RouterState {
     app: AppState,
     network: NetworkHandle,
-    _network_tasks: std::sync::Arc<NetworkTasks>,
+    _network_tasks: Arc<NetworkTasks>,
 }
 
 impl FromRef<RouterState> for AppState {
@@ -50,25 +51,36 @@ impl Drop for NetworkTasks {
 }
 
 impl RouterState {
-    fn new(app: AppState) -> Self {
-        let (event_tx, event_rx) = mpsc::channel::<NetworkEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
-        let (supervisor, network) = NetworkSupervisor::new(event_tx);
-        let adapter = LegacyBackendAdapter::new(app.clone(), network.clone(), event_rx);
-        let supervisor = tokio::spawn(supervisor.run());
-        let adapter = tokio::spawn(adapter.run());
-
+    fn new(app: AppState, network: NetworkHandle, network_tasks: Arc<NetworkTasks>) -> Self {
         Self {
             app,
             network,
-            _network_tasks: std::sync::Arc::new(NetworkTasks {
-                supervisor,
-                adapter,
-            }),
+            _network_tasks: network_tasks,
         }
     }
 }
 
-pub fn build_router(state: AppState) -> Router {
+fn start_network(app: AppState) -> (NetworkHandle, Arc<NetworkTasks>) {
+    let (event_tx, event_rx) = mpsc::channel::<NetworkEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
+    let (supervisor, network) = NetworkSupervisor::new(event_tx);
+    let adapter = LegacyBackendAdapter::new(app, network.clone(), event_rx);
+    let supervisor = tokio::spawn(supervisor.run());
+    let adapter = tokio::spawn(adapter.run());
+
+    (
+        network,
+        Arc::new(NetworkTasks {
+            supervisor,
+            adapter,
+        }),
+    )
+}
+
+fn build_router_with_network(
+    state: AppState,
+    network: NetworkHandle,
+    network_tasks: Arc<NetworkTasks>,
+) -> Router {
     // Serve static files from the project root. Assumes process CWD is repo root.
     let serve_dir = ServeDir::new("pkg").append_index_html_on_directories(true);
     let serve_media = ServeDir::new("media").append_index_html_on_directories(true);
@@ -88,18 +100,27 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", get(serve_index))
         // Fallback handler for SPA routing - serve index.html for all other routes
         .fallback(spa_handler)
-        .with_state(RouterState::new(state))
+        .with_state(RouterState::new(state, network, network_tasks))
+}
+
+pub fn build_router(state: AppState) -> Router {
+    let (network, network_tasks) = start_network(state.clone());
+    build_router_with_network(state, network, network_tasks)
 }
 
 pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
-    let app = build_router(state.clone());
+    let (network, network_tasks) = start_network(state.clone());
+    let app = build_router_with_network(state.clone(), network.clone(), network_tasks);
 
     // Spawn the iroh listener so it runs concurrently with the Axum HTTP/WebSocket server.
     // This is always enabled.
     {
         let state_clone = state.clone();
+        let network_clone = network.clone();
         tokio::spawn(async move {
-            if let Err(e) = crate::server::iroh::spawn_iroh_listener(state_clone).await {
+            if let Err(e) =
+                crate::server::iroh::spawn_iroh_listener(state_clone, network_clone).await
+            {
                 eprintln!("Iroh listener failed: {}", e);
             }
         });

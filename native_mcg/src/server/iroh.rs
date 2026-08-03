@@ -21,6 +21,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::sync::broadcast;
 
+use crate::network::NetworkHandle;
 use crate::public::{path_for_config, PublicInfo};
 use crate::transport::{send_server_msg_to_writer, send_peer_msg_to_writer};
 use crate::server::state::{AppState, subscribe_connection, PeerInfo};
@@ -30,7 +31,7 @@ use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg, Peer2PeerMsg};
 ///
 /// Refactored to delegate sub-tasks to smaller helper functions to improve
 /// readability and make the high-level flow easier to follow.
-pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
+pub async fn spawn_iroh_listener(state: AppState, network: NetworkHandle) -> Result<()> {
     // Keep the iroh-specific imports local to this function so the module does
     // not require iroh at compile time when the feature is disabled.
     // `getrandom` will be imported in `load_or_generate_iroh_secret` where it's used.
@@ -45,6 +46,10 @@ pub async fn spawn_iroh_listener(state: AppState) -> Result<()> {
 
     // Build and bind the iroh endpoint (advertising our ALPN)
     let endpoint = build_iroh_endpoint(secret_key, ALPN).await?;
+    network
+        .configure_iroh_endpoint(endpoint.clone())
+        .await
+        .context("configuring Iroh endpoint in network supervisor")?;
 
     // Wait for endpoint to be "online" (connected to relay, has addresses)
     // This is critical for reliable connections on restrictive networks.
