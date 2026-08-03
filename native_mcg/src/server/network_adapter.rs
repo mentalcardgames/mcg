@@ -1,13 +1,28 @@
 use std::collections::{HashMap, HashSet};
 
+use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::network::{
-    ConnectionId, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle, PeerId,
+    ConnectionId, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle, PeerId, TransportKind,
 };
 
 use super::state::{current_state_public, dispatch_client_message, AppState, PeerInfo};
+
+const PEER_CONNECT_RESULT_CHANNEL_CAPACITY: usize = 32;
+
+#[derive(Clone, Copy)]
+enum PeerConnectOrigin {
+    Frontend(ConnectionId),
+    Discovery,
+}
+
+struct PeerConnectResult {
+    peer_id: PeerId,
+    origin: PeerConnectOrigin,
+    result: Result<ConnectionId, NetworkError>,
+}
 
 /// Temporary bridge between the actor-based network layer and the legacy
 /// lock-based backend state.
@@ -17,8 +32,11 @@ pub(super) struct LegacyBackendAdapter {
     event_rx: mpsc::Receiver<NetworkEvent>,
     broadcast_rx: broadcast::Receiver<Backend2FrontendMsg>,
     peer_broadcast_rx: broadcast::Receiver<Peer2PeerMsg>,
+    peer_connect_result_tx: mpsc::Sender<PeerConnectResult>,
+    peer_connect_result_rx: mpsc::Receiver<PeerConnectResult>,
     subscribers: HashSet<ConnectionId>,
     peer_ids: HashMap<ConnectionId, PeerId>,
+    pending_peer_ids: HashSet<PeerId>,
 }
 
 impl LegacyBackendAdapter {
@@ -29,14 +47,19 @@ impl LegacyBackendAdapter {
     ) -> Self {
         let broadcast_rx = state.broadcaster.subscribe();
         let peer_broadcast_rx = state.peer_broadcaster.subscribe();
+        let (peer_connect_result_tx, peer_connect_result_rx) =
+            mpsc::channel(PEER_CONNECT_RESULT_CHANNEL_CAPACITY);
         Self {
             state,
             network,
             event_rx,
             broadcast_rx,
             peer_broadcast_rx,
+            peer_connect_result_tx,
+            peer_connect_result_rx,
             subscribers: HashSet::new(),
             peer_ids: HashMap::new(),
+            pending_peer_ids: HashSet::new(),
         }
     }
 
@@ -75,6 +98,14 @@ impl LegacyBackendAdapter {
                             tracing::warn!(skipped, "legacy network adapter missed peer broadcasts");
                         }
                         Err(broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+                result = self.peer_connect_result_rx.recv() => {
+                    let Some(result) = result else {
+                        break;
+                    };
+                    if !self.handle_peer_connect_result(result).await {
+                        break;
                     }
                 }
             }
@@ -117,6 +148,13 @@ impl LegacyBackendAdapter {
                 connection_id,
                 message: Frontend2BackendMsg::Subscribe,
             } => self.subscribe(connection_id).await,
+            NetworkEvent::FrontendMessage {
+                connection_id,
+                message: Frontend2BackendMsg::QrValue(ticket),
+            } => {
+                self.start_peer_connect(ticket, PeerConnectOrigin::Frontend(connection_id))
+                    .await
+            }
             NetworkEvent::FrontendMessage {
                 connection_id,
                 message,
@@ -274,7 +312,7 @@ impl LegacyBackendAdapter {
                     .await
             }
             Peer2PeerMsg::Peers(peers) => {
-                let mut next_ticket = None;
+                let mut discovered_tickets = Vec::new();
                 {
                     let mut known_peers = self.state.peers.write().await;
                     for (id, (name, ticket)) in peers {
@@ -282,6 +320,18 @@ impl LegacyBackendAdapter {
                             tracing::warn!(peer_id = %id, "received invalid advertised peer identity");
                             continue;
                         };
+                        let Ok(ticket_peer_id) = peer_id_from_ticket(&ticket) else {
+                            tracing::warn!(peer_id = %id, "received invalid advertised peer ticket");
+                            continue;
+                        };
+                        if ticket_peer_id.as_str() != id {
+                            tracing::warn!(
+                                peer_id = %id,
+                                ticket_peer_id = %ticket_peer_id,
+                                "advertised peer identity does not match its ticket"
+                            );
+                            continue;
+                        }
                         if known_peers.contains_key(&endpoint_id) {
                             continue;
                         }
@@ -298,12 +348,17 @@ impl LegacyBackendAdapter {
                             .broadcaster
                             .send(Backend2FrontendMsg::NewPlayer(name));
                         if id != peer_id.as_str() {
-                            next_ticket = Some(ticket);
+                            discovered_tickets.push(ticket);
                         }
                     }
                 }
-                if let Some(ticket) = next_ticket {
-                    self.state.remote_ticket.write().await.replace(ticket);
+                for ticket in discovered_tickets {
+                    if !self
+                        .start_peer_connect(ticket, PeerConnectOrigin::Discovery)
+                        .await
+                    {
+                        return false;
+                    }
                 }
                 true
             }
@@ -396,6 +451,82 @@ impl LegacyBackendAdapter {
                     .broadcaster
                     .send(Backend2FrontendMsg::RemovePlayer(peer.name));
             }
+        }
+    }
+
+    async fn start_peer_connect(&mut self, ticket: String, origin: PeerConnectOrigin) -> bool {
+        let peer_id = match peer_id_from_ticket(&ticket) {
+            Ok(peer_id) => peer_id,
+            Err(error) => return self.report_peer_connect_error(origin, error).await,
+        };
+
+        let own_peer_id = self
+            .state
+            .ticket
+            .read()
+            .await
+            .as_deref()
+            .and_then(|ticket| peer_id_from_ticket(ticket).ok());
+        if own_peer_id.as_ref() == Some(&peer_id) {
+            let error = NetworkError::ConnectionSetupFailed {
+                transport: TransportKind::Iroh,
+                message: "cannot connect to the local endpoint".into(),
+            };
+            return self.report_peer_connect_error(origin, error).await;
+        }
+
+        if self.peer_ids.values().any(|known| known == &peer_id)
+            || !self.pending_peer_ids.insert(peer_id.clone())
+        {
+            tracing::debug!(%peer_id, "skipping duplicate outgoing peer connection");
+            return true;
+        }
+
+        let state = self.state.clone();
+        let network = self.network.clone();
+        let result_tx = self.peer_connect_result_tx.clone();
+        let result_peer_id = peer_id.clone();
+        tokio::spawn(async move {
+            let result = connect_and_introduce(&state, &network, ticket).await;
+            let completion = PeerConnectResult {
+                peer_id: result_peer_id,
+                origin,
+                result,
+            };
+            if result_tx.send(completion).await.is_err() {
+                tracing::debug!(%peer_id, "network adapter stopped before peer connect completed");
+            }
+        });
+        true
+    }
+
+    async fn handle_peer_connect_result(&mut self, result: PeerConnectResult) -> bool {
+        self.pending_peer_ids.remove(&result.peer_id);
+        match result.result {
+            Ok(connection_id) => {
+                self.peer_ids.insert(connection_id, result.peer_id.clone());
+                tracing::info!(%connection_id, peer_id = %result.peer_id, "outgoing Iroh peer connected and introduced");
+                true
+            }
+            Err(error) => self.report_peer_connect_error(result.origin, error).await,
+        }
+    }
+
+    async fn report_peer_connect_error(
+        &mut self,
+        origin: PeerConnectOrigin,
+        error: NetworkError,
+    ) -> bool {
+        tracing::warn!(%error, "failed to establish outgoing Iroh peer connection");
+        match origin {
+            PeerConnectOrigin::Frontend(connection_id) => {
+                self.send_frontend(
+                    connection_id,
+                    Backend2FrontendMsg::Error(format!("Failed to connect to peer: {error}")),
+                )
+                .await
+            }
+            PeerConnectOrigin::Discovery => !matches!(error, NetworkError::SupervisorStopped),
         }
     }
 
@@ -514,6 +645,50 @@ impl LegacyBackendAdapter {
     }
 }
 
+fn peer_id_from_ticket(ticket: &str) -> Result<PeerId, NetworkError> {
+    let ticket = EndpointTicket::deserialize(ticket)
+        .map_err(|error| NetworkError::InvalidPeerTicket(error.to_string()))?;
+    Ok(PeerId::new(ticket.endpoint_addr().id.to_string()))
+}
+
+pub(super) async fn connect_and_introduce(
+    state: &AppState,
+    network: &NetworkHandle,
+    ticket: String,
+) -> Result<ConnectionId, NetworkError> {
+    let connection_id = network.connect_iroh_peer(ticket).await?;
+    introduce_peer_connection(state, network, connection_id).await?;
+    Ok(connection_id)
+}
+
+async fn introduce_peer_connection(
+    state: &AppState,
+    network: &NetworkHandle,
+    connection_id: ConnectionId,
+) -> Result<(), NetworkError> {
+    let name = state.lobby.read().await.our_name.clone();
+    let own_ticket = state.ticket.read().await.clone();
+    let introduction = Peer2PeerMsg::Connect(name, own_ticket);
+
+    if let Err(error) = network
+        .send_command(NetworkCommand::SendPeer {
+            connection_id,
+            message: introduction,
+        })
+        .await
+    {
+        let _ = network
+            .send_command(NetworkCommand::CloseConnection {
+                connection_id,
+                reason: "failed to send peer introduction".into(),
+            })
+            .await;
+        return Err(error);
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -524,6 +699,38 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::network::NetworkSupervisor;
+
+    #[tokio::test]
+    async fn outgoing_peer_is_introduced_through_network_actor() -> Result<()> {
+        let state = AppState::new(Config::default(), None);
+        state.lobby.write().await.our_name = "Bob".into();
+        *state.ticket.write().await = Some("bob-ticket".into());
+        let (event_tx, _event_rx) = mpsc::channel(16);
+        let (supervisor, network) = NetworkSupervisor::new(event_tx);
+        let supervisor_task = tokio::spawn(supervisor.run());
+        let (actor_stream, remote_stream) = duplex(4096);
+        let (actor_reader, actor_writer) = split(actor_stream);
+        let (remote_reader, _remote_writer) = split(remote_stream);
+        let mut remote_reader = BufReader::new(remote_reader);
+        let peer_id = PeerId::new(iroh::SecretKey::from_bytes(&[9; 32]).public().to_string());
+        let connection_id = network
+            .register_iroh_peer(peer_id, actor_reader, actor_writer)
+            .await?;
+
+        introduce_peer_connection(&state, &network, connection_id).await?;
+
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(1), remote_reader.read_line(&mut line)).await??;
+        assert!(matches!(
+            serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
+            Peer2PeerMsg::Connect(name, Some(ticket))
+                if name == "Bob" && ticket == "bob-ticket"
+        ));
+
+        supervisor_task.abort();
+        let _ = supervisor_task.await;
+        Ok(())
+    }
 
     #[tokio::test]
     async fn adapter_handles_peer_lobby_messages_through_network_actor() -> Result<()> {

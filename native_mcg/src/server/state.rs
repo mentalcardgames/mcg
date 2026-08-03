@@ -33,7 +33,6 @@ pub struct AppState {
     /// If present, transports (e.g. iroh) may persist changes to this path.
     pub config_path: Option<PathBuf>,
     pub ticket: Arc<RwLock<Option<String>>>,
-    pub remote_ticket: Arc<RwLock<Option<String>>>,
     pub peers: Arc<RwLock<HashMap<iroh::EndpointId, PeerInfo>>>,
 }
 
@@ -50,7 +49,6 @@ impl AppState {
             config: std::sync::Arc::new(RwLock::new(config)),
             config_path,
             ticket: Arc::new(RwLock::new(None)),
-            remote_ticket: Arc::new(RwLock::new(None)),
             peers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -121,7 +119,6 @@ impl Default for AppState {
             config: std::sync::Arc::new(RwLock::new(crate::config::Config::default())),
             config_path: None,
             ticket: Arc::new(RwLock::new(None)),
-            remote_ticket: Arc::new(RwLock::new(None)),
             peers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -430,11 +427,9 @@ pub async fn dispatch_client_message(
         mcg_shared::Frontend2BackendMsg::PushState { state: game_state } => {
             import_game_state(state, game_state).await
         }
-        mcg_shared::Frontend2BackendMsg::QrValue(value) => {
-            tracing::info!("received QR value from client: {}", value);
-            state.remote_ticket.write().await.replace(value);
-            mcg_shared::Backend2FrontendMsg::Error("filler response".into())
-        }
+        mcg_shared::Frontend2BackendMsg::QrValue(_) => mcg_shared::Backend2FrontendMsg::Error(
+            "QR connections require a network-aware handler".into(),
+        ),
         mcg_shared::Frontend2BackendMsg::GetTicket => handle_get_ticket(state).await,
         mcg_shared::Frontend2BackendMsg::GetIP => {
             let ip = match handle_get_ip().await {
