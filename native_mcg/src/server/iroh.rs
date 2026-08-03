@@ -5,13 +5,62 @@
 // network-aware application handlers.
 
 use anyhow::{Context, Result};
+use tokio::sync::oneshot;
+use tokio::task::{JoinHandle, JoinSet};
 
 use crate::network::{NetworkHandle, PeerId};
 use crate::public::{path_for_config, PublicInfo};
 use crate::server::state::{AppState, PeerInfo};
 
-/// Creates the Iroh endpoint and starts accepting peer connections.
-pub async fn spawn_iroh_listener(state: AppState, network: NetworkHandle) -> Result<()> {
+const IROH_CONNECTION_SETUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Owned background task for the Iroh endpoint and its incoming connections.
+pub(super) struct IrohListenerTask {
+    shutdown_tx: Option<oneshot::Sender<()>>,
+    task: Option<JoinHandle<()>>,
+}
+
+impl IrohListenerTask {
+    pub(super) async fn shutdown(mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        if let Some(task) = self.task.take() {
+            if let Err(error) = task.await {
+                tracing::error!(%error, "Iroh listener task failed during shutdown");
+            }
+        }
+    }
+}
+
+impl Drop for IrohListenerTask {
+    fn drop(&mut self) {
+        if let Some(task) = &self.task {
+            task.abort();
+        }
+    }
+}
+
+/// Starts an owned Iroh listener task without delaying the HTTP server startup.
+pub(super) fn spawn_iroh_listener(state: AppState, network: NetworkHandle) -> IrohListenerTask {
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let task = tokio::spawn(async move {
+        if let Err(error) = run_iroh_listener(state, network, shutdown_rx).await {
+            tracing::error!(%error, "Iroh listener failed");
+        }
+    });
+    IrohListenerTask {
+        shutdown_tx: Some(shutdown_tx),
+        task: Some(task),
+    }
+}
+
+/// Creates the Iroh endpoint and accepts peer connections until shutdown.
+async fn run_iroh_listener(
+    state: AppState,
+    network: NetworkHandle,
+    mut shutdown_rx: oneshot::Receiver<()>,
+) -> Result<()> {
     use iroh::SecretKey;
     use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 
@@ -24,10 +73,18 @@ pub async fn spawn_iroh_listener(state: AppState, network: NetworkHandle) -> Res
         .await
         .context("configuring Iroh endpoint in network supervisor")?;
 
-    match tokio::time::timeout(std::time::Duration::from_secs(30), endpoint.online()).await {
-        Ok(()) => tracing::info!("iroh endpoint is online (relay connected)"),
-        Err(_) => {
-            tracing::warn!("timeout waiting for iroh endpoint to come online; proceeding anyway")
+    tokio::select! {
+        _ = &mut shutdown_rx => {
+            endpoint.close().await;
+            return Ok(());
+        }
+        online = tokio::time::timeout(IROH_CONNECTION_SETUP_TIMEOUT, endpoint.online()) => {
+            match online {
+                Ok(()) => tracing::info!("iroh endpoint is online (relay connected)"),
+                Err(_) => {
+                    tracing::warn!("timeout waiting for iroh endpoint to come online; proceeding anyway")
+                }
+            }
         }
     }
 
@@ -62,12 +119,11 @@ pub async fn spawn_iroh_listener(state: AppState, network: NetworkHandle) -> Res
         }
     }
 
-    start_iroh_accept_loop(endpoint, network);
-
     tracing::info!(
         alpn = %std::str::from_utf8(ALPN).unwrap_or("mcg/iroh/1"),
         "iroh listener started"
     );
+    run_iroh_accept_loop(endpoint, network, shutdown_rx).await;
     Ok(())
 }
 
@@ -133,33 +189,47 @@ async fn build_iroh_endpoint(
         .context("binding iroh endpoint")
 }
 
-fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, network: NetworkHandle) {
-    tokio::spawn(async move {
-        loop {
-            match endpoint.accept().await {
-                Some(connect_future) => match connect_future.await {
-                    Ok(connection) => {
+async fn run_iroh_accept_loop(
+    endpoint: iroh::endpoint::Endpoint,
+    network: NetworkHandle,
+    mut shutdown_rx: oneshot::Receiver<()>,
+) {
+    let mut connection_tasks = JoinSet::new();
+    loop {
+        tokio::select! {
+            _ = &mut shutdown_rx => break,
+            incoming = endpoint.accept() => {
+                let Some(incoming) = incoming else {
+                    break;
+                };
+                let network = network.clone();
+                connection_tasks.spawn(async move {
+                    let setup = async {
+                        let connection = incoming.await.context("accepting incoming Iroh connection")?;
                         let remote_id = connection.remote_id();
                         tracing::info!(peer = %remote_id, "accepted new Iroh connection");
-                        let network = network.clone();
-                        tokio::spawn(async move {
-                            if let Err(error) =
-                                register_incoming_iroh_connection(network, connection).await
-                            {
-                                tracing::error!(peer = %remote_id, %error, "failed to register incoming Iroh connection");
-                            }
-                        });
+                        register_incoming_iroh_connection(network, connection)
+                            .await
+                            .with_context(|| format!("registering incoming Iroh peer {remote_id}"))
+                    };
+                    match tokio::time::timeout(IROH_CONNECTION_SETUP_TIMEOUT, setup).await {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => tracing::error!(%error, "failed to set up incoming Iroh connection"),
+                        Err(_) => tracing::warn!("timed out while setting up incoming Iroh connection"),
                     }
-                    Err(error) => {
-                        tracing::error!(%error, "Iroh accept/connect error");
-                    }
-                },
-                None => {
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                });
+            }
+            task = connection_tasks.join_next(), if !connection_tasks.is_empty() => {
+                if let Some(Err(error)) = task {
+                    tracing::error!(%error, "incoming Iroh connection task failed");
                 }
             }
         }
-    });
+    }
+
+    endpoint.close().await;
+    connection_tasks.shutdown().await;
+    tracing::info!("Iroh listener stopped");
 }
 
 async fn register_incoming_iroh_connection(

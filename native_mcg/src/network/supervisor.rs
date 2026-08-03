@@ -2,11 +2,13 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::ws::WebSocket;
 use iroh::endpoint::Endpoint;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinSet;
 
 use super::iroh::{
     run_iroh_peer_actor, IrohConnectError, IrohConnector, IrohEndpointConnector, PeerReader,
@@ -21,6 +23,7 @@ use super::{
 
 const DEFAULT_CONTROL_CHANNEL_CAPACITY: usize = 256;
 const DEFAULT_CONNECTION_CHANNEL_CAPACITY: usize = 64;
+const DEFAULT_IROH_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Errors returned while interacting with the network supervisor.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -42,6 +45,7 @@ pub enum NetworkError {
         transport: TransportKind,
         message: String,
     },
+    ConnectionSetupTimedOut(TransportKind),
 }
 
 impl fmt::Display for NetworkError {
@@ -82,6 +86,12 @@ impl fmt::Display for NetworkError {
                     "failed to establish {transport:?} connection: {message}"
                 )
             }
+            Self::ConnectionSetupTimedOut(transport) => {
+                write!(
+                    formatter,
+                    "timed out while establishing {transport:?} connection"
+                )
+            }
         }
     }
 }
@@ -95,6 +105,18 @@ pub struct NetworkHandle {
 }
 
 impl NetworkHandle {
+    /// Requests an orderly shutdown of the supervisor and all owned child tasks.
+    pub(crate) async fn shutdown(&self) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::Shutdown { response_tx })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)
+    }
+
     /// Configures the Iroh endpoint used for outgoing peer connections.
     pub async fn configure_iroh_endpoint(&self, endpoint: Endpoint) -> Result<(), NetworkError> {
         self.configure_iroh_connector(Arc::new(IrohEndpointConnector::new(endpoint)))
@@ -212,10 +234,13 @@ pub struct NetworkSupervisor {
     iroh_connect_result_rx: mpsc::Receiver<IrohConnectResult>,
     /// Endpoint-backed connector for outgoing Iroh connections.
     iroh_connector: Option<Arc<dyn IrohConnector>>,
+    /// Connection actors and in-progress outgoing connection attempts.
+    tasks: JoinSet<()>,
     /// Container with all connections with other peers or with frontends.
     connections: HashMap<ConnectionId, ManagedConnection>,
     next_connection_id: u64,
     connection_channel_capacity: usize,
+    iroh_connect_timeout: Duration,
 }
 
 impl NetworkSupervisor {
@@ -233,8 +258,23 @@ impl NetworkSupervisor {
         control_channel_capacity: usize,
         connection_channel_capacity: usize,
     ) -> (Self, NetworkHandle) {
+        Self::with_settings(
+            application_event_tx,
+            control_channel_capacity,
+            connection_channel_capacity,
+            DEFAULT_IROH_CONNECT_TIMEOUT,
+        )
+    }
+
+    fn with_settings(
+        application_event_tx: mpsc::Sender<NetworkEvent>,
+        control_channel_capacity: usize,
+        connection_channel_capacity: usize,
+        iroh_connect_timeout: Duration,
+    ) -> (Self, NetworkHandle) {
         assert!(control_channel_capacity > 0);
         assert!(connection_channel_capacity > 0);
+        assert!(!iroh_connect_timeout.is_zero());
 
         let (request_tx, request_rx) = mpsc::channel(control_channel_capacity);
         let (actor_event_tx, actor_event_rx) = mpsc::channel(control_channel_capacity);
@@ -248,10 +288,12 @@ impl NetworkSupervisor {
             iroh_connect_result_tx,
             iroh_connect_result_rx,
             iroh_connector: None,
+            tasks: JoinSet::new(),
             application_event_tx,
             connections: HashMap::new(),
             next_connection_id: 0,
             connection_channel_capacity,
+            iroh_connect_timeout,
         };
         (supervisor, handle)
     }
@@ -266,7 +308,9 @@ impl NetworkSupervisor {
                     let Some(request) = request else {
                         break;
                     };
-                    self.handle_request(request);
+                    if !self.handle_request(request) {
+                        break;
+                    }
                 }
                 // Enrich internal actor events with supervisor-owned metadata.
                 event = self.actor_event_rx.recv() => {
@@ -285,16 +329,26 @@ impl NetworkSupervisor {
                     };
                     self.handle_iroh_connect_result(result);
                 }
+                task = self.tasks.join_next(), if !self.tasks.is_empty() => {
+                    if let Some(Err(error)) = task {
+                        tracing::error!(%error, "network child task failed");
+                    }
+                }
             }
         }
+        self.tasks.shutdown().await;
         tracing::info!(
             connections = self.connections.len(),
             "network supervisor stopped"
         );
     }
 
-    fn handle_request(&mut self, request: SupervisorRequest) {
+    fn handle_request(&mut self, request: SupervisorRequest) -> bool {
         match request {
+            SupervisorRequest::Shutdown { response_tx } => {
+                let _ = response_tx.send(());
+                return false;
+            }
             SupervisorRequest::ConfigureIroh {
                 connector,
                 response_tx,
@@ -335,6 +389,7 @@ impl NetworkSupervisor {
                 let _ = response_tx.send(result);
             }
         }
+        true
     }
 
     fn configure_iroh_connector(
@@ -351,7 +406,7 @@ impl NetworkSupervisor {
     }
 
     fn start_iroh_connect(
-        &self,
+        &mut self,
         ticket: String,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     ) {
@@ -360,9 +415,18 @@ impl NetworkSupervisor {
             return;
         };
         let result_tx = self.iroh_connect_result_tx.clone();
+        let timeout = self.iroh_connect_timeout;
 
-        tokio::spawn(async move {
-            let result = connector.connect(ticket).await;
+        self.tasks.spawn(async move {
+            let result = match tokio::time::timeout(timeout, connector.connect(ticket)).await {
+                Ok(result) => result,
+                Err(_) => {
+                    let _ = response_tx.send(Err(NetworkError::ConnectionSetupTimedOut(
+                        TransportKind::Iroh,
+                    )));
+                    return;
+                }
+            };
             let completion = IrohConnectResult {
                 result,
                 response_tx,
@@ -410,7 +474,7 @@ impl NetworkSupervisor {
                 target: ManagedTarget::Frontend { command_tx },
             },
         );
-        tokio::spawn(run_websocket_actor(
+        self.tasks.spawn(run_websocket_actor(
             connection_id,
             socket,
             actor_event_tx,
@@ -442,7 +506,7 @@ impl NetworkSupervisor {
                 },
             },
         );
-        tokio::spawn(run_iroh_peer_actor(
+        self.tasks.spawn(run_iroh_peer_actor(
             connection_id,
             reader,
             writer,
@@ -608,6 +672,9 @@ impl NetworkSupervisor {
 
 /// Type that represents the internal contract between NetworkSupervisor and NetworkHandle for message calls on the handle.
 enum SupervisorRequest {
+    Shutdown {
+        response_tx: oneshot::Sender<()>,
+    },
     ConfigureIroh {
         connector: Arc<dyn IrohConnector>,
         response_tx: oneshot::Sender<Result<(), NetworkError>>,
@@ -707,6 +774,12 @@ mod tests {
         stream: Mutex<Option<(PeerReader, PeerWriter)>>,
     }
 
+    struct PendingIrohConnector;
+
+    struct SignalingPendingIrohConnector {
+        started_tx: Mutex<Option<oneshot::Sender<()>>>,
+    }
+
     #[async_trait]
     impl IrohConnector for OneShotIrohConnector {
         async fn connect(
@@ -718,6 +791,29 @@ mod tests {
                     IrohConnectError::Connect("test stream already consumed".into())
                 })?;
             Ok((self.peer_id.clone(), reader, writer))
+        }
+    }
+
+    #[async_trait]
+    impl IrohConnector for PendingIrohConnector {
+        async fn connect(
+            &self,
+            _ticket: String,
+        ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError> {
+            std::future::pending().await
+        }
+    }
+
+    #[async_trait]
+    impl IrohConnector for SignalingPendingIrohConnector {
+        async fn connect(
+            &self,
+            _ticket: String,
+        ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError> {
+            if let Some(started_tx) = self.started_tx.lock().await.take() {
+                let _ = started_tx.send(());
+            }
+            std::future::pending().await
         }
     }
 
@@ -841,7 +937,7 @@ mod tests {
 
         server_task.abort();
         let _ = server_task.await;
-        drop(network);
+        network.shutdown().await?;
         tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
         Ok(())
     }
@@ -966,6 +1062,50 @@ mod tests {
 
         drop(network);
         tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn supervisor_times_out_pending_iroh_connections() -> Result<()> {
+        let (event_tx, _event_rx) = mpsc::channel(16);
+        let (supervisor, network) =
+            NetworkSupervisor::with_settings(event_tx, 16, 8, Duration::from_millis(10));
+        let supervisor_task = tokio::spawn(supervisor.run());
+        network
+            .configure_iroh_connector(Arc::new(PendingIrohConnector))
+            .await?;
+
+        assert_eq!(
+            network.connect_iroh_peer("test-ticket").await,
+            Err(NetworkError::ConnectionSetupTimedOut(TransportKind::Iroh))
+        );
+
+        network.shutdown().await?;
+        tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn supervisor_shutdown_cancels_pending_iroh_connections() -> Result<()> {
+        let (event_tx, _event_rx) = mpsc::channel(16);
+        let (supervisor, network) = NetworkSupervisor::new(event_tx);
+        let supervisor_task = tokio::spawn(supervisor.run());
+        let (started_tx, started_rx) = oneshot::channel();
+        network
+            .configure_iroh_connector(Arc::new(SignalingPendingIrohConnector {
+                started_tx: Mutex::new(Some(started_tx)),
+            }))
+            .await?;
+        let connect_task = tokio::spawn({
+            let network = network.clone();
+            async move { network.connect_iroh_peer("test-ticket").await }
+        });
+        tokio::time::timeout(Duration::from_secs(1), started_rx).await??;
+
+        network.shutdown().await?;
+
+        tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+        assert_eq!(connect_task.await?, Err(NetworkError::SupervisorStopped));
         Ok(())
     }
 }

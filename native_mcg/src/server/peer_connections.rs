@@ -1,11 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::Peer2PeerMsg;
-use tokio::sync::Mutex;
 
 use crate::network::{
     ConnectionId, NetworkCommand, NetworkError, NetworkHandle, PeerConnectionDirection, PeerId,
@@ -63,6 +62,40 @@ struct ActivePeerConnection {
     direction: PeerConnectionDirection,
 }
 
+struct PendingPeerReservation {
+    registry: Arc<Mutex<PeerConnectionState>>,
+    peer_id: PeerId,
+}
+
+impl PendingPeerReservation {
+    fn reserve(
+        registry: Arc<Mutex<PeerConnectionState>>,
+        peer_id: PeerId,
+    ) -> Result<Self, PeerConnectionError> {
+        {
+            let mut state = registry.lock().expect("peer connection registry poisoned");
+            if state.pending.contains(&peer_id)
+                || state.active.values().any(|known| known.peer_id == peer_id)
+            {
+                return Err(PeerConnectionError::DuplicatePeer(peer_id));
+            }
+            state.pending.insert(peer_id.clone());
+        }
+
+        Ok(Self { registry, peer_id })
+    }
+}
+
+impl Drop for PendingPeerReservation {
+    fn drop(&mut self) {
+        self.registry
+            .lock()
+            .expect("peer connection registry poisoned")
+            .pending
+            .remove(&self.peer_id);
+    }
+}
+
 /// Coordinates application-level outgoing peer connections for every caller.
 ///
 /// Ticket validation, duplicate suppression, transport establishment, and the
@@ -94,18 +127,7 @@ impl PeerConnectionService {
             return Err(PeerConnectionError::LocalEndpoint(peer_id));
         }
 
-        {
-            let mut registry = self.registry.lock().await;
-            if registry.pending.contains(&peer_id)
-                || registry
-                    .active
-                    .values()
-                    .any(|known| known.peer_id == peer_id)
-            {
-                return Err(PeerConnectionError::DuplicatePeer(peer_id));
-            }
-            registry.pending.insert(peer_id.clone());
-        }
+        let _pending = PendingPeerReservation::reserve(self.registry.clone(), peer_id.clone())?;
 
         let result = self.network.connect_iroh_peer(ticket).await;
         match result {
@@ -128,10 +150,7 @@ impl PeerConnectionService {
                     peer_id,
                 })
             }
-            Err(error) => {
-                self.registry.lock().await.pending.remove(&peer_id);
-                Err(error.into())
-            }
+            Err(error) => Err(error.into()),
         }
     }
 
@@ -146,7 +165,10 @@ impl PeerConnectionService {
             .await
             .and_then(|local_peer_id| preferred_direction(&local_peer_id, &peer_id));
         let (winner, loser) = {
-            let mut registry = self.registry.lock().await;
+            let mut registry = self
+                .registry
+                .lock()
+                .expect("peer connection registry poisoned");
             registry.pending.remove(&peer_id);
 
             if registry.active.contains_key(&connection_id) {
@@ -208,7 +230,11 @@ impl PeerConnectionService {
     }
 
     pub(super) async fn connection_closed(&self, connection_id: ConnectionId) {
-        self.registry.lock().await.active.remove(&connection_id);
+        self.registry
+            .lock()
+            .expect("peer connection registry poisoned")
+            .active
+            .remove(&connection_id);
     }
 
     async fn local_peer_id(&self) -> Option<PeerId> {
@@ -276,6 +302,27 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::network::{NetworkEvent, NetworkSupervisor, TransportKind};
+
+    #[test]
+    fn pending_peer_reservation_is_removed_when_connect_future_is_dropped() {
+        let registry = Arc::new(Mutex::new(PeerConnectionState::default()));
+        let peer_id = PeerId::new("cancelled-peer");
+        let reservation = PendingPeerReservation::reserve(registry.clone(), peer_id.clone())
+            .expect("first reservation should succeed");
+        assert!(registry
+            .lock()
+            .expect("peer connection registry poisoned")
+            .pending
+            .contains(&peer_id));
+
+        drop(reservation);
+
+        assert!(!registry
+            .lock()
+            .expect("peer connection registry poisoned")
+            .pending
+            .contains(&peer_id));
+    }
 
     #[tokio::test]
     async fn service_introduces_peer_through_network_actor() -> Result<()> {
@@ -427,8 +474,24 @@ mod tests {
             higher_incoming
         );
 
-        assert_eq!(lower_service.registry.lock().await.active.len(), 1);
-        assert_eq!(higher_service.registry.lock().await.active.len(), 1);
+        assert_eq!(
+            lower_service
+                .registry
+                .lock()
+                .expect("peer connection registry poisoned")
+                .active
+                .len(),
+            1
+        );
+        assert_eq!(
+            higher_service
+                .registry
+                .lock()
+                .expect("peer connection registry poisoned")
+                .active
+                .len(),
+            1
+        );
 
         supervisor_task.abort();
         let _ = supervisor_task.await;

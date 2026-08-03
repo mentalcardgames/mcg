@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use tokio::sync::{broadcast, mpsc};
+use tokio::task::JoinSet;
 
 use crate::network::{
     ConnectionId, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle, PeerId,
@@ -36,6 +37,7 @@ pub(super) struct LegacyBackendAdapter {
     peer_broadcast_rx: broadcast::Receiver<Peer2PeerMsg>,
     peer_connect_result_tx: mpsc::Sender<PeerConnectResult>,
     peer_connect_result_rx: mpsc::Receiver<PeerConnectResult>,
+    peer_connect_tasks: JoinSet<()>,
     subscribers: HashSet<ConnectionId>,
     peer_ids: HashMap<ConnectionId, PeerId>,
 }
@@ -60,6 +62,7 @@ impl LegacyBackendAdapter {
             peer_broadcast_rx,
             peer_connect_result_tx,
             peer_connect_result_rx,
+            peer_connect_tasks: JoinSet::new(),
             subscribers: HashSet::new(),
             peer_ids: HashMap::new(),
         }
@@ -110,8 +113,14 @@ impl LegacyBackendAdapter {
                         break;
                     }
                 }
+                task = self.peer_connect_tasks.join_next(), if !self.peer_connect_tasks.is_empty() => {
+                    if let Some(Err(error)) = task {
+                        tracing::error!(%error, "peer connection task failed");
+                    }
+                }
             }
         }
+        self.peer_connect_tasks.shutdown().await;
         tracing::info!("legacy backend network adapter stopped");
     }
 
@@ -469,7 +478,7 @@ impl LegacyBackendAdapter {
     async fn start_peer_connect(&mut self, ticket: String, origin: PeerConnectOrigin) -> bool {
         let peer_connections = self.peer_connections.clone();
         let result_tx = self.peer_connect_result_tx.clone();
-        tokio::spawn(async move {
+        self.peer_connect_tasks.spawn(async move {
             let result = peer_connections.connect(ticket).await;
             let completion = PeerConnectResult { origin, result };
             if result_tx.send(completion).await.is_err() {
