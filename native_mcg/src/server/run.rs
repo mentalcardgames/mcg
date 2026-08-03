@@ -13,7 +13,9 @@ use axum::{
 use tower_http::services::ServeDir;
 
 use crate::network::{NetworkEvent, NetworkHandle, NetworkSupervisor};
-use crate::server::{network_adapter::LegacyBackendAdapter, AppState};
+use crate::server::{
+    network_adapter::LegacyBackendAdapter, peer_connections::PeerConnectionService, AppState,
+};
 use anyhow::{Context, Result};
 use tokio::sync::mpsc;
 
@@ -23,6 +25,7 @@ const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
 struct RouterState {
     app: AppState,
     network: NetworkHandle,
+    peer_connections: PeerConnectionService,
     _network_tasks: Arc<NetworkTasks>,
 }
 
@@ -35,6 +38,12 @@ impl FromRef<RouterState> for AppState {
 impl FromRef<RouterState> for NetworkHandle {
     fn from_ref(state: &RouterState) -> Self {
         state.network.clone()
+    }
+}
+
+impl FromRef<RouterState> for PeerConnectionService {
+    fn from_ref(state: &RouterState) -> Self {
+        state.peer_connections.clone()
     }
 }
 
@@ -51,24 +60,33 @@ impl Drop for NetworkTasks {
 }
 
 impl RouterState {
-    fn new(app: AppState, network: NetworkHandle, network_tasks: Arc<NetworkTasks>) -> Self {
+    fn new(
+        app: AppState,
+        network: NetworkHandle,
+        peer_connections: PeerConnectionService,
+        network_tasks: Arc<NetworkTasks>,
+    ) -> Self {
         Self {
             app,
             network,
+            peer_connections,
             _network_tasks: network_tasks,
         }
     }
 }
 
-fn start_network(app: AppState) -> (NetworkHandle, Arc<NetworkTasks>) {
+fn start_network(app: AppState) -> (NetworkHandle, PeerConnectionService, Arc<NetworkTasks>) {
     let (event_tx, event_rx) = mpsc::channel::<NetworkEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
     let (supervisor, network) = NetworkSupervisor::new(event_tx);
-    let adapter = LegacyBackendAdapter::new(app, network.clone(), event_rx);
+    let peer_connections = PeerConnectionService::new(app.clone(), network.clone());
+    let adapter =
+        LegacyBackendAdapter::new(app, network.clone(), peer_connections.clone(), event_rx);
     let supervisor = tokio::spawn(supervisor.run());
     let adapter = tokio::spawn(adapter.run());
 
     (
         network,
+        peer_connections,
         Arc::new(NetworkTasks {
             supervisor,
             adapter,
@@ -79,6 +97,7 @@ fn start_network(app: AppState) -> (NetworkHandle, Arc<NetworkTasks>) {
 fn build_router_with_network(
     state: AppState,
     network: NetworkHandle,
+    peer_connections: PeerConnectionService,
     network_tasks: Arc<NetworkTasks>,
 ) -> Router {
     // Serve static files from the project root. Assumes process CWD is repo root.
@@ -100,17 +119,27 @@ fn build_router_with_network(
         .route("/", get(serve_index))
         // Fallback handler for SPA routing - serve index.html for all other routes
         .fallback(spa_handler)
-        .with_state(RouterState::new(state, network, network_tasks))
+        .with_state(RouterState::new(
+            state,
+            network,
+            peer_connections,
+            network_tasks,
+        ))
 }
 
 pub fn build_router(state: AppState) -> Router {
-    let (network, network_tasks) = start_network(state.clone());
-    build_router_with_network(state, network, network_tasks)
+    let (network, peer_connections, network_tasks) = start_network(state.clone());
+    build_router_with_network(state, network, peer_connections, network_tasks)
 }
 
 pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
-    let (network, network_tasks) = start_network(state.clone());
-    let app = build_router_with_network(state.clone(), network.clone(), network_tasks);
+    let (network, peer_connections, network_tasks) = start_network(state.clone());
+    let app = build_router_with_network(
+        state.clone(),
+        network.clone(),
+        peer_connections,
+        network_tasks,
+    );
 
     // Spawn the iroh listener so it runs concurrently with the Axum HTTP/WebSocket server.
     // This is always enabled.

@@ -2,6 +2,7 @@ pub mod bot_driver;
 pub mod http;
 pub mod iroh;
 mod network_adapter;
+mod peer_connections;
 pub mod run;
 pub mod state;
 pub mod ws;

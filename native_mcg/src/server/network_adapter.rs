@@ -1,13 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
-use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::network::{
-    ConnectionId, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle, PeerId, TransportKind,
+    ConnectionId, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle, PeerId,
 };
 
+use super::peer_connections::{
+    peer_id_from_ticket, EstablishedPeer, PeerConnectionError, PeerConnectionService,
+};
 use super::state::{current_state_public, dispatch_client_message, AppState, PeerInfo};
 
 const PEER_CONNECT_RESULT_CHANNEL_CAPACITY: usize = 32;
@@ -19,9 +21,8 @@ enum PeerConnectOrigin {
 }
 
 struct PeerConnectResult {
-    peer_id: PeerId,
     origin: PeerConnectOrigin,
-    result: Result<ConnectionId, NetworkError>,
+    result: Result<EstablishedPeer, PeerConnectionError>,
 }
 
 /// Temporary bridge between the actor-based network layer and the legacy
@@ -29,6 +30,7 @@ struct PeerConnectResult {
 pub(super) struct LegacyBackendAdapter {
     state: AppState,
     network: NetworkHandle,
+    peer_connections: PeerConnectionService,
     event_rx: mpsc::Receiver<NetworkEvent>,
     broadcast_rx: broadcast::Receiver<Backend2FrontendMsg>,
     peer_broadcast_rx: broadcast::Receiver<Peer2PeerMsg>,
@@ -36,13 +38,13 @@ pub(super) struct LegacyBackendAdapter {
     peer_connect_result_rx: mpsc::Receiver<PeerConnectResult>,
     subscribers: HashSet<ConnectionId>,
     peer_ids: HashMap<ConnectionId, PeerId>,
-    pending_peer_ids: HashSet<PeerId>,
 }
 
 impl LegacyBackendAdapter {
     pub(super) fn new(
         state: AppState,
         network: NetworkHandle,
+        peer_connections: PeerConnectionService,
         event_rx: mpsc::Receiver<NetworkEvent>,
     ) -> Self {
         let broadcast_rx = state.broadcaster.subscribe();
@@ -52,6 +54,7 @@ impl LegacyBackendAdapter {
         Self {
             state,
             network,
+            peer_connections,
             event_rx,
             broadcast_rx,
             peer_broadcast_rx,
@@ -59,7 +62,6 @@ impl LegacyBackendAdapter {
             peer_connect_result_rx,
             subscribers: HashSet::new(),
             peer_ids: HashMap::new(),
-            pending_peer_ids: HashSet::new(),
         }
     }
 
@@ -132,6 +134,9 @@ impl LegacyBackendAdapter {
                 transport,
             } => {
                 tracing::debug!(%connection_id, %peer_id, ?transport, "peer connection opened");
+                self.peer_connections
+                    .connection_opened(connection_id, peer_id.clone())
+                    .await;
                 self.peer_ids.insert(connection_id, peer_id);
                 true
             }
@@ -438,6 +443,7 @@ impl LegacyBackendAdapter {
     }
 
     async fn remove_peer_connection(&mut self, connection_id: ConnectionId) {
+        self.peer_connections.connection_closed(connection_id).await;
         let Some(peer_id) = self.peer_ids.remove(&connection_id) else {
             return;
         };
@@ -455,57 +461,24 @@ impl LegacyBackendAdapter {
     }
 
     async fn start_peer_connect(&mut self, ticket: String, origin: PeerConnectOrigin) -> bool {
-        let peer_id = match peer_id_from_ticket(&ticket) {
-            Ok(peer_id) => peer_id,
-            Err(error) => return self.report_peer_connect_error(origin, error).await,
-        };
-
-        let own_peer_id = self
-            .state
-            .ticket
-            .read()
-            .await
-            .as_deref()
-            .and_then(|ticket| peer_id_from_ticket(ticket).ok());
-        if own_peer_id.as_ref() == Some(&peer_id) {
-            let error = NetworkError::ConnectionSetupFailed {
-                transport: TransportKind::Iroh,
-                message: "cannot connect to the local endpoint".into(),
-            };
-            return self.report_peer_connect_error(origin, error).await;
-        }
-
-        if self.peer_ids.values().any(|known| known == &peer_id)
-            || !self.pending_peer_ids.insert(peer_id.clone())
-        {
-            tracing::debug!(%peer_id, "skipping duplicate outgoing peer connection");
-            return true;
-        }
-
-        let state = self.state.clone();
-        let network = self.network.clone();
+        let peer_connections = self.peer_connections.clone();
         let result_tx = self.peer_connect_result_tx.clone();
-        let result_peer_id = peer_id.clone();
         tokio::spawn(async move {
-            let result = connect_and_introduce(&state, &network, ticket).await;
-            let completion = PeerConnectResult {
-                peer_id: result_peer_id,
-                origin,
-                result,
-            };
+            let result = peer_connections.connect(ticket).await;
+            let completion = PeerConnectResult { origin, result };
             if result_tx.send(completion).await.is_err() {
-                tracing::debug!(%peer_id, "network adapter stopped before peer connect completed");
+                tracing::debug!("network adapter stopped before peer connect completed");
             }
         });
         true
     }
 
     async fn handle_peer_connect_result(&mut self, result: PeerConnectResult) -> bool {
-        self.pending_peer_ids.remove(&result.peer_id);
         match result.result {
-            Ok(connection_id) => {
-                self.peer_ids.insert(connection_id, result.peer_id.clone());
-                tracing::info!(%connection_id, peer_id = %result.peer_id, "outgoing Iroh peer connected and introduced");
+            Ok(peer) => {
+                self.peer_ids
+                    .insert(peer.connection_id, peer.peer_id.clone());
+                tracing::info!(connection_id = %peer.connection_id, peer_id = %peer.peer_id, "outgoing Iroh peer connected and introduced");
                 true
             }
             Err(error) => self.report_peer_connect_error(result.origin, error).await,
@@ -515,7 +488,7 @@ impl LegacyBackendAdapter {
     async fn report_peer_connect_error(
         &mut self,
         origin: PeerConnectOrigin,
-        error: NetworkError,
+        error: PeerConnectionError,
     ) -> bool {
         tracing::warn!(%error, "failed to establish outgoing Iroh peer connection");
         match origin {
@@ -526,7 +499,10 @@ impl LegacyBackendAdapter {
                 )
                 .await
             }
-            PeerConnectOrigin::Discovery => !matches!(error, NetworkError::SupervisorStopped),
+            PeerConnectOrigin::Discovery => !matches!(
+                error,
+                PeerConnectionError::Network(NetworkError::SupervisorStopped)
+            ),
         }
     }
 
@@ -645,50 +621,6 @@ impl LegacyBackendAdapter {
     }
 }
 
-fn peer_id_from_ticket(ticket: &str) -> Result<PeerId, NetworkError> {
-    let ticket = EndpointTicket::deserialize(ticket)
-        .map_err(|error| NetworkError::InvalidPeerTicket(error.to_string()))?;
-    Ok(PeerId::new(ticket.endpoint_addr().id.to_string()))
-}
-
-pub(super) async fn connect_and_introduce(
-    state: &AppState,
-    network: &NetworkHandle,
-    ticket: String,
-) -> Result<ConnectionId, NetworkError> {
-    let connection_id = network.connect_iroh_peer(ticket).await?;
-    introduce_peer_connection(state, network, connection_id).await?;
-    Ok(connection_id)
-}
-
-async fn introduce_peer_connection(
-    state: &AppState,
-    network: &NetworkHandle,
-    connection_id: ConnectionId,
-) -> Result<(), NetworkError> {
-    let name = state.lobby.read().await.our_name.clone();
-    let own_ticket = state.ticket.read().await.clone();
-    let introduction = Peer2PeerMsg::Connect(name, own_ticket);
-
-    if let Err(error) = network
-        .send_command(NetworkCommand::SendPeer {
-            connection_id,
-            message: introduction,
-        })
-        .await
-    {
-        let _ = network
-            .send_command(NetworkCommand::CloseConnection {
-                connection_id,
-                reason: "failed to send peer introduction".into(),
-            })
-            .await;
-        return Err(error);
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -699,38 +631,6 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::network::NetworkSupervisor;
-
-    #[tokio::test]
-    async fn outgoing_peer_is_introduced_through_network_actor() -> Result<()> {
-        let state = AppState::new(Config::default(), None);
-        state.lobby.write().await.our_name = "Bob".into();
-        *state.ticket.write().await = Some("bob-ticket".into());
-        let (event_tx, _event_rx) = mpsc::channel(16);
-        let (supervisor, network) = NetworkSupervisor::new(event_tx);
-        let supervisor_task = tokio::spawn(supervisor.run());
-        let (actor_stream, remote_stream) = duplex(4096);
-        let (actor_reader, actor_writer) = split(actor_stream);
-        let (remote_reader, _remote_writer) = split(remote_stream);
-        let mut remote_reader = BufReader::new(remote_reader);
-        let peer_id = PeerId::new(iroh::SecretKey::from_bytes(&[9; 32]).public().to_string());
-        let connection_id = network
-            .register_iroh_peer(peer_id, actor_reader, actor_writer)
-            .await?;
-
-        introduce_peer_connection(&state, &network, connection_id).await?;
-
-        let mut line = String::new();
-        tokio::time::timeout(Duration::from_secs(1), remote_reader.read_line(&mut line)).await??;
-        assert!(matches!(
-            serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
-            Peer2PeerMsg::Connect(name, Some(ticket))
-                if name == "Bob" && ticket == "bob-ticket"
-        ));
-
-        supervisor_task.abort();
-        let _ = supervisor_task.await;
-        Ok(())
-    }
 
     #[tokio::test]
     async fn adapter_handles_peer_lobby_messages_through_network_actor() -> Result<()> {
@@ -745,8 +645,11 @@ mod tests {
         let (event_tx, event_rx) = mpsc::channel(16);
         let (supervisor, network) = NetworkSupervisor::new(event_tx);
         let supervisor_task = tokio::spawn(supervisor.run());
-        let adapter_task =
-            tokio::spawn(LegacyBackendAdapter::new(state.clone(), network.clone(), event_rx).run());
+        let peer_connections = PeerConnectionService::new(state.clone(), network.clone());
+        let adapter_task = tokio::spawn(
+            LegacyBackendAdapter::new(state.clone(), network.clone(), peer_connections, event_rx)
+                .run(),
+        );
         let (actor_stream, remote_stream) = duplex(4096);
         let (actor_reader, actor_writer) = split(actor_stream);
         let (remote_reader, mut remote_writer) = split(remote_stream);
