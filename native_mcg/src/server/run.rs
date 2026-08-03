@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 
 use axum::{
+    extract::FromRef,
     http::Uri,
     response::IntoResponse,
     routing::{get, post},
@@ -10,8 +11,62 @@ use axum::{
 };
 use tower_http::services::ServeDir;
 
-use crate::server::AppState;
+use crate::network::{NetworkEvent, NetworkHandle, NetworkSupervisor};
+use crate::server::{network_adapter::LegacyBackendAdapter, AppState};
 use anyhow::{Context, Result};
+use tokio::sync::mpsc;
+
+const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
+
+#[derive(Clone)]
+struct RouterState {
+    app: AppState,
+    network: NetworkHandle,
+    _network_tasks: std::sync::Arc<NetworkTasks>,
+}
+
+impl FromRef<RouterState> for AppState {
+    fn from_ref(state: &RouterState) -> Self {
+        state.app.clone()
+    }
+}
+
+impl FromRef<RouterState> for NetworkHandle {
+    fn from_ref(state: &RouterState) -> Self {
+        state.network.clone()
+    }
+}
+
+struct NetworkTasks {
+    supervisor: tokio::task::JoinHandle<()>,
+    adapter: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for NetworkTasks {
+    fn drop(&mut self) {
+        self.supervisor.abort();
+        self.adapter.abort();
+    }
+}
+
+impl RouterState {
+    fn new(app: AppState) -> Self {
+        let (event_tx, event_rx) = mpsc::channel::<NetworkEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
+        let (supervisor, network) = NetworkSupervisor::new(event_tx);
+        let adapter = LegacyBackendAdapter::new(app.clone(), network.clone(), event_rx);
+        let supervisor = tokio::spawn(supervisor.run());
+        let adapter = tokio::spawn(adapter.run());
+
+        Self {
+            app,
+            network,
+            _network_tasks: std::sync::Arc::new(NetworkTasks {
+                supervisor,
+                adapter,
+            }),
+        }
+    }
+}
 
 pub fn build_router(state: AppState) -> Router {
     // Serve static files from the project root. Assumes process CWD is repo root.
@@ -33,7 +88,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", get(serve_index))
         // Fallback handler for SPA routing - serve index.html for all other routes
         .fallback(spa_handler)
-        .with_state(state)
+        .with_state(RouterState::new(state))
 }
 
 pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
