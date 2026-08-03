@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use tokio::sync::oneshot;
 use tokio::task::{JoinHandle, JoinSet};
 
-use crate::network::{NetworkHandle, PeerId};
+use crate::network::{NetworkHandle, PeerId, IROH_ALPN};
 use crate::public::{path_for_config, PublicInfo};
 use crate::server::state::{AppState, PeerInfo};
 
@@ -64,10 +64,8 @@ async fn run_iroh_listener(
     use iroh::SecretKey;
     use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 
-    const ALPN: &[u8] = b"mcg/iroh/1";
-
     let secret_key: SecretKey = load_or_generate_iroh_secret(state.clone()).await;
-    let endpoint = build_iroh_endpoint(secret_key, ALPN).await?;
+    let endpoint = build_iroh_endpoint(secret_key, IROH_ALPN).await?;
     network
         .configure_iroh_endpoint(endpoint.clone())
         .await
@@ -120,7 +118,7 @@ async fn run_iroh_listener(
     }
 
     tracing::info!(
-        alpn = %std::str::from_utf8(ALPN).unwrap_or("mcg/iroh/1"),
+        alpn = %std::str::from_utf8(IROH_ALPN).unwrap_or("mcg/iroh/1"),
         "iroh listener started"
     );
     run_iroh_accept_loop(endpoint, network, shutdown_rx).await;

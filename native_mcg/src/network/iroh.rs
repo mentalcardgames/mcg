@@ -10,7 +10,8 @@ use crate::transport::send_peer_msg_to_writer;
 use super::types::ActorEvent;
 use super::{ConnectionCloseReason, ConnectionId, PeerConnectionCommand, PeerId};
 
-pub(super) const IROH_ALPN: &[u8] = b"mcg/iroh/1";
+/// Application protocol negotiated by all MCG Iroh peer connections.
+pub const IROH_ALPN: &[u8] = b"mcg/iroh/1";
 
 pub(super) type PeerReader = Box<dyn AsyncRead + Unpin + Send>;
 pub(super) type PeerWriter = Box<dyn AsyncWrite + Unpin + Send>;
