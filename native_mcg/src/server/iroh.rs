@@ -1,14 +1,10 @@
 // Iroh transport listener for MCG server.
 //
-// This module accepts incoming iroh connections and speaks a simple
-// newline-delimited JSON protocol where each JSON object is a
-// Frontend2BackendMsg or Backend2FrontendMsg (the same types used over the WebSocket).
+// This module bootstraps the iroh endpoint. Incoming peer streams are handed
+// to the network supervisor, which owns their protocol processing and lifecycle.
 //
-// The implementation mirrors the WebSocket handler behaviour: clients send a
-// `Frontend2BackendMsg::Subscribe` if they wish to receive broadcast state updates. After
-// subscribing they are sent the current `Backend2FrontendMsg::State` (if one exists) and
-// will receive future broadcasts. All other client messages delegate to shared
-// backend handlers to preserve transport-agnostic behavior.
+// The outgoing connection path below still uses the legacy handler and is
+// migrated separately from incoming connections.
 //
 // Note: this file is feature-gated behind the iroh Cargo feature. It attempts
 // to follow the iroh API shown in the iroh docs. The exact iroh types and
@@ -21,7 +17,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::sync::broadcast;
 
-use crate::network::NetworkHandle;
+use crate::network::{NetworkHandle, PeerId};
 use crate::public::{path_for_config, PublicInfo};
 use crate::transport::{send_server_msg_to_writer, send_peer_msg_to_writer};
 use crate::server::state::{AppState, subscribe_connection, PeerInfo};
@@ -102,8 +98,8 @@ pub async fn spawn_iroh_listener(state: AppState, network: NetworkHandle) -> Res
         }
     }
 
-    // Start the accept loop which will spawn a handler per connection
-    start_iroh_accept_loop(endpoint.clone(), state.clone());
+    // Start the accept loop which registers each peer stream with the network supervisor.
+    start_iroh_accept_loop(endpoint.clone(), network);
     start_iroh_connect_loop(endpoint.clone(), state.clone());
 
     tracing::info!(alpn = %std::str::from_utf8(ALPN).unwrap_or("mcg/iroh/1"), "iroh listener started");
@@ -200,12 +196,10 @@ async fn build_iroh_endpoint(
     Ok(endpoint)
 }
 
-/// Spawn the accept loop which accepts connections and spawns a handler
-/// task for each connection. This mirrors the previous inline logic but
-/// keeps the accept loop isolated for clarity.
-fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, state: AppState) {
+/// Spawn the accept loop which accepts connections and registers their first
+/// bidirectional stream with the network supervisor.
+fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, network: NetworkHandle) {
     let ep_accept = endpoint;
-    let state_clone = state.clone();
     tokio::spawn(async move {
         loop {
             match ep_accept.accept().await {
@@ -213,10 +207,10 @@ fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, state: AppState) {
                     Ok(conn) => {
                         let remote_node_id = conn.remote_id();
                         tracing::info!(peer = %remote_node_id, "Accepted new iroh connection");
-                        let state_for_conn = state_clone.clone();
+                        let network = network.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = manage_incoming_iroh_connection(state_for_conn, conn).await {
-                                tracing::error!(error = %e, "iroh connection handler error");
+                            if let Err(e) = register_incoming_iroh_connection(network, conn).await {
+                                tracing::error!(peer = %remote_node_id, error = %e, "failed to register incoming iroh connection");
                             }
                         });
                     }
@@ -231,6 +225,24 @@ fn start_iroh_accept_loop(endpoint: iroh::endpoint::Endpoint, state: AppState) {
             }
         }
     });
+}
+
+async fn register_incoming_iroh_connection(
+    network: NetworkHandle,
+    connection: iroh::endpoint::Connection,
+) -> Result<()> {
+    let peer_id = PeerId::new(connection.remote_id().to_string());
+    let (writer, reader) = connection
+        .accept_bi()
+        .await
+        .context("accepting incoming Iroh bidirectional stream")?;
+    let connection_id = network
+        .register_iroh_peer(peer_id.clone(), reader, writer)
+        .await
+        .context("registering incoming Iroh peer with network supervisor")?;
+
+    tracing::info!(%connection_id, %peer_id, "incoming Iroh peer registered");
+    Ok(())
 }
 
 fn start_iroh_connect_loop(endpoint: iroh::endpoint::Endpoint, state: AppState){
@@ -279,129 +291,6 @@ fn start_iroh_connect_loop(endpoint: iroh::endpoint::Endpoint, state: AppState){
         }
     });
 }
-// Per-connection handler which speaks newline-delimited JSON over a
-// bi-directional iroh connection. Separated into smaller helpers to make
-// the flow easier to reason about and unit-test individual parts.
-async fn manage_incoming_iroh_connection(
-    state: AppState,
-    connection: iroh::endpoint::Connection,
-) -> Result<()> {
-    // Accept a bidirectional stream (send, recv) and wrap recv in a BufReader.
-    let (mut send, recv) = connection.accept_bi().await?;
-    let mut reader = BufReader::new(recv);
-
-    tracing::info!(peer = %connection.remote_id(), "Iroh bi-stream established");
-    let peer_id = connection.remote_id();
-    let mut subscription: Option<broadcast::Receiver<Backend2FrontendMsg>> = None;
-    // Receiver for peer broadcasts
-    let mut peer_rx = state.peer_broadcaster.subscribe();
-
-    let mut line = String::new();
-    loop {
-        line.clear();
-        if let Some(rx) = subscription.as_mut() {
-            tokio::select! {
-                recv = rx.recv() => {
-                    match recv {
-                        Ok(sm) => {
-                            if let Err(e) = send_server_msg_to_writer(&mut send, &sm).await {
-                                tracing::error!(error = %e, "iroh send error while forwarding broadcast");
-                                break;
-                            }
-                        }
-                        Err(broadcast::error::RecvError::Lagged(_)) => {
-                            continue;
-                        }
-                        Err(broadcast::error::RecvError::Closed) => {
-                            break;
-                        }
-                    }
-                }
-                peer = peer_rx.recv() => {
-                    match peer {
-                        Ok(pm) => {
-                            if let Err(e) = send_peer_msg_to_writer(&mut send, &pm).await {
-                                tracing::error!(error = %e, "iroh send error while forwarding peer broadcast");
-                                break;
-                            }
-                        }
-                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                        Err(broadcast::error::RecvError::Closed) => break,
-                    }
-                }
-                res = reader.read_line(&mut line) => {
-                    match res {
-                        Ok(0) => break,
-                        Ok(_) => {
-                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(), peer_id.clone()).await? {
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!(error = %e, "iroh read error");
-                            break;
-                        }
-                    }
-                }
-            }
-        } else {
-            // subscription == None: still poll peer_rx so peer messages are forwarded
-            tokio::select! {
-                peer = peer_rx.recv() => {
-                    match peer {
-                        Ok(pm) => {
-                            if let Err(e) = send_peer_msg_to_writer(&mut send, &pm).await {
-                                tracing::error!(error = %e, "iroh send error while forwarding peer broadcast");
-                                break;
-                            }
-                        }
-                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                        Err(broadcast::error::RecvError::Closed) => break,
-                    }
-                }
-                res = reader.read_line(&mut line) => {
-                    match res {
-                        Ok(0) => break,
-                        Ok(_) => {
-                            if !process_iroh_line(&state, &mut send, &mut subscription, line.trim(),peer_id.clone()).await?
-                            {
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!(error = %e, "iroh read error");
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    tracing::info!("[IROH DISCONNECT] Client");
-    // Close the send side politely if available
-    let _ = send.finish();
-    // Remove the peer in case they couldn't send a disconnect message or we hit an error
-    {
-        let name_to_remove = {
-            let peers = state.peers.read().await;
-            peers.get(&peer_id)
-                .map(|p| p.name.clone())
-        };
-
-        if let Some(name) = name_to_remove {
-            let _ = state.broadcaster.send(
-                Backend2FrontendMsg::RemovePlayer(name)
-            );
-        }
-    }
-    {
-        state.peers.write().await.remove(&peer_id);
-    }
-    connection.closed().await;
-    Ok(())
-}
-
 //Split the original manage_iroh_connection into two seperate functions (logic is the same)
 // The reason for this is so that we can set up sending specific messages easier
 async fn manage_outgoing_iroh_connection(
