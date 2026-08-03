@@ -80,6 +80,16 @@ pub enum Backend2FrontendMsg {
     PlayerReady(String, bool),
 }
 
+/// First message sent when opening a peer WebSocket connection.
+///
+/// WebSockets do not authenticate a remote endpoint like Iroh does, so the
+/// initiating backend has to claim its identity before peer messages may flow.
+/// The receiving backend must not treat this claim as proof of identity.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WebSocketPeerHandshake {
+    pub peer_id: String,
+}
+
 /// Messages that are send between two peers
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
@@ -88,7 +98,7 @@ pub enum Peer2PeerMsg {
     Pong,
     Connect(String, Option<String>), // Send our name and our endpointticket (if we have one) to the peer we're connecting to
     Disconnect(String), // Send our name to the peer we're disconnecting from (so they can remove us from their peer list)
-    Reject(String), // Send a reason for rejecting the connection to the peer we're rejecting
+    Reject(String),     // Send a reason for rejecting the connection to the peer we're rejecting
     Payload(String),
     LobbyAccept(usize, String), // Number of max players in the lobby, gametype, and trigger to open lobby on the receiving peer
     Peers(HashMap<String, (String, String)>), // EndpointId (as string) -> Peer's Name and Ticket

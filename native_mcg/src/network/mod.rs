@@ -16,3 +16,4 @@ pub use types::{
     ConnectionCloseReason, ConnectionId, FrontendConnectionCommand, NetworkCommand, NetworkEvent,
     PeerConnectionCommand, PeerConnectionDirection, PeerId, ProtocolRole, TransportKind,
 };
+pub use websocket::{WEBSOCKET_FRONTEND_PROTOCOL, WEBSOCKET_PEER_PROTOCOL};

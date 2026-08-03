@@ -15,7 +15,7 @@ use super::iroh::{
     IrohEndpointConnector, IrohReader, IrohWriter,
 };
 use super::types::ActorEvent;
-use super::websocket::run_websocket_actor;
+use super::websocket::{run_websocket_frontend_actor, run_websocket_pending_peer_actor};
 use super::{
     ConnectionId, FrontendConnectionCommand, NetworkCommand, NetworkEvent, PeerConnectionCommand,
     PeerConnectionDirection, PeerId, ProtocolRole, TransportKind,
@@ -38,6 +38,7 @@ pub enum NetworkError {
     },
     ConnectionBackpressured(ConnectionId),
     ConnectionActorStopped(ConnectionId),
+    PeerNotIdentified(ConnectionId),
     TransportAlreadyConfigured(TransportKind),
     TransportUnavailable(TransportKind),
     InvalidPeerTicket(String),
@@ -72,6 +73,12 @@ impl fmt::Display for NetworkError {
             }
             Self::ConnectionActorStopped(connection_id) => {
                 write!(formatter, "connection actor {connection_id} stopped")
+            }
+            Self::PeerNotIdentified(connection_id) => {
+                write!(
+                    formatter,
+                    "peer connection {connection_id} has not identified itself"
+                )
             }
             Self::TransportAlreadyConfigured(transport) => {
                 write!(formatter, "{transport:?} transport is already configured")
@@ -159,13 +166,31 @@ impl NetworkHandle {
     }
 
     /// Registers an upgraded frontend WebSocket with the supervisor.
-    pub async fn register_websocket(
+    pub async fn register_frontend_websocket(
         &self,
         socket: WebSocket,
     ) -> Result<ConnectionId, NetworkError> {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
-            .send(SupervisorRequest::RegisterWebSocket {
+            .send(SupervisorRequest::RegisterFrontendWebSocket {
+                socket: Box::new(socket),
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Registers an upgraded peer WebSocket pending its identity handshake.
+    pub async fn register_pending_peer_websocket(
+        &self,
+        socket: WebSocket,
+    ) -> Result<ConnectionId, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::RegisterPendingPeerWebSocket {
                 socket: Box::new(socket),
                 response_tx,
             })
@@ -384,11 +409,18 @@ impl NetworkSupervisor {
                 ticket,
                 response_tx,
             } => self.start_iroh_connect(ticket, response_tx),
-            SupervisorRequest::RegisterWebSocket {
+            SupervisorRequest::RegisterFrontendWebSocket {
                 socket,
                 response_tx,
             } => {
-                let result = self.register_websocket(*socket);
+                let result = self.register_frontend_websocket(*socket);
+                let _ = response_tx.send(result);
+            }
+            SupervisorRequest::RegisterPendingPeerWebSocket {
+                socket,
+                response_tx,
+            } => {
+                let result = self.register_pending_peer_websocket(*socket);
                 let _ = response_tx.send(result);
             }
             SupervisorRequest::RegisterIncomingIrohPeer {
@@ -494,7 +526,10 @@ impl NetworkSupervisor {
         let _ = result.response_tx.send(connection);
     }
 
-    fn register_websocket(&mut self, socket: WebSocket) -> Result<ConnectionId, NetworkError> {
+    fn register_frontend_websocket(
+        &mut self,
+        socket: WebSocket,
+    ) -> Result<ConnectionId, NetworkError> {
         let connection_id = self.allocate_connection_id()?;
         let (command_tx, command_rx) = mpsc::channel(self.connection_channel_capacity);
         let actor_event_tx = self.actor_event_tx.clone();
@@ -506,7 +541,32 @@ impl NetworkSupervisor {
                 target: ManagedTarget::Frontend { command_tx },
             },
         );
-        self.tasks.spawn(run_websocket_actor(
+        self.tasks.spawn(run_websocket_frontend_actor(
+            connection_id,
+            socket,
+            actor_event_tx,
+            command_rx,
+        ));
+
+        Ok(connection_id)
+    }
+
+    fn register_pending_peer_websocket(
+        &mut self,
+        socket: WebSocket,
+    ) -> Result<ConnectionId, NetworkError> {
+        let connection_id = self.allocate_connection_id()?;
+        let (command_tx, command_rx) = mpsc::channel(self.connection_channel_capacity);
+        let actor_event_tx = self.actor_event_tx.clone();
+
+        self.connections.insert(
+            connection_id,
+            ManagedConnection {
+                transport: TransportKind::WebSocket,
+                target: ManagedTarget::PendingPeer { command_tx },
+            },
+        );
+        self.tasks.spawn(run_websocket_pending_peer_actor(
             connection_id,
             socket,
             actor_event_tx,
@@ -614,7 +674,7 @@ impl NetworkSupervisor {
             .ok_or(NetworkError::ConnectionNotFound(connection_id))?;
         let command_tx = match &connection.target {
             ManagedTarget::Frontend { command_tx } => command_tx.clone(),
-            ManagedTarget::Peer { .. } => {
+            ManagedTarget::PendingPeer { .. } | ManagedTarget::Peer { .. } => {
                 return Err(NetworkError::ProtocolMismatch {
                     connection_id,
                     expected: ProtocolRole::Frontend,
@@ -644,6 +704,9 @@ impl NetworkSupervisor {
                     actual: connection.role(),
                 });
             }
+            ManagedTarget::PendingPeer { .. } => {
+                return Err(NetworkError::PeerNotIdentified(connection_id));
+            }
         };
 
         self.try_send(connection_id, command_tx, command)
@@ -667,6 +730,11 @@ impl NetworkSupervisor {
                 FrontendConnectionCommand::Close { reason },
             ),
             ManagedTarget::Peer { command_tx, .. } => self.try_send(
+                connection_id,
+                command_tx,
+                PeerConnectionCommand::Close { reason },
+            ),
+            ManagedTarget::PendingPeer { command_tx } => self.try_send(
                 connection_id,
                 command_tx,
                 PeerConnectionCommand::Close { reason },
@@ -699,7 +767,7 @@ impl NetworkSupervisor {
                     tracing::warn!(%connection_id, "ready event belongs to an unknown connection");
                     return None;
                 };
-                Some(connection.connected_event(connection_id))
+                connection.connected_event(connection_id)
             }
             ActorEvent::FrontendMessage {
                 connection_id,
@@ -708,6 +776,10 @@ impl NetworkSupervisor {
                 connection_id,
                 message,
             }),
+            ActorEvent::PeerIdentified {
+                connection_id,
+                peer_id,
+            } => self.promote_pending_peer(connection_id, peer_id),
             ActorEvent::PeerMessage {
                 connection_id,
                 message,
@@ -727,6 +799,33 @@ impl NetworkSupervisor {
             }
         }
     }
+
+    fn promote_pending_peer(
+        &mut self,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
+    ) -> Option<NetworkEvent> {
+        let Some(connection) = self.connections.get_mut(&connection_id) else {
+            tracing::warn!(%connection_id, %peer_id, "peer identity belongs to an unknown connection");
+            return None;
+        };
+        let ManagedTarget::PendingPeer { command_tx } = &connection.target else {
+            tracing::warn!(%connection_id, %peer_id, actual = ?connection.role(), "peer identity belongs to a non-pending connection");
+            return None;
+        };
+
+        connection.target = ManagedTarget::Peer {
+            peer_id: peer_id.clone(),
+            direction: PeerConnectionDirection::Incoming,
+            command_tx: command_tx.clone(),
+        };
+        Some(NetworkEvent::PeerConnected {
+            connection_id,
+            peer_id,
+            transport: connection.transport,
+            direction: PeerConnectionDirection::Incoming,
+        })
+    }
 }
 
 /// Type that represents the internal contract between NetworkSupervisor and NetworkHandle for message calls on the handle.
@@ -742,7 +841,11 @@ enum SupervisorRequest {
         ticket: String,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
-    RegisterWebSocket {
+    RegisterFrontendWebSocket {
+        socket: Box<WebSocket>,
+        response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
+    },
+    RegisterPendingPeerWebSocket {
         socket: Box<WebSocket>,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
@@ -779,6 +882,9 @@ enum ManagedTarget {
     Frontend {
         command_tx: mpsc::Sender<FrontendConnectionCommand>,
     },
+    PendingPeer {
+        command_tx: mpsc::Sender<PeerConnectionCommand>,
+    },
     Peer {
         peer_id: PeerId,
         direction: PeerConnectionDirection,
@@ -790,24 +896,29 @@ impl ManagedConnection {
     fn role(&self) -> ProtocolRole {
         match &self.target {
             ManagedTarget::Frontend { .. } => ProtocolRole::Frontend,
+            ManagedTarget::PendingPeer { .. } => ProtocolRole::Peer,
             ManagedTarget::Peer { .. } => ProtocolRole::Peer,
         }
     }
 
-    fn connected_event(&self, connection_id: ConnectionId) -> NetworkEvent {
+    fn connected_event(&self, connection_id: ConnectionId) -> Option<NetworkEvent> {
         match &self.target {
-            ManagedTarget::Frontend { .. } => NetworkEvent::FrontendConnected {
+            ManagedTarget::Frontend { .. } => Some(NetworkEvent::FrontendConnected {
                 connection_id,
                 transport: self.transport,
-            },
+            }),
+            ManagedTarget::PendingPeer { .. } => {
+                tracing::warn!(%connection_id, "pending peer reported ready before identification");
+                None
+            }
             ManagedTarget::Peer {
                 peer_id, direction, ..
-            } => NetworkEvent::PeerConnected {
+            } => Some(NetworkEvent::PeerConnected {
                 connection_id,
                 peer_id: peer_id.clone(),
                 transport: self.transport,
                 direction: *direction,
-            },
+            }),
         }
     }
 }
@@ -887,7 +998,7 @@ mod tests {
     ) -> impl IntoResponse {
         ws.on_upgrade(move |socket| async move {
             network
-                .register_websocket(socket)
+                .register_frontend_websocket(socket)
                 .await
                 .expect("test supervisor should be running");
         })

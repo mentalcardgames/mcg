@@ -158,6 +158,10 @@ pub(super) enum ActorEvent {
         connection_id: ConnectionId,
         message: Frontend2BackendMsg,
     },
+    PeerIdentified {
+        connection_id: ConnectionId,
+        peer_id: PeerId,
+    },
     PeerMessage {
         connection_id: ConnectionId,
         message: Peer2PeerMsg,
