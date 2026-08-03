@@ -1,3 +1,6 @@
+use async_trait::async_trait;
+use iroh::endpoint::Endpoint;
+use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::Peer2PeerMsg;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
@@ -8,6 +11,52 @@ use super::{
     ConnectionCloseReason, ConnectionId, ConnectionInfo, ConnectionRole, NetworkEvent,
     PeerConnectionCommand, TransportKind,
 };
+
+pub(super) const IROH_ALPN: &[u8] = b"mcg/iroh/1";
+
+pub(super) type PeerReader = Box<dyn AsyncRead + Unpin + Send>;
+pub(super) type PeerWriter = Box<dyn AsyncWrite + Unpin + Send>;
+
+#[derive(Debug)]
+pub(super) enum IrohConnectError {
+    InvalidTicket(String),
+    Connect(String),
+    OpenStream(String),
+}
+
+#[async_trait]
+pub(super) trait IrohConnector: Send + Sync {
+    async fn connect(&self, ticket: String) -> Result<(PeerReader, PeerWriter), IrohConnectError>;
+}
+
+pub(super) struct IrohEndpointConnector {
+    endpoint: Endpoint,
+}
+
+impl IrohEndpointConnector {
+    pub(super) fn new(endpoint: Endpoint) -> Self {
+        Self { endpoint }
+    }
+}
+
+#[async_trait]
+impl IrohConnector for IrohEndpointConnector {
+    async fn connect(&self, ticket: String) -> Result<(PeerReader, PeerWriter), IrohConnectError> {
+        let ticket = EndpointTicket::deserialize(&ticket)
+            .map_err(|error| IrohConnectError::InvalidTicket(error.to_string()))?;
+        let connection = self
+            .endpoint
+            .connect(ticket.endpoint_addr().clone(), IROH_ALPN)
+            .await
+            .map_err(|error| IrohConnectError::Connect(error.to_string()))?;
+        let (writer, reader) = connection
+            .open_bi()
+            .await
+            .map_err(|error| IrohConnectError::OpenStream(error.to_string()))?;
+
+        Ok((Box::new(reader), Box::new(writer)))
+    }
+}
 
 /// Runs one established Iroh peer stream.
 ///

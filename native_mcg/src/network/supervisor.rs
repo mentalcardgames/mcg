@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
+use std::sync::Arc;
 
 use axum::extract::ws::WebSocket;
+use iroh::endpoint::Endpoint;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
 
+use super::iroh::{IrohConnectError, IrohConnector, IrohEndpointConnector, PeerReader, PeerWriter};
 use super::{
     run_iroh_peer_actor, run_websocket_actor, ConnectionId, ConnectionRole,
-    FrontendConnectionCommand, NetworkCommand, NetworkEvent, PeerConnectionCommand,
+    FrontendConnectionCommand, NetworkCommand, NetworkEvent, PeerConnectionCommand, TransportKind,
 };
 
 const DEFAULT_CONTROL_CHANNEL_CAPACITY: usize = 256;
@@ -27,6 +30,13 @@ pub enum NetworkError {
     },
     ConnectionBackpressured(ConnectionId),
     ConnectionActorStopped(ConnectionId),
+    TransportAlreadyConfigured(TransportKind),
+    TransportUnavailable(TransportKind),
+    InvalidPeerTicket(String),
+    ConnectionSetupFailed {
+        transport: TransportKind,
+        message: String,
+    },
 }
 
 impl fmt::Display for NetworkError {
@@ -54,6 +64,19 @@ impl fmt::Display for NetworkError {
             Self::ConnectionActorStopped(connection_id) => {
                 write!(formatter, "connection actor {connection_id} stopped")
             }
+            Self::TransportAlreadyConfigured(transport) => {
+                write!(formatter, "{transport:?} transport is already configured")
+            }
+            Self::TransportUnavailable(transport) => {
+                write!(formatter, "{transport:?} transport is unavailable")
+            }
+            Self::InvalidPeerTicket(message) => write!(formatter, "invalid peer ticket: {message}"),
+            Self::ConnectionSetupFailed { transport, message } => {
+                write!(
+                    formatter,
+                    "failed to establish {transport:?} connection: {message}"
+                )
+            }
         }
     }
 }
@@ -67,6 +90,47 @@ pub struct NetworkHandle {
 }
 
 impl NetworkHandle {
+    /// Configures the Iroh endpoint used for outgoing peer connections.
+    pub async fn configure_iroh_endpoint(&self, endpoint: Endpoint) -> Result<(), NetworkError> {
+        self.configure_iroh_connector(Arc::new(IrohEndpointConnector::new(endpoint)))
+            .await
+    }
+
+    async fn configure_iroh_connector(
+        &self,
+        connector: Arc<dyn IrohConnector>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::ConfigureIroh {
+                connector,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Establishes and registers an outgoing Iroh peer connection.
+    pub async fn connect_iroh_peer(
+        &self,
+        ticket: impl Into<String>,
+    ) -> Result<ConnectionId, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::ConnectIrohPeer {
+                ticket: ticket.into(),
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
     /// Registers an upgraded frontend WebSocket with the supervisor.
     pub async fn register_websocket(
         &self,
@@ -136,6 +200,11 @@ pub struct NetworkSupervisor {
     application_event_tx: mpsc::Sender<NetworkEvent>,
     /// Requests from NetworkHandles.
     request_rx: mpsc::Receiver<SupervisorRequest>,
+    /// Completed outgoing Iroh connection attempts.
+    iroh_connect_result_tx: mpsc::Sender<IrohConnectResult>,
+    iroh_connect_result_rx: mpsc::Receiver<IrohConnectResult>,
+    /// Endpoint-backed connector for outgoing Iroh connections.
+    iroh_connector: Option<Arc<dyn IrohConnector>>,
     /// Container with all connections with other peers or with frontends.
     connections: HashMap<ConnectionId, ManagedConnection>,
     next_connection_id: u64,
@@ -162,11 +231,16 @@ impl NetworkSupervisor {
 
         let (request_tx, request_rx) = mpsc::channel(control_channel_capacity);
         let (actor_event_tx, actor_event_rx) = mpsc::channel(control_channel_capacity);
+        let (iroh_connect_result_tx, iroh_connect_result_rx) =
+            mpsc::channel(control_channel_capacity);
         let handle = NetworkHandle { request_tx };
         let supervisor = Self {
             request_rx,
             actor_event_tx,
             actor_event_rx,
+            iroh_connect_result_tx,
+            iroh_connect_result_rx,
+            iroh_connector: None,
             application_event_tx,
             connections: HashMap::new(),
             next_connection_id: 0,
@@ -197,6 +271,12 @@ impl NetworkSupervisor {
                         break;
                     }
                 }
+                result = self.iroh_connect_result_rx.recv() => {
+                    let Some(result) = result else {
+                        break;
+                    };
+                    self.handle_iroh_connect_result(result);
+                }
             }
         }
         tracing::info!(
@@ -207,6 +287,17 @@ impl NetworkSupervisor {
 
     fn handle_request(&mut self, request: SupervisorRequest) {
         match request {
+            SupervisorRequest::ConfigureIroh {
+                connector,
+                response_tx,
+            } => {
+                let result = self.configure_iroh_connector(connector);
+                let _ = response_tx.send(result);
+            }
+            SupervisorRequest::ConnectIrohPeer {
+                ticket,
+                response_tx,
+            } => self.start_iroh_connect(ticket, response_tx),
             SupervisorRequest::RegisterWebSocket {
                 socket,
                 response_tx,
@@ -232,6 +323,65 @@ impl NetworkSupervisor {
         }
     }
 
+    fn configure_iroh_connector(
+        &mut self,
+        connector: Arc<dyn IrohConnector>,
+    ) -> Result<(), NetworkError> {
+        if self.iroh_connector.is_some() {
+            return Err(NetworkError::TransportAlreadyConfigured(
+                TransportKind::Iroh,
+            ));
+        }
+        self.iroh_connector = Some(connector);
+        Ok(())
+    }
+
+    fn start_iroh_connect(
+        &self,
+        ticket: String,
+        response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
+    ) {
+        let Some(connector) = self.iroh_connector.clone() else {
+            let _ = response_tx.send(Err(NetworkError::TransportUnavailable(TransportKind::Iroh)));
+            return;
+        };
+        let result_tx = self.iroh_connect_result_tx.clone();
+
+        tokio::spawn(async move {
+            let result = connector.connect(ticket).await;
+            let completion = IrohConnectResult {
+                result,
+                response_tx,
+            };
+            if let Err(error) = result_tx.send(completion).await {
+                let _ = error
+                    .0
+                    .response_tx
+                    .send(Err(NetworkError::SupervisorStopped));
+            }
+        });
+    }
+
+    fn handle_iroh_connect_result(&mut self, result: IrohConnectResult) {
+        let connection = match result.result {
+            Ok((reader, writer)) => self.register_iroh_peer(reader, writer),
+            Err(IrohConnectError::InvalidTicket(message)) => {
+                Err(NetworkError::InvalidPeerTicket(message))
+            }
+            Err(IrohConnectError::Connect(message)) => Err(NetworkError::ConnectionSetupFailed {
+                transport: TransportKind::Iroh,
+                message,
+            }),
+            Err(IrohConnectError::OpenStream(message)) => {
+                Err(NetworkError::ConnectionSetupFailed {
+                    transport: TransportKind::Iroh,
+                    message: format!("opening bidirectional stream: {message}"),
+                })
+            }
+        };
+        let _ = result.response_tx.send(connection);
+    }
+
     fn register_websocket(&mut self, socket: WebSocket) -> Result<ConnectionId, NetworkError> {
         let connection_id = self.allocate_connection_id()?;
         let (command_tx, command_rx) = mpsc::channel(self.connection_channel_capacity);
@@ -251,8 +401,8 @@ impl NetworkSupervisor {
 
     fn register_iroh_peer(
         &mut self,
-        reader: Box<dyn AsyncRead + Unpin + Send>,
-        writer: Box<dyn AsyncWrite + Unpin + Send>,
+        reader: PeerReader,
+        writer: PeerWriter,
     ) -> Result<ConnectionId, NetworkError> {
         let connection_id = self.allocate_connection_id()?;
         let (command_tx, command_rx) = mpsc::channel(self.connection_channel_capacity);
@@ -396,6 +546,14 @@ impl NetworkSupervisor {
 
 /// Type that represents the internal contract between NetworkSupervisor and NetworkHandle for message calls on the handle.
 enum SupervisorRequest {
+    ConfigureIroh {
+        connector: Arc<dyn IrohConnector>,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    ConnectIrohPeer {
+        ticket: String,
+        response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
+    },
     RegisterWebSocket {
         socket: Box<WebSocket>,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
@@ -409,6 +567,11 @@ enum SupervisorRequest {
         command: NetworkCommand,
         response_tx: oneshot::Sender<Result<(), NetworkError>>,
     },
+}
+
+struct IrohConnectResult {
+    result: Result<(PeerReader, PeerWriter), IrohConnectError>,
+    response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
 }
 
 #[derive(Clone)]
@@ -435,6 +598,7 @@ mod tests {
     use std::time::Duration;
 
     use anyhow::Result;
+    use async_trait::async_trait;
     use axum::{
         extract::{ws::WebSocketUpgrade, State},
         response::IntoResponse,
@@ -444,10 +608,29 @@ mod tests {
     use futures::{SinkExt, StreamExt};
     use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
     use tokio::io::{duplex, split, AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::sync::Mutex;
     use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 
     use super::*;
     use crate::network::{ConnectionCloseReason, ConnectionInfo, TransportKind};
+
+    struct OneShotIrohConnector {
+        stream: Mutex<Option<(PeerReader, PeerWriter)>>,
+    }
+
+    #[async_trait]
+    impl IrohConnector for OneShotIrohConnector {
+        async fn connect(
+            &self,
+            _ticket: String,
+        ) -> Result<(PeerReader, PeerWriter), IrohConnectError> {
+            self.stream
+                .lock()
+                .await
+                .take()
+                .ok_or_else(|| IrohConnectError::Connect("test stream already consumed".into()))
+        }
+    }
 
     async fn test_ws_handler(
         ws: WebSocketUpgrade,
@@ -588,9 +771,28 @@ mod tests {
         let (remote_reader, mut remote_writer) = split(remote_stream);
         let mut remote_reader = BufReader::new(remote_reader);
 
-        let connection_id = network
-            .register_iroh_peer(actor_reader, actor_writer)
+        let unavailable = network.connect_iroh_peer("test-ticket").await;
+        assert_eq!(
+            unavailable,
+            Err(NetworkError::TransportUnavailable(TransportKind::Iroh))
+        );
+        network
+            .configure_iroh_connector(Arc::new(OneShotIrohConnector {
+                stream: Mutex::new(Some((Box::new(actor_reader), Box::new(actor_writer)))),
+            }))
             .await?;
+        let duplicate_configuration = network
+            .configure_iroh_connector(Arc::new(OneShotIrohConnector {
+                stream: Mutex::new(None),
+            }))
+            .await;
+        assert_eq!(
+            duplicate_configuration,
+            Err(NetworkError::TransportAlreadyConfigured(
+                TransportKind::Iroh
+            ))
+        );
+        let connection_id = network.connect_iroh_peer("test-ticket").await?;
         let opened = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
             .await?
             .expect("supervisor should forward the open event");
