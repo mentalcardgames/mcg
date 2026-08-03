@@ -1,11 +1,13 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use tokio::sync::{broadcast, mpsc};
 
-use crate::network::{ConnectionId, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle};
+use crate::network::{
+    ConnectionId, ConnectionRole, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle, PeerId,
+};
 
-use super::state::{current_state_public, dispatch_client_message, AppState};
+use super::state::{current_state_public, dispatch_client_message, AppState, PeerInfo};
 
 /// Temporary bridge between the actor-based network layer and the legacy
 /// lock-based backend state.
@@ -14,7 +16,9 @@ pub(super) struct LegacyBackendAdapter {
     network: NetworkHandle,
     event_rx: mpsc::Receiver<NetworkEvent>,
     broadcast_rx: broadcast::Receiver<Backend2FrontendMsg>,
+    peer_broadcast_rx: broadcast::Receiver<Peer2PeerMsg>,
     subscribers: HashSet<ConnectionId>,
+    peer_ids: HashMap<ConnectionId, PeerId>,
 }
 
 impl LegacyBackendAdapter {
@@ -24,12 +28,15 @@ impl LegacyBackendAdapter {
         event_rx: mpsc::Receiver<NetworkEvent>,
     ) -> Self {
         let broadcast_rx = state.broadcaster.subscribe();
+        let peer_broadcast_rx = state.peer_broadcaster.subscribe();
         Self {
             state,
             network,
             event_rx,
             broadcast_rx,
+            peer_broadcast_rx,
             subscribers: HashSet::new(),
+            peer_ids: HashMap::new(),
         }
     }
 
@@ -57,6 +64,19 @@ impl LegacyBackendAdapter {
                         Err(broadcast::error::RecvError::Closed) => break,
                     }
                 }
+                broadcast = self.peer_broadcast_rx.recv() => {
+                    match broadcast {
+                        Ok(message) => {
+                            if !self.forward_peer_broadcast(message).await {
+                                break;
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            tracing::warn!(skipped, "legacy network adapter missed peer broadcasts");
+                        }
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    }
+                }
             }
         }
         tracing::info!("legacy backend network adapter stopped");
@@ -71,6 +91,23 @@ impl LegacyBackendAdapter {
                     transport = ?connection.transport,
                     "network connection opened"
                 );
+                match (connection.role, connection.peer_id) {
+                    (ConnectionRole::Peer, Some(peer_id)) => {
+                        self.peer_ids.insert(connection.id, peer_id);
+                    }
+                    (ConnectionRole::Frontend, None) => {}
+                    (role, peer_id) => {
+                        tracing::error!(
+                            connection_id = %connection.id,
+                            ?role,
+                            ?peer_id,
+                            "network connection has inconsistent peer metadata"
+                        );
+                        return self
+                            .close_connection(connection.id, "inconsistent peer metadata".into())
+                            .await;
+                    }
+                }
                 true
             }
             NetworkEvent::ConnectionClosed {
@@ -78,6 +115,7 @@ impl LegacyBackendAdapter {
                 reason,
             } => {
                 self.subscribers.remove(&connection_id);
+                self.remove_peer_connection(connection_id).await;
                 tracing::debug!(%connection_id, ?reason, "network connection closed");
                 true
             }
@@ -96,8 +134,14 @@ impl LegacyBackendAdapter {
                 connection_id,
                 message,
             } => {
-                tracing::warn!(%connection_id, ?message, "legacy adapter does not handle peer events yet");
-                true
+                let Some(peer_id) = self.peer_ids.get(&connection_id).cloned() else {
+                    tracing::error!(%connection_id, "peer message has no registered peer identity");
+                    return self
+                        .close_connection(connection_id, "missing peer identity".into())
+                        .await;
+                };
+                self.handle_peer_message(connection_id, peer_id, message)
+                    .await
             }
         }
     }
@@ -117,6 +161,247 @@ impl LegacyBackendAdapter {
                 .await
         } else {
             true
+        }
+    }
+
+    async fn handle_peer_message(
+        &mut self,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
+        message: Peer2PeerMsg,
+    ) -> bool {
+        match message {
+            Peer2PeerMsg::Connect(name, ticket) => {
+                let (rejection, max_players, game_type) = {
+                    let lobby = self.state.lobby.read().await;
+                    let peers = self.state.peers.read().await;
+                    let rejection = if !lobby.lobby_open {
+                        Some("Lobby is closed")
+                    } else if lobby.game_running {
+                        Some("Game is already running, wait until it finishes and try again")
+                    } else if peers.len() >= lobby.max_players {
+                        Some("Lobby is full")
+                    } else {
+                        None
+                    };
+                    (rejection, lobby.max_players, lobby.game_type.clone())
+                };
+
+                if let Some(reason) = rejection {
+                    if !self
+                        .send_peer(connection_id, Peer2PeerMsg::Reject(reason.into()))
+                        .await
+                    {
+                        return false;
+                    }
+                    return self
+                        .close_connection(connection_id, "peer connection rejected".into())
+                        .await;
+                }
+
+                let Some(endpoint_id) = Self::parse_peer_endpoint_id(&peer_id) else {
+                    return self
+                        .close_connection(connection_id, "invalid peer identity".into())
+                        .await;
+                };
+
+                if !self
+                    .send_peer(
+                        connection_id,
+                        Peer2PeerMsg::LobbyAccept(max_players, game_type),
+                    )
+                    .await
+                {
+                    return false;
+                }
+
+                let assigned_name = {
+                    let peers = self.state.peers.read().await;
+                    if peers.values().any(|peer| peer.name == name) {
+                        let mut counter = 2;
+                        loop {
+                            let candidate = format!("{name} {counter}");
+                            if !peers.values().any(|peer| peer.name == candidate) {
+                                break candidate;
+                            }
+                            counter += 1;
+                        }
+                    } else {
+                        name.clone()
+                    }
+                };
+
+                if assigned_name != name
+                    && !self
+                        .send_peer(connection_id, Peer2PeerMsg::NewName(assigned_name.clone()))
+                        .await
+                {
+                    return false;
+                }
+
+                let peers = {
+                    self.state
+                        .peers
+                        .read()
+                        .await
+                        .iter()
+                        .map(|(id, info)| {
+                            (id.to_string(), (info.name.clone(), info.ticket.clone()))
+                        })
+                        .collect()
+                };
+                if !self
+                    .send_peer(connection_id, Peer2PeerMsg::Peers(peers))
+                    .await
+                {
+                    return false;
+                }
+
+                self.state.peers.write().await.insert(
+                    endpoint_id,
+                    PeerInfo {
+                        name: assigned_name.clone(),
+                        ticket: ticket.unwrap_or_default(),
+                    },
+                );
+                let _ = self
+                    .state
+                    .broadcaster
+                    .send(Backend2FrontendMsg::NewPlayer(assigned_name));
+                true
+            }
+            Peer2PeerMsg::Disconnect(name) => {
+                self.remove_peer_from_state(&peer_id).await;
+                let _ = self
+                    .state
+                    .broadcaster
+                    .send(Backend2FrontendMsg::RemovePlayer(name));
+                self.close_connection(connection_id, "peer requested disconnect".into())
+                    .await
+            }
+            Peer2PeerMsg::Peers(peers) => {
+                let mut next_ticket = None;
+                {
+                    let mut known_peers = self.state.peers.write().await;
+                    for (id, (name, ticket)) in peers {
+                        let Ok(endpoint_id) = id.parse::<iroh::EndpointId>() else {
+                            tracing::warn!(peer_id = %id, "received invalid advertised peer identity");
+                            continue;
+                        };
+                        if known_peers.contains_key(&endpoint_id) {
+                            continue;
+                        }
+
+                        known_peers.insert(
+                            endpoint_id,
+                            PeerInfo {
+                                name: name.clone(),
+                                ticket: ticket.clone(),
+                            },
+                        );
+                        let _ = self
+                            .state
+                            .broadcaster
+                            .send(Backend2FrontendMsg::NewPlayer(name));
+                        if id != peer_id.as_str() {
+                            next_ticket = Some(ticket);
+                        }
+                    }
+                }
+                if let Some(ticket) = next_ticket {
+                    self.state.remote_ticket.write().await.replace(ticket);
+                }
+                true
+            }
+            Peer2PeerMsg::NewName(name) => {
+                self.state.lobby.write().await.our_name = name.clone();
+                let own_ticket = self.state.ticket.read().await.clone().unwrap_or_default();
+                if let Some(own_peer) = self
+                    .state
+                    .peers
+                    .write()
+                    .await
+                    .values_mut()
+                    .find(|peer| peer.ticket == own_ticket)
+                {
+                    own_peer.name = name.clone();
+                }
+                let _ = self
+                    .state
+                    .broadcaster
+                    .send(Backend2FrontendMsg::OurName(name));
+                true
+            }
+            Peer2PeerMsg::LobbyAccept(max_players, game_type) => {
+                {
+                    let mut lobby = self.state.lobby.write().await;
+                    lobby.lobby_open = true;
+                    lobby.max_players = max_players;
+                    lobby.game_type = game_type;
+                }
+                let _ = self.state.broadcaster.send(Backend2FrontendMsg::Pong);
+                true
+            }
+            Peer2PeerMsg::RequestReady => {
+                let message = {
+                    let lobby = self.state.lobby.read().await;
+                    Peer2PeerMsg::PeerReady(lobby.our_name.clone(), lobby.ready)
+                };
+                self.send_peer(connection_id, message).await
+            }
+            Peer2PeerMsg::PeerReady(name, ready) => {
+                let _ = self
+                    .state
+                    .broadcaster
+                    .send(Backend2FrontendMsg::PlayerReady(name, ready));
+                true
+            }
+            Peer2PeerMsg::Reject(reason) => {
+                let _ = self
+                    .state
+                    .broadcaster
+                    .send(Backend2FrontendMsg::Error(format!(
+                        "Peer rejected connection: {reason}"
+                    )));
+                self.close_connection(connection_id, "peer rejected connection".into())
+                    .await
+            }
+            other => {
+                tracing::debug!(%connection_id, %peer_id, ?other, "peer message has no legacy handler");
+                true
+            }
+        }
+    }
+
+    fn parse_peer_endpoint_id(peer_id: &PeerId) -> Option<iroh::EndpointId> {
+        match peer_id.as_str().parse() {
+            Ok(endpoint_id) => Some(endpoint_id),
+            Err(error) => {
+                tracing::error!(%peer_id, %error, "peer identity is not a valid Iroh endpoint ID");
+                None
+            }
+        }
+    }
+
+    async fn remove_peer_from_state(&self, peer_id: &PeerId) -> Option<PeerInfo> {
+        let endpoint_id = Self::parse_peer_endpoint_id(peer_id)?;
+        self.state.peers.write().await.remove(&endpoint_id)
+    }
+
+    async fn remove_peer_connection(&mut self, connection_id: ConnectionId) {
+        let Some(peer_id) = self.peer_ids.remove(&connection_id) else {
+            return;
+        };
+        if self.peer_ids.values().any(|known| known == &peer_id) {
+            return;
+        }
+        if let Some(peer) = self.remove_peer_from_state(&peer_id).await {
+            if !peer.name.is_empty() {
+                let _ = self
+                    .state
+                    .broadcaster
+                    .send(Backend2FrontendMsg::RemovePlayer(peer.name));
+            }
         }
     }
 
@@ -149,6 +434,16 @@ impl LegacyBackendAdapter {
         true
     }
 
+    async fn forward_peer_broadcast(&mut self, message: Peer2PeerMsg) -> bool {
+        let connections: Vec<_> = self.peer_ids.keys().copied().collect();
+        for connection_id in connections {
+            if !self.send_peer(connection_id, message.clone()).await {
+                return false;
+            }
+        }
+        true
+    }
+
     async fn send_frontend(
         &mut self,
         connection_id: ConnectionId,
@@ -173,5 +468,183 @@ impl LegacyBackendAdapter {
                 true
             }
         }
+    }
+
+    async fn send_peer(&mut self, connection_id: ConnectionId, message: Peer2PeerMsg) -> bool {
+        match self
+            .network
+            .send_command(NetworkCommand::SendPeer {
+                connection_id,
+                message,
+            })
+            .await
+        {
+            Ok(()) => true,
+            Err(NetworkError::ConnectionNotFound(_) | NetworkError::ConnectionActorStopped(_)) => {
+                self.remove_peer_connection(connection_id).await;
+                true
+            }
+            Err(NetworkError::ConnectionBackpressured(_)) => {
+                tracing::warn!(%connection_id, "dropping direct message for backpressured peer");
+                true
+            }
+            Err(NetworkError::SupervisorStopped) => false,
+            Err(error) => {
+                tracing::error!(%connection_id, %error, "failed to send direct peer message");
+                true
+            }
+        }
+    }
+
+    async fn close_connection(&mut self, connection_id: ConnectionId, reason: String) -> bool {
+        match self
+            .network
+            .send_command(NetworkCommand::CloseConnection {
+                connection_id,
+                reason,
+            })
+            .await
+        {
+            Ok(()) => true,
+            Err(NetworkError::ConnectionNotFound(_) | NetworkError::ConnectionActorStopped(_)) => {
+                self.subscribers.remove(&connection_id);
+                self.remove_peer_connection(connection_id).await;
+                true
+            }
+            Err(NetworkError::SupervisorStopped) => false,
+            Err(error) => {
+                tracing::error!(%connection_id, %error, "failed to close network connection");
+                true
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use anyhow::Result;
+    use tokio::io::{duplex, split, AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    use super::*;
+    use crate::config::Config;
+    use crate::network::NetworkSupervisor;
+
+    #[tokio::test]
+    async fn adapter_handles_peer_lobby_messages_through_network_actor() -> Result<()> {
+        let state = AppState::new(Config::default(), None);
+        {
+            let mut lobby = state.lobby.write().await;
+            lobby.lobby_open = true;
+            lobby.max_players = 3;
+            lobby.game_type = "poker".into();
+        }
+        let mut frontend_events = state.broadcaster.subscribe();
+        let (event_tx, event_rx) = mpsc::channel(16);
+        let (supervisor, network) = NetworkSupervisor::new(event_tx);
+        let supervisor_task = tokio::spawn(supervisor.run());
+        let adapter_task =
+            tokio::spawn(LegacyBackendAdapter::new(state.clone(), network.clone(), event_rx).run());
+        let (actor_stream, remote_stream) = duplex(4096);
+        let (actor_reader, actor_writer) = split(actor_stream);
+        let (remote_reader, mut remote_writer) = split(remote_stream);
+        let mut remote_reader = BufReader::new(remote_reader);
+        let endpoint_id = iroh::SecretKey::from_bytes(&[7; 32]).public();
+        let peer_id = PeerId::new(endpoint_id.to_string());
+
+        network
+            .register_iroh_peer(peer_id, actor_reader, actor_writer)
+            .await?;
+        remote_writer
+            .write_all(
+                format!(
+                    "{}\n",
+                    serde_json::to_string(&Peer2PeerMsg::Connect(
+                        "Alice".into(),
+                        Some("alice-ticket".into()),
+                    ))?
+                )
+                .as_bytes(),
+            )
+            .await?;
+
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(1), remote_reader.read_line(&mut line)).await??;
+        assert!(matches!(
+            serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
+            Peer2PeerMsg::LobbyAccept(3, game_type) if game_type == "poker"
+        ));
+        line.clear();
+        tokio::time::timeout(Duration::from_secs(1), remote_reader.read_line(&mut line)).await??;
+        assert!(matches!(
+            serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
+            Peer2PeerMsg::Peers(peers) if peers.is_empty()
+        ));
+        let new_player =
+            tokio::time::timeout(Duration::from_secs(1), frontend_events.recv()).await??;
+        assert!(matches!(
+            new_player,
+            Backend2FrontendMsg::NewPlayer(name) if name == "Alice"
+        ));
+        let peer = state
+            .peers
+            .read()
+            .await
+            .get(&endpoint_id)
+            .cloned()
+            .expect("accepted peer should be stored");
+        assert_eq!(peer.name, "Alice");
+        assert_eq!(peer.ticket, "alice-ticket");
+
+        state
+            .peer_broadcaster
+            .send(Peer2PeerMsg::Payload("broadcast payload".into()))?;
+        line.clear();
+        tokio::time::timeout(Duration::from_secs(1), remote_reader.read_line(&mut line)).await??;
+        assert!(matches!(
+            serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
+            Peer2PeerMsg::Payload(payload) if payload == "broadcast payload"
+        ));
+
+        remote_writer
+            .write_all(
+                format!("{}\n", serde_json::to_string(&Peer2PeerMsg::RequestReady)?).as_bytes(),
+            )
+            .await?;
+        line.clear();
+        tokio::time::timeout(Duration::from_secs(1), remote_reader.read_line(&mut line)).await??;
+        assert!(matches!(
+            serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
+            Peer2PeerMsg::PeerReady(name, false) if name.is_empty()
+        ));
+
+        remote_writer
+            .write_all(
+                format!(
+                    "{}\n",
+                    serde_json::to_string(&Peer2PeerMsg::Disconnect("Alice".into()))?
+                )
+                .as_bytes(),
+            )
+            .await?;
+        let removed_player =
+            tokio::time::timeout(Duration::from_secs(1), frontend_events.recv()).await??;
+        assert!(matches!(
+            removed_player,
+            Backend2FrontendMsg::RemovePlayer(name) if name == "Alice"
+        ));
+        line.clear();
+        let bytes =
+            tokio::time::timeout(Duration::from_secs(1), remote_reader.read_line(&mut line))
+                .await??;
+        assert_eq!(bytes, 0, "peer actor should close its writer");
+        assert!(!state.peers.read().await.contains_key(&endpoint_id));
+
+        adapter_task.abort();
+        supervisor_task.abort();
+        let _ = adapter_task.await;
+        let _ = supervisor_task.await;
+        Ok(())
     }
 }
