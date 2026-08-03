@@ -10,7 +10,7 @@ mod supervisor;
 mod types;
 mod websocket;
 
-pub use iroh::IROH_ALPN;
+pub use iroh::{IROH_FRONTEND_ALPN, IROH_PEER_ALPN};
 pub use supervisor::{NetworkError, NetworkHandle, NetworkSupervisor};
 pub use types::{
     ConnectionCloseReason, ConnectionId, FrontendConnectionCommand, NetworkCommand, NetworkEvent,

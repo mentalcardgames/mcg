@@ -1,20 +1,24 @@
 use async_trait::async_trait;
 use iroh::endpoint::Endpoint;
 use iroh_tickets::{endpoint::EndpointTicket, Ticket};
-use mcg_shared::Peer2PeerMsg;
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 
-use crate::transport::send_peer_msg_to_writer;
+use crate::transport::{send_peer_msg_to_writer, send_server_msg_to_writer};
 
 use super::types::ActorEvent;
-use super::{ConnectionCloseReason, ConnectionId, PeerConnectionCommand, PeerId};
+use super::{
+    ConnectionCloseReason, ConnectionId, FrontendConnectionCommand, PeerConnectionCommand, PeerId,
+};
 
-/// Application protocol negotiated by all MCG Iroh peer connections.
-pub const IROH_ALPN: &[u8] = b"mcg/iroh/1";
+/// Application protocol for Iroh connections between an MCG frontend and backend.
+pub const IROH_FRONTEND_ALPN: &[u8] = b"mcg/iroh/frontend";
+/// Application protocol for Iroh connections between MCG backend peers.
+pub const IROH_PEER_ALPN: &[u8] = b"mcg/iroh/peer";
 
-pub(super) type PeerReader = Box<dyn AsyncRead + Unpin + Send>;
-pub(super) type PeerWriter = Box<dyn AsyncWrite + Unpin + Send>;
+pub(super) type IrohReader = Box<dyn AsyncRead + Unpin + Send>;
+pub(super) type IrohWriter = Box<dyn AsyncWrite + Unpin + Send>;
 
 #[derive(Debug)]
 pub(super) enum IrohConnectError {
@@ -28,7 +32,7 @@ pub(super) trait IrohConnector: Send + Sync {
     async fn connect(
         &self,
         ticket: String,
-    ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError>;
+    ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError>;
 }
 
 pub(super) struct IrohEndpointConnector {
@@ -46,12 +50,12 @@ impl IrohConnector for IrohEndpointConnector {
     async fn connect(
         &self,
         ticket: String,
-    ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError> {
+    ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError> {
         let ticket = EndpointTicket::deserialize(&ticket)
             .map_err(|error| IrohConnectError::InvalidTicket(error.to_string()))?;
         let connection = self
             .endpoint
-            .connect(ticket.endpoint_addr().clone(), IROH_ALPN)
+            .connect(ticket.endpoint_addr().clone(), IROH_PEER_ALPN)
             .await
             .map_err(|error| IrohConnectError::Connect(error.to_string()))?;
         let peer_id = PeerId::new(connection.remote_id().to_string());
@@ -62,6 +66,94 @@ impl IrohConnector for IrohEndpointConnector {
 
         Ok((peer_id, Box::new(reader), Box::new(writer)))
     }
+}
+
+/// Runs one established Iroh frontend stream.
+///
+/// Iroh frontend connections use the same typed protocol as WebSockets, with
+/// newline-delimited JSON as their transport framing.
+pub(super) async fn run_iroh_frontend_actor<R, W>(
+    connection_id: ConnectionId,
+    reader: R,
+    mut writer: W,
+    event_tx: mpsc::Sender<ActorEvent>,
+    mut command_rx: mpsc::Receiver<FrontendConnectionCommand>,
+) where
+    R: AsyncRead + Unpin + Send,
+    W: AsyncWrite + Unpin + Send,
+{
+    if event_tx
+        .send(ActorEvent::Ready { connection_id })
+        .await
+        .is_err()
+    {
+        tracing::debug!(%connection_id, "network event receiver dropped before Iroh frontend actor started");
+        return;
+    }
+    tracing::info!(%connection_id, "Iroh frontend connection actor started");
+
+    let mut lines = BufReader::new(reader).lines();
+    let close_reason = loop {
+        tokio::select! {
+            incoming = lines.next_line() => {
+                match incoming {
+                    Ok(Some(line)) => {
+                        let line = line.trim();
+                        if line.is_empty() {
+                            continue;
+                        }
+
+                        match serde_json::from_str::<Frontend2BackendMsg>(line) {
+                            Ok(message) => {
+                                let event = ActorEvent::FrontendMessage {
+                                    connection_id,
+                                    message,
+                                };
+                                if event_tx.send(event).await.is_err() {
+                                    break ConnectionCloseReason::EventReceiverClosed;
+                                }
+                            }
+                            Err(error) => {
+                                tracing::warn!(%connection_id, %error, "failed to parse Iroh frontend message");
+                                let response = Backend2FrontendMsg::Error(
+                                    "Malformed Frontend2BackendMsg JSON".into(),
+                                );
+                                if let Err(error) = send_server_msg_to_writer(&mut writer, &response).await {
+                                    break ConnectionCloseReason::TransportError(error.to_string());
+                                }
+                            }
+                        }
+                    }
+                    Ok(None) => break ConnectionCloseReason::RemoteClosed,
+                    Err(error) => break ConnectionCloseReason::TransportError(error.to_string()),
+                }
+            }
+            command = command_rx.recv() => {
+                match command {
+                    Some(FrontendConnectionCommand::Send(message)) => {
+                        if let Err(error) = send_server_msg_to_writer(&mut writer, &message).await {
+                            break ConnectionCloseReason::TransportError(error.to_string());
+                        }
+                    }
+                    Some(FrontendConnectionCommand::Close { reason }) => {
+                        if let Err(error) = writer.shutdown().await {
+                            break ConnectionCloseReason::TransportError(error.to_string());
+                        }
+                        break ConnectionCloseReason::LocalRequest(reason);
+                    }
+                    None => break ConnectionCloseReason::OutboundChannelClosed,
+                }
+            }
+        }
+    };
+
+    let _ = event_tx
+        .send(ActorEvent::Closed {
+            connection_id,
+            reason: close_reason,
+        })
+        .await;
+    tracing::info!(%connection_id, "Iroh frontend connection actor stopped");
 }
 
 /// Runs one established Iroh peer stream.

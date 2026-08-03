@@ -1,14 +1,14 @@
 // Iroh transport bootstrap for the MCG server.
 //
-// This module owns the endpoint and hands incoming peer streams to the network
-// supervisor. Outgoing connections are initiated through `NetworkHandle` by
-// network-aware application handlers.
+// This module owns the endpoint and dispatches incoming frontend and peer
+// streams to the network supervisor based on their negotiated ALPN. Outgoing
+// peer connections are initiated by network-aware application handlers.
 
 use anyhow::{Context, Result};
 use tokio::sync::oneshot;
 use tokio::task::{JoinHandle, JoinSet};
 
-use crate::network::{NetworkHandle, PeerId, IROH_ALPN};
+use crate::network::{NetworkHandle, PeerId, ProtocolRole, IROH_FRONTEND_ALPN, IROH_PEER_ALPN};
 use crate::public::{path_for_config, PublicInfo};
 use crate::server::state::{AppState, PeerInfo};
 
@@ -65,7 +65,7 @@ async fn run_iroh_listener(
     use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 
     let secret_key: SecretKey = load_or_generate_iroh_secret(state.clone()).await;
-    let endpoint = build_iroh_endpoint(secret_key, IROH_ALPN).await?;
+    let endpoint = build_iroh_endpoint(secret_key).await?;
     network
         .configure_iroh_endpoint(endpoint.clone())
         .await
@@ -118,7 +118,8 @@ async fn run_iroh_listener(
     }
 
     tracing::info!(
-        alpn = %std::str::from_utf8(IROH_ALPN).unwrap_or("mcg/iroh/1"),
+        peer_alpn = %std::str::from_utf8(IROH_PEER_ALPN).unwrap_or("mcg/iroh/peer"),
+        frontend_alpn = %std::str::from_utf8(IROH_FRONTEND_ALPN).unwrap_or("mcg/iroh/frontend"),
         "iroh listener started"
     );
     run_iroh_accept_loop(endpoint, network, shutdown_rx).await;
@@ -173,14 +174,11 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
     }
 }
 
-async fn build_iroh_endpoint(
-    secret_key: iroh::SecretKey,
-    alpn: &[u8],
-) -> Result<iroh::endpoint::Endpoint> {
+async fn build_iroh_endpoint(secret_key: iroh::SecretKey) -> Result<iroh::endpoint::Endpoint> {
     use iroh::endpoint::Endpoint;
 
     Endpoint::builder()
-        .alpns(vec![alpn.to_vec()])
+        .alpns(vec![IROH_PEER_ALPN.to_vec(), IROH_FRONTEND_ALPN.to_vec()])
         .secret_key(secret_key)
         .bind()
         .await
@@ -203,12 +201,19 @@ async fn run_iroh_accept_loop(
                 let network = network.clone();
                 connection_tasks.spawn(async move {
                     let setup = async {
-                        let connection = incoming.await.context("accepting incoming Iroh connection")?;
-                        let remote_id = connection.remote_id();
-                        tracing::info!(peer = %remote_id, "accepted new Iroh connection");
-                        register_incoming_iroh_connection(network, connection)
+                        let mut accepting = incoming
+                            .accept()
+                            .context("starting incoming Iroh handshake")?;
+                        let alpn = accepting
+                            .alpn()
                             .await
-                            .with_context(|| format!("registering incoming Iroh peer {remote_id}"))
+                            .context("reading incoming Iroh ALPN")?;
+                        let connection = accepting.await.context("accepting incoming Iroh connection")?;
+                        let remote_id = connection.remote_id();
+                        tracing::info!(peer = %remote_id, alpn = %String::from_utf8_lossy(&alpn), "accepted new Iroh connection");
+                        register_incoming_iroh_connection(network, connection, &alpn)
+                            .await
+                            .with_context(|| format!("registering incoming Iroh connection from {remote_id}"))
                     };
                     match tokio::time::timeout(IROH_CONNECTION_SETUP_TIMEOUT, setup).await {
                         Ok(Ok(())) => {}
@@ -233,17 +238,59 @@ async fn run_iroh_accept_loop(
 async fn register_incoming_iroh_connection(
     network: NetworkHandle,
     connection: iroh::endpoint::Connection,
+    alpn: &[u8],
 ) -> Result<()> {
-    let peer_id = PeerId::new(connection.remote_id().to_string());
+    let remote_id = connection.remote_id();
     let (writer, reader) = connection
         .accept_bi()
         .await
         .context("accepting incoming Iroh bidirectional stream")?;
-    let connection_id = network
-        .register_incoming_iroh_peer(peer_id.clone(), reader, writer)
-        .await
-        .context("registering incoming Iroh peer with network supervisor")?;
+    match protocol_role_from_alpn(alpn) {
+        Some(ProtocolRole::Peer) => {
+            let peer_id = PeerId::new(remote_id.to_string());
+            let connection_id = network
+                .register_incoming_iroh_peer(peer_id.clone(), reader, writer)
+                .await
+                .context("registering incoming Iroh peer with network supervisor")?;
+            tracing::info!(%connection_id, %peer_id, "incoming Iroh peer registered");
+            Ok(())
+        }
+        Some(ProtocolRole::Frontend) => {
+            let connection_id = network
+                .register_incoming_iroh_frontend(reader, writer)
+                .await
+                .context("registering incoming Iroh frontend with network supervisor")?;
+            tracing::info!(%connection_id, endpoint_id = %remote_id, "incoming Iroh frontend registered");
+            Ok(())
+        }
+        None => anyhow::bail!("unsupported Iroh ALPN {}", String::from_utf8_lossy(alpn)),
+    }
+}
 
-    tracing::info!(%connection_id, %peer_id, "incoming Iroh peer registered");
-    Ok(())
+fn protocol_role_from_alpn(alpn: &[u8]) -> Option<ProtocolRole> {
+    if alpn == IROH_PEER_ALPN {
+        Some(ProtocolRole::Peer)
+    } else if alpn == IROH_FRONTEND_ALPN {
+        Some(ProtocolRole::Frontend)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn iroh_alpns_select_exactly_one_protocol_role() {
+        assert_eq!(
+            protocol_role_from_alpn(IROH_PEER_ALPN),
+            Some(ProtocolRole::Peer)
+        );
+        assert_eq!(
+            protocol_role_from_alpn(IROH_FRONTEND_ALPN),
+            Some(ProtocolRole::Frontend)
+        );
+        assert_eq!(protocol_role_from_alpn(b"mcg/iroh/unknown"), None);
+    }
 }

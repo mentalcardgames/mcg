@@ -11,8 +11,8 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 
 use super::iroh::{
-    run_iroh_peer_actor, IrohConnectError, IrohConnector, IrohEndpointConnector, PeerReader,
-    PeerWriter,
+    run_iroh_frontend_actor, run_iroh_peer_actor, IrohConnectError, IrohConnector,
+    IrohEndpointConnector, IrohReader, IrohWriter,
 };
 use super::types::ActorEvent;
 use super::websocket::run_websocket_actor;
@@ -191,6 +191,30 @@ impl NetworkHandle {
         self.request_tx
             .send(SupervisorRequest::RegisterIncomingIrohPeer {
                 peer_id,
+                reader: Box::new(reader),
+                writer: Box::new(writer),
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Registers an established Iroh frontend stream with the supervisor.
+    pub async fn register_incoming_iroh_frontend<R, W>(
+        &self,
+        reader: R,
+        writer: W,
+    ) -> Result<ConnectionId, NetworkError>
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::RegisterIncomingIrohFrontend {
                 reader: Box::new(reader),
                 writer: Box::new(writer),
                 response_tx,
@@ -381,6 +405,14 @@ impl NetworkSupervisor {
                 );
                 let _ = response_tx.send(result);
             }
+            SupervisorRequest::RegisterIncomingIrohFrontend {
+                reader,
+                writer,
+                response_tx,
+            } => {
+                let result = self.register_iroh_frontend(reader, writer);
+                let _ = response_tx.send(result);
+            }
             SupervisorRequest::Execute {
                 command,
                 response_tx,
@@ -488,8 +520,8 @@ impl NetworkSupervisor {
         &mut self,
         peer_id: PeerId,
         direction: PeerConnectionDirection,
-        reader: PeerReader,
-        writer: PeerWriter,
+        reader: IrohReader,
+        writer: IrohWriter,
     ) -> Result<ConnectionId, NetworkError> {
         let connection_id = self.allocate_connection_id()?;
         let (command_tx, command_rx) = mpsc::channel(self.connection_channel_capacity);
@@ -507,6 +539,33 @@ impl NetworkSupervisor {
             },
         );
         self.tasks.spawn(run_iroh_peer_actor(
+            connection_id,
+            reader,
+            writer,
+            actor_event_tx,
+            command_rx,
+        ));
+
+        Ok(connection_id)
+    }
+
+    fn register_iroh_frontend(
+        &mut self,
+        reader: IrohReader,
+        writer: IrohWriter,
+    ) -> Result<ConnectionId, NetworkError> {
+        let connection_id = self.allocate_connection_id()?;
+        let (command_tx, command_rx) = mpsc::channel(self.connection_channel_capacity);
+        let actor_event_tx = self.actor_event_tx.clone();
+
+        self.connections.insert(
+            connection_id,
+            ManagedConnection {
+                transport: TransportKind::Iroh,
+                target: ManagedTarget::Frontend { command_tx },
+            },
+        );
+        self.tasks.spawn(run_iroh_frontend_actor(
             connection_id,
             reader,
             writer,
@@ -693,6 +752,11 @@ enum SupervisorRequest {
         writer: Box<dyn AsyncWrite + Unpin + Send>,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
+    RegisterIncomingIrohFrontend {
+        reader: Box<dyn AsyncRead + Unpin + Send>,
+        writer: Box<dyn AsyncWrite + Unpin + Send>,
+        response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
+    },
     Execute {
         command: NetworkCommand,
         response_tx: oneshot::Sender<Result<(), NetworkError>>,
@@ -700,7 +764,7 @@ enum SupervisorRequest {
 }
 
 struct IrohConnectResult {
-    result: Result<(PeerId, PeerReader, PeerWriter), IrohConnectError>,
+    result: Result<(PeerId, IrohReader, IrohWriter), IrohConnectError>,
     response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
 }
 
@@ -771,7 +835,7 @@ mod tests {
 
     struct OneShotIrohConnector {
         peer_id: PeerId,
-        stream: Mutex<Option<(PeerReader, PeerWriter)>>,
+        stream: Mutex<Option<(IrohReader, IrohWriter)>>,
     }
 
     struct PendingIrohConnector;
@@ -785,7 +849,7 @@ mod tests {
         async fn connect(
             &self,
             _ticket: String,
-        ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError> {
+        ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError> {
             let (reader, writer) =
                 self.stream.lock().await.take().ok_or_else(|| {
                     IrohConnectError::Connect("test stream already consumed".into())
@@ -799,7 +863,7 @@ mod tests {
         async fn connect(
             &self,
             _ticket: String,
-        ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError> {
+        ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError> {
             std::future::pending().await
         }
     }
@@ -809,7 +873,7 @@ mod tests {
         async fn connect(
             &self,
             _ticket: String,
-        ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError> {
+        ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError> {
             if let Some(started_tx) = self.started_tx.lock().await.take() {
                 let _ = started_tx.send(());
             }
