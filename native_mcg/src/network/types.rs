@@ -54,6 +54,7 @@ pub struct ConnectionInfo {
 pub enum ConnectionCloseReason {
     RemoteClosed,
     TransportError(String),
+    ProtocolError(String),
     OutboundChannelClosed,
     EventReceiverClosed,
     LocalRequest(String),
@@ -63,6 +64,13 @@ pub enum ConnectionCloseReason {
 #[derive(Clone, Debug)]
 pub enum FrontendConnectionCommand {
     Send(Backend2FrontendMsg),
+    Close { reason: String },
+}
+
+/// Commands accepted by an established peer connection actor.
+#[derive(Clone, Debug)]
+pub enum PeerConnectionCommand {
+    Send(Peer2PeerMsg),
     Close { reason: String },
 }
 
