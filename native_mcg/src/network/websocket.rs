@@ -24,6 +24,7 @@ pub async fn run_websocket_actor(
         id: connection_id,
         role: ConnectionRole::Frontend,
         transport: TransportKind::WebSocket,
+        peer_id: None,
     };
 
     // Respond success with starting the actor loop
@@ -194,6 +195,7 @@ mod tests {
                     id,
                     role: ConnectionRole::Frontend,
                     transport: TransportKind::WebSocket,
+                    peer_id: None,
                 }
             } if id == ConnectionId::new(17)
         ));

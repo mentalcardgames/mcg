@@ -9,7 +9,7 @@ use crate::transport::send_peer_msg_to_writer;
 
 use super::{
     ConnectionCloseReason, ConnectionId, ConnectionInfo, ConnectionRole, NetworkEvent,
-    PeerConnectionCommand, TransportKind,
+    PeerConnectionCommand, PeerId, TransportKind,
 };
 
 pub(super) const IROH_ALPN: &[u8] = b"mcg/iroh/1";
@@ -26,7 +26,10 @@ pub(super) enum IrohConnectError {
 
 #[async_trait]
 pub(super) trait IrohConnector: Send + Sync {
-    async fn connect(&self, ticket: String) -> Result<(PeerReader, PeerWriter), IrohConnectError>;
+    async fn connect(
+        &self,
+        ticket: String,
+    ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError>;
 }
 
 pub(super) struct IrohEndpointConnector {
@@ -41,7 +44,10 @@ impl IrohEndpointConnector {
 
 #[async_trait]
 impl IrohConnector for IrohEndpointConnector {
-    async fn connect(&self, ticket: String) -> Result<(PeerReader, PeerWriter), IrohConnectError> {
+    async fn connect(
+        &self,
+        ticket: String,
+    ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError> {
         let ticket = EndpointTicket::deserialize(&ticket)
             .map_err(|error| IrohConnectError::InvalidTicket(error.to_string()))?;
         let connection = self
@@ -49,12 +55,13 @@ impl IrohConnector for IrohEndpointConnector {
             .connect(ticket.endpoint_addr().clone(), IROH_ALPN)
             .await
             .map_err(|error| IrohConnectError::Connect(error.to_string()))?;
+        let peer_id = PeerId::new(connection.remote_id().to_string());
         let (writer, reader) = connection
             .open_bi()
             .await
             .map_err(|error| IrohConnectError::OpenStream(error.to_string()))?;
 
-        Ok((Box::new(reader), Box::new(writer)))
+        Ok((peer_id, Box::new(reader), Box::new(writer)))
     }
 }
 
@@ -65,6 +72,7 @@ impl IrohConnector for IrohEndpointConnector {
 /// access to application state or connection policy.
 pub async fn run_iroh_peer_actor<R, W>(
     connection_id: ConnectionId,
+    peer_id: PeerId,
     reader: R,
     mut writer: W,
     event_tx: mpsc::Sender<NetworkEvent>,
@@ -77,6 +85,7 @@ pub async fn run_iroh_peer_actor<R, W>(
         id: connection_id,
         role: ConnectionRole::Peer,
         transport: TransportKind::Iroh,
+        peer_id: Some(peer_id),
     };
 
     // Respond success with starting the actor loop
@@ -170,8 +179,10 @@ mod tests {
         let (event_tx, mut event_rx) = mpsc::channel(8);
         let (command_tx, command_rx) = mpsc::channel(8);
         let connection_id = ConnectionId::new(23);
+        let peer_id = PeerId::new("test-peer-23");
         let actor_task = tokio::spawn(run_iroh_peer_actor(
             connection_id,
+            peer_id.clone(),
             actor_reader,
             actor_writer,
             event_tx,
@@ -188,8 +199,9 @@ mod tests {
                     id,
                     role: ConnectionRole::Peer,
                     transport: TransportKind::Iroh,
+                    peer_id: Some(opened_peer_id),
                 }
-            } if id == connection_id
+            } if id == connection_id && opened_peer_id == peer_id
         ));
 
         remote_writer
@@ -245,6 +257,7 @@ mod tests {
         let connection_id = ConnectionId::new(31);
         let actor_task = tokio::spawn(run_iroh_peer_actor(
             connection_id,
+            PeerId::new("test-peer-31"),
             actor_reader,
             actor_writer,
             event_tx,

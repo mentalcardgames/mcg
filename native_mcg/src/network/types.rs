@@ -27,6 +27,29 @@ impl fmt::Display for ConnectionId {
     }
 }
 
+/// Transport-independent identity of a remote peer.
+///
+/// Unlike [`ConnectionId`], a peer ID may remain stable across multiple
+/// transport connections. Iroh connections use the remote endpoint ID.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PeerId(String);
+
+impl PeerId {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for PeerId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
 /// Application protocol spoken by a connection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConnectionRole {
@@ -42,11 +65,12 @@ pub enum TransportKind {
 }
 
 /// Stable metadata associated with one open connection.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConnectionInfo {
     pub id: ConnectionId,
     pub role: ConnectionRole,
     pub transport: TransportKind,
+    pub peer_id: Option<PeerId>,
 }
 
 /// Reason why a previously open connection actor stopped.
@@ -153,10 +177,12 @@ mod tests {
             id: ConnectionId::new(9),
             role: ConnectionRole::Frontend,
             transport: TransportKind::WebSocket,
+            peer_id: None,
         };
 
         assert_eq!(connection.id, ConnectionId::new(9));
         assert_eq!(connection.role, ConnectionRole::Frontend);
         assert_eq!(connection.transport, TransportKind::WebSocket);
+        assert_eq!(connection.peer_id, None);
     }
 }

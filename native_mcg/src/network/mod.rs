@@ -13,6 +13,6 @@ pub use iroh::run_iroh_peer_actor;
 pub use supervisor::{NetworkError, NetworkHandle, NetworkSupervisor};
 pub use types::{
     ConnectionCloseReason, ConnectionId, ConnectionInfo, ConnectionRole, FrontendConnectionCommand,
-    NetworkCommand, NetworkEvent, PeerConnectionCommand, TransportKind,
+    NetworkCommand, NetworkEvent, PeerConnectionCommand, PeerId, TransportKind,
 };
 pub use websocket::run_websocket_actor;

@@ -11,7 +11,8 @@ use tokio::sync::{mpsc, oneshot};
 use super::iroh::{IrohConnectError, IrohConnector, IrohEndpointConnector, PeerReader, PeerWriter};
 use super::{
     run_iroh_peer_actor, run_websocket_actor, ConnectionId, ConnectionRole,
-    FrontendConnectionCommand, NetworkCommand, NetworkEvent, PeerConnectionCommand, TransportKind,
+    FrontendConnectionCommand, NetworkCommand, NetworkEvent, PeerConnectionCommand, PeerId,
+    TransportKind,
 };
 
 const DEFAULT_CONTROL_CHANNEL_CAPACITY: usize = 256;
@@ -152,6 +153,7 @@ impl NetworkHandle {
     /// Registers an established Iroh peer stream with the supervisor.
     pub async fn register_iroh_peer<R, W>(
         &self,
+        peer_id: PeerId,
         reader: R,
         writer: W,
     ) -> Result<ConnectionId, NetworkError>
@@ -162,6 +164,7 @@ impl NetworkHandle {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
             .send(SupervisorRequest::RegisterIrohPeer {
+                peer_id,
                 reader: Box::new(reader),
                 writer: Box::new(writer),
                 response_tx,
@@ -306,11 +309,12 @@ impl NetworkSupervisor {
                 let _ = response_tx.send(result);
             }
             SupervisorRequest::RegisterIrohPeer {
+                peer_id,
                 reader,
                 writer,
                 response_tx,
             } => {
-                let result = self.register_iroh_peer(reader, writer);
+                let result = self.register_iroh_peer(peer_id, reader, writer);
                 let _ = response_tx.send(result);
             }
             SupervisorRequest::Execute {
@@ -364,7 +368,7 @@ impl NetworkSupervisor {
 
     fn handle_iroh_connect_result(&mut self, result: IrohConnectResult) {
         let connection = match result.result {
-            Ok((reader, writer)) => self.register_iroh_peer(reader, writer),
+            Ok((peer_id, reader, writer)) => self.register_iroh_peer(peer_id, reader, writer),
             Err(IrohConnectError::InvalidTicket(message)) => {
                 Err(NetworkError::InvalidPeerTicket(message))
             }
@@ -401,6 +405,7 @@ impl NetworkSupervisor {
 
     fn register_iroh_peer(
         &mut self,
+        peer_id: PeerId,
         reader: PeerReader,
         writer: PeerWriter,
     ) -> Result<ConnectionId, NetworkError> {
@@ -412,6 +417,7 @@ impl NetworkSupervisor {
             .insert(connection_id, ManagedConnection::Peer { command_tx });
         tokio::spawn(run_iroh_peer_actor(
             connection_id,
+            peer_id,
             reader,
             writer,
             actor_event_tx,
@@ -559,6 +565,7 @@ enum SupervisorRequest {
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
     RegisterIrohPeer {
+        peer_id: PeerId,
         reader: Box<dyn AsyncRead + Unpin + Send>,
         writer: Box<dyn AsyncWrite + Unpin + Send>,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
@@ -570,7 +577,7 @@ enum SupervisorRequest {
 }
 
 struct IrohConnectResult {
-    result: Result<(PeerReader, PeerWriter), IrohConnectError>,
+    result: Result<(PeerId, PeerReader, PeerWriter), IrohConnectError>,
     response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
 }
 
@@ -615,6 +622,7 @@ mod tests {
     use crate::network::{ConnectionCloseReason, ConnectionInfo, TransportKind};
 
     struct OneShotIrohConnector {
+        peer_id: PeerId,
         stream: Mutex<Option<(PeerReader, PeerWriter)>>,
     }
 
@@ -623,12 +631,12 @@ mod tests {
         async fn connect(
             &self,
             _ticket: String,
-        ) -> Result<(PeerReader, PeerWriter), IrohConnectError> {
-            self.stream
-                .lock()
-                .await
-                .take()
-                .ok_or_else(|| IrohConnectError::Connect("test stream already consumed".into()))
+        ) -> Result<(PeerId, PeerReader, PeerWriter), IrohConnectError> {
+            let (reader, writer) =
+                self.stream.lock().await.take().ok_or_else(|| {
+                    IrohConnectError::Connect("test stream already consumed".into())
+                })?;
+            Ok((self.peer_id.clone(), reader, writer))
         }
     }
 
@@ -668,6 +676,7 @@ mod tests {
                         id,
                         role: ConnectionRole::Frontend,
                         transport: TransportKind::WebSocket,
+                        peer_id: None,
                     },
             } => id,
             other => panic!("unexpected event: {other:?}"),
@@ -770,6 +779,7 @@ mod tests {
         let (actor_reader, actor_writer) = split(actor_stream);
         let (remote_reader, mut remote_writer) = split(remote_stream);
         let mut remote_reader = BufReader::new(remote_reader);
+        let peer_id = PeerId::new("test-peer-supervisor");
 
         let unavailable = network.connect_iroh_peer("test-ticket").await;
         assert_eq!(
@@ -778,11 +788,13 @@ mod tests {
         );
         network
             .configure_iroh_connector(Arc::new(OneShotIrohConnector {
+                peer_id: peer_id.clone(),
                 stream: Mutex::new(Some((Box::new(actor_reader), Box::new(actor_writer)))),
             }))
             .await?;
         let duplicate_configuration = network
             .configure_iroh_connector(Arc::new(OneShotIrohConnector {
+                peer_id: PeerId::new("unused-test-peer"),
                 stream: Mutex::new(None),
             }))
             .await;
@@ -803,8 +815,9 @@ mod tests {
                     id,
                     role: ConnectionRole::Peer,
                     transport: TransportKind::Iroh,
+                    peer_id: Some(opened_peer_id),
                 },
-            } if id == connection_id
+            } if id == connection_id && opened_peer_id == peer_id
         ));
 
         remote_writer
