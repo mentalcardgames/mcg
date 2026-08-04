@@ -98,7 +98,7 @@ async fn run_iroh_listener(
     let ticket = EndpointTicket::new(addr);
     println!("{ticket}");
     tracing::info!(ticket = %ticket);
-    let ticket = ticket.serialize();
+    let ticket = ticket.encode_string();
     *state.ticket.write().await = Some(ticket.clone());
 
     state.peers.write().await.insert(
@@ -177,7 +177,7 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
 async fn build_iroh_endpoint(secret_key: iroh::SecretKey) -> Result<iroh::endpoint::Endpoint> {
     use iroh::endpoint::Endpoint;
 
-    Endpoint::builder()
+    Endpoint::builder(iroh::endpoint::presets::N0)
         .alpns(vec![IROH_PEER_ALPN.to_vec(), IROH_FRONTEND_ALPN.to_vec()])
         .secret_key(secret_key)
         .bind()

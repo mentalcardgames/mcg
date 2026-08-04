@@ -286,7 +286,7 @@ fn preferred_direction(
 }
 
 pub(super) fn peer_id_from_ticket(ticket: &str) -> Result<PeerId, NetworkError> {
-    let ticket = EndpointTicket::deserialize(ticket)
+    let ticket = EndpointTicket::decode_string(ticket)
         .map_err(|error| NetworkError::InvalidPeerTicket(error.to_string()))?;
     Ok(PeerId::new(ticket.endpoint_addr().id.to_string()))
 }
@@ -377,7 +377,7 @@ mod tests {
         let service = PeerConnectionService::new(state, network);
         let endpoint_id = iroh::SecretKey::from_bytes(&[10; 32]).public();
         let peer_id = PeerId::new(endpoint_id.to_string());
-        let ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).serialize();
+        let ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
         let connection_id = ConnectionId::new(41);
         service
             .connection_opened(
@@ -422,7 +422,7 @@ mod tests {
 
         let lower_state = AppState::new(Config::default(), None);
         *lower_state.ticket.write().await =
-            Some(EndpointTicket::new(iroh::EndpointAddr::new(lower_endpoint)).serialize());
+            Some(EndpointTicket::new(iroh::EndpointAddr::new(lower_endpoint)).encode_string());
         let lower_service = PeerConnectionService::new(lower_state, network.clone());
         let lower_incoming = ConnectionId::new(51);
         let lower_outgoing = ConnectionId::new(52);
@@ -449,7 +449,7 @@ mod tests {
 
         let higher_state = AppState::new(Config::default(), None);
         *higher_state.ticket.write().await =
-            Some(EndpointTicket::new(iroh::EndpointAddr::new(higher_endpoint)).serialize());
+            Some(EndpointTicket::new(iroh::EndpointAddr::new(higher_endpoint)).encode_string());
         let higher_service = PeerConnectionService::new(higher_state, network);
         let higher_incoming = ConnectionId::new(61);
         let higher_outgoing = ConnectionId::new(62);

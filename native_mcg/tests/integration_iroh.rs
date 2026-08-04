@@ -17,9 +17,11 @@ use tokio::task::JoinHandle;
 const TEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 async fn local_endpoint() -> Result<Endpoint> {
-    Endpoint::empty_builder(RelayMode::Disabled)
-        .clear_discovery()
-        .bind_addr_v4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+    Endpoint::builder(iroh::endpoint::presets::Minimal)
+        .relay_mode(RelayMode::Disabled)
+        .clear_address_lookup()
+        .clear_ip_transports()
+        .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))?
         .alpns(vec![IROH_PEER_ALPN.to_vec()])
         .bind()
         .await
@@ -27,9 +29,11 @@ async fn local_endpoint() -> Result<Endpoint> {
 }
 
 async fn local_frontend_endpoint() -> Result<Endpoint> {
-    Endpoint::empty_builder(RelayMode::Disabled)
-        .clear_discovery()
-        .bind_addr_v4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+    Endpoint::builder(iroh::endpoint::presets::Minimal)
+        .relay_mode(RelayMode::Disabled)
+        .clear_address_lookup()
+        .clear_ip_transports()
+        .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))?
         .alpns(vec![IROH_FRONTEND_ALPN.to_vec()])
         .bind()
         .await
@@ -37,7 +41,7 @@ async fn local_frontend_endpoint() -> Result<Endpoint> {
 }
 
 fn endpoint_ticket(endpoint: &Endpoint) -> String {
-    EndpointTicket::new(endpoint.addr()).serialize()
+    EndpointTicket::new(endpoint.addr()).encode_string()
 }
 
 fn start_supervisor() -> (NetworkHandle, mpsc::Receiver<NetworkEvent>, JoinHandle<()>) {

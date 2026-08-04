@@ -51,7 +51,7 @@ impl IrohConnector for IrohEndpointConnector {
         &self,
         ticket: String,
     ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError> {
-        let ticket = EndpointTicket::deserialize(&ticket)
+        let ticket = EndpointTicket::decode_string(&ticket)
             .map_err(|error| IrohConnectError::InvalidTicket(error.to_string()))?;
         let connection = self
             .endpoint

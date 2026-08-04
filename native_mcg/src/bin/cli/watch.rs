@@ -91,13 +91,13 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     // Bind a local endpoint
-    // Endpoint::builder() uses presets::N0 which includes DNS discovery and default relays
-    let endpoint = Endpoint::builder()
+    // presets::N0 includes DNS discovery and default relays.
+    let endpoint = Endpoint::builder(iroh::endpoint::presets::N0)
         .bind()
         .await
         .context("binding iroh endpoint for client")?;
 
-    // In iroh 0.95, PublicKey is renamed to EndpointId
+    // Iroh 1.x uses EndpointId for peer identities.
     let peer_id = EndpointId::from_str(peer_uri).context("parsing iroh endpoint id (z-base-32)")?;
     let connection = endpoint
         .connect(peer_id, IROH_FRONTEND_ALPN)
