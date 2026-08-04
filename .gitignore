@@ -1,6 +1,5 @@
 /target/
 /frontend/target/
-Cargo.lock
 **/*.rs.bk
 *.swp
 *.swo
