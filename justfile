@@ -63,12 +63,6 @@ kill-backend:
 cli +ARGS:
     cargo run -p native_mcg --bin mcg-cli -- {{ARGS}}
 
-# Make the project somewhat AI development friendly
-agents:
-    cp AGENTS.md CLAUDE.md
-    cp AGENTS.md CRUSH.md
-    cp AGENTS.md WARP.md
-
 # Run the engine TUI for interactive testing
 # Usage: just tui [GAME]
 # Examples:

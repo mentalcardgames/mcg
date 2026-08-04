@@ -319,6 +319,7 @@ async fn fetch_current_state(state: &AppState) -> mcg_shared::Backend2FrontendMs
 
 /// Handle a NextHand message from a client
 async fn advance_to_next_hand(state: &AppState) -> mcg_shared::Backend2FrontendMsg {
+    // TODO: Starting the next hand does not handle bankrupt players or bots correctly.
     // Ensure a game exists first
     {
         let lobby_r = state.lobby.read().await;
