@@ -14,6 +14,7 @@
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::OnceLock;
 
 use crate::fsm_to_dot::fsm_to_dot;
 use crate::ir::{Ir, IrBuilder, SpannedPayload};
@@ -124,8 +125,30 @@ fn show_graph(fsm: &Ir<SpannedPayload>, name: &str) {
     assert!(status.success());
 }
 
+fn dot_is_available() -> bool {
+    static DOT_IS_AVAILABLE: OnceLock<bool> = OnceLock::new();
+
+    *DOT_IS_AVAILABLE.get_or_init(|| {
+        Command::new("dot")
+            .arg("-V")
+            .output()
+            .is_ok_and(|output| output.status.success())
+    })
+}
+
+macro_rules! skip_without_dot {
+    () => {
+        if !dot_is_available() {
+            eprintln!("skipping test: Graphviz 'dot' executable is not available");
+            return;
+        }
+    };
+}
+
 #[test]
 fn test_rule_ir() {
+    skip_without_dot!();
+
     let fsm = build_ir_from(
         "
       set current out of stage
@@ -139,6 +162,8 @@ fn test_rule_ir() {
 
 #[test]
 fn test_optional_ir() {
+    skip_without_dot!();
+
     let fsm = build_ir_from(
         "
       optional {
@@ -154,6 +179,8 @@ fn test_optional_ir() {
 
 #[test]
 fn test_if_ir() {
+    skip_without_dot!();
+
     let fsm = build_ir_from(
         "
       if (Hand empty) {
@@ -169,6 +196,8 @@ fn test_if_ir() {
 
 #[test]
 fn test_stage_ir() {
+    skip_without_dot!();
+
     let fsm = build_ir_from(
         "
       stage Outside for current until end {
@@ -190,6 +219,8 @@ fn test_stage_ir() {
 
 #[test]
 fn test_choose_ir() {
+    skip_without_dot!();
+
     let fsm = build_ir_from(
         "
     choose {
@@ -207,6 +238,8 @@ fn test_choose_ir() {
 
 #[test]
 fn test_conditional_ir() {
+    skip_without_dot!();
+
     let fsm = build_ir_from(
         "
     conditional {
@@ -227,6 +260,8 @@ fn test_conditional_ir() {
 
 #[test]
 fn test_game_ir() {
+    skip_without_dot!();
+
     let fsm = build_ir_from(
 "
           player P1, P2, P3

@@ -1,8 +1,5 @@
-use super::{
-    cards::{CardRank, CardSuit},
-    constants::*,
-};
-use mcg_shared::{Card, HandRank, HandRankCategory};
+use super::constants::*;
+use mcg_shared::{Card, CardRank, CardSuit, HandRank, HandRankCategory};
 
 /// Evaluate the best 5-card hand from 2 hole + up to 5 community cards.
 /// Returns a HandRank with category and tiebreakers for comparison.
