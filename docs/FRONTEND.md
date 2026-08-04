@@ -8,12 +8,12 @@ The core interaction logic is built around a set of traits and structs that defi
 
 ### Key Traits
 
--   **`ScreenWidget`** @ [frontend/src/game/screens/mod.rs](../frontend/src/app/screens/mod.rs):
+-   **`ScreenWidget`** @ [frontend/src/widgets/screen.rs](../frontend/src/widgets/screen.rs):
     -   **Purpose**: Defines the **rendering logic** and behavior of a screen.
     -   **Usage**: Implement this trait to create new views (e.g., Main Menu, Game Setup). The `ui` method, called every frame, handles both logic updates and UI drawing.
-    -   **Navigation**: Screens can request transitions to other screens via the `FrontendInterface` (passed as a parameter to `ui`). See [AppInterface](../frontend/src/app/screens/mod.rs).
+    -   **Navigation**: Screens can request transitions to other screens via the `FrontendInterface` (passed as a parameter to `ui`). See [FrontendInterface](../frontend/src/app.rs).
 
--   **`ScreenDef`** @ [frontend/src/game/screens/mod.rs](../frontend/src/app/screens/mod.rs):
+-   **`ScreenDef`** @ [frontend/src/widgets/screen.rs](../frontend/src/widgets/screen.rs):
     -   **Purpose**: Defines the **metadata** and factory for a screen.
     -   **Usage**: Implement this to provide static information (path, display name, icon) and a constructor function. This allows the `ScreenRegistry` to list and instantiate screens dynamically.
 
@@ -131,7 +131,7 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
 1.  **The Payload (`DNDSelector`)**:
     We define a specific payload type that carries information about what is being dragged.
     ```rust
-    // frontend/src/app/screens/app
+    // frontend/src/screens/game.rs
     pub enum DNDSelector {
         Player(usize, usize), // (Player Index, Card Index)
         Stack,                // From the top of the stack
@@ -152,7 +152,7 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
 3.  **The Detection (Game Loop)**:
     In your main game loop (`ScreenWidget::ui`), you check if a payload was released over a specific area (the drop target).
     ```rust
-    // frontend/src/app/screens/app @ impl ScreenWidget::ui
+    // frontend/src/screens/game.rs @ impl ScreenWidget::ui
     // Draw the stack (the drop target)
     let response = ui.add(stack.draw());
 
@@ -166,7 +166,7 @@ The system leverages `egui`'s native drag and drop capabilities to allow intuiti
 4.  **The Mutation**:
     Finally, you resolve the move by modifying the game state. This usually happens at the end of the update loop.
     ```rust
-    // frontend/src/app/screens/app @ impl ScreenWidget::ui
+    // frontend/src/screens/game.rs @ impl ScreenWidget::ui
     if let (Some(source), Some(destination)) = (self.drag, self.drop) {
         // Move the card data from source field to destination field
         game_state.move_card(source, destination);
@@ -217,7 +217,7 @@ Screens are distinct views (e.g., Main Menu, Poker Table, QR Scanner). To add a 
 
 1.  **Create the Screen Struct**: Implement `ScreenWidget` (for rendering) and `ScreenDef` (for registration). Alternatively you can use the `impl_screen_def!` macro to generate the `ScreenDef` implementation.
     ```rust
-    // frontend/src/app/screens/my_screen.rs
+    // frontend/src/screens/my_screen.rs
     pub struct MyScreen;
     
     impl ScreenWidget for MyScreen {
@@ -243,9 +243,9 @@ Screens are distinct views (e.g., Main Menu, Poker Table, QR Scanner). To add a 
     }
     ```
 
-2.  **Register the Screen**: Add it to `ScreenRegistry::new` in `../frontend/src/app/screens/mod.rs`.
+2.  **Register the Screen**: Add it to `ScreenRegistry::new` in [`frontend/src/widgets/screen.rs`](../frontend/src/widgets/screen.rs).
     ```rust
-    // frontend/src/app/screens/mod.rs
+    // frontend/src/widgets/screen.rs
     pub fn new() -> Self {
         // ...
         reg.register::<MyScreen>();

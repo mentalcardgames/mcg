@@ -1,4 +1,3 @@
-pub mod screens;
 pub mod websocket;
 pub mod state;
 
