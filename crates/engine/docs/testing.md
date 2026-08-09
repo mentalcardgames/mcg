@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/debug/tests.rs
   - crates/engine/tests/quantifier_test.rs
   - crates/engine/test_games/
-last_validated: 2026-07-28
+last_validated: 2026-08-09
 ---
 
 # Testing Strategy
@@ -80,8 +80,20 @@ crates/engine/
 │   └── debug/
 │       ├── mod.rs
 │       └── tests.rs
-└── tests/
-    └── quantifier_test.rs      ← integration test (separate compilation unit, links as `extern crate`)
+└── tests/                       ← integration tests (separate compilation units)
+    ├── action_test.rs           │  one file per feature area, auto-discovered by Cargo:
+    ├── behavior_test.rs         │  deterministic rule-outcome fixtures
+    ├── demo_games_test.rs       │  the five demo games driven end-to-end
+    ├── flow_test.rs             │  if/optional/stage flow
+    ├── memory_test.rs           │  memory semantics
+    ├── optional_test.rs         │
+    ├── out_test.rs              │  elimination
+    ├── quantifier_test.rs       │
+    ├── random_play_test.rs      │  random-input monkey tests
+    ├── scoring_test.rs          │
+    ├── setup_test.rs            │
+    ├── shuffle_test.rs          │
+    └── turn_test.rs             ┘
 ```
 
 **Naming conventions:**

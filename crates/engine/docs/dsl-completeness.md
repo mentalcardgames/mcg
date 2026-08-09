@@ -15,6 +15,11 @@ last_validated: 2026-08-09
 > the five handoff demo games (`test_games/{blackjack,war,crazy_eights,
 > five_card_draw,go_fish}.cgdsl`, driven by `tests/demo_games_test.rs`).
 >
+> This is the **single status authority** for implementation state. What each
+> construct *means* is documented in [`dsl-semantics.md`](./dsl-semantics.md);
+> known bugs and divergences with repros live in
+> [`engine-vs-design.md`](./engine-vs-design.md).
+>
 > Status key:
 > - ✅ **works** — exercised and correct
 > - ⚠️ **works with caveats** — see the note
@@ -127,7 +132,7 @@ last_validated: 2026-08-09
 | `min/max of X using PM` / `using Precedence` | ✅ | |
 | `X of <owner>` (GroupOwner) | ✅ | Plain-location fast path (owner-resolved). `where`-groups are owner-resolved since 2026-08-09 (D-7); team/collection owners error. |
 | `X where <filter>` | ✅ | Filters: `size(...)`, `same K`, `distinct K`, `adjacent K using P`, `K higher/lower than "V" using P`, `K is "V"`/`is not`, `combo C`/`not combo C`, binary `(A and B)`. An empty filter result reports the base location (fixed 2026-08-09 — was the location-0 sentinel). |
-| `<combo> in X` / `not <combo> in X` | ✅ | Read-side syntax is the combo *name* (no `combo` keyword): `Pair in Hand`. Combos evaluate group-wise like `where` (fixed 2026-08-09 — per-card `same`/`distinct` matching was broken). |
+| `<combo> in X` / `not <combo> in X` | ✅ | Read-side syntax is the combo *name* (no `combo` keyword): `Pair in Hand`. Combos evaluate group-wise like `where` (fixed 2026-08-09 — per-card `same`/`distinct` matching was broken). **Limitation (D-16):** `same K` matches pairs too and `size` filters the whole set — "exactly N of a kind / N consecutive" is not expressible; `move <combo> in X …` lays down all matched cards, `deal any from <combo> in X …` picks a subset. |
 | cardset memory `(&CS:M of ...)` | ⚠️ | Location inferred from the first card; falls back to location-0 sentinel (I-14/D-15) — a dest move may target the wrong pile. |
 
 ## 6. Scoring

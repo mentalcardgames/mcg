@@ -9,7 +9,7 @@ associated_files:
   - crates/engine/src/interpreter/mod.rs
   - crates/engine/src/game_data.rs
   - crates/engine/Cargo.toml
-last_validated: 2026-07-28
+last_validated: 2026-08-09
 ---
 
 # Concurrency, Memory & Thread Safety
@@ -136,4 +136,4 @@ Error handling is stringly-typed (`Result<_, String>`).
 > Note: `crates/engine/src/bin/cgdsl-play.rs` is auto-discovered by cargo. Only `engine-tui`
 > has an explicit `[[bin]]` entry in `Cargo.toml`.
 
-last_validated: 2026-07-28
+last_validated: 2026-08-09

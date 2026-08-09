@@ -11,7 +11,10 @@ pub enum TraceEntry {
 pub enum TraceEvent {
     Action {
         subtype: String,
+        /// Human-readable DSL text, e.g. `deal 1 from Deck private to Hand of P:P1`.
         detail: String,
+        /// `Debug` representation of the rule, e.g. `Move { move_type: ... }`.
+        raw_detail: String,
     },
     Choice {
         chosen_idx: usize,
@@ -20,15 +23,21 @@ pub enum TraceEvent {
     OptionalAccept,
     OptionalDecline,
     Condition {
+        /// Human-readable boolean expression, e.g. `(sum of Hand of current using BJ > 21)`.
         expr: String,
+        /// `Debug` representation of the expression.
+        raw_expr: String,
         result: bool,
         negated: bool,
         took_else: bool,
     },
     EndCondition {
+        /// Human-readable boolean expression.
         expr: String,
-        result: bool,
+        /// `Debug` representation of the expression.
+        raw_expr: String,
         stage: String,
+        result: bool,
         exited: bool,
     },
     StageRoundCounter {
@@ -45,6 +54,52 @@ pub enum TraceEvent {
     },
 }
 
+impl TraceEvent {
+    /// "Simplified" rendering: DSL-level text. `TraceEntry::Display` uses
+    /// this form (so the `MCG_TRACE_LOG` file is readable too).
+    pub fn pretty(&self) -> String {
+        format!("{}", self)
+    }
+
+    /// "Raw" rendering: `Debug` representations where the engine has them
+    /// (action rules, condition expressions); identical to [`pretty`]
+    /// otherwise.
+    pub fn raw(&self) -> String {
+        match self {
+            TraceEvent::Action {
+                subtype,
+                raw_detail,
+                ..
+            } => format!("Action:{} {}", subtype, raw_detail),
+            TraceEvent::Condition {
+                raw_expr,
+                result,
+                negated,
+                took_else,
+                ..
+            } => {
+                format!(
+                    "Condition: {} = {} (neg={}, else={})",
+                    raw_expr, result, negated, took_else
+                )
+            }
+            TraceEvent::EndCondition {
+                raw_expr,
+                stage,
+                result,
+                exited,
+                ..
+            } => {
+                format!(
+                    "EndCondition({}): {} = {} (exited={})",
+                    stage, raw_expr, result, exited
+                )
+            }
+            _ => format!("{}", self),
+        }
+    }
+}
+
 impl std::fmt::Display for TraceEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -56,7 +111,9 @@ impl std::fmt::Display for TraceEntry {
 impl std::fmt::Display for TraceEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TraceEvent::Action { subtype, detail } => write!(f, "Action:{} {}", subtype, detail),
+            TraceEvent::Action {
+                subtype, detail, ..
+            } => write!(f, "{} {}", subtype, detail),
             TraceEvent::Choice {
                 chosen_idx,
                 options,
@@ -70,6 +127,7 @@ impl std::fmt::Display for TraceEvent {
                 result,
                 negated,
                 took_else,
+                ..
             } => {
                 write!(
                     f,
@@ -82,6 +140,7 @@ impl std::fmt::Display for TraceEvent {
                 result,
                 stage,
                 exited,
+                ..
             } => {
                 write!(
                     f,

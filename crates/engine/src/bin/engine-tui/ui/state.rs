@@ -15,6 +15,8 @@ pub struct TuiState {
     pub trace_entries: Vec<DisplayTraceEntry>,
     pub step_count: usize,
     pub trace_detail: TraceDetail,
+    /// `false` = simplified (DSL text); `true` = raw (`Debug` output).
+    pub trace_raw: bool,
     pub state_detail: DebugLevel,
     pub perspective_idx: usize,
     pub pending_input: Option<InputType>,
@@ -40,6 +42,7 @@ impl TuiState {
             trace_entries: Vec::new(),
             step_count: 0,
             trace_detail: TraceDetail::Evaluations,
+            trace_raw: false,
             state_detail: DebugLevel::Medium,
             perspective_idx: 0,
             pending_input: None,
@@ -83,6 +86,10 @@ impl TuiState {
 
     pub fn cycle_trace_detail(&mut self) {
         self.trace_detail.cycle();
+    }
+
+    pub fn toggle_trace_raw(&mut self) {
+        self.trace_raw = !self.trace_raw;
     }
 
     pub fn cycle_state_detail(&mut self) {

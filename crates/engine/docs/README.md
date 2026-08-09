@@ -3,10 +3,20 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all — crate-level overview]
 topics: [overview, architecture, module-map, domain-concepts, entry-point]
-last_validated: 2026-07-28
+last_validated: 2026-08-09
 ---
 
 # CGDSL Engine — Overview
+
+> **SCOPE — read first.** Every file in this directory (`crates/engine/docs/`)
+> documents **only the `cgdsl-engine` crate** (the `.cgdsl` interpreter). This
+> is the complete and only documentation set maintained for it.
+>
+> The repository root `docs/` and `plans/` directories belong to **other
+> projects** (the `native_mcg` poker product, QR protocol, VS Code extension,
+> …) and are **not** maintained or kept in sync here — do not treat them as
+> engine documentation. When in doubt: if it lives under `crates/engine/docs/`,
+> it describes this crate; otherwise it does not.
 
 The engine is a deterministic finite-state-machine interpreter that runs `.cgdsl`
 card-game definitions. It parses a game description, builds an IR graph, and steps
@@ -41,30 +51,30 @@ This crate is part of a larger workspace. Other crates you may need:
 ## Suggested Reading Path
 
 **First time here:**
-1. [`dsl-semantics.md`](./dsl-semantics.md) — what every `.cgdsl` construct means to the engine
-2. [`lifecycle.md`](./lifecycle.md) — when things happen: setup → stage → play → terminate
+1. [`dsl-semantics.md`](./dsl-semantics.md) — what every `.cgdsl` construct *means* to the engine
+2. [`dsl-completeness.md`](./dsl-completeness.md) — per-construct implementation status (the single status authority)
+3. [`lifecycle.md`](./lifecycle.md) — when things happen: setup → stage → play → terminate
 
 **Modifying engine code:**
-3. [`invariants.md`](./invariants.md) — 23 guardrails. **Read before touching anything.**
-4. [`data-structures.md`](./data-structures.md) — field-level layout of every struct and enum
-5. [`contributing.md`](./contributing.md) — development cheatsheet: which files to touch when adding features
+4. [`invariants.md`](./invariants.md) — 23 guardrails. **Read before touching anything.**
+5. [`data-structures.md`](./data-structures.md) — field-level layout of every struct and enum
+6. [`contributing.md`](./contributing.md) — development cheatsheet: which files to touch when adding features
 
 **Writing tests:**
-6. [`testing.md`](./testing.md) — test layers, fixture conventions, commands
+7. [`testing.md`](./testing.md) — test layers, fixture conventions, commands
 
 **Integrating from outside:**
-7. [`interfaces.md`](./interfaces.md) — public API surface, data flow
-8. [`api-usage.md`](./api-usage.md) — `run_game()` examples
+8. [`interfaces.md`](./interfaces.md) — public API surface, data flow
+9. [`api-usage.md`](./api-usage.md) — `run_game()` examples
 
 **Reference:**
-9. [`developer-notes.md`](./developer-notes.md) — design decisions, completeness audit, known bugs
-10. [`error-handling.md`](./error-handling.md) — panic sites, recoverable errors, silent no-ops
-11. [`concurrency.md`](./concurrency.md) — threading model, `Send`/`Sync`
-12. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
+10. [`developer-notes.md`](./developer-notes.md) — design decisions (memory ownership, scoring)
+11. [`engine-vs-design.md`](./engine-vs-design.md) — divergences from the intended DSL design, with repros
+12. [`error-handling.md`](./error-handling.md) — panic sites, recoverable errors, silent no-ops
+13. [`concurrency.md`](./concurrency.md) — threading model, `Send`/`Sync`
+14. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
 
 **Handoff set (2026-08):**
-13. [`dsl-completeness.md`](./dsl-completeness.md) — per-construct status: grammar → IR → engine
-14. [`engine-vs-design.md`](./engine-vs-design.md) — divergence/bug catalog with repros + demo-game index
 15. [`NEXT_STEPS.md`](./NEXT_STEPS.md) — future-work project seeds (bachelor/master)
 
 ## Module Map

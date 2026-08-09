@@ -9,11 +9,13 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 
 pub struct TraceLogPanel {
     pub detail: TraceDetail,
+    /// `false` = simplified (DSL text); `true` = raw (`Debug` output).
+    pub raw: bool,
 }
 
 impl TraceLogPanel {
-    pub fn new(detail: TraceDetail) -> Self {
-        Self { detail }
+    pub fn new(detail: TraceDetail, raw: bool) -> Self {
+        Self { detail, raw }
     }
 
     pub fn render(
@@ -25,7 +27,11 @@ impl TraceLogPanel {
         auto_scroll: bool,
         focused: bool,
     ) -> u16 {
-        let title = format!("IR TRACE LOG ({:?})", self.detail);
+        let title = format!(
+            "IR TRACE LOG ({:?}, {})",
+            self.detail,
+            if self.raw { "raw" } else { "simplified" }
+        );
 
         let block = if focused {
             Block::default()
@@ -120,13 +126,28 @@ impl TraceLogPanel {
 
     fn format_event(&self, event: &TraceEvent) -> Vec<Span<'static>> {
         match event {
-            TraceEvent::Action { subtype, detail } => vec![
-                Span::styled(
-                    format!("Action:{}", subtype),
-                    Style::default().fg(Color::LightGreen),
-                ),
-                Span::raw(format!(" {}", detail)),
-            ],
+            TraceEvent::Action {
+                subtype,
+                detail,
+                raw_detail,
+            } => {
+                if self.raw {
+                    vec![
+                        Span::styled(
+                            format!("Action:{}", subtype),
+                            Style::default().fg(Color::LightGreen),
+                        ),
+                        Span::raw(format!(" {}", raw_detail)),
+                    ]
+                } else {
+                    // Simplified mode: the DSL line alone — the action text
+                    // is self-describing ("deal …", "shuffle …", "score …").
+                    vec![Span::styled(
+                        detail.clone(),
+                        Style::default().fg(Color::LightGreen),
+                    )]
+                }
+            }
             TraceEvent::Choice {
                 chosen_idx,
                 options,
@@ -155,14 +176,16 @@ impl TraceLogPanel {
             ],
             TraceEvent::Condition {
                 expr,
+                raw_expr,
                 result,
                 negated,
                 took_else,
             } => {
                 let r_color = if *result { Color::Green } else { Color::Red };
+                let shown = if self.raw { raw_expr } else { expr };
                 vec![
                     Span::styled("Condition: ", Style::default().fg(Color::LightMagenta)),
-                    Span::raw(expr.clone()),
+                    Span::raw(shown.clone()),
                     Span::raw(" = "),
                     Span::styled(result.to_string(), Style::default().fg(r_color)),
                     Span::styled(
@@ -173,18 +196,20 @@ impl TraceLogPanel {
             }
             TraceEvent::EndCondition {
                 expr,
+                raw_expr,
                 result,
                 stage,
                 exited,
             } => {
                 let r_color = if *result { Color::Green } else { Color::Red };
                 let x_color = if *exited { Color::Green } else { Color::Red };
+                let shown = if self.raw { raw_expr } else { expr };
                 vec![
                     Span::styled(
                         format!("EndCondition({}): ", stage),
                         Style::default().fg(Color::LightMagenta),
                     ),
-                    Span::raw(expr.clone()),
+                    Span::raw(shown.clone()),
                     Span::raw(" = "),
                     Span::styled(result.to_string(), Style::default().fg(r_color)),
                     Span::raw(" (exited="),

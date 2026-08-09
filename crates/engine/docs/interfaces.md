@@ -10,7 +10,7 @@ associated_files:
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/interpreter/types.rs
   - crates/engine/src/game_data.rs
-last_validated: 2026-07-28
+last_validated: 2026-08-09
 ---
 
 # Public Interfaces — the External Host Contract
@@ -301,20 +301,24 @@ pub enum TraceEntry {
 ```
 
 ```rust
-// crates/engine/src/interpreter/trace.rs:11
+// crates/engine/src/interpreter/trace.rs:10-52
 pub enum TraceEvent {
-    Action { subtype: String, detail: String },
+    Action { subtype: String, detail: String, raw_detail: String },
     Choice { chosen_idx: usize, options: Vec<String> },
     OptionalAccept,
     OptionalDecline,
-    Condition { expr: String, result: bool, negated: bool, took_else: bool },
-    EndCondition { expr: String, result: bool, stage: String, exited: bool },
+    Condition { expr: String, raw_expr: String, result: bool, negated: bool, took_else: bool },
+    EndCondition { expr: String, raw_expr: String, result: bool, stage: String, exited: bool },
     StageRoundCounter { stage: String, new_count: u32 },
     EndStage { stage: String },
     Trigger,
     Quantifier { kind: String, detail: String },
 }
 ```
+
+`detail`/`expr` are DSL-level text (via the AST `Display` impls);
+`raw_detail`/`raw_expr` are the `Debug` forms. `TraceEvent::pretty()` /
+`TraceEvent::raw()` select between them (the TUI's `r` toggle uses this).
 
 Intent: `TraceEntry::Step { from, to, event }` is emitted once per FSM transition via the
 `trace_sender` callback; the `Quantifier` variant surfaces intermediate sub-steps ("chose player

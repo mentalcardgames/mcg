@@ -16,11 +16,59 @@ fn trace_entry_step_displays_bracketed_transition() {
 fn trace_event_action_displays_subtype_and_detail() {
     let event = TraceEvent::Action {
         subtype: "Action:Move".to_string(),
-        detail: "some detail".to_string(),
+        detail: "deal 1 from Deck private to Hand of P:P1".to_string(),
+        raw_detail: "Move { move_type: Deal { .. } }".to_string(),
     };
     let s = format!("{}", event);
     assert!(s.contains("Action:Move"));
-    assert!(s.contains("some detail"));
+    assert!(s.contains("deal 1 from Deck"));
+    let raw = event.raw();
+    assert!(
+        raw.contains("Move { move_type"),
+        "raw mode shows Debug: {raw}"
+    );
+    assert!(
+        !raw.contains("deal 1 from Deck"),
+        "raw mode hides pretty text: {raw}"
+    );
+}
+
+#[test]
+fn trace_event_condition_displays_result_and_neg() {
+    let event = TraceEvent::Condition {
+        expr: "(sum of Hand of current using BJ > 21)".to_string(),
+        raw_expr: "Aggregate { aggregate: Compare { .. } }".to_string(),
+        result: true,
+        negated: false,
+        took_else: true,
+    };
+    let s = format!("{}", event);
+    assert!(s.contains("Condition:"));
+    assert!(s.contains("(sum of Hand of current using BJ > 21)"));
+    assert!(s.contains("true"));
+    assert!(s.contains("neg=false"));
+    assert!(s.contains("else=true"));
+    let raw = event.raw();
+    assert!(raw.contains("Aggregate {"), "raw mode shows Debug: {raw}");
+    assert!(
+        !raw.contains("sum of Hand of current"),
+        "raw mode hides pretty text: {raw}"
+    );
+}
+
+#[test]
+fn trace_event_end_condition_displays_stage_and_exited() {
+    let event = TraceEvent::EndCondition {
+        expr: "e".to_string(),
+        raw_expr: "Aggregate { .. }".to_string(),
+        result: false,
+        stage: "Play".to_string(),
+        exited: true,
+    };
+    let s = format!("{}", event);
+    assert!(s.contains("EndCondition(Play)"));
+    assert!(s.contains("exited=true"));
+    assert!(event.raw().contains("Aggregate { .. }"));
 }
 
 #[test]
@@ -45,35 +93,6 @@ fn trace_event_optional_accept_displays_accepted() {
 #[test]
 fn trace_event_optional_decline_displays_declined() {
     assert!(format!("{}", TraceEvent::OptionalDecline).contains("DECLINED"));
-}
-
-#[test]
-fn trace_event_condition_displays_result_and_neg() {
-    let event = TraceEvent::Condition {
-        expr: "some expr".to_string(),
-        result: true,
-        negated: false,
-        took_else: true,
-    };
-    let s = format!("{}", event);
-    assert!(s.contains("Condition:"));
-    assert!(s.contains("some expr"));
-    assert!(s.contains("true"));
-    assert!(s.contains("neg=false"));
-    assert!(s.contains("else=true"));
-}
-
-#[test]
-fn trace_event_end_condition_displays_stage_and_exited() {
-    let event = TraceEvent::EndCondition {
-        expr: "e".to_string(),
-        result: false,
-        stage: "Play".to_string(),
-        exited: true,
-    };
-    let s = format!("{}", event);
-    assert!(s.contains("EndCondition(Play)"));
-    assert!(s.contains("exited=true"));
 }
 
 #[test]

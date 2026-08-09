@@ -287,6 +287,62 @@ fn five_card_draw_scores_hand_bonuses() {
 }
 
 // ---------------------------------------------------------------------------
+// Combos — laying down sets that match a combo definition
+// ---------------------------------------------------------------------------
+
+#[test]
+fn combo_laydown_moves_matching_cards() {
+    let ir = load_game("behavior_combo_laydown.cgdsl");
+    let tracker = Tracker::new();
+    let who_for_closure = tracker.0.clone();
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(move |it: InputType| {
+            let who = who_for_closure
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "P1".into());
+            let _ = it;
+            Input {
+                player_id: who,
+                kind: InputKind::Choice { idx: 0 },
+            }
+        })),
+        Some(tracker.sender()),
+        None,
+    )
+    .expect("combo laydown must complete");
+
+    let hand = hand_location(&gd, "P1");
+    let set_table = gd.locations.iter().find(|l| l.name == "SetTable").unwrap();
+    let run_table = gd.locations.iter().find(|l| l.name == "RunTable").unwrap();
+
+    // Set: `same Rank` matches ANY duplicated rank (pairs included) and the
+    // `size` filter applies to the whole set — so the pair of Twos matches
+    // alongside the three Aces. 5 cards land (documented DSL limitation,
+    // engine-vs-design.md D-16).
+    assert_eq!(set_table.cards.len(), 5, "3 Aces + 2 Twos (pairs match)");
+    for &id in &set_table.cards {
+        let rank = gd.cards[id].get("Rank").map(|r| r.as_str()).unwrap();
+        assert!(
+            rank == "Ace" || rank == "Two",
+            "only duplicated ranks on SetTable, got {rank}"
+        );
+    }
+
+    // Run: the remaining hand is Three..Seven, a genuine chain: all 5 move.
+    assert_eq!(
+        run_table.cards.len(),
+        5,
+        "Three..Seven is one adjacent chain"
+    );
+    assert_eq!(hand.cards.len(), 0, "hand is empty after both laydowns");
+    assert_eq!(total_cards(&gd), 10);
+}
+
+// ---------------------------------------------------------------------------
 // Crazy Eights — empty-hand win
 // ---------------------------------------------------------------------------
 

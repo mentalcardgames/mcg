@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/query/mod.rs
   - crates/engine/src/controller/mod.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-07-28
+last_validated: 2026-08-09
 ---
 
 # System Invariants & Guardrails

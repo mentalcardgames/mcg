@@ -130,6 +130,28 @@ last_validated: 2026-08-09
   (F-11) but the memory case keeps the sentinel.
 - **Wanted:** an explicit "empty set" marker at the `eval_cardset` boundary.
 
+### D-16 — combo filters cannot express group-size constraints ("laying down" sets)
+- **Severity:** medium (game-design impact for Rummy-style games).
+- **Behaviour:** `combo Set where (same Rank and size >= 3)` does **not** mean
+  "a set of three-or-more of a kind":
+  - `same Rank` matches **any** duplicated rank — a pair of Twos satisfies it;
+  - the `size` filter applies to the **whole set** being filtered, not to each
+    group — so `size >= 3` only requires the pile to hold ≥3 cards;
+  - `adjacent Rank using P` returns every card with an adjacent neighbour, so
+    chains extend through their boundaries (a pair next to a run drags the
+    pair along).
+  Consequently "exactly N of a kind" and "exactly N consecutive" are not
+  expressible. The *mechanics* of laying down work — `<combo> in <pile>` is a
+  valid cardset, and `move <combo> in <pile> <status> to <dest>` (or
+  `deal any from <combo> in <pile> ...` to choose a subset) moves the matched
+  cards — but the match itself over-approximates. Verified by
+  `tests/behavior_test.rs::combo_laydown_moves_matching_cards`
+  (`test_games/behavior_combo_laydown.cgdsl`: the "set" laydown moves 5 cards,
+  not 3).
+- **Wanted:** per-group filters (e.g. a `same Rank size >= 3`-style atom, or
+  `adjacent` restricted to chains of exactly N), or a `where`-clause on the
+  combo that can reference group membership.
+
 ## 3. Parser / lowering divergences (front_end-side)
 
 - **P-1 (`for X` is dropped, B-1).** The `stage ... for <player>` clause is

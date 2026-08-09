@@ -20,6 +20,7 @@ mcg_server_public.toml
 *.log
 
 *.dot
+.obsidian/
 
 CLAUDE.md
 CRUSH.md

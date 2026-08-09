@@ -25,7 +25,10 @@ impl IrExt for Ir<LoweredPayLoad> {
     }
 }
 
-pub(super) fn rule_signature(rule: &front_end::ast::GameRule) -> (String, String) {
+/// `(subtype, detail, raw_detail)`: a stable category label ("Action:Move"),
+/// the rule rendered as DSL text (`deal 1 from Deck private to Hand of P:P1`),
+/// and the `Debug` representation (for the TUI's raw trace mode).
+pub(super) fn rule_signature(rule: &front_end::ast::GameRule) -> (String, String, String) {
     match rule {
         front_end::ast::GameRule::Action { action } => {
             let subtype = match action {
@@ -50,7 +53,7 @@ pub(super) fn rule_signature(rule: &front_end::ast::GameRule) -> (String, String
                 }
                 front_end::ast::ActionRule::Move { .. } => "Action:Move".to_string(),
             };
-            (subtype, format!("{:?}", action))
+            (subtype, format!("{}", action), format!("{:?}", action))
         }
         front_end::ast::GameRule::SetUp { setup } => {
             let subtype = match setup {
@@ -83,7 +86,7 @@ pub(super) fn rule_signature(rule: &front_end::ast::GameRule) -> (String, String
                     "SetUp:CreatePointMap".to_string()
                 }
             };
-            (subtype, format!("{:?}", setup))
+            (subtype, format!("{}", setup), format!("{:?}", setup))
         }
         front_end::ast::GameRule::Scoring { scoring } => {
             let subtype = match scoring {
@@ -100,7 +103,7 @@ pub(super) fn rule_signature(rule: &front_end::ast::GameRule) -> (String, String
                     }
                 },
             };
-            (subtype, format!("{:?}", scoring))
+            (subtype, format!("{}", scoring), format!("{:?}", scoring))
         }
     }
 }

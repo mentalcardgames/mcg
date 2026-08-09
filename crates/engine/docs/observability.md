@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/controller/trace_logger.rs
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/action.rs
-last_validated: 2026-07-28
+last_validated: 2026-08-09
 ---
 
 # Observability & Diagnostics
@@ -84,20 +84,27 @@ ids the quantifier subsystem allocates from `u32::MAX - 1` downward (see invaria
 ### 2.2 `TraceEvent`
 
 ```rust
-// crates/engine/src/interpreter/trace.rs:10-46
+// crates/engine/src/interpreter/trace.rs:10-52
 pub enum TraceEvent {
-    Action { subtype: String, detail: String },
+    Action { subtype: String, detail: String, raw_detail: String },
     Choice { chosen_idx: usize, options: Vec<String> },
     OptionalAccept,
     OptionalDecline,
-    Condition { expr: String, result: bool, negated: bool, took_else: bool },
-    EndCondition { expr: String, result: bool, stage: String, exited: bool },
+    Condition { expr: String, raw_expr: String, result: bool, negated: bool, took_else: bool },
+    EndCondition { expr: String, raw_expr: String, result: bool, stage: String, exited: bool },
     StageRoundCounter { stage: String, new_count: u32 },
     EndStage { stage: String },
     Trigger,
     Quantifier { kind: String, detail: String },
 }
 ```
+
+`detail`/`expr` carry **DSL-level text** (e.g. `deal 1 from Deck private to
+Hand of P:P1`, `(sum of Hand of current using BJ > 21)`) — the AST `Display`
+implementations; `raw_detail`/`raw_expr` carry the `Debug` representations.
+`TraceEvent::pretty()` renders the simplified form (this is what `Display`
+uses, so the trace file is readable); `TraceEvent::raw()` renders the `Debug`
+form — the TUI toggles between them with `r`.
 
 Each variant is emitted by exactly one arm of `Interpreter::step`
 (`crates/engine/src/interpreter/mod.rs:64-364`) or by the quantifier driver

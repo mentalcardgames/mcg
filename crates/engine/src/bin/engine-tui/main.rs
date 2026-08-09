@@ -101,6 +101,15 @@ fn is_current_player(state: &TuiState) -> bool {
         || perspective_name == state.current_player_name
 }
 
+/// Map a digit-key shortcut to a `Choice` option index.
+/// `1`..=`9` select options 1..=9; `0` selects option 10 (for long lists
+/// such as Go Fish's 13-rank ask). Returns `None` when the option does not
+/// exist (the digit is then simply ignored).
+fn choice_shortcut_idx(digit: u32, max_index: usize) -> Option<usize> {
+    let idx = if digit == 0 { 9 } else { digit as usize - 1 };
+    (idx <= max_index).then_some(idx)
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let game_path = std::env::args()
         .nth(1)
@@ -183,7 +192,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     tui_state.choose_cursor = 0;
                     tui_state.choose_selected = vec![false; display.len()];
                 }
-                InputType::ChoosePlayer { candidates: _, .. } => {
+                InputType::ChoosePlayer { candidates: _, .. } | InputType::Choice { .. } => {
                     tui_state.choose_cursor = 0;
                     tui_state.choose_selected = Vec::new();
                 }
@@ -228,7 +237,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let trace_focused = tui_state.focus == PanelFocus::TraceLog;
-            let trace_panel = TraceLogPanel::new(tui_state.trace_detail);
+            let trace_panel = TraceLogPanel::new(tui_state.trace_detail, tui_state.trace_raw);
             let th = trace_panel.render(
                 f,
                 &tui_state.trace_entries,
@@ -251,6 +260,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             &tui_state.pending_input,
                             Some(InputType::ChooseCards { .. })
                                 | Some(InputType::ChoosePlayer { .. })
+                                | Some(InputType::Choice { .. })
                         );
                     match key.code {
                         crossterm::event::KeyCode::Char('q') => break,
@@ -260,6 +270,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         crossterm::event::KeyCode::Char('t') => {
                             tui_state.cycle_trace_detail();
+                        }
+                        crossterm::event::KeyCode::Char('r') => {
+                            tui_state.toggle_trace_raw();
                         }
                         crossterm::event::KeyCode::Char('p') => {
                             if let Some(ref gd) = tui_state.current_state {
@@ -292,6 +305,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     Some(InputType::ChoosePlayer { candidates, .. }) => {
                                         candidates.len()
                                     }
+                                    Some(InputType::Choice { options, .. }) => options.len(),
                                     _ => 1,
                                 };
                                 if tui_state.choose_cursor + 1 < max {
@@ -326,22 +340,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         crossterm::event::KeyCode::Char(n) => {
                             if tui_state.waiting_for_input && is_current_player(&tui_state) {
+                                let player_name = tui_state
+                                    .current_state
+                                    .as_ref()
+                                    .and_then(|gd| gd.players.get(tui_state.perspective_idx))
+                                    .map(|p| p.name.clone())
+                                    .unwrap_or_else(|| {
+                                        format!("Player{}", tui_state.perspective_idx)
+                                    });
                                 match &tui_state.pending_input {
                                     Some(InputType::ChooseCards { .. })
                                     | Some(InputType::ChoosePlayer { .. }) => {
                                         // ignored: use arrows/space/enter for these
                                     }
-                                    _ => {
-                                        let player_name = tui_state
-                                            .current_state
-                                            .as_ref()
-                                            .and_then(|gd| {
-                                                gd.players.get(tui_state.perspective_idx)
-                                            })
-                                            .map(|p| p.name.clone())
-                                            .unwrap_or_else(|| {
-                                                format!("Player{}", tui_state.perspective_idx)
-                                            });
+                                    Some(InputType::Choice { max_index, .. }) => {
+                                        if let Some(digit) = n.to_digit(10) {
+                                            if let Some(idx) =
+                                                choice_shortcut_idx(digit, *max_index)
+                                            {
+                                                if let Some(ref tx) = tui_state.input_tx {
+                                                    let _ = tx.send(Input {
+                                                        player_id: player_name,
+                                                        kind: InputKind::Choice { idx },
+                                                    });
+                                                    tui_state.waiting_for_input = false;
+                                                    tui_state.pending_input = None;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Some(InputType::Optional(_)) => {
                                         if n == 'y' || n == 'Y' {
                                             if let Some(ref tx) = tui_state.input_tx {
                                                 let _ = tx.send(Input {
@@ -360,20 +388,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 tui_state.waiting_for_input = false;
                                                 tui_state.pending_input = None;
                                             }
-                                        } else if let Some(digit) = n.to_digit(10) {
-                                            if (1..=9).contains(&digit) {
-                                                let idx = digit as usize - 1;
-                                                if let Some(ref tx) = tui_state.input_tx {
-                                                    let _ = tx.send(Input {
-                                                        player_id: player_name,
-                                                        kind: InputKind::Choice { idx },
-                                                    });
-                                                    tui_state.waiting_for_input = false;
-                                                    tui_state.pending_input = None;
-                                                }
-                                            }
                                         }
                                     }
+                                    _ => {}
                                 }
                             }
                         }
@@ -419,16 +436,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             tui_state.pending_input = None;
                                         }
                                     }
-                                    _ => {
+                                    Some(InputType::Choice { .. }) => {
                                         if let Some(ref tx) = tui_state.input_tx {
                                             let _ = tx.send(Input {
                                                 player_id: player_name,
-                                                kind: InputKind::Choice { idx: 0 },
+                                                kind: InputKind::Choice {
+                                                    idx: tui_state.choose_cursor,
+                                                },
                                             });
                                             tui_state.waiting_for_input = false;
                                             tui_state.pending_input = None;
                                         }
                                     }
+                                    Some(InputType::Optional(_)) => {
+                                        // Enter = accept (y/n remain the explicit
+                                        // controls; sending a non-Optional Input
+                                        // here would error the engine).
+                                        if let Some(ref tx) = tui_state.input_tx {
+                                            let _ = tx.send(Input {
+                                                player_id: player_name,
+                                                kind: InputKind::OptionalAccept,
+                                            });
+                                            tui_state.waiting_for_input = false;
+                                            tui_state.pending_input = None;
+                                        }
+                                    }
+                                    _ => {}
                                 }
                             }
                         }
@@ -460,4 +493,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::choice_shortcut_idx;
+
+    #[test]
+    fn choice_shortcuts_cover_1_to_9() {
+        assert_eq!(choice_shortcut_idx(1, 12), Some(0));
+        assert_eq!(choice_shortcut_idx(9, 12), Some(8));
+    }
+
+    #[test]
+    fn choice_shortcut_zero_selects_option_10() {
+        assert_eq!(choice_shortcut_idx(0, 12), Some(9), "0 = option 10");
+        assert_eq!(
+            choice_shortcut_idx(0, 8),
+            None,
+            "no option 10 in a 9-option list"
+        );
+    }
+
+    #[test]
+    fn choice_shortcut_out_of_range_is_ignored() {
+        assert_eq!(choice_shortcut_idx(7, 3), None, "option 7 does not exist");
+    }
 }

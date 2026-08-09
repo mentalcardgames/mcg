@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all]
 topics: [contributing, development, workflow, cheatsheet]
-last_validated: 2026-07-28
+last_validated: 2026-08-09
 ---
 
 # Contributing — Development Cheatsheet
@@ -68,7 +68,7 @@ Where to touch when adding or modifying engine functionality.
 ## Build commands
 
 ```
-cargo test -p cgdsl-engine                    # 482 tests
+cargo test -p cgdsl-engine                    # 488 tests
 cargo clippy -p cgdsl-engine --all-targets -- -D warnings
 cargo fmt -p cgdsl-engine -- --check
 just tui [GAME]                                # interactive TUI testing

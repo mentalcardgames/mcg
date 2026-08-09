@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/interpreter/ir_ext.rs
   - crates/engine/src/controller/mod.rs
   - crates/front_end/src/ir.rs
-last_validated: 2026-07-28
+last_validated: 2026-08-09
 ---
 
 # Data Structures & State Model
@@ -280,7 +280,7 @@ pub enum TraceEvent {
 
 `from`/`to` are **raw** `StateID` integers (via `StateID::raw()`). Both enums derive `Clone +
 Debug`; both also implement `std::fmt::Display` (`trace.rs:48-102`) producing human-readable lines
-suitable for `mcg-trace.log` (e.g. `[12->13] Action:Action:Move Move { … }`). The
+suitable for `mcg-trace.log` (e.g. `[12->13] Action:Move deal 26 from Deck private to P1Pile`). The
 `Quantifier` variant is emitted by the quantifier driver at synthetic-state allocation/deallocation
 (`interpreter/quant_driver.rs:363-375`). See [`observability.md`](./observability.md) for how
 `run_game` threads the sender into the `Interpreter`.

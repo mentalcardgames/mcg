@@ -1,0 +1,40 @@
+// Behavioral fixture — "laying down" cards that match a combo.
+//
+// Deterministic deck (10 cards, one suit, creation order):
+//   Ace, Ace, Ace, Two, Two, Three, Four, Five, Six, Seven
+// P1 gets all 10. Then:
+//   1. `move Set in Hand of current private to SetTable`
+//      - "Set" = same Rank and size >= 3. LIMITATION (documented): `same
+//        Rank` matches ANY duplicated rank (pairs included) and the
+//        `size` filter applies to the whole set, not the group — so the
+//        pair of Twos also matches. 5 cards land (3 Aces + 2 Twos).
+//   2. `move Run in Hand of current private to RunTable`
+//      - "Run" = adjacent Rank using RankOrder and size >= 3. The
+//        remaining hand is Three..Seven, a genuine chain: all 5 move.
+player P1
+turnorder (P:P1)
+location Hand on P:P1
+location SetTable on table
+location RunTable on table
+location Deck on table
+
+combo Set where (same Rank and size >= 3)
+
+precedence RankOrder on Rank(Two, Three, Four, Five, Six, Seven, Ace)
+combo Run where (adjacent Rank using RankOrder and size >= 3)
+
+card on Deck:
+  Rank(Ace, Ace, Ace, Two, Two, Three, Four, Five, Six, Seven)
+    for Suit(Diamonds)
+
+stage Deal for current 1 times {
+  deal 10 from Deck private to Hand
+}
+
+stage LaySet for current 1 times {
+  move Set in Hand of current private to SetTable
+}
+
+stage LayRun for current 1 times {
+  move Run in Hand of current private to RunTable
+}

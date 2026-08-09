@@ -2,13 +2,21 @@
 type: agent_wiki_node
 module: crates::engine
 scope: [all]
-topics: [design-decisions, todos, gaps, known-bugs, completeness]
-last_validated: 2026-07-28
+topics: [design-decisions, notes]
+last_validated: 2026-08-09
 ---
 
 # Developer Notes
 
-Design decisions, completeness audit, and known bugs — consolidated for the next maintainer.
+Design decisions and tribal knowledge for the next maintainer. **This page is
+deliberately small** — status, bugs, and divergences have dedicated homes:
+
+| Topic | Where it lives |
+|---|---|
+| Per-construct implementation status | [`dsl-completeness.md`](./dsl-completeness.md) |
+| Known bugs & design divergences (with repros) | [`engine-vs-design.md`](./engine-vs-design.md) |
+| Panic sites / recoverable errors / silent no-ops | [`error-handling.md`](./error-handling.md) |
+| Guardrails (invariants I-1 … I-23) | [`invariants.md`](./invariants.md) |
 
 ---
 
@@ -30,7 +38,7 @@ This ownership is encoded by **prefixing the key** in the flat HashMap:
 
 **Runtime reads:** All evaluator memory arms use `Evaluator::resolve_memory_key` / `resolve_collection_memory_key`. When the AST carries a `WithOwner` variant (`&I:M of P1`), the owner is used directly. The parser already supports `of <owner>` in all memory-reference grammar rules (`&I:M of ...`, `&P:M of ...`, etc.). The bare `Memory { memory }` variant (no owner) returns an error.
 
-**Runtime writes (bridge):** `SetMemory` (`M is 42`) and `ResetMemory` (`reset M`) lack an owner clause in the grammar. As a bridge, they prefix the key with the current player name. Each site is flagged with `// NOTE(grammar-gap)`. When the grammar adds `of <owner>` to these rules, the bridge code is replaced with the explicit owner from the AST.
+**Runtime writes (bridge):** `SetMemory` (`M is 42`) and `ResetMemory` (`reset M`) lack an owner clause in the grammar. As a bridge, they prefix the key with the current player name; without a current player they return a recoverable error. Each site is flagged with `// NOTE(grammar-gap)`. When the grammar adds `of <owner>` to these rules, the bridge code is replaced with the explicit owner from the AST (see `engine-vs-design.md` D-14).
 
 **Why not a nested data structure?** `GameData` is `Clone` and the flat `HashMap` is serializable. Owner-prefixed keys need zero type-system changes — just string formatting at the access site, with guaranteed non-collision.
 
@@ -40,107 +48,16 @@ This ownership is encoded by **prefixing the key** in the flat HashMap:
 
 ### 1.3 Scoring: WinnerWith::Position Interpretation
 
-`winner is highest position` / `winner is lowest position` uses the player's index in `turn_order` (0-based). `turn_order [P2, P1, P3]` → P2=0, P1=1, P3=2. `highest position` → P3 wins. `lowest position` → P2 wins. Players not in `turn_order` get `usize::MAX`. This interpretation may not match the intended DSL semantics.
+`winner is highest position` / `winner is lowest position` uses the player's index in `turn_order` (0-based). `turn_order [P2, P1, P3]` → P2=0, P1=1, P3=2. `highest position` → P3 wins. `lowest position` → P2 wins. Players not in `turn_order` get `usize::MAX`. This interpretation may not match the intended DSL semantics (see `engine-vs-design.md` D-10).
 
 ### 1.4 CGDSL Identifiers Must Start With Capital Letter
 
 Per the Pest grammar `ident = { &capital ~ ... }`, names must start with a capital letter. Memory named `m` fails to parse; use `M`. This applies to: memory names, stage names, team names, combo names, precedence names, point map names, location names, and token names.
 
----
+### 1.5 Card Creation Order is Deterministic (unless shuffled)
 
-## 2. Completeness Audit
+`expand_types` expands rank-major with the innermost dimension last (`Rank(Ace, Two) for Suit(D, C)` → `Ace-D, Ace-C, Two-D, Two-C`), and `deal N` takes the top N cards. **Without `shuffle`, the deck order is fully predictable** — the deterministic `behavior_*.cgdsl` fixtures rely on this (see `testing.md` §12). For exact per-player hands, use single-suit decks or comma-separated type groups.
 
-### 2.1 Implemented and Working
+### 1.6 The TUI Treats All Prompt Lists the Same
 
-**Interpreter:** Full FSM step execution, quantifier preprocessor (DestPlayerAll / DestPlayerAny / SrcCardsAnyOrRange), input buffer (LIFO), trace emission for all payload arms.
-
-**Controller:** `run_game` with `InputSource::Player` and `InputSource::TestFile`, player-fingerprinting validation, `Name:` prefix in test files, `MCG_TRACE_LOG` file logging.
-
-**Types:** `Input { player_id, kind }` / `InputKind` with accessor delegation, `InputType` (Choice, Optional, ChoosePlayer, ChooseCards).
-
-**Actions — 26 of 31 variants implemented:**
-SetUp (all 12): CreatePlayer, CreateTeams, CreateTurnorder/Random, CreateLocation, CreateCardOnLocation, CreateCombo, CreateMemory/WithMemoryType, CreatePrecedence, CreatePointMap.
-Action (11/16): ShuffleAction, OutAction, SetMemory, ResetMemory, CycleAction, EndAction (Turn/Stage), Score, ScoreMemory, Winner, WinnerWith.
-Move (3/4): Deal, Exchange, Classic.
-
-**Query Evaluator:** `bool.rs` and `cardset.rs` — 100%. `int.rs`, `string.rs`, `player.rs` — complete except 4 `todo!()` panics and 2 silent empty-returns. Full unit test suite (5 files, ~180 tests).
-
-**GameData:** 16 of 22 methods working correctly. Memory ownership model implemented (prefixed keys). 6 documented known bugs (see §2.4).
-
-**TUI:** Dual-panel layout, 4 trace detail levels, choose-player/cards navigation, keyboard gating, turn-change separators.
-
-**CLI:** Interactive + test-file mode with player name tracking.
-
-**Tests:** 414 unit (1 ignored) + 74 integration tests passing across 12 `tests/` files (2026-08). 75 `.cgdsl` fixture files in `test_games/` (including the five handoff demo games: `blackjack.cgdsl`, `war.cgdsl`, `crazy_eights.cgdsl`, `five_card_draw.cgdsl`, `go_fish.cgdsl`, the `errors_*` / `fix_*` regression fixtures, and the five `behavior_*` deterministic fixtures).
-
-### 2.2 Not Implemented
-
-**`todo!()` Panics (none remain):** all four collection-memory `todo!()` sites
-(`query/player.rs:240`, `query/int.rs:170,257`, `query/string.rs:55`) were implemented on
-2026-08-09 (multi-owner aggregation), and every DSL-reachable panic in `action.rs` became a
-recoverable `Err` (see `error-handling.md` §2). The only remaining panics are internal
-invariants (`add_location`, `next_player`) or unreachable-by-construction (`alloc_synth`).
-
-**Silent No-Ops / Stubs (11 action variants):**
-
-Token/card-status: `CreateTokenOnLocation`, `FlipAction`, `MoveType::Place` — data model never built.
-
-Bidding/demand: `BidAction`, `BidMemoryAction`, `DemandAction`, `DemandMemoryAction` — semantics undefined.
-
-Game end: `EndType::GameWithWinner` — empty body.
-
-SetMemory collection sub-variants: `PlayerCollection`, `StringCollection`, `TeamCollection`, `IntCollection`, `LocationCollection`, `CardSet` — insert empty defaults instead of evaluating.
-
-**Query — Silent Empty Returns (fixed 2026-08-09):**
-
-`PlayerCollection::AggregateMemory` / `PlayerCollection::Memory` previously returned `vec![]`
-silently; both now read (or aggregate) the real memory slot and error on missing slots.
-
-**GameData — Known Quirks (documented in invariants.md):**
-
-| Quirk | Invariant | File:line |
-|-------|-----------|-----------|
-| `add_card` ignores `_location_id` | I-6 | `game_data.rs:156` |
-| `resolve_turn` never considers current player | I-13 | `game_data.rs:261` |
-| `leave_stage` drains entire stack if stage absent | I-11 | `game_data.rs:252` |
-| `add_memory` wrong init for Player/TeamCollection | I-10 | `game_data.rs:280,286` |
-| `reset_memory` only affects Int | — | `game_data.rs:305` |
-| `CycleAction`/`cycle to next` with no eligible *other* player | I-13 | `action.rs` — recoverable `Err` since 2026-08-09 (was a panic) |
-| `ShuffleAction` only shuffles the selected cards in place | — | `action.rs:192` |
-| card status slot exists but is unused (encryption-deferred) | — | `game_data.rs` `card_statuses` |
-
-### 2.3 Blocked by Missing Dependencies
-
-- **Bidding/Demand**: semantics never specified.
-- **GameWithWinner**: depends on scoring completion (now implemented, but GameWithWinner dispatch still empty).
-- **Collection memory aggregation**: the 4 `todo!()` sites need multi-owner iteration logic in the evaluator.
-- **Card status (FaceUp/FaceDown/Private)**: `FlipAction` exists but cards lack a status field.
-- **Tokens**: `CreateTokenOnLocation` / `Place` exist but tokens are not in the data model.
-
----
-
-## 3. Known Bugs (Front-End Origin)
-
-Bugs in `front_end` (parser, AST, IR lowering) that manifest at engine runtime.
-
-### B-1: `for Y` player collection dropped during IR lowering
-
-**Severity:** Medium. **DSL:** `stage Play for <collection> ...` — any `for Y` where Y is not `current`. Parsed but dropped. All players end up in-stage regardless. `SeqStage` and `SimStage` both produce the same sequential IR.
-
-**Fix:** Carry participant collection into IR payloads. `ir.rs` lines 565-641 (build_seq_stage) and 648-730 (build_sim_stage).
-
-### B-2: Quantifier `Any` todo! remains for winner/OutOfPlayer
-
-**Severity:** Low. Setup and Move-dest quantifiers work. Remaining `todo!()` at `query/player.rs:246` reachable via `end game with winner(for all ...)` / `OutOfPlayer`.
-
-**Fix:** Complete `PlayerCollection::Aggregate` evaluator arm or intercept at engine level (as done for Move-dest quantifiers).
-
-### B-3: SimStage produces identical sequential IR
-
-**Severity:** Low. `build_sim_stage` at `ir.rs:648` has explicit TODO. No simultaneous/parallel execution — all stages are sequential regardless of type.
-
-**Fix:** Front-end: parallel sub-FSMs or a `SimStage`-specific payload. Tied to B-1.
-
----
-
-*Last updated: 2026-07-28*
+`Choice`, `ChoosePlayer`, and `ChooseCards` prompts share one interaction model in `engine-tui`: a cursor-highlighted list scrolled with ↑/↓ and confirmed with Enter, with digit shortcuts (1-9, 0 = option 10) for `Choice`. The windowing logic (`cursor_scroll_offset`) is unit-tested. The trace log has two rendering modes — simplified (DSL text) and raw (`Debug` output) — toggled with `r`; the four `TraceDetail` filter levels are unchanged.

@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all]
 topics: [cgdsl, authoring, guide, tutorial, blackjack]
-last_validated: 2026-07-29
+last_validated: 2026-08-09
 ---
 
 # CGDSL Authoring Guide
@@ -487,8 +487,11 @@ cycle to current
 ```
 
 Sets `current_player` in `turn_order`. `next` walks turn order, skipping
-eliminated or out-of-stage players. Panics if the target is not in the turn
-order.
+eliminated or out-of-stage players. If the target cannot be resolved (e.g.
+`cycle to next` with no eligible *other* player — `resolve_turn` never
+considers the current player, I-13), the engine returns a **recoverable
+error** instead of crashing. Games that eliminate players guard the cycle
+with `if (size(playersin) >= 2)`.
 
 ### 6.4 End scope
 
@@ -496,7 +499,7 @@ order.
 end turn              // advance to next player
 end stage             // leave current stage
 end Play              // leave named stage
-end game with winner P:P1   // ❌ stub
+end game with winner P:P1   // ends the game (IR jumps to goal)
 ```
 
 `end turn` calls `next_player()` which scans `turn_order` for the next
@@ -549,11 +552,11 @@ evaluation is not yet implemented.
 
 | Action | Status |
 |--------|--------|
-| `flip <cardset> to <status>` | ❌ Cards have no status field |
+| `flip <cardset> to <status>` | ⏳ No-op by design — becomes (de)encryption with card crypto; the status slot exists |
 | `place <token> from ... to ...` | ❌ Tokens not modeled |
 | `bid <quantity>` / `bid ... on <memory>` | ❌ Semantics undefined |
 | `demand <type>` / `demand ... as <memory>` | ❌ Semantics undefined |
-| `end game with winner <players>` | ❌ Empty dispatch |
+| `end game with winner <players>` | ⚠️ Ends the game (IR jump to goal); the action arm itself is an empty TODO |
 
 ---
 
@@ -762,8 +765,9 @@ Because `set … out of game` removes the player from the eligible pool,
 > - Standing is **not recorded** — declining only skips this round, so the
 >   optional re-asks the same player next round. Bound the stage with
 >   `N times` and let players re-decline.
-> - `cycle to next` **panics** when no *other* player is still eligible
->   (`resolve_turn` never considers the current player, I-13). Always guard:
+> - `cycle to next` returns a **recoverable error** when no *other* player is
+>   still eligible (`resolve_turn` never considers the current player, I-13) —
+>   it no longer crashes, but the game would end with an error. Always guard:
 >   `if (size(playersin) >= 2) { cycle to next }`.
 
 ### 10.3 Deal N cards per player
@@ -908,7 +912,7 @@ players. The `size(playersin) >= 2` guard prevents the `cycle to next` panic
 (D-1) once only one player remains — at that point the remaining player is
 re-asked until the round cap ends the stage.
 
-> **Why the guards?** `cycle to next` panics when no eligible *other* player
+> **Why the guards?** `cycle to next` errors when no eligible *other* player
 > exists (I-13). A bare `cycle to next` in a game that eliminates players is
 > a crash waiting to happen.
 
@@ -1032,7 +1036,7 @@ stage End for current 1 times {
 | `unless` | ❌ Not in grammar | Use `if (not <expr>)` — note `not (X)` with parens does **not** parse (P-8); write `not Hand empty`, `not current out of game` |
 | `for <players>` clause in stage | ⚠️ Dropped | All players always in-stage (B-1) |
 | SimStage (per-player FSM) | ❌ Not implemented | `build_sim_stage` = same IR as seq (B-3) |
-| `flip <cardset> to <status>` | ❌ Stub | Cards have no status field |
+| `flip <cardset> to <status>` | ⏳ No-op by design | Becomes (de)encryption with card crypto; the status slot exists |
 | `place <token>` | ❌ Stub | Tokens not in data model |
 | `create token` | ❌ Stub | Tokens not in data model |
 | `bid <quantity>` | ❌ Stub | Semantics undefined |
@@ -1040,9 +1044,13 @@ stage End for current 1 times {
 | `end game with winner <players>` | ⚠️ | IR jumps to the goal (game ends); the action arm is an empty TODO |
 | Mem collection writes | ⚠️ Stub | Collections insert empty defaults |
 | `reset memory` on non-Int | ⚠️ | Silently no-ops |
-| `cycle to next` with one eligible player | ⚠️ | Panics (I-13, D-1) — guard with `size(playersin) >= 2` |
-| Aggregate memory (multi-owner) | ⚠️ | `todo!()` panics in query evaluators |
+| `cycle to next` with one eligible player | ⚠️ | Recoverable error (I-13, D-1) — guard with `size(playersin) >= 2` to keep the turn flowing |
+| Aggregate memory (multi-owner) | ✅ | Implemented 2026-08-09 (`(&I:M of all)` aggregates per-owner slots) |
 | `owner of highest/lowest <mem>` | ✅ | Key-order bug fixed 2026-08-09 (`<player>_<mem>`) |
+
+> Statuses above are a convenience excerpt — the authoritative status table is
+> [`dsl-completeness.md`](./dsl-completeness.md); divergences with repros live
+> in [`engine-vs-design.md`](./engine-vs-design.md).
 
 ---
 

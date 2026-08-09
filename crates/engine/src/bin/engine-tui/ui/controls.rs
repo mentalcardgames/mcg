@@ -21,7 +21,8 @@ impl ControlsPanel {
         let text = Text::from(vec![
             Line::from("q/F10: Quit | Tab: Focus panel"),
             Line::from("Up/Dn/PgUp/PgDn/Home/End: Scroll"),
-            Line::from("1-9/y/n/Enter: Input | l/t/p: Cycle views"),
+            Line::from("↑↓/Enter: Choose option (1-9/0 shortcuts) | Space: Select card"),
+            Line::from("y/n: Optional | l/t/p: Cycle views | r: Raw/simplified trace"),
         ]);
 
         let paragraph = Paragraph::new(text).wrap(ratatui::widgets::Wrap { trim: false });
