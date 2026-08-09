@@ -256,7 +256,7 @@ pending-resume state match, and the setup-`Any` guard.
 > `StepResult::Error("quantifier 'any' is not supported in setup rules")` *before* calling
 > `execute_edge` — no `GameData` mutation occurs. `Quantifier::All` in setup is supported
 > (it expands to all in-game players via `resolve_owner_to_names` →
-> `crate::quantifier::resolve_player_candidates`, see I-10's setup note in
+> `Evaluator::resolve_player_collection`, see I-10's setup note in
 > [`lifecycle.md`](./lifecycle.md) §2). See also the corresponding error-string entry in
 > [`error-handling.md`](./error-handling.md).
 

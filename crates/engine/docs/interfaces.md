@@ -34,7 +34,7 @@ This section inventories every symbol re-exported by `crates/engine/src/lib.rs:9
 ```rust
 // crates/engine/src/lib.rs:9-13
 pub use controller::{run_game, InputSource};
-pub use debug::{format_game_data, print_game_data, save_game_data, DebugLevel};
+pub use debug::{format_game_data, save_game_data, DebugLevel};
 pub use game_data::{Card, Combo, GameData, Location, OwnerData, Player, PointMap, Precedence};
 pub use interpreter::{Input, InputType, Interpreter, IrExt, StepResult, TraceEntry, TraceEvent};
 pub use quantifier::{PendingKind, PendingQuant, QuantSite};
@@ -333,8 +333,6 @@ pub enum DebugLevel { Low, Medium, High }
 
 // crates/engine/src/debug/mod.rs:38
 pub fn format_game_data(data: &GameData, level: DebugLevel) -> String
-// crates/engine/src/debug/mod.rs:46
-pub fn print_game_data(data: &GameData, level: DebugLevel)
 // crates/engine/src/debug/save.rs:8
 pub fn save_game_data(data: &GameData, path: &Path) -> io::Result<()>
 ```
@@ -605,7 +603,7 @@ Mode B is the recommended path for the upcoming UI project (see §4.1).
   (header / `[Step NNN] <Display>` / footer / panic line) is documented in
   [`observability.md`](./observability.md) §3.
 - **`debug.rs`** — `DebugLevel::{Low, Medium, High}` formatted dumps; `format_game_data` /
-  `print_game_data` / `save_game_data`. Cross-ref [`observability.md`](./observability.md) §4.
+  `save_game_data`. Cross-ref [`observability.md`](./observability.md) §4.
 - **Structured/`tracing` integration:** not present; hosts that need it must add it themselves
   (cross-ref [`error-handling.md`](./error-handling.md) §1 / [`concurrency.md`](./concurrency.md) §4).
 

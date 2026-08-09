@@ -328,7 +328,7 @@ query module was split into submodules (`bool.rs`, `cardset.rs`, `int.rs`, `play
 eligible player) or that reference unknown players yield `Err` instead of panicking.
 `resolve_quantity` takes `&GameData` and evaluates runtime int expressions against the live
 state. `resolve_owner_to_names` (plural) routes `Owner::PlayerCollection` through
-`crate::quantifier::resolve_player_candidates` so it supports the `Aggregate { Quantifier::All }`
+`Evaluator::resolve_player_collection` so it supports the `Aggregate { Quantifier::All }`
 owner that the setup path produces. The former `todo!()`/silent-empty collection-memory arms
 (`PlayerCollection::Aggregate`/`AggregateMemory`/`Memory`, `IntCollection::AggregateMemory`,
 `TeamCollection::AggregateMemory`, `StringCollection::AggregateMemory`) are implemented; see

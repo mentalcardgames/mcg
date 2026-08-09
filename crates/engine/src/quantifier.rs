@@ -137,35 +137,6 @@ pub fn alloc_synth(next_synth: &mut u32) -> StateID {
         .expect("StateID deserialisation from a valid u32 cannot fail")
 }
 
-/// Resolve a dest-quantifier `PlayerCollection` to concrete player indices.
-/// For `Aggregate { AggregatePlayerCollection::Quantifier }` we mirror
-/// `RuntimePlayerCollection::PlayersIn`: every in-game player is a candidate
-/// (the `All`/`Any` distinction — fan-out vs pick-one — is the caller's job).
-/// For every other `PlayerCollection` variant we delegate to the evaluator.
-///
-/// NOTE: this deviates from the plan's literal Task 19 instruction to call
-/// `Evaluator::resolve_player_collection(&pc, ...)` directly, because that
-/// used to hit a `todo!()` panic for an `Aggregate`. Since 2026-08 the
-/// evaluator implements `Aggregate` itself, so this indirection only remains
-/// for the in-game filter semantics.
-pub fn resolve_player_candidates(
-    pc: &PlayerCollection,
-    game_data: &GameData,
-) -> Result<Vec<usize>, String> {
-    match pc {
-        PlayerCollection::Aggregate { aggregate } => match aggregate {
-            AggregatePlayerCollection::Quantifier { .. } => Ok(game_data
-                .players
-                .iter()
-                .enumerate()
-                .filter(|(_, p)| p.in_game)
-                .map(|(i, _)| i)
-                .collect()),
-        },
-        _ => crate::query::Evaluator::resolve_player_collection(pc, game_data),
-    }
-}
-
 fn pc_is_any(pc: &PlayerCollection) -> bool {
     matches!(
         pc,

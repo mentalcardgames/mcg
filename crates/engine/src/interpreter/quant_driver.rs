@@ -484,7 +484,7 @@ impl Interpreter {
         &self,
         pc: &front_end::ast::PlayerCollection,
     ) -> Result<Vec<String>, String> {
-        let idxs = crate::quantifier::resolve_player_candidates(pc, &self.game_data)?;
+        let idxs = crate::query::Evaluator::resolve_player_collection(pc, &self.game_data)?;
         Ok(idxs
             .iter()
             .filter_map(|&i| self.game_data.players.get(i).map(|p| p.name.clone()))

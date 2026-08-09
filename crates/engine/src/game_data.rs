@@ -112,6 +112,9 @@ pub struct PointMap {
 }
 
 impl GameData {
+    // No `Default` impl: `new()` seeds `current_player = Some(0)` as a
+    // sentinel (I-2), which a derived `Default` would not.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         GameData {
             table: OwnerData { locations: vec![] },
@@ -286,19 +289,26 @@ impl GameData {
         }
     }
 
-    pub fn resolve_turn(&mut self) -> Option<usize> {
-        if let Some(current_idx) = self.current_player {
-            let current_stage = self.get_current_stage()?;
-            for i in 1..self.turn_order.len() {
-                let player_idx = self.turn_order[(current_idx + i) % self.turn_order.len()];
-                if let Some(player) = self.players.get(player_idx) {
-                    if player.in_game && *player.in_stage.get(&current_stage).unwrap_or(&false) {
-                        return Some(player_idx);
-                    }
+    /// The next *eligible* player index after `from` in `turn_order`,
+    /// wrapping. Eligible = `in_game && in_stage[stage]`. The player at
+    /// `from` itself is never considered (invariant I-13).
+    pub(crate) fn next_eligible_player(&self, from: usize, stage: &str) -> Option<usize> {
+        let turn_len = self.turn_order.len();
+        for i in 1..turn_len {
+            let player_idx = self.turn_order[(from + i) % turn_len];
+            if let Some(player) = self.players.get(player_idx) {
+                if player.in_game && *player.in_stage.get(stage).unwrap_or(&false) {
+                    return Some(player_idx);
                 }
             }
         }
         None
+    }
+
+    pub fn resolve_turn(&mut self) -> Option<usize> {
+        let current_idx = self.current_player?;
+        let current_stage = self.get_current_stage()?;
+        self.next_eligible_player(current_idx, &current_stage)
     }
 
     pub fn add_memory(&mut self, key: String, _owner: Owner, memory_type: Option<MemoryType>) {
@@ -334,12 +344,6 @@ impl GameData {
         if let Some(MemoryValue::Int(v)) = self.memories.get_mut(key) {
             *v = 0;
         }
-    }
-}
-
-impl Default for GameData {
-    fn default() -> Self {
-        GameData::new()
     }
 }
 

@@ -17,18 +17,14 @@ impl Evaluator {
                 RuntimePlayer::Next => {
                     let current_idx = game_data.current_player.ok_or("No current player")?;
                     let current_stage = game_data.get_current_stage().ok_or("No current stage")?;
-                    let turn_len = game_data.turn_order.len();
-                    for i in 1..turn_len {
-                        let player_idx = game_data.turn_order[(current_idx + i) % turn_len];
-                        if let Some(player) = game_data.players.get(player_idx) {
-                            if player.in_game
-                                && *player.in_stage.get(&current_stage).unwrap_or(&false)
-                            {
-                                return Ok(player.name.clone());
-                            }
-                        }
-                    }
-                    Err("No next player available".to_string())
+                    let player_idx = game_data
+                        .next_eligible_player(current_idx, &current_stage)
+                        .ok_or_else(|| "No next player available".to_string())?;
+                    game_data
+                        .players
+                        .get(player_idx)
+                        .map(|p| p.name.clone())
+                        .ok_or_else(|| "No next player available".to_string())
                 }
                 RuntimePlayer::Previous => {
                     let current_idx = game_data.current_player.ok_or("No current player")?;
@@ -379,7 +375,7 @@ impl Evaluator {
             Owner::PlayerCollection {
                 player_collection: pc,
             } => {
-                let indices = crate::quantifier::resolve_player_candidates(pc, game_data)?;
+                let indices = Self::resolve_player_collection(pc, game_data)?;
                 Ok(indices
                     .into_iter()
                     .map(|i| game_data.players[i].name.clone())

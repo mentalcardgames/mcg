@@ -115,7 +115,7 @@ The IR's first edges carry
   previously a panic), so `CreatePlayer`/`CreateTeams` must precede it.
   `resolve_owner_to_names` now transparently routes
   `Owner::PlayerCollection { Aggregate { Quantifier::All } }` (the post-Stage-5 quantifier owner)
-  through `crate::quantifier::resolve_player_candidates` so a setup `CreateLocation` with `Owner =
+  through `Evaluator::resolve_player_collection` so a setup `CreateLocation` with `Owner =
   All` produces one location per in-game player — see invariant I-10 in
   [`invariants.md`](./invariants.md).
 - `front_end::ast::SetUpRule::CreateCardOnLocation` requires the location to already exist;

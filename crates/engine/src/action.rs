@@ -69,8 +69,10 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
         }
         SetUpRule::CreateTeams { teams } => {
             for (team_name, player_collection) in teams {
-                let player_indices =
-                    crate::quantifier::resolve_player_candidates(&player_collection, game_data)?;
+                let player_indices = crate::query::Evaluator::resolve_player_collection(
+                    &player_collection,
+                    game_data,
+                )?;
                 game_data.teams.push(Team {
                     name: team_name,
                     players: player_indices,
@@ -80,14 +82,14 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
         }
         SetUpRule::CreateTurnorder { player_collection } => {
             let indices =
-                crate::quantifier::resolve_player_candidates(&player_collection, game_data)?;
+                crate::query::Evaluator::resolve_player_collection(&player_collection, game_data)?;
             game_data.turn_order = indices;
             Ok(())
         }
         SetUpRule::CreateTurnorderRandom { player_collection } => {
             use rand::seq::SliceRandom;
             let mut indices =
-                crate::quantifier::resolve_player_candidates(&player_collection, game_data)?;
+                crate::query::Evaluator::resolve_player_collection(&player_collection, game_data)?;
             indices.shuffle(&mut rand::thread_rng());
             game_data.turn_order = indices;
             Ok(())
@@ -584,9 +586,9 @@ pub(crate) fn execute_cardset_move(
         ));
     }
 
-    // for each card to move
-    let take = count.min(card_indices.len());
-    for &card_id in card_indices.iter().take(take) {
+    // for each card to move (count is always <= the source size: quantities
+    // are clamped by resolve_quantity)
+    for &card_id in card_indices.iter().take(count) {
         // iterate through all locations in the game, and remove the card id from all of them -
         // later, a more elegant solution would be to resolve the card location somehow but this might just result in the same thing.
         for loc in game_data.locations.iter_mut() {

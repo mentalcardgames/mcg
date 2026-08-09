@@ -126,7 +126,7 @@ fn main() {
         Ok(final_state) => {
             println!("Game over. {} players still in game.",
                 final_state.players.iter().filter(|p| p.in_game).count());
-            cgdsl_engine::print_game_data(&final_state, cgdsl_engine::DebugLevel::High);
+            println!("{}", cgdsl_engine::format_game_data(&final_state, cgdsl_engine::DebugLevel::High));
         }
         Err(e) => eprintln!("Game error: {e}"),
     }

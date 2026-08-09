@@ -43,8 +43,4 @@ pub fn format_game_data(data: &GameData, level: DebugLevel) -> String {
     }
 }
 
-pub fn print_game_data(data: &GameData, level: DebugLevel) {
-    println!("{}", format_game_data(data, level));
-}
-
 pub use save::save_game_data;

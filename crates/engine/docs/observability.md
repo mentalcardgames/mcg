@@ -206,7 +206,7 @@ impl DebugLevel {
     pub fn marker(&self) -> &'static str;          // inverse
 }
 pub fn format_game_data(data: &GameData, level: DebugLevel) -> String;   // mod.rs:38-44
-pub fn print_game_data(data: &GameData, level: DebugLevel);              // mod.rs:46-48
+pub fn format_game_data(data: &GameData, level: DebugLevel) -> String;   // mod.rs:38-44
 pub fn save_game_data(data: &GameData, path: &Path) -> io::Result<()>;   // save.rs:8-24
 ```
 

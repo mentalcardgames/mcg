@@ -33,7 +33,6 @@ fn test_input_parsing() {
             "c 1,3".to_string(),
         ]),
         file_loaded: true,
-        loaded_line_count: 6,
         input_sequence: 0,
         step_count: Arc::new(std::sync::Mutex::new(0)),
     };
@@ -107,7 +106,6 @@ fn test_input_exhausted_error() {
         event_sender: None,
         line_buffer: VecDeque::from(["1".to_string()]),
         file_loaded: true,
-        loaded_line_count: 1,
         input_sequence: 0,
         step_count: Arc::new(std::sync::Mutex::new(0)),
     };
@@ -139,7 +137,6 @@ fn test_input_parsing_name_prefix() {
         event_sender: None,
         line_buffer: VecDeque::from(["P2:y".to_string(), "P3:c 1,3".to_string()]),
         file_loaded: true,
-        loaded_line_count: 2,
         input_sequence: 0,
         step_count: Arc::new(std::sync::Mutex::new(0)),
     };

@@ -33,7 +33,7 @@ last_validated: 2026-08-09
 | Construct | Grammar | IR | Engine | Status | Notes |
 |---|---|---|---|---|---|
 | `player P1, P2` | ✅ | ✅ | ✅ | ✅ | Appends players + initial turn order. `player` (no `create` keyword; `kw_create` exists in the grammar but is unused). |
-| `team T1 with all` / `with (P:P1, P:P2)` | ✅ | ✅ | ✅ | ⚠️ | `All` resolves to in-game players (via `quantifier::resolve_player_candidates`); `Any` is rejected (setup-Any guard, I-20). |
+| `team T1 with all` / `with (P:P1, P:P2)` | ✅ | ✅ | ✅ | ⚠️ | `All` resolves to in-game players (via `Evaluator::resolve_player_collection`); `Any` is rejected (setup-Any guard, I-20). |
 | `turnorder all` / `(P:P1, P:P2)` / `... random` | ✅ | ✅ | ✅ | ✅ | `random` uses `rand::thread_rng()`. |
 | `location Hand on all` / `on P:P1` / `on table` | ✅ | ✅ | ✅ | ✅ | `on all` → one location per player; `on T:T1` parses but **errors** at runtime (team-owned locations not in the data model); `on any` rejected. |
 | `card on Deck: Rank(...) for Suit(...)` | ✅ | ✅ | ✅ | ✅ | Cartesian product of all key-value sets (`expand_types`). |

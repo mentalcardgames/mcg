@@ -91,7 +91,6 @@ pub fn run_game(
         event_sender,
         line_buffer: VecDeque::new(),
         file_loaded: false,
-        loaded_line_count: 0,
         input_sequence: 0,
         step_count,
     };
@@ -142,7 +141,6 @@ struct Controller {
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
     line_buffer: VecDeque<String>,
     file_loaded: bool,
-    loaded_line_count: usize,
     input_sequence: usize,
     step_count: Arc<std::sync::Mutex<usize>>,
 }
@@ -225,7 +223,6 @@ impl Controller {
                     self.line_buffer.push_back(trimmed.to_string());
                 }
             }
-            self.loaded_line_count = self.line_buffer.len();
             self.file_loaded = true;
         }
 

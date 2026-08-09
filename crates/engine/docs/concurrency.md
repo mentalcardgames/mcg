@@ -119,7 +119,8 @@ the engine on a single dedicated thread and communicate via channels.
 
 **In use — production library target:**
 - `front_end` — IR, AST, and lowering types.
-- `serde` + `serde_json` — used by `alloc_synth` for `StateID` construction.
+- `serde_json` — used by `alloc_synth` for `StateID` construction (`serde` is
+  not a direct dependency).
 
 **In use — `engine-tui` binary:**
 - `ratatui` + `crossterm` — terminal UI.
