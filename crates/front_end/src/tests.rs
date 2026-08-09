@@ -384,6 +384,34 @@ fn choice_rule_single_option_no_or() {
 }
 
 #[test]
+fn not_combo_empty_parses_as_boolean_negation() {
+    // Regression (2026-08): `not Book in Hand of current empty` must mean
+    // "not (the Book cards are empty)", i.e. a unary Not over card_set_empty
+    // — previously the `not` bound to the combo (NotCombo) because
+    // card_set_empty was tried before bool_expr_unary, and the condition
+    // "the non-Book cards are empty" was almost never true.
+    let dsl = "not Book in Hand of current empty";
+    let parsed = test_rule_consume(dsl, Rule::bool_expr, CGDSLParser::bool_expr)
+        .expect("bool_expr must parse");
+    let debug = format!("{:?}", parsed.node);
+    assert!(debug.contains("Unary"), "`not` must bind to the boolean: {debug}");
+    assert!(!debug.contains("NotCombo"), "must not bind to the combo: {debug}");
+    assert!(debug.contains("CardSetEmpty"), "inner bool must be the empty check: {debug}");
+}
+
+#[test]
+fn combo_not_empty_parses_as_card_set_not_empty() {
+    // The positive spelling `Book in Hand of current not empty` stays a
+    // card_set_not_empty (no leading `not` to bind).
+    let dsl = "Book in Hand of current not empty";
+    let parsed = test_rule_consume(dsl, Rule::bool_expr, CGDSLParser::bool_expr)
+        .expect("bool_expr must parse");
+    let debug = format!("{:?}", parsed.node);
+    assert!(debug.contains("CardSetNotEmpty"), "expected CardSetNotEmpty: {debug}");
+    assert!(!debug.contains("NotCombo"), "no stray NotCombo: {debug}");
+}
+
+#[test]
 fn test_reparse_game() {
     parse_ast_parse(
     "

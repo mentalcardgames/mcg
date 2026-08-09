@@ -3,7 +3,6 @@ use front_end::ir::{Edge, LoweredPayLoad};
 use super::Interpreter;
 use crate::interpreter::trace::{TraceEntry, TraceEvent};
 use crate::interpreter::types::{InputKind, InputType, StepResult};
-
 impl Interpreter {
     // =======================================================================
     // Quantifier preprocessor integration (see `crate::quantifier`).
@@ -22,6 +21,12 @@ impl Interpreter {
             Cards {
                 selected: Vec<usize>,
                 candidate_ids: Vec<usize>,
+                original: Edge<LoweredPayLoad>,
+            },
+            Combo {
+                selected: Vec<usize>,
+                candidate_ids: Vec<usize>,
+                filter: front_end::ast::FilterExpr,
                 original: Edge<LoweredPayLoad>,
             },
             AllCards {
@@ -63,6 +68,19 @@ impl Interpreter {
                     original: original.clone(),
                 },
                 (
+                    crate::quantifier::PendingKind::Combo {
+                        candidate_ids,
+                        filter,
+                        original,
+                    },
+                    InputKind::ChooseCards { selected },
+                ) => Resume::Combo {
+                    selected: selected.clone(),
+                    candidate_ids: candidate_ids.clone(),
+                    filter: filter.clone(),
+                    original: original.clone(),
+                },
+                (
                     crate::quantifier::PendingKind::DestAllThenCards {
                         player_names,
                         candidate_ids,
@@ -94,6 +112,12 @@ impl Interpreter {
                 candidate_ids,
                 original,
             } => self.resume_cards_any_or_range(selected, candidate_ids, original),
+            Resume::Combo {
+                selected,
+                candidate_ids,
+                filter,
+                original,
+            } => self.resume_combo_source(selected, candidate_ids, filter, original),
             Resume::AllCards {
                 selected,
                 player_names,
@@ -215,6 +239,118 @@ impl Interpreter {
             max,
             prompt: "Choose cards".to_string(),
         })
+    }
+
+    /// `ComboSource` arm (initial): prompt the player to choose cards from
+    /// the whole source pile; the resume validates the choice against the
+    /// combo's filter.
+    pub(super) fn step_combo_source(
+        &mut self,
+        edge: &Edge<LoweredPayLoad>,
+        combo: String,
+        from: front_end::ast::CardSet,
+    ) -> StepResult {
+        // The pile the combo filters (groupable + owner, no combo).
+        let pile = crate::quantifier::combo_pile_cardset(&from);
+        let candidate_ids = match crate::query::Evaluator::eval_cardset(&pile, &self.game_data) {
+            Ok((_, ids)) => ids,
+            Err(e) => return StepResult::Error(e),
+        };
+        let n = candidate_ids.len();
+        if n == 0 {
+            // Nothing to lay down — dispatch the original edge (an empty
+            // combo source is a no-op move).
+            return self.dispatch(edge.clone());
+        }
+        let filter = match self
+            .game_data
+            .combos
+            .iter()
+            .find(|c| c.name == combo)
+            .map(|c| c.filter.clone())
+        {
+            Some(f) => f,
+            None => {
+                return StepResult::Error(format!("Combo {} not found", combo));
+            }
+        };
+        let (display, _, max) = self.build_choose_cards(
+            &front_end::ast::Quantity::Quantifier {
+                quantifier: front_end::ast::Quantifier::Any,
+            },
+            &candidate_ids,
+        );
+        // min = 0: an empty selection is a valid no-op ("cancel / no book"),
+        // so a prompt that over-fires (D-16 read-side) can always be
+        // dismissed instead of trapping the player in re-prompts.
+        self.pending_quant = Some(crate::quantifier::PendingQuant {
+            state: self.current_state,
+            kind: crate::quantifier::PendingKind::Combo {
+                candidate_ids,
+                filter,
+                original: edge.clone(),
+            },
+        });
+        self.emit_quant_trace("ComboSource", format!("{} candidates", n));
+        StepResult::NeedsInput(InputType::ChooseCards {
+            display,
+            min: 0,
+            max,
+            prompt: format!("Choose cards that form a '{}' (0 to skip)", combo),
+        })
+    }
+
+    /// Resume a `ComboSource`: validate the chosen set against the combo's
+    /// filter (re-prompting on mismatch), then move the chosen cards via the
+    /// synthetic-memory replacement edge.
+    fn resume_combo_source(
+        &mut self,
+        selected: Vec<usize>,
+        candidate_ids: Vec<usize>,
+        filter: front_end::ast::FilterExpr,
+        original: Edge<LoweredPayLoad>,
+    ) -> StepResult {
+        let mut chosen: Vec<usize> = selected.iter().map(|&i| candidate_ids[i]).collect();
+        chosen.dedup(); // defensive: duplicate indices must not duplicate cards
+        match crate::query::Evaluator::filter_card_ids(&filter, &chosen, &self.game_data) {
+            Ok(matched) if matched.len() == chosen.len() => {
+                self.game_data.memories.insert(
+                    format!("Table_{}", crate::quantifier::SYNTH_MEMORY_KEY),
+                    crate::game_data::MemoryValue::CardSet(chosen.clone()),
+                );
+                let mut repl = crate::quantifier::substitute_cardset_memory(&original, &chosen);
+                let s = crate::quantifier::alloc_synth(&mut self.next_synth);
+                repl.to = original.to;
+                self.emit_quant_trace("ComboSource", format!("laid down {}", chosen.len()));
+                self.pending_overlay.insert(s, vec![repl]);
+                self.current_state = s;
+                StepResult::Ok
+            }
+            Ok(_) => {
+                let (display, _, max) = self.build_choose_cards(
+                    &front_end::ast::Quantity::Quantifier {
+                        quantifier: front_end::ast::Quantifier::Any,
+                    },
+                    &candidate_ids,
+                );
+                self.pending_quant = Some(crate::quantifier::PendingQuant {
+                    state: self.current_state,
+                    kind: crate::quantifier::PendingKind::Combo {
+                        candidate_ids,
+                        filter,
+                        original,
+                    },
+                });
+                StepResult::NeedsInput(InputType::ChooseCards {
+                    display,
+                    min: 0,
+                    max,
+                    prompt: "Selection does not match the combo (0 to skip). Please choose again."
+                        .to_string(),
+                })
+            }
+            Err(e) => StepResult::Error(e),
+        }
     }
 
     /// Resume a `DestPlayerAny`: substitute the chosen player into the original

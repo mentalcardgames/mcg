@@ -291,10 +291,12 @@ fn five_card_draw_scores_hand_bonuses() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn combo_laydown_moves_matching_cards() {
+fn combo_laydown_prompts_and_validates() {
     let ir = load_game("behavior_combo_laydown.cgdsl");
     let tracker = Tracker::new();
     let who_for_closure = tracker.0.clone();
+    let asks = Arc::new(Mutex::new(0usize));
+    let asks_clone = asks.clone();
     let gd = run_game(
         ir,
         GameData::new(),
@@ -304,10 +306,29 @@ fn combo_laydown_moves_matching_cards() {
                 .unwrap()
                 .clone()
                 .unwrap_or_else(|| "P1".into());
-            let _ = it;
-            Input {
-                player_id: who,
-                kind: InputKind::Choice { idx: 0 },
+            match it {
+                InputType::ChooseCards { .. } => {
+                    let mut n = asks_clone.lock().unwrap();
+                    *n += 1;
+                    let i = *n;
+                    drop(n);
+                    // LaySet: first an INVALID set (2 Aces + a Two) to
+                    // exercise the re-prompt, then the valid three Aces.
+                    // LayRun: Three..Seven of the remaining 7 cards.
+                    let selected = match i {
+                        1 => vec![0, 1, 3],
+                        2 => vec![0, 1, 2],
+                        _ => vec![2, 3, 4, 5, 6],
+                    };
+                    Input {
+                        player_id: who,
+                        kind: InputKind::ChooseCards { selected },
+                    }
+                }
+                _ => Input {
+                    player_id: who,
+                    kind: InputKind::Choice { idx: 0 },
+                },
             }
         })),
         Some(tracker.sender()),
@@ -319,27 +340,116 @@ fn combo_laydown_moves_matching_cards() {
     let set_table = gd.locations.iter().find(|l| l.name == "SetTable").unwrap();
     let run_table = gd.locations.iter().find(|l| l.name == "RunTable").unwrap();
 
-    // Set: `same Rank` matches ANY duplicated rank (pairs included) and the
-    // `size` filter applies to the whole set — so the pair of Twos matches
-    // alongside the three Aces. 5 cards land (documented DSL limitation,
-    // engine-vs-design.md D-16).
-    assert_eq!(set_table.cards.len(), 5, "3 Aces + 2 Twos (pairs match)");
+    // Set: exactly the three Aces — the invalid 2-Ace+Two choice was rejected.
+    assert_eq!(set_table.cards.len(), 3, "validated laydown of three Aces");
     for &id in &set_table.cards {
-        let rank = gd.cards[id].get("Rank").map(|r| r.as_str()).unwrap();
-        assert!(
-            rank == "Ace" || rank == "Two",
-            "only duplicated ranks on SetTable, got {rank}"
+        assert_eq!(
+            gd.cards[id].get("Rank").map(|r| r.as_str()),
+            Some("Ace"),
+            "only Aces on SetTable"
         );
     }
 
-    // Run: the remaining hand is Three..Seven, a genuine chain: all 5 move.
-    assert_eq!(
-        run_table.cards.len(),
-        5,
-        "Three..Seven is one adjacent chain"
-    );
-    assert_eq!(hand.cards.len(), 0, "hand is empty after both laydowns");
+    // Run: the chosen Three..Seven.
+    assert_eq!(run_table.cards.len(), 5, "validated laydown of the run");
+    assert_eq!(hand.cards.len(), 2, "the pair of Twos stays in hand");
     assert_eq!(total_cards(&gd), 10);
+    assert_eq!(
+        *asks.lock().unwrap(),
+        3,
+        "one re-prompt + two valid selections"
+    );
+}
+
+#[test]
+fn combo_book_lays_down_four_of_a_kind() {
+    let ir = load_game("behavior_combo_book.cgdsl");
+    let tracker = Tracker::new();
+    let who_for_closure = tracker.0.clone();
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(move |it: InputType| {
+            let who = who_for_closure
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "P1".into());
+            match it {
+                InputType::ChooseCards { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::ChooseCards {
+                        selected: vec![0, 1, 2, 3],
+                    }, // the Aces
+                },
+                _ => Input {
+                    player_id: who,
+                    kind: InputKind::Choice { idx: 0 },
+                },
+            }
+        })),
+        Some(tracker.sender()),
+        None,
+    )
+    .expect("combo book must complete");
+
+    let books = gd.locations.iter().find(|l| l.name == "Books").unwrap();
+    let hand = hand_location(&gd, "P1");
+    assert_eq!(books.cards.len(), 4, "the four Aces form a book");
+    for &id in &books.cards {
+        assert_eq!(
+            gd.cards[id].get("Rank").map(|r| r.as_str()),
+            Some("Ace"),
+            "only Aces on the book pile"
+        );
+    }
+    assert_eq!(hand.cards.len(), 6, "Kings and Threes stay in hand");
+    assert_eq!(total_cards(&gd), 10);
+}
+
+#[test]
+fn combo_until_stage_loops_until_hand_cleared() {
+    // Proposal B: `until Set in Hand empty` drives repeated laydown prompts
+    // until no combo-matching cards remain.
+    let ir = load_game("behavior_combo_until.cgdsl");
+    let tracker = Tracker::new();
+    let who_for_closure = tracker.0.clone();
+    let gd = run_game(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(move |it: InputType| {
+            let who = who_for_closure
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "P1".into());
+            match it {
+                InputType::ChooseCards { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::ChooseCards {
+                        selected: vec![0, 1, 2],
+                    }, // the Aces
+                },
+                _ => Input {
+                    player_id: who,
+                    kind: InputKind::Choice { idx: 0 },
+                },
+            }
+        })),
+        Some(tracker.sender()),
+        None,
+    )
+    .expect("combo-until stage must complete");
+
+    let table = gd.locations.iter().find(|l| l.name == "Table").unwrap();
+    let hand = hand_location(&gd, "P1");
+    assert_eq!(table.cards.len(), 3, "the three Aces were laid down");
+    assert_eq!(
+        hand.cards.len(),
+        2,
+        "the pair of Twos no longer matches the combo"
+    );
+    assert_eq!(total_cards(&gd), 5);
 }
 
 // ---------------------------------------------------------------------------

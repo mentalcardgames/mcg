@@ -189,7 +189,7 @@ impl TraceLogPanel {
                     Span::raw(" = "),
                     Span::styled(result.to_string(), Style::default().fg(r_color)),
                     Span::styled(
-                        format!(" (neg={}, else={})", negated, took_else),
+                        format!(" (neg={}, body={})", negated, took_else),
                         Style::default().fg(Color::LightBlue),
                     ),
                 ]

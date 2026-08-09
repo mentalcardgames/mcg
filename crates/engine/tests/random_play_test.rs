@@ -142,6 +142,14 @@ impl RandomPlayer {
                                 selected: vec![display.len() + 5],
                             },
                         }
+                    } else if r.gen_bool(0.5) {
+                        // Half the time submit nothing: valid as a "skip" for
+                        // combo prompts (min = 0); rejected + re-prompted for
+                        // prompts with min >= 1 (the next roll may succeed).
+                        Input {
+                            player_id: who,
+                            kind: InputKind::ChooseCards { selected: vec![] },
+                        }
                     } else {
                         let count = if max > min {
                             r.gen_range(min..=max)

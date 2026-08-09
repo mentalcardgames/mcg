@@ -41,6 +41,7 @@ last_validated: 2026-08-09
 | F-12 | **`resolve_quantity` evaluated against an empty `GameData`** (D-8): runtime-backed quantities silently fell back to 1 (or "accept any" for ranges). It now evaluates against the live state and propagates errors. | `query/int.rs` | `int_tests` (rewritten runtime tests) |
 | F-13 | **Collection-memory aggregation unimplemented** (D-4): the four `todo!()` arms (`IntCollection`/`TeamCollection`/`StringCollection` `AggregateMemory`, `PlayerCollection::Aggregate`) now aggregate the slot across every owner of `multi`. | `query/int.rs`, `query/string.rs`, `query/player.rs` | `int_tests`, `string_tests`, `player_tests` |
 | F-14 | **`choose` did not split on `or`** (parser bug, `front_end`): `choose { A B or C D }` produced four single-component options instead of two options of `[A, B]`/`[C, D]`. The AST now carries `options: Vec<Vec<FlowComponent>>`, the parser groups on `or`, the IR builder chains each option's sequence, the formatter renders groups, and the arbitrary generator produces non-empty groups. | `front_end`: `grammar.pest` (kw_or), `parser.rs`, `ast.rs`, `arbitrary.rs`, `ir.rs`, `fmt_ast.rs` | `front_end` `choice_rule_splits_options_on_or` / `choice_rule_single_option_no_or`; `go_fish.cgdsl` now behaves as authored (13 arms of deal+draw) |
+| F-15 | **`not <combo> in X empty` bound `not` to the combo** (parser ambiguity, `front_end`): `not Book in Hand of current empty` parsed as `CardSetEmpty(NotCombo(Book, Hand))` — "the cards not matching Book are empty" — almost never true, so guards like `if (not Book in Hand of current empty)` silently never fired. Root cause: `bool_expr` tried `card_set_empty`/`card_set_not_empty` before `bool_expr_unary`, and a combo group may itself start with `not`. Fix: `bool_expr_unary` moved before the cardset-empty rules, so a leading `not` binds to the boolean (`Unary(Not, CardSetEmpty(Combo-in-X))`); `Book in Hand of current not empty` remains `CardSetNotEmpty`. Also renamed the trace label `else=` → `body=` (it reports whether the if-*body* edge was taken). | `front_end`: `grammar.pest` (bool_expr rule order) | `front_end` `not_combo_empty_parses_as_boolean_negation` / `combo_not_empty_parses_as_card_set_not_empty`; `go_fish.cgdsl` book guard |
 
 ## 1b. Partially fixed
 
@@ -130,27 +131,30 @@ last_validated: 2026-08-09
   (F-11) but the memory case keeps the sentinel.
 - **Wanted:** an explicit "empty set" marker at the `eval_cardset` boundary.
 
-### D-16 — combo filters cannot express group-size constraints ("laying down" sets)
+### D-16 — combo *read-side* evaluation over-approximates; moves now prompt + validate
 - **Severity:** medium (game-design impact for Rummy-style games).
-- **Behaviour:** `combo Set where (same Rank and size >= 3)` does **not** mean
-  "a set of three-or-more of a kind":
-  - `same Rank` matches **any** duplicated rank — a pair of Twos satisfies it;
-  - the `size` filter applies to the **whole set** being filtered, not to each
-    group — so `size >= 3` only requires the pile to hold ≥3 cards;
-  - `adjacent Rank using P` returns every card with an adjacent neighbour, so
-    chains extend through their boundaries (a pair next to a run drags the
-    pair along).
-  Consequently "exactly N of a kind" and "exactly N consecutive" are not
-  expressible. The *mechanics* of laying down work — `<combo> in <pile>` is a
-  valid cardset, and `move <combo> in <pile> <status> to <dest>` (or
-  `deal any from <combo> in <pile> ...` to choose a subset) moves the matched
-  cards — but the match itself over-approximates. Verified by
-  `tests/behavior_test.rs::combo_laydown_moves_matching_cards`
-  (`test_games/behavior_combo_laydown.cgdsl`: the "set" laydown moves 5 cards,
-  not 3).
-- **Wanted:** per-group filters (e.g. a `same Rank size >= 3`-style atom, or
-  `adjacent` restricted to chains of exactly N), or a `where`-clause on the
-  combo that can reference group membership.
+- **Lay-down moves (fixed 2026-08-09):** a move whose source is a combo group
+  (`move Set in Hand of current private to Table`) is now a **validated
+  prompt** (quantifier site `ComboSource`): the player chooses cards from the
+  *whole* pile; the engine validates the choice against the combo's filter
+  and re-prompts on mismatch. This makes the classic constraints work:
+  `combo Set where (same Rank and size >= 3)` correctly **rejects** a two-Ace
+  selection (the `size` filter is now applied to the *player's selection*).
+  The prompt accepts **0 cards as a valid no-op ("skip")**, so a prompt that
+  over-fires (read-side, below) can always be dismissed — and games can offer
+  "lay down or pass" freely (Go Fish's book mechanic uses this). For "lay
+  down everything", pair the move with a stage loop:
+  `stage Laydown for current until Set in Hand empty { move Set in Hand of
+  current private to Table }` — `until <combo> in <pile> empty` is a valid
+  end condition (a combo group is a cardset; `card_set_empty` applies).
+- **Read-side remains over-approximating:** `size(cards Set in Hand)` still
+  counts *any* duplicated rank (pairs included) and applies `size` to the
+  whole pile — the filter semantics themselves are unchanged.
+- **Wanted (read-side):** per-group filters (e.g. a `same Rank size >= 3`
+  atom, or `adjacent` restricted to chains of exactly N).
+- Verified by `tests/behavior_test.rs::combo_laydown_prompts_and_validates`
+  (invalid selection rejected, then re-prompted) and
+  `combo_until_stage_loops_until_hand_cleared` (`test_games/behavior_combo_{laydown,until}.cgdsl`).
 
 ## 3. Parser / lowering divergences (front_end-side)
 

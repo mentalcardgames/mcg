@@ -344,6 +344,22 @@ fn go_fish_rotating_asks() {
                         kind: InputKind::Choice { idx },
                     }
                 }
+                InputType::Optional(prompt) => {
+                    // Decline the book-laydown optional ("Book" in the label).
+                    let accept = !prompt.contains("Book");
+                    Input {
+                        player_id: who,
+                        kind: if accept {
+                            InputKind::OptionalAccept
+                        } else {
+                            InputKind::OptionalDecline
+                        },
+                    }
+                }
+                InputType::ChooseCards { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::ChooseCards { selected: vec![] }, // skip book
+                },
                 _ => Input {
                     player_id: who,
                     kind: InputKind::Choice { idx: 0 },
@@ -375,9 +391,21 @@ fn go_fish_runs_to_completion() {
                     player_id: who,
                     kind: InputKind::Choice { idx: 0 },
                 },
-                InputType::Optional { .. } => Input {
+                InputType::Optional(prompt) => {
+                    // Decline the book-laydown optional ("Book" in the label).
+                    let accept = !prompt.contains("Book");
+                    Input {
+                        player_id: who,
+                        kind: if accept {
+                            InputKind::OptionalAccept
+                        } else {
+                            InputKind::OptionalDecline
+                        },
+                    }
+                }
+                InputType::ChooseCards { .. } => Input {
                     player_id: who,
-                    kind: InputKind::OptionalAccept,
+                    kind: InputKind::ChooseCards { selected: vec![] }, // skip book
                 },
                 _ => Input {
                     player_id: who,

@@ -47,7 +47,7 @@ fn trace_event_condition_displays_result_and_neg() {
     assert!(s.contains("(sum of Hand of current using BJ > 21)"));
     assert!(s.contains("true"));
     assert!(s.contains("neg=false"));
-    assert!(s.contains("else=true"));
+    assert!(s.contains("body=true"), "the body edge was taken: {s}");
     let raw = event.raw();
     assert!(raw.contains("Aggregate {"), "raw mode shows Debug: {raw}");
     assert!(

@@ -1,0 +1,28 @@
+// Behavioral fixture — Proposal B: lay down ALL combos via a stage loop.
+//
+// `until Set in Hand empty` is a valid end condition: `Set in Hand` is a
+// cardset (a combo group), and `card_set_empty` works on any cardset. The
+// stage re-prompts each iteration until no combo-matching cards remain.
+//
+// Deck: Ace, Ace, Ace, Two, Two (one suit). The player lays down the three
+// Aces in iteration 1; the loop-back check then finds the two Twos no longer
+// match ("same Rank and size >= 3" needs >= 3 cards) -> stage exits.
+player P1
+turnorder (P:P1)
+location Hand on P:P1
+location Table on table
+location Deck on table
+
+combo Set where (same Rank and size >= 3)
+
+card on Deck:
+  Rank(Ace, Ace, Ace, Two, Two)
+    for Suit(Diamonds)
+
+stage Deal for current 1 times {
+  deal 5 from Deck private to Hand
+}
+
+stage Laydown for current until Set in Hand empty {
+  move Set in Hand of current private to Table
+}

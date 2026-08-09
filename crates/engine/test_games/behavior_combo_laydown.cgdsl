@@ -2,15 +2,15 @@
 //
 // Deterministic deck (10 cards, one suit, creation order):
 //   Ace, Ace, Ace, Two, Two, Three, Four, Five, Six, Seven
-// P1 gets all 10. Then:
-//   1. `move Set in Hand of current private to SetTable`
-//      - "Set" = same Rank and size >= 3. LIMITATION (documented): `same
-//        Rank` matches ANY duplicated rank (pairs included) and the
-//        `size` filter applies to the whole set, not the group — so the
-//        pair of Twos also matches. 5 cards land (3 Aces + 2 Twos).
-//   2. `move Run in Hand of current private to RunTable`
-//      - "Run" = adjacent Rank using RankOrder and size >= 3. The
-//        remaining hand is Three..Seven, a genuine chain: all 5 move.
+// P1 gets all 10. A combo-source move prompts the player to choose cards
+// from the whole pile and validates the choice against the combo filter
+// (re-prompting on mismatch):
+//   1. LaySet: `move Set in Hand of current private to SetTable`
+//      - the player selects [0,1,3] (two Aces + a Two) first -> rejected;
+//      - then selects the three Aces -> valid ("same Rank and size >= 3").
+//   2. LayRun: `move Run in Hand of current private to RunTable`
+//      - the remaining hand is Two, Two, Three, Four, Five, Six, Seven;
+//        the player selects Three..Seven -> valid ("adjacent ... and size >= 3").
 player P1
 turnorder (P:P1)
 location Hand on P:P1

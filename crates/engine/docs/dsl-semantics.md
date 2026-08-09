@@ -259,6 +259,15 @@ When quantifiers (`all`, `any`, `>= M and <= N`) appear on `from` or `to`,
 the quantifier preprocessor intercepts the edge before dispatch and issues
 `ChooseCards` / `ChoosePlayer` prompts or builds synthetic fan-out chains.
 
+**Combo-source moves** (`move <combo> in <pile> ...`, e.g. laying down a
+Rummy set): the preprocessor prompts the player to choose cards from the
+*whole* pile and then **validates the choice against the combo's filter**,
+re-prompting on mismatch — so `combo Set where (same Rank and size >= 3)`
+rejects a two-of-a-kind selection. Combine with a stage loop to lay down
+everything: `stage Laydown for current until Set in Hand empty { move Set in
+Hand of current private to Table }` (`until <combo> in <pile> empty` is a
+valid end condition — a combo group is a cardset).
+
 **NOTE:** an empty source set is a no-op (nothing moves, the destination is
 not evaluated); a `where`-filtered destination with no matches resolves to the
 base location of the groupable (D-11, fixed 2026-08-09).
@@ -519,7 +528,10 @@ See invariant I-3 for the inverted edge-indexing relationship between
 
 **NOTE:** `unless` does **not** exist in the grammar. Use `if (not <expr>)` —
 parentheses around the inner bool do **not** parse (`not (X)` is rejected by
-the PEG grammar; write `not Hand empty`, `not current out of game`).
+the PEG grammar; write `not Hand empty`, `not current out of game`). A leading
+`not` before a combo group binds to the boolean, not the combo
+(`not Book in Hand of current empty` = "the Book cards are not empty" —
+fixed 2026-08-09, F-15).
 
 ---
 

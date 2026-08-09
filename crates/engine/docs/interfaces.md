@@ -356,6 +356,7 @@ pub enum QuantSite {
     DestPlayerAll { pc: PlayerCollection },
     DestPlayerAny { pc: PlayerCollection },
     SrcCardsAnyOrRange { qty: Quantity, from: CardSet },
+    ComboSource { combo: String, from: CardSet },  // lay-down: prompt + validate
 }
 
 // crates/engine/src/quantifier.rs:69
@@ -369,6 +370,7 @@ pub enum PendingKind {
     DestPlayerAny { candidates: Vec<String>, original: Edge<LoweredPayLoad> },
     CardsAnyOrRange { candidate_ids: Vec<usize>, original: Edge<LoweredPayLoad> },
     DestAllThenCards { player_names: Vec<String>, candidate_ids: Vec<usize>, original: Edge<LoweredPayLoad> },
+    Combo { candidate_ids: Vec<usize>, filter: FilterExpr, original: Edge<LoweredPayLoad> },
 }
 ```
 

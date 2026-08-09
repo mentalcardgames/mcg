@@ -131,7 +131,7 @@ impl std::fmt::Display for TraceEvent {
             } => {
                 write!(
                     f,
-                    "Condition: {} = {} (neg={}, else={})",
+                    "Condition: {} = {} (neg={}, body={})",
                     expr, result, negated, took_else
                 )
             }

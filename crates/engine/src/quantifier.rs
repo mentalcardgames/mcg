@@ -18,8 +18,8 @@
 
 use crate::game_data::GameData;
 use front_end::ast::{
-    AggregatePlayerCollection, CardSet, IntExpr, IntRange, IntRangeOperator, MoveCardSet, Owner,
-    PlayerCollection, PlayerExpr, Quantifier, Quantity, SetUpRule, UseMemory,
+    AggregatePlayerCollection, CardSet, FilterExpr, Group, IntExpr, IntRange, IntRangeOperator,
+    MoveCardSet, Owner, PlayerCollection, PlayerExpr, Quantifier, Quantity, SetUpRule, UseMemory,
 };
 use front_end::ir::{Edge, LoweredPayLoad, Payload, StateID};
 
@@ -57,6 +57,13 @@ pub enum QuantSite {
     /// `quantity` is `Quantifier::Any` or `IntRange` — pick cards / count.
     SrcCardsAnyOrRange {
         qty: Quantity,
+        from: CardSet,
+    },
+    /// The move's `from` is a combo group (`<combo> in <pile>`): prompt the
+    /// player to choose cards from the pile, then validate the chosen set
+    /// against the combo's filter ("laying down", see D-16).
+    ComboSource {
+        combo: String,
         from: CardSet,
     },
 }
@@ -97,6 +104,14 @@ pub enum PendingKind {
     DestAllThenCards {
         player_names: Vec<String>,
         candidate_ids: Vec<usize>,
+        original: Edge<LoweredPayLoad>,
+    },
+    /// Combo lay-down: the player chose cards from `candidate_ids` (the whole
+    /// source pile); on resume the choice must satisfy `filter` (the combo's
+    /// filter), otherwise the prompt is re-issued.
+    Combo {
+        candidate_ids: Vec<usize>,
+        filter: FilterExpr,
         original: Edge<LoweredPayLoad>,
     },
 }
@@ -284,8 +299,52 @@ fn dest_site_for(to: &CardSet) -> QuantSite {
     QuantSite::None
 }
 
+/// If the move's `from` is a combo group (`<combo> in <groupable>`, with or
+/// without an owner), return the combo name and the full `from` cardset.
+fn combo_source(mcs: &MoveCardSet) -> Option<(String, CardSet)> {
+    let from = match mcs {
+        MoveCardSet::Move { from, .. } => from,
+        MoveCardSet::MoveQuantity { from, .. } => from,
+    };
+    match from {
+        CardSet::Group {
+            group: Group::Combo { combo, .. },
+        } => Some((combo.clone(), from.clone())),
+        CardSet::GroupOwner {
+            group: Group::Combo { combo, .. },
+            ..
+        } => Some((combo.clone(), from.clone())),
+        _ => None,
+    }
+}
+
+/// Rebuild the *pile* cardset that a combo group filters — i.e. drop the
+/// combo, keep the groupable (and owner). Used to prompt the player over the
+/// whole pile rather than the pre-matched subset.
+pub fn combo_pile_cardset(from: &CardSet) -> CardSet {
+    match from {
+        CardSet::Group {
+            group: Group::Combo { groupable, .. },
+        } => CardSet::Group {
+            group: Group::Groupable {
+                groupable: groupable.clone(),
+            },
+        },
+        CardSet::GroupOwner {
+            group: Group::Combo { groupable, .. },
+            owner,
+        } => CardSet::GroupOwner {
+            group: Group::Groupable {
+                groupable: groupable.clone(),
+            },
+            owner: owner.clone(),
+        },
+        _ => from.clone(),
+    }
+}
+
 /// Detect the quantifier site on `edge`, in precedence order
-/// `DestPlayerAll` > `DestPlayerAny` > `SrcCardsAnyOrRange`.
+/// `DestPlayerAll` > `DestPlayerAny` > `ComboSource` > `SrcCardsAnyOrRange`.
 ///
 /// If `to` is a `CardSet::GroupOwner` whose `owner` is
 /// `Owner::PlayerCollection { PlayerCollection::Aggregate { Quantifier::All } }`
@@ -294,8 +353,9 @@ fn dest_site_for(to: &CardSet) -> QuantSite {
 /// of all`) scans as `DestPlayerAll` and the card choice is handled by the
 /// resume branch via [`card_site`].
 ///
-/// Otherwise, if the edge is a `MoveQuantity` whose `quantity` is
-/// `Quantifier::Any` or `IntRange` → `SrcCardsAnyOrRange`.
+/// Otherwise, if the move's `from` is a combo group → `ComboSource` (lay-down
+/// with validation). Otherwise, if the edge is a `MoveQuantity` whose
+/// `quantity` is `Quantifier::Any` or `IntRange` → `SrcCardsAnyOrRange`.
 pub fn scan_edge(edge: &Edge<LoweredPayLoad>) -> QuantSite {
     let Some(mcs) = move_cardset_ref(edge) else {
         return QuantSite::None;
@@ -305,6 +365,12 @@ pub fn scan_edge(edge: &Edge<LoweredPayLoad>) -> QuantSite {
     let dest = dest_site_for(mcs_to_ref(mcs));
     if dest != QuantSite::None {
         return dest;
+    }
+
+    // Combo-source (lay-down) — takes precedence over the card-amount site
+    // so the chosen set is validated against the combo filter.
+    if let Some((combo, from)) = combo_source(mcs) {
+        return QuantSite::ComboSource { combo, from };
     }
 
     // Card-amount quantifier (only MoveQuantity carries a quantity).

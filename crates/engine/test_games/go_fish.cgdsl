@@ -1,28 +1,41 @@
-// Go Fish (simplified) — 3 players, ask the next player for a rank.
+// Go Fish (simplified) — 3 players, ask the next player for a rank, lay
+// down books (sets of four).
 //
 // Rules:
 //   - 52-card deck; each player is dealt 7 cards.
 //   - On your turn, ask the next player for one rank: if they hold any
 //     cards of that rank, they must hand them over; otherwise you draw
 //     one card from the deck.
-//   - No "books" are tracked (4-of-a-kind sets); the game ends when the
-//     deck runs out or a player empties their hand (or after 24 turns).
-//   - The player holding the most cards wins.
+//   - After the ask, you may lay down a book: four cards of the same rank.
+//     The engine validates the chosen set against the `Book` combo (submit
+//     0 cards to skip). Books land on your Books pile and score 4 points.
+//   - The game ends when the deck runs out or a player empties their hand
+//     (or after 24 turns); the most books wins.
 //
 // Engine notes:
 //   - The ask is a 13-way `choose` (one option per rank).
 //   - `Hand where Rank is "X" of next` combines a where-filter with an
 //     owner; the engine resolves the base location against the owner
 //     ("next"), not the current player.
-//   - Each option checks the emptiness *first* and deals *after*: on a hit
-//     the transfer happens and no draw occurs; on a miss the draw happens
-//     and the (empty) transfer is a no-op. (Order matters — checking after
-//     the deal would draw on hits too; caught by the behavioral fixtures.)
+//   - Each ask option checks the emptiness *first* and deals *after*: on a
+//     hit the transfer happens and no draw occurs; on a miss the draw
+//     happens and the (empty) transfer is a no-op. (Order matters — caught
+//     by the behavioral fixtures.)
+//   - Laying down uses the combo-source move (`ComboSource`): the player
+//     picks cards from the whole hand and the engine validates them against
+//     the combo filter, re-prompting on mismatch. `same Rank` matches any
+//     duplicated rank, so a 2+2 split also passes the filter — a documented
+//     simplification of the combo semantics (engine-vs-design.md D-16). The
+//     guard only prompts when duplicated ranks exist; 0 cards skips.
+//   - Scoring is by books (4 points per book) instead of hand size.
 
 player P1, P2, P3
 turnorder (P:P1, P:P2, P:P3)
 location Hand on all
+location Books on all
 location Deck on table
+
+combo Book where (same Rank and size >= 4)
 
 card on Deck:
   Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King)
@@ -101,11 +114,16 @@ stage Ask for current until (Deck empty or Hand of current empty) or 24 times {
     }
     deal Hand where Rank is "King" of next private to Hand of current
   }
+  if (not Book in Hand of current empty) {
+    optional {
+      move Book in Hand of current private to Books
+    }
+  }
   cycle to next
 }
 
 stage Score for current 3 times {
-  score size(cards Hand of current) to current
+  score size(cards Books of current) to current
   cycle to next
 }
 

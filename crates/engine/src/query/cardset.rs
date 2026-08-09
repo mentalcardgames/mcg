@@ -320,6 +320,17 @@ impl Evaluator {
         }
     }
 
+    /// Public wrapper over the private `apply_filter`: returns the subset of
+    /// `card_ids` that satisfies `filter`. Used by the combo-source quantifier
+    /// to validate a player's chosen set on resume.
+    pub fn filter_card_ids(
+        filter: &FilterExpr,
+        card_ids: &[usize],
+        game_data: &GameData,
+    ) -> Result<Vec<usize>, String> {
+        Self::apply_filter(filter, card_ids, game_data)
+    }
+
     fn apply_filter(
         filter: &FilterExpr,
         card_ids: &[usize],

@@ -132,7 +132,7 @@ last_validated: 2026-08-09
 | `min/max of X using PM` / `using Precedence` | ✅ | |
 | `X of <owner>` (GroupOwner) | ✅ | Plain-location fast path (owner-resolved). `where`-groups are owner-resolved since 2026-08-09 (D-7); team/collection owners error. |
 | `X where <filter>` | ✅ | Filters: `size(...)`, `same K`, `distinct K`, `adjacent K using P`, `K higher/lower than "V" using P`, `K is "V"`/`is not`, `combo C`/`not combo C`, binary `(A and B)`. An empty filter result reports the base location (fixed 2026-08-09 — was the location-0 sentinel). |
-| `<combo> in X` / `not <combo> in X` | ✅ | Read-side syntax is the combo *name* (no `combo` keyword): `Pair in Hand`. Combos evaluate group-wise like `where` (fixed 2026-08-09 — per-card `same`/`distinct` matching was broken). **Limitation (D-16):** `same K` matches pairs too and `size` filters the whole set — "exactly N of a kind / N consecutive" is not expressible; `move <combo> in X …` lays down all matched cards, `deal any from <combo> in X …` picks a subset. |
+| `<combo> in X` / `not <combo> in X` | ✅ | Read-side syntax is the combo *name* (no `combo` keyword): `Pair in Hand`. Combos evaluate group-wise like `where` (fixed 2026-08-09). **Lay-down moves** (`move <combo> in X …`) prompt the player to choose cards from the pile and **validate** the choice against the combo filter, re-prompting on mismatch; **0 cards = skip** (2026-08-09, site `ComboSource`); combine with `until <combo> in X empty` for a lay-down-all stage loop. Read-side evaluation still over-approximates pairs (D-16). |
 | cardset memory `(&CS:M of ...)` | ⚠️ | Location inferred from the first card; falls back to location-0 sentinel (I-14/D-15) — a dest move may target the wrong pile. |
 
 ## 6. Scoring
@@ -157,10 +157,11 @@ last_validated: 2026-08-09
 
 ## 8. Known parse-level quirks (PEG)
 
-1. `not (X)` and `(X)` (single bool in parens) do not parse — the binary wrapper requires `bool_op`. Write `not X` or `if (X)`.
-2. `case (A > B)` / `until (A > B)` fail when both operands are non-literal int exprs (the inner `int_expr_bool` greedily consumes the whole parenthesis). Workaround: `if (A > B)` or split into two conditions.
-3. Parenthesised cardsets in moves (`deal (X) ...`) fail — the quantity slot tries to parse the `(`. Write `deal X ...` (where-clauses bind fine without parens).
-4. `size(cards X)` needs the `cards` keyword; `playersin`/`playersout`/`others` are single tokens (no spaces).
-5. String literals are double-quoted (`Rank is "Ace"`); filter keyword is `is`, not `==`.
+1. `not (X)` and `(X)` (single bool in parens) do not parse - the binary wrapper requires `bool_op`. Write `not X` or `if (X)`.
+2. `not <combo> in X empty` — a leading `not` before a combo group **binds to the boolean** since 2026-08-09 (previously it bound to the combo, forming a `NotCombo` cardset whose empty-check was almost never true — rule-order fix, F-15). The positive spelling `combo in X not empty` also works.
+3. `case (A > B)` / `until (A > B)` fail when both operands are non-literal int exprs (the inner `int_expr_bool` greedily consumes the whole parenthesis). Workaround: `if (A > B)` or split into two conditions.
+4. Parenthesised cardsets in moves (`deal (X) ...`) fail - the quantity slot tries to parse the `(`. Write `deal X ...` (where-clauses bind fine without parens).
+5. `size(cards X)` needs the `cards` keyword; `playersin`/`playersout`/`others` are single tokens (no spaces).
+6. String literals are double-quoted (`Rank is "Ace"`); filter keyword is `is`, not `==`.
 6. Where-clauses precede the owner: `Hand where Rank is "Ace" of next`.
 7. All identifiers start with a capital letter (Pest `ident` rule).

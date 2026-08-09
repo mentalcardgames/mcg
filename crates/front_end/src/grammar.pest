@@ -355,10 +355,10 @@ cmp_bool = {
 bool_expr = {
     cmp_bool
   | string_card_set
+  | bool_expr_unary
   | card_set_not_empty
   | card_set_empty
   | bool_expr_binary
-  | bool_expr_unary
   | players_out_of
 }
 // =======================
