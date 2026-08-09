@@ -1,0 +1,12 @@
+// Repro: SetMemory with no current player must error, not panic (the memory
+// key is prefixed with the current player's name; `end turn` with nobody
+// eligible leaves `current_player = None`, and the bridge has nothing to key
+// to).
+player P1
+turnorder (P:P1)
+
+stage Play for current 1 times {
+  set P:P1 out of game
+  end turn
+  Counter is 5
+}

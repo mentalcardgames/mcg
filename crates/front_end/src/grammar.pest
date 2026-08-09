@@ -664,7 +664,7 @@ optional_rule = { kw_optional ~ "{" ~ flow_component+ ~ "}" }
 
 // ChoiceRule
 // =======================
-choice_rule = { kw_choose ~ "{" ~ flow_component+ ~ ("or" ~ flow_component+)* ~ "}" }
+choice_rule = { kw_choose ~ "{" ~ flow_component+ ~ (kw_or ~ flow_component+)* ~ "}" }
 // =======================
 
 // TriggerRule

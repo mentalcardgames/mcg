@@ -51,11 +51,23 @@ impl Evaluator {
                 }
                 Ok(result)
             }
-            StringCollection::AggregateMemory { memory: _, multi } => {
-                todo!(
-                    "StringCollection::AggregateMemory not yet implemented: {:?}",
-                    multi
-                )
+            // Aggregate a String memory across every owner in `multi`.
+            StringCollection::AggregateMemory { memory, multi } => {
+                let names = super::Evaluator::resolve_multi_owner_names(multi, game_data)?;
+                let mut result = vec![];
+                for name in names {
+                    let key = format!("{}_{}", name, memory);
+                    match game_data.get_memory(&key) {
+                        Some(MemoryValue::String(v)) => result.push(v.clone()),
+                        Some(_) => {
+                            return Err(format!("Memory value is not a String ({})", key));
+                        }
+                        None => {
+                            return Err(format!("Memory {} not found", key));
+                        }
+                    }
+                }
+                Ok(result)
             }
             StringCollection::Memory { memory } => {
                 let key = Self::resolve_collection_memory_key(memory, game_data)?;

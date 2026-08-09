@@ -1,0 +1,45 @@
+// Behavioral fixture — War battle + winner semantics (deterministic: no
+// shuffle). Deck (6 cards, creation order):
+//   P1Pile = [Ace-D, Two-D, Three-D], P2Pile = [Two-C, Three-C, Ace-C].
+// Battle rounds: Ace(14) beats Two(2); Two(2) loses to Three(3);
+// Three(3) loses to Ace(14). P1 pile empties after round 3.
+// P2 captures 4 cards, P1 captures 2 -> P2 wins.
+player P1, P2
+turnorder (P:P1, P:P2)
+location P1Pile on P:P1
+location P2Pile on P:P2
+location P1Winnings on P:P1
+location P2Winnings on P:P2
+location Deck on table
+location Discard on table
+
+card on Deck:
+  Rank(Ace, Two, Three) for Suit(Diamonds)
+  ,
+  Rank(Two, Three, Ace) for Suit(Clubs)
+
+points RankValue on Rank(Ace: 14, Two: 2, Three: 3)
+
+deal 3 from Deck private to P1Pile
+deal 3 from Deck private to P2Pile
+
+stage Battle for current until (P1Pile empty or P2Pile empty) {
+  if (sum of top(P1Pile) using RankValue > sum of top(P2Pile) using RankValue) {
+    move top(P1Pile) private to P1Winnings
+    move top(P2Pile) private to P1Winnings
+  }
+  if (sum of top(P1Pile) using RankValue < sum of top(P2Pile) using RankValue) {
+    move top(P1Pile) private to P2Winnings
+    move top(P2Pile) private to P2Winnings
+  }
+  if (sum of top(P1Pile) using RankValue == sum of top(P2Pile) using RankValue) {
+    move top(P1Pile) private to Discard
+    move top(P2Pile) private to Discard
+  }
+}
+
+stage End for current 1 times {
+  score size(cards P1Winnings) to P:P1
+  score size(cards P2Winnings) to P:P2
+  winner is highest score
+}

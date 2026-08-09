@@ -168,8 +168,8 @@ fn eval_int_size_of_player_collection_memory() {
             },
         },
     });
-    // resolve_player_collection for Memory variant currently returns vec![] (stub)
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(0));
+    // Implemented 2026-08: the PlayerCollection memory slot is read.
+    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(2));
 }
 
 // ── I‑9 ──────────────────────────────────────────────────────────
@@ -561,9 +561,13 @@ fn eval_int_collection_memory_no_owner_error() {
 
 // ── I‑18 ─────────────────────────────────────────────────────────
 #[test]
-#[should_panic(expected = "IntCollection::AggregateMemory not yet implemented")]
-fn eval_int_size_of_int_collection_aggregate_memory_panics() {
-    let gd = GameData::new();
+fn eval_int_size_of_int_collection_aggregate_memory() {
+    // Implemented 2026-08: aggregates the slot across every owner.
+    let mut gd = GameData::new();
+    gd.add_player("P1".to_string());
+    gd.add_player("P2".to_string());
+    gd.memories.insert("P1_x".to_string(), MemoryValue::Int(5));
+    gd.memories.insert("P2_x".to_string(), MemoryValue::Int(7));
     let expr = size_of(Collection::IntCollection {
         int: IntCollection::AggregateMemory {
             memory: "x".to_string(),
@@ -574,14 +578,62 @@ fn eval_int_size_of_int_collection_aggregate_memory_panics() {
             },
         },
     });
-    let _ = Evaluator::eval_int(&expr, &gd);
+    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(2));
+}
+
+#[test]
+fn eval_int_sum_of_int_collection_aggregate_memory() {
+    let mut gd = GameData::new();
+    gd.add_player("P1".to_string());
+    gd.add_player("P2".to_string());
+    gd.memories.insert("P1_x".to_string(), MemoryValue::Int(5));
+    gd.memories.insert("P2_x".to_string(), MemoryValue::Int(7));
+    let expr = IntExpr::Aggregate {
+        aggregate: AggregateInt::SumOfIntCollection {
+            int_collection: IntCollection::AggregateMemory {
+                memory: "x".to_string(),
+                multi: MultiOwner::PlayerCollection {
+                    player_collection: Box::new(PlayerCollection::Runtime {
+                        runtime: RuntimePlayerCollection::PlayersIn,
+                    }),
+                },
+            },
+        },
+    };
+    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(12));
+}
+
+#[test]
+fn eval_int_size_of_int_collection_aggregate_memory_missing_errors() {
+    let mut gd = GameData::new();
+    gd.add_player("P1".to_string());
+    let expr = size_of(Collection::IntCollection {
+        int: IntCollection::AggregateMemory {
+            memory: "x".to_string(),
+            multi: MultiOwner::PlayerCollection {
+                player_collection: Box::new(PlayerCollection::Runtime {
+                    runtime: RuntimePlayerCollection::PlayersIn,
+                }),
+            },
+        },
+    });
+    assert_eq!(
+        Evaluator::eval_int(&expr, &gd),
+        Err("Memory P1_x not found".to_string())
+    );
 }
 
 // ── I‑19 ─────────────────────────────────────────────────────────
 #[test]
-#[should_panic(expected = "TeamCollection::AggregateMemory not yet implemented")]
-fn eval_int_size_of_team_collection_aggregate_memory_panics() {
-    let gd = GameData::new();
+fn eval_int_size_of_team_collection_aggregate_memory() {
+    // Implemented 2026-08: aggregates the slot across every owner.
+    let mut gd = GameData::new();
+    gd.add_player("P1".to_string());
+    gd.add_player("P2".to_string());
+    gd.memories
+        .insert("P1_x".to_string(), MemoryValue::Team("T1".to_string()));
+    gd.memories
+        .insert("P2_x".to_string(), MemoryValue::Team("T2".to_string()));
     let expr = size_of(Collection::TeamCollection {
         team: TeamCollection::AggregateMemory {
             memory: "x".to_string(),
@@ -592,14 +644,20 @@ fn eval_int_size_of_team_collection_aggregate_memory_panics() {
             },
         },
     });
-    let _ = Evaluator::eval_int(&expr, &gd);
+    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(2));
 }
 
 // ── I‑20 ─────────────────────────────────────────────────────────
 #[test]
-#[should_panic(expected = "StringCollection::AggregateMemory not yet implemented")]
-fn eval_int_size_of_string_collection_aggregate_memory_panics() {
-    let gd = GameData::new();
+fn eval_int_size_of_string_collection_aggregate_memory() {
+    // Implemented 2026-08: aggregates the slot across every owner.
+    let mut gd = GameData::new();
+    gd.add_player("P1".to_string());
+    gd.add_player("P2".to_string());
+    gd.memories
+        .insert("P1_x".to_string(), MemoryValue::String("a".to_string()));
+    gd.memories
+        .insert("P2_x".to_string(), MemoryValue::String("b".to_string()));
     let expr = size_of(Collection::StringCollection {
         string: StringCollection::AggregateMemory {
             memory: "x".to_string(),
@@ -610,20 +668,20 @@ fn eval_int_size_of_string_collection_aggregate_memory_panics() {
             },
         },
     });
-    let _ = Evaluator::eval_int(&expr, &gd);
+    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(2));
 }
 
 // ── I‑21 ─────────────────────────────────────────────────────────
 #[test]
 fn resolve_quantity_int() {
     let q = Quantity::Int { int: lit(3) };
-    assert_eq!(Evaluator::resolve_quantity(&q, 10), Ok(3));
+    assert_eq!(Evaluator::resolve_quantity(&q, 10, &GameData::new()), Ok(3));
 }
 
 #[test]
 fn resolve_quantity_int_clamps_to_available() {
     let q = Quantity::Int { int: lit(20) };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5), Ok(5));
+    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
 }
 
 #[test]
@@ -631,7 +689,7 @@ fn resolve_quantity_quantifier_all() {
     let q = Quantity::Quantifier {
         quantifier: Quantifier::All,
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5), Ok(5));
+    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
 }
 
 #[test]
@@ -639,7 +697,7 @@ fn resolve_quantity_quantifier_any() {
     let q = Quantity::Quantifier {
         quantifier: Quantifier::Any,
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5), Ok(1));
+    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(1));
 }
 
 // ── I‑22 ─────────────────────────────────────────────────────────
@@ -651,7 +709,7 @@ fn resolve_quantity_int_range_start_satisfied() {
             op_int: vec![],
         },
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5), Ok(5));
+    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
 }
 
 #[test]
@@ -662,7 +720,7 @@ fn resolve_quantity_int_range_start_not_satisfied() {
             op_int: vec![],
         },
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5), Ok(0));
+    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(0));
 }
 
 #[test]
@@ -673,7 +731,7 @@ fn resolve_quantity_int_range_and_chain() {
             op_int: vec![(IntRangeOperator::And, IntCompare::Le, lit(10))],
         },
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5), Ok(5));
+    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
 }
 
 #[test]
@@ -685,7 +743,7 @@ fn resolve_quantity_int_range_and_fails() {
         },
     };
     // available=5, 5 <= 4 is false → returns Ok(0)
-    assert_eq!(Evaluator::resolve_quantity(&q, 5), Ok(0));
+    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(0));
 }
 
 #[test]
@@ -697,7 +755,7 @@ fn resolve_quantity_int_range_or_chain() {
         },
     };
     // available=5, 5 == 7 false → falls through to Ok(available)
-    assert_eq!(Evaluator::resolve_quantity(&q, 5), Ok(5));
+    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
 }
 
 #[test]
@@ -709,12 +767,17 @@ fn resolve_quantity_int_range_or_satisfied() {
         },
     };
     // available=5, 5 == 5 true → returns Ok(available)
-    assert_eq!(Evaluator::resolve_quantity(&q, 5), Ok(5));
+    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
 }
 
 // ── I‑23 ─────────────────────────────────────────────────────────
 #[test]
-fn resolve_quantity_ignores_runtime_gamedata() {
+fn resolve_quantity_runtime_memory_evaluated_live() {
+    // Runtime-backed quantities are evaluated against the live GameData
+    // (fixed 2026-08, was: empty GameData with a silent fallback of 1).
+    let mut gd = GameData::new();
+    gd.memories
+        .insert("Table_secret".to_string(), MemoryValue::Int(3));
     let q = Quantity::Int {
         int: IntExpr::Memory {
             memory: UseSingleMemory::WithOwner {
@@ -723,13 +786,32 @@ fn resolve_quantity_ignores_runtime_gamedata() {
             },
         },
     };
-    // eval_int fails against GameData::new(), unwrap_or(1) gives 1
-    assert_eq!(Evaluator::resolve_quantity(&q, 100), Ok(1));
+    assert_eq!(Evaluator::resolve_quantity(&q, 100, &gd), Ok(3));
+}
+
+#[test]
+fn resolve_quantity_runtime_memory_missing_errors() {
+    let q = Quantity::Int {
+        int: IntExpr::Memory {
+            memory: UseSingleMemory::WithOwner {
+                memory: "secret".to_string(),
+                owner: Box::new(SingleOwner::Table),
+            },
+        },
+    };
+    // Missing memory now surfaces as an error instead of silently moving 1.
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 100, &GameData::new()),
+        Err("Memory Table_secret not found".to_string())
+    );
 }
 
 // ── I‑24 ─────────────────────────────────────────────────────────
 #[test]
-fn resolve_quantity_int_range_swallows_start_eval_error() {
+fn resolve_quantity_int_range_evaluated_live() {
+    let mut gd = GameData::new();
+    gd.memories
+        .insert("Table_ghost".to_string(), MemoryValue::Int(2));
     let q = Quantity::IntRange {
         int_range: IntRange {
             start: (
@@ -744,6 +826,29 @@ fn resolve_quantity_int_range_swallows_start_eval_error() {
             op_int: vec![],
         },
     };
-    // eval_int fails (memory "ghost" absent in GameData::new()) → Err(_) → false → Ok(0)
-    assert_eq!(Evaluator::resolve_quantity(&q, 100), Ok(0));
+    // available=100 >= 2 → satisfied → Ok(100) (previously eval failed against
+    // an empty GameData and fell back to Ok(0)).
+    assert_eq!(Evaluator::resolve_quantity(&q, 100, &gd), Ok(100));
+}
+
+#[test]
+fn resolve_quantity_int_range_missing_memory_errors() {
+    let q = Quantity::IntRange {
+        int_range: IntRange {
+            start: (
+                IntCompare::Ge,
+                IntExpr::Memory {
+                    memory: UseSingleMemory::WithOwner {
+                        memory: "ghost".to_string(),
+                        owner: Box::new(SingleOwner::Table),
+                    },
+                },
+            ),
+            op_int: vec![],
+        },
+    };
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 100, &GameData::new()),
+        Err("Memory Table_ghost not found".to_string())
+    );
 }

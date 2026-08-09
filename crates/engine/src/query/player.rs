@@ -1,8 +1,8 @@
 use super::Evaluator;
 use crate::game_data::{GameData, MemoryValue};
 use front_end::ast::{
-    AggregatePlayer, AggregateTeam, Extrema, Owner, PlayerCollection, PlayerExpr, Players,
-    QueryPlayer, RuntimePlayer, TeamExpr,
+    AggregatePlayer, AggregateTeam, Extrema, MultiOwner, Owner, PlayerCollection, PlayerExpr,
+    Players, QueryPlayer, RuntimePlayer, TeamExpr,
 };
 
 impl Evaluator {
@@ -135,7 +135,7 @@ impl Evaluator {
                         .ok_or(format!("Player at index {} not found", idx))
                 }
                 QueryPlayer::CollectionAt { players: pc, int } => {
-                    let indices = Self::resolve_player_collection(pc, game_data);
+                    let indices = Self::resolve_player_collection(pc, game_data)?;
                     let idx = Self::eval_int(int, game_data)? as usize;
                     let player_idx = *indices
                         .get(idx)
@@ -198,19 +198,22 @@ impl Evaluator {
         }
     }
 
-    pub fn resolve_players(players: &Players, game_data: &GameData) -> Vec<usize> {
+    /// Resolve a `Players` expression to concrete player indices. Fallible:
+    /// player-expressions that cannot be evaluated (e.g. `next` with no
+    /// eligible player) or that reference unknown players yield `Err` instead
+    /// of panicking (recoverable in the action/condition paths).
+    pub fn resolve_players(players: &Players, game_data: &GameData) -> Result<Vec<usize>, String> {
         match players {
             Players::Player { player } => {
-                let name = Self::eval_player(player, game_data).unwrap_or_else(|e| {
-                    panic!("resolve_players: failed to eval player {:?}: {}", player, e)
-                });
-                vec![game_data
+                let name = Self::eval_player(player, game_data)?;
+                let idx = game_data
                     .players
                     .iter()
                     .position(|p| p.name == name)
-                    .unwrap_or_else(|| {
-                        panic!("resolve_players: player {} not found in game_data", name)
-                    })]
+                    .ok_or_else(|| {
+                        format!("resolve_players: player {} not found in game_data", name)
+                    })?;
+                Ok(vec![idx])
             }
             Players::PlayerCollection { player_collection } => {
                 Self::resolve_player_collection(player_collection, game_data)
@@ -218,62 +221,130 @@ impl Evaluator {
         }
     }
 
-    pub fn resolve_player_collection(pc: &PlayerCollection, game_data: &GameData) -> Vec<usize> {
+    /// Resolve a `PlayerCollection` to concrete player indices. Fallible since
+    /// 2026-08: literal eval failures, unknown literal names, and missing
+    /// memory slots return `Err`; the `Aggregate`/`AggregateMemory`/`Memory`
+    /// arms are fully implemented (multi-owner aggregation).
+    pub fn resolve_player_collection(
+        pc: &PlayerCollection,
+        game_data: &GameData,
+    ) -> Result<Vec<usize>, String> {
         match pc {
             PlayerCollection::Literal { players } => {
                 let mut indices = vec![];
                 for player_expr in players {
-                    let name = Self::eval_player(player_expr, game_data).unwrap_or_else(|e| {
-                        panic!(
-                            "resolve_player_collection: failed to eval player {:?}: {}",
-                            player_expr, e
-                        )
-                    });
-                    if let Some(idx) = game_data.players.iter().position(|p| p.name == name) {
-                        indices.push(idx);
-                    }
+                    let name = Self::eval_player(player_expr, game_data)?;
+                    let idx = game_data
+                        .players
+                        .iter()
+                        .position(|p| p.name == name)
+                        .ok_or_else(|| {
+                            format!(
+                                "resolve_player_collection: player {} not found in game_data",
+                                name
+                            )
+                        })?;
+                    indices.push(idx);
                 }
-                indices
+                Ok(indices)
             }
 
-            PlayerCollection::Aggregate { .. } => {
-                todo!("PlayerCollection::Aggregate not yet implemented")
-            }
-            PlayerCollection::Runtime { runtime } => match runtime {
-                front_end::ast::RuntimePlayerCollection::PlayersOut => game_data
-                    .players
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, p)| !p.in_game)
-                    .map(|(i, _)| i)
-                    .collect(),
-                front_end::ast::RuntimePlayerCollection::PlayersIn => game_data
+            // `all` / `any` resolve to every in-game player; the caller
+            // distinguishes fan-out (`all`) from pick-one (`any`).
+            PlayerCollection::Aggregate { aggregate } => match aggregate {
+                front_end::ast::AggregatePlayerCollection::Quantifier { .. } => Ok(game_data
                     .players
                     .iter()
                     .enumerate()
                     .filter(|(_, p)| p.in_game)
                     .map(|(i, _)| i)
-                    .collect(),
+                    .collect()),
+            },
+            PlayerCollection::Runtime { runtime } => match runtime {
+                front_end::ast::RuntimePlayerCollection::PlayersOut => Ok(game_data
+                    .players
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| !p.in_game)
+                    .map(|(i, _)| i)
+                    .collect()),
+                front_end::ast::RuntimePlayerCollection::PlayersIn => Ok(game_data
+                    .players
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| p.in_game)
+                    .map(|(i, _)| i)
+                    .collect()),
                 front_end::ast::RuntimePlayerCollection::Others => {
                     let current = game_data
                         .get_current_player()
                         .map(|p| p.name.clone())
                         .unwrap_or_default();
-                    game_data
+                    Ok(game_data
                         .players
                         .iter()
                         .enumerate()
                         .filter(|(_, p)| p.name != current && p.in_game)
                         .map(|(i, _)| i)
-                        .collect()
+                        .collect())
                 }
             },
-            // TODO: memory not implemented
-            PlayerCollection::AggregateMemory {
-                memory: _,
-                multi: _,
-            } => vec![],
-            PlayerCollection::Memory { memory: _ } => vec![],
+            // Aggregate a memory slot across every owner in `multi`, e.g.
+            // `(&P:M of all)` / `(&P:M of others)`.
+            PlayerCollection::AggregateMemory { memory, multi } => {
+                let names = Self::resolve_multi_owner_names(multi, game_data)?;
+                let mut indices = vec![];
+                for name in names {
+                    let key = format!("{}_{}", name, memory);
+                    match game_data.get_memory(&key) {
+                        Some(MemoryValue::PlayerCollection(ids)) => {
+                            indices.extend(ids.iter().copied())
+                        }
+                        Some(_) => {
+                            return Err(format!("Memory value is not a PlayerCollection ({})", key))
+                        }
+                        None => {
+                            return Err(format!("Memory {} not found", key));
+                        }
+                    }
+                }
+                Ok(indices)
+            }
+            PlayerCollection::Memory { memory } => {
+                let key = Self::resolve_collection_memory_key(memory, game_data)?;
+                match game_data.get_memory(&key) {
+                    Some(MemoryValue::PlayerCollection(ids)) => Ok(ids.clone()),
+                    Some(_) => Err("Memory value is not a PlayerCollection".to_string()),
+                    None => Err(format!("Memory {} not found", key)),
+                }
+            }
+        }
+    }
+
+    /// Resolve the owner collection of a multi-owner memory reference to
+    /// concrete names: `MultiOwner::PlayerCollection` → player names,
+    /// `MultiOwner::TeamCollection` → team names.
+    pub(super) fn resolve_multi_owner_names(
+        multi: &MultiOwner,
+        game_data: &GameData,
+    ) -> Result<Vec<String>, String> {
+        match multi {
+            MultiOwner::PlayerCollection { player_collection } => {
+                let indices = Self::resolve_player_collection(player_collection, game_data)?;
+                Ok(indices
+                    .into_iter()
+                    .map(|i| {
+                        game_data
+                            .players
+                            .get(i)
+                            .map(|p| p.name.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect())
+            }
+            MultiOwner::TeamCollection { team_collection } => {
+                Self::eval_team_collection(team_collection, game_data)
+            }
         }
     }
 
@@ -308,7 +379,7 @@ impl Evaluator {
             Owner::PlayerCollection {
                 player_collection: pc,
             } => {
-                let indices = crate::quantifier::resolve_player_candidates(pc, game_data);
+                let indices = crate::quantifier::resolve_player_candidates(pc, game_data)?;
                 Ok(indices
                     .into_iter()
                     .map(|i| game_data.players[i].name.clone())

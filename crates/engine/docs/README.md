@@ -108,7 +108,7 @@ crates/engine/src/
 │   │   ├── main.rs, trace.rs
 │   │   └── ui/                    — state, layout, game_state, trace_log, input, controls
 │   └── cgdsl-play.rs              — CLI game driver (interactive + file replay)
-├── test_games/                    — 63 .cgdsl fixture files (incl. the five demo games)
+├── test_games/                    — 70 .cgdsl fixture files (incl. the five demo games)
 └── tests/                         — integration tests (one file per feature area)
     ├── quantifier_test.rs
     ├── action_test.rs
@@ -120,7 +120,9 @@ crates/engine/src/
     ├── flow_test.rs
     ├── optional_test.rs
     ├── shuffle_test.rs
-    └── demo_games_test.rs         — the five handoff demo games driven end-to-end
+    ├── demo_games_test.rs         — the five handoff demo games driven end-to-end
+    ├── behavior_test.rs           — deterministic (non-shuffled) behavioral fixtures with exact expected outcomes
+    └── random_play_test.rs        — monkey tests: random inputs, 40 seeds per game
 ```
 
 ## Key Concepts
@@ -150,7 +152,7 @@ crates/engine/src/
 ## Build and Test
 
 ```
-cargo test -p cgdsl-engine              # 463 tests (406 unit + 57 integration)
+cargo test -p cgdsl-engine              # 488 tests (414 unit + 74 integration)
 cargo test -p cgdsl-engine --test <name> # single integration test file
 cargo clippy -p cgdsl-engine --all-targets -- -D warnings
 cargo fmt -p cgdsl-engine -- --check

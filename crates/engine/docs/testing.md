@@ -504,22 +504,67 @@ you trip over them; promote to dedicated tests when the area is touched.)
 
 Per §8.1, these are bugs to fix before writing the regression tests:
 
-- **`cycle to next` panics with a single eligible player** — `src/action.rs:309`.
-  `resolve_turn` never considers the current player (invariant I-13), so a
-  `cycle to next` guard of `size(playersin) >= 2` is required in games that
-  eliminate players. A graceful `StepResult::Error` would be preferable to the
-  panic; documented in `engine-vs-design.md`.
+- **`optional` decline runs nothing (D-3)** and **stage-exit checks happen at
+  entry only (D-2)** — both need parser/IR work and are deferred by design
+  (see `engine-vs-design.md` §5).
 
-(Former entries — I-9 `set_memory` increment semantics and the
-`execute_cardset_move` `>`/`>=` off-by-one — were fixed on 2026-08-09; see
-`game_data.rs:301` and `action.rs:538`.)
+(The former panic table — `cycle to next`, `SetMemory`, the `execute_cardset_move`
+guard, and the collection-memory `todo!()`s — was converted to recoverable errors
+on 2026-08-09; see `engine-vs-design.md` §1.)
 
 When fixing, file entries under [`developer-notes.md`](./known-bugs.md), land the corrected
 behavior and its regression test together.
 
+## 12. Behavioral Fixtures — `tests/behavior_test.rs`
+
+Invariant tests (completion, card conservation) prove a game *runs*; behavioral
+fixtures prove it *plays the game correctly*. Each fixture mirrors one demo
+game's core mechanic with a **deterministic deck** and asserts the **exact**
+outcome from the rules:
+
+| Fixture | Mechanic verified | Exact assertions |
+|---|---|---|
+| `behavior_go_fish_ask.cgdsl` | ask a held rank → transfer, no draw; ask a missing rank → draw exactly 1 | hand sizes, rank counts, deck size |
+| `behavior_war.cgdsl` | battle capture + winner declaration | per-round winners, scores, winnings/discard split |
+| `behavior_blackjack.cgdsl` | dealing order, dealer draw-until-17, scoring vs dealer, winner | scores, dealer hand, deck exhaustion |
+| `behavior_five_card_draw.cgdsl` | hand sum + pair (+10) + flush (+20) bonuses | exact scores 59/40/68, winner |
+| `behavior_crazy_eights.cgdsl` | empty-hand win, lowest-score winner | scores, discard/deck counts |
+
+**The determinism trick:** without `shuffle Deck`, card creation order defines
+the deck (`expand_types` is rank-major, suit innermost: `Ace-D, Ace-C, Ace-H,
+Two-D, ...`), and `deal N` takes the top N cards — so every hand is known. Use
+single-suit decks or comma-separated type groups (as in `behavior_war.cgdsl`)
+when exact card order matters.
+
+**Track record:** these fixtures caught a real DSL-authoring bug in
+`go_fish.cgdsl` — the option body dealt *before* checking emptiness, so a
+successful ask also drew a card (draw-on-hit). Fixed by inverting the order
+(check first, deal second). Invariant tests could not see this; the game
+completed with all 52 cards either way.
+
 ---
 
-## 12. Cross-References
+## 13. Random-Input ("Monkey") Testing — `tests/random_play_test.rs`
+
+The demo games are additionally driven with **fully random player inputs** across
+40 seeds per game (`RUNS_PER_GAME`), plus a 10% rate of deliberately
+*out-of-range* answers to exercise the controller's re-prompt validation loop
+(I-15). The property under test: a well-formed game **never panics, never hangs,
+and conserves all 52 cards**, regardless of what the player does.
+
+- `RandomPlayer` (a seeded `StdRng` behind an `Arc<Mutex<..>>`) answers every
+  `InputType` uniformly at random within its valid range; answers carry the
+  current player's name (tracked via `event_sender`, I-23).
+- Infinite re-prompt storms are caught by an input-call cap (`INPUT_CALL_CAP`).
+- Panics propagate out of `run_game` and fail the test directly.
+- Per-run seeds are derived from one entropy draw and printed in failure
+  messages, so a failing *input sequence* is reproducible. The shuffle itself
+  uses `rand::thread_rng()` (not injectable), so full replay determinism needs a
+  seeded engine RNG (see `NEXT_STEPS.md`).
+
+---
+
+## 14. Cross-References
 
 | Page | When relevant |
 |---|---|

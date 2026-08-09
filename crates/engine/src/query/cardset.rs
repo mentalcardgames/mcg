@@ -48,13 +48,10 @@ impl Evaluator {
                                 .find(|c| c.name == *combo)
                                 .map(|c| c.filter.clone())
                                 .ok_or(format!("Combo {} not found", combo))?;
-                            let filtered: Vec<usize> = base_cards
-                                .into_iter()
-                                .filter(|&card_id| {
-                                    Self::card_matches_filter(card_id, &combo_filter, game_data)
-                                })
-                                .collect();
-                            (base_idx, filtered)
+                            (
+                                base_idx,
+                                Self::apply_filter(&combo_filter, &base_cards, game_data)?,
+                            )
                         }
                         Group::NotCombo { combo, .. } => {
                             let combo_filter = game_data
@@ -63,11 +60,11 @@ impl Evaluator {
                                 .find(|c| c.name == *combo)
                                 .map(|c| c.filter.clone())
                                 .ok_or(format!("Combo {} not found", combo))?;
+                            let matched =
+                                Self::apply_filter(&combo_filter, &base_cards, game_data)?;
                             let filtered: Vec<usize> = base_cards
                                 .into_iter()
-                                .filter(|&card_id| {
-                                    !Self::card_matches_filter(card_id, &combo_filter, game_data)
-                                })
+                                .filter(|id| !matched.contains(id))
                                 .collect();
                             (base_idx, filtered)
                         }
@@ -211,9 +208,17 @@ impl Evaluator {
         match group {
             Group::Groupable { groupable } => Self::eval_groupable(groupable, game_data),
             Group::Where { groupable, filter } => {
-                let (_, card_ids) = Self::eval_groupable(groupable, game_data)?;
+                let (base_idx, card_ids) = Self::eval_groupable(groupable, game_data)?;
                 let filtered = Self::apply_filter(filter, &card_ids, game_data)?;
-                let location_idx = Self::infer_location_from_cards(&filtered, game_data)?;
+                // An empty filter result must not degrade to the location-0
+                // sentinel (I-14): report the base location of the groupable
+                // instead, so a `where`-set used as a move destination still
+                // resolves to the pile it filters (engine-vs-design.md D-11).
+                let location_idx = if filtered.is_empty() {
+                    base_idx
+                } else {
+                    Self::infer_location_from_cards(&filtered, game_data)?
+                };
                 Ok((location_idx, filtered))
             }
             Group::NotCombo { combo, groupable } => {
@@ -224,11 +229,10 @@ impl Evaluator {
                     .find(|c| c.name == *combo)
                     .map(|c| c.filter.clone())
                     .ok_or(format!("Combo {} not found", combo))?;
+                let matched = Self::apply_filter(&combo_filter, &card_ids, game_data)?;
                 let filtered: Vec<usize> = card_ids
                     .into_iter()
-                    .filter(|&card_id| {
-                        !Self::card_matches_filter(card_id, &combo_filter, game_data)
-                    })
+                    .filter(|id| !matched.contains(id))
                     .collect();
                 Ok((loc_idx, filtered))
             }
@@ -240,10 +244,10 @@ impl Evaluator {
                     .find(|c| c.name == *combo)
                     .map(|c| c.filter.clone())
                     .ok_or(format!("Combo {} not found", combo))?;
-                let filtered: Vec<usize> = card_ids
-                    .into_iter()
-                    .filter(|&card_id| Self::card_matches_filter(card_id, &combo_filter, game_data))
-                    .collect();
+                // Combo filters are evaluated group-wise (like `where`), not
+                // per-card: `same Rank`/`distinct Suit`/`size` all need the
+                // group context (engine-vs-design.md D-5).
+                let filtered = Self::apply_filter(&combo_filter, &card_ids, game_data)?;
                 Ok((loc_idx, filtered))
             }
             Group::CardPosition { card_position } => {
@@ -505,14 +509,9 @@ impl Evaluator {
                         .find(|c| c.name == *combo)
                         .map(|c| c.filter.clone())
                         .ok_or(format!("Combo {} not found", combo))?;
-                    let result: Vec<usize> = card_ids
-                        .iter()
-                        .filter(|&&card_id| {
-                            Self::card_matches_filter(card_id, &combo_filter, game_data)
-                        })
-                        .copied()
-                        .collect();
-                    Ok(result)
+                    // Group-wise, like `where` (D-5): the combo's filter is
+                    // applied to the current set, not per card.
+                    Self::apply_filter(&combo_filter, card_ids, game_data)
                 }
                 AggregateFilter::NotCombo { combo } => {
                     let combo_filter = game_data
@@ -521,12 +520,11 @@ impl Evaluator {
                         .find(|c| c.name == *combo)
                         .map(|c| c.filter.clone())
                         .ok_or(format!("Combo {} not found", combo))?;
+                    let matched = Self::apply_filter(&combo_filter, card_ids, game_data)?;
                     let result: Vec<usize> = card_ids
                         .iter()
-                        .filter(|&&card_id| {
-                            !Self::card_matches_filter(card_id, &combo_filter, game_data)
-                        })
                         .copied()
+                        .filter(|id| !matched.contains(id))
                         .collect();
                     Ok(result)
                 }
@@ -560,57 +558,10 @@ impl Evaluator {
         }
     }
 
-    fn card_matches_filter(card_id: usize, filter: &FilterExpr, game_data: &GameData) -> bool {
-        match filter {
-            FilterExpr::Aggregate { aggregate } => match aggregate {
-                AggregateFilter::Size { cmp, int_expr } => {
-                    if let Ok(target) = Self::eval_int(int_expr, game_data) {
-                        let size = 1;
-                        return Self::eval_int_compare(size, cmp, target);
-                    }
-                    false
-                }
-                AggregateFilter::Same { key } => {
-                    if let Some(card) = game_data.get_card(card_id) {
-                        if let Some(value) = card.get(key) {
-                            return game_data
-                                .cards
-                                .iter()
-                                .filter(|c| c.get(key) == Some(value))
-                                .any(|c| std::ptr::eq(c, card));
-                        }
-                    }
-                    false
-                }
-                AggregateFilter::Distinct { key } => {
-                    if let Some(card) = game_data.get_card(card_id) {
-                        if let Some(value) = card.get(key) {
-                            return !game_data
-                                .cards
-                                .iter()
-                                .filter(|c| c.get(key) == Some(value))
-                                .any(|c| !std::ptr::eq(c, card));
-                        }
-                    }
-                    false
-                }
-                _ => false,
-            },
-            FilterExpr::Binary {
-                filter: f1,
-                op,
-                filter1: f2,
-            } => {
-                let m1 = Self::card_matches_filter(card_id, f1, game_data);
-                let m2 = Self::card_matches_filter(card_id, f2, game_data);
-                match op {
-                    front_end::ast::FilterOp::And => m1 && m2,
-                    front_end::ast::FilterOp::Or => m1 || m2,
-                }
-            }
-        }
-    }
-
+    /// Best-effort location inference for a *non-empty* card set: the first
+    /// location containing all of them, else the location of the first card,
+    /// else the location-0 sentinel (I-14). `eval_group` avoids calling this
+    /// with an empty set (D-11: it reports the base location instead).
     fn infer_location_from_cards(
         card_ids: &[usize],
         game_data: &GameData,

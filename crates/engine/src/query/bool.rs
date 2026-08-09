@@ -57,7 +57,7 @@ impl Evaluator {
                 Ok(!cards.is_empty())
             }
             AggregateBool::OutOfPlayer { players, out_of } => {
-                let player_indices = Self::resolve_players(players, game_data);
+                let player_indices = Self::resolve_players(players, game_data)?;
                 let current_stage = game_data.get_current_stage().unwrap_or_default();
                 match out_of {
                     front_end::ast::OutOf::CurrentStage => {

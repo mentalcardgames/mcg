@@ -127,13 +127,14 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > `"Test input file exhausted (input #{})"`).
 
 > **I-9 — `set_memory` assigns the caller-provided `MemoryValue` verbatim (was: increment-by-1).**
-> `crates::engine::game_data::GameData::set_memory` (`crates/engine/src/game_data.rs:297-303`)
+> `crates::engine::game_data::GameData::set_memory` (`crates/engine/src/game_data.rs:329-331`)
 > inserts the `MemoryValue` it is given, overwriting any prior value. It is the write-side
 > primitive used by `ActionRule::SetMemory` *after* the `MemoryType` expression has been
-> evaluated by `action.rs` (which panics on eval failure). Earlier engine revisions
-> incremented an `Int` memory by 1 and ignored the type argument; that behavior is gone —
-> do not reintroduce it. `reset_memory` (`crates/engine/src/game_data.rs:305-311`) still only
-> resets `Int` memories (silent no-op on other variants).
+> evaluated by `action.rs` (eval failures surface as recoverable `Err`s since 2026-08 — they
+> previously panicked). Earlier engine revisions incremented an `Int` memory by 1 and ignored
+> the type argument; that behavior is gone — do not reintroduce it. `reset_memory`
+> (`crates/engine/src/game_data.rs:333-339`) still only resets `Int` memories (silent no-op on
+> other variants).
 
 > **I-10 — `add_memory` initializes some `MemoryType`s to mismatched `MemoryValue`s.**
 > (`crates/engine/src/game_data.rs:276-291`):
@@ -170,6 +171,10 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > `crates::engine::game_data::GameData::next_player` uses `unwrap_or_else(|| panic!(...))` on the
 > found position (`crates/engine/src/game_data.rs:204-209`) — safe only because `resolve_turn`
 > returning `Some(idx)` guarantees the idx is in `turn_order`.
+> **Note (2026-08-09):** `cycle to next` resolving to no eligible *other* player is now a
+> **recoverable** `StepResult::Error` ("No next player available"), not a panic — see
+> `error-handling.md` §2 / `engine-vs-design.md` F-8. `end turn` still silently leaves
+> `current_player = None`.
 
 > **I-14 — `eval_cardset` returns `(location_idx, card_ids)`; the location is best-effort.**
 > `crates::engine::query::Evaluator::eval_cardset` returns `(usize, Vec<usize>)`. For

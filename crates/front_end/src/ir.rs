@@ -545,7 +545,6 @@ impl IrBuilder<SpannedPayload> {
     }
 
     fn build_choice_rule(&mut self, choice_rule: &ChoiceRule, entry: u32, exit: u32) -> u32 {
-        let entry = entry;
         let choice_exit = exit;
 
         for option in choice_rule.options.iter() {
@@ -553,10 +552,12 @@ impl IrBuilder<SpannedPayload> {
 
             self.new_edge(entry, choice, Payload::Choice, None);
 
-            self.build_flow(option, choice, choice_exit);
+            // Each option is an `or`-separated *sequence* of flow components;
+            // the whole chain executes once that option is chosen.
+            self.build_flows(option, choice, choice_exit);
         }
 
-        return choice_exit;
+        choice_exit
     }
 
     /// Build SeqStage has to worry about the most GameFlowChanges.

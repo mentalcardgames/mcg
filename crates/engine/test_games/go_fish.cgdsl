@@ -14,8 +14,10 @@
 //   - `Hand where Rank is "X" of next` combines a where-filter with an
 //     owner; the engine resolves the base location against the owner
 //     ("next"), not the current player.
-//   - When the ask yields nothing, the `deal` of an empty set is a
-//     no-op, so the same option body also draws from the deck.
+//   - Each option checks the emptiness *first* and deals *after*: on a hit
+//     the transfer happens and no draw occurs; on a miss the draw happens
+//     and the (empty) transfer is a no-op. (Order matters — checking after
+//     the deal would draw on hits too; caught by the behavioral fixtures.)
 
 player P1, P2, P3
 turnorder (P:P1, P:P2, P:P3)
@@ -34,70 +36,70 @@ stage Deal for current 1 times {
 
 stage Ask for current until (Deck empty or Hand of current empty) or 24 times {
   choose {
-    deal Hand where Rank is "Ace" of next private to Hand of current
     if (size(cards Hand where Rank is "Ace" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Ace" of next private to Hand of current
     or
-    deal Hand where Rank is "Two" of next private to Hand of current
     if (size(cards Hand where Rank is "Two" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Two" of next private to Hand of current
     or
-    deal Hand where Rank is "Three" of next private to Hand of current
     if (size(cards Hand where Rank is "Three" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Three" of next private to Hand of current
     or
-    deal Hand where Rank is "Four" of next private to Hand of current
     if (size(cards Hand where Rank is "Four" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Four" of next private to Hand of current
     or
-    deal Hand where Rank is "Five" of next private to Hand of current
     if (size(cards Hand where Rank is "Five" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Five" of next private to Hand of current
     or
-    deal Hand where Rank is "Six" of next private to Hand of current
     if (size(cards Hand where Rank is "Six" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Six" of next private to Hand of current
     or
-    deal Hand where Rank is "Seven" of next private to Hand of current
     if (size(cards Hand where Rank is "Seven" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Seven" of next private to Hand of current
     or
-    deal Hand where Rank is "Eight" of next private to Hand of current
     if (size(cards Hand where Rank is "Eight" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Eight" of next private to Hand of current
     or
-    deal Hand where Rank is "Nine" of next private to Hand of current
     if (size(cards Hand where Rank is "Nine" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Nine" of next private to Hand of current
     or
-    deal Hand where Rank is "Ten" of next private to Hand of current
     if (size(cards Hand where Rank is "Ten" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Ten" of next private to Hand of current
     or
-    deal Hand where Rank is "Jack" of next private to Hand of current
     if (size(cards Hand where Rank is "Jack" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Jack" of next private to Hand of current
     or
-    deal Hand where Rank is "Queen" of next private to Hand of current
     if (size(cards Hand where Rank is "Queen" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "Queen" of next private to Hand of current
     or
-    deal Hand where Rank is "King" of next private to Hand of current
     if (size(cards Hand where Rank is "King" of next) == 0) {
       deal 1 from Deck private to Hand of current
     }
+    deal Hand where Rank is "King" of next private to Hand of current
   }
   cycle to next
 }

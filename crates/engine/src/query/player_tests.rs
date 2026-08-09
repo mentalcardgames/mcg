@@ -589,7 +589,7 @@ fn resolve_players_single_player() {
             name: "P1".to_string(),
         },
     };
-    assert_eq!(Evaluator::resolve_players(&players, &gd), vec![p0]);
+    assert_eq!(Evaluator::resolve_players(&players, &gd), Ok(vec![p0]));
 }
 
 #[test]
@@ -611,28 +611,30 @@ fn resolve_players_player_collection_literal() {
     let players = Players::PlayerCollection {
         player_collection: pc,
     };
-    assert_eq!(Evaluator::resolve_players(&players, &gd), vec![p0, p1]);
+    assert_eq!(Evaluator::resolve_players(&players, &gd), Ok(vec![p0, p1]));
 }
 
 // ── P-17 ────────────────────────────────────────────────────────────────
 
 #[test]
-#[should_panic(expected = "resolve_players: failed to eval player")]
-fn resolve_players_eval_failure_panics() {
+fn resolve_players_eval_failure_errors() {
+    // Fallible since 2026-08: eval failures surface as Err, not panics.
     let gd = GameData::new();
     let players = Players::Player {
         player: PlayerExpr::Runtime {
             runtime: RuntimePlayer::Current,
         },
     };
-    let _ = Evaluator::resolve_players(&players, &gd);
+    assert_eq!(
+        Evaluator::resolve_players(&players, &gd),
+        Err("No current player".to_string())
+    );
 }
 
 // ── P-18 ────────────────────────────────────────────────────────────────
 
 #[test]
-#[should_panic(expected = "resolve_players: player Ghost not found in game_data")]
-fn resolve_players_player_not_in_gamedata_panics() {
+fn resolve_players_player_not_in_gamedata_errors() {
     let mut gd = GameData::new();
     let p0 = gd.add_player("P1".to_string());
     gd.turn_order = vec![p0];
@@ -641,7 +643,10 @@ fn resolve_players_player_not_in_gamedata_panics() {
             name: "Ghost".to_string(),
         },
     };
-    let _ = Evaluator::resolve_players(&players, &gd);
+    assert_eq!(
+        Evaluator::resolve_players(&players, &gd),
+        Err("resolve_players: player Ghost not found in game_data".to_string())
+    );
 }
 
 // ── P-19 ────────────────────────────────────────────────────────────────
@@ -662,21 +667,42 @@ fn resolve_player_collection_literal_happy() {
             },
         ],
     };
-    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), vec![p0, p1]);
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd),
+        Ok(vec![p0, p1])
+    );
 }
 
 // ── P-20 ────────────────────────────────────────────────────────────────
 
 #[test]
-#[should_panic(expected = "resolve_player_collection: failed to eval player")]
-fn resolve_player_collection_literal_eval_failure_panics() {
+fn resolve_player_collection_literal_eval_failure_errors() {
     let gd = GameData::new();
     let pc = PlayerCollection::Literal {
         players: vec![PlayerExpr::Runtime {
             runtime: RuntimePlayer::Current,
         }],
     };
-    let _ = Evaluator::resolve_player_collection(&pc, &gd);
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd),
+        Err("No current player".to_string())
+    );
+}
+
+#[test]
+fn resolve_player_collection_literal_unknown_name_errors() {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("P1".to_string());
+    gd.turn_order = vec![p0];
+    let pc = PlayerCollection::Literal {
+        players: vec![PlayerExpr::Literal {
+            name: "Ghost".to_string(),
+        }],
+    };
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd),
+        Err("resolve_player_collection: player Ghost not found in game_data".to_string())
+    );
 }
 
 // ── P-21 ────────────────────────────────────────────────────────────────
@@ -691,7 +717,7 @@ fn resolve_player_collection_runtime_players_out() {
     let pc = PlayerCollection::Runtime {
         runtime: RuntimePlayerCollection::PlayersOut,
     };
-    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), vec![p0]);
+    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p0]));
 }
 
 #[test]
@@ -704,7 +730,7 @@ fn resolve_player_collection_runtime_players_in() {
     let pc = PlayerCollection::Runtime {
         runtime: RuntimePlayerCollection::PlayersIn,
     };
-    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), vec![p1]);
+    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p1]));
 }
 
 #[test]
@@ -719,55 +745,85 @@ fn resolve_player_collection_runtime_others() {
     let pc = PlayerCollection::Runtime {
         runtime: RuntimePlayerCollection::Others,
     };
-    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), vec![p1]);
+    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p1]));
 }
 
 // ── P-22 ────────────────────────────────────────────────────────────────
 
 #[test]
-fn resolve_player_collection_aggregate_memory_silent_empty() {
+fn resolve_player_collection_aggregate_memory() {
     let mut gd = GameData::new();
     let p0 = gd.add_player("P1".to_string());
-    gd.turn_order = vec![p0];
+    let p1 = gd.add_player("P2".to_string());
+    gd.turn_order = vec![p0, p1];
+    gd.memories
+        .insert("P1_m".to_string(), MemoryValue::PlayerCollection(vec![p1]));
+    gd.memories
+        .insert("P2_m".to_string(), MemoryValue::PlayerCollection(vec![p0]));
     let pc = PlayerCollection::AggregateMemory {
         memory: "m".to_string(),
         multi: front_end::ast::MultiOwner::PlayerCollection {
-            player_collection: Box::new(PlayerCollection::Literal { players: vec![] }),
+            player_collection: Box::new(PlayerCollection::Runtime {
+                runtime: RuntimePlayerCollection::PlayersIn,
+            }),
         },
     };
-    // Quirk: AggregateMemory returns empty vec (silent, no error)
-    let result: Vec<usize> = Evaluator::resolve_player_collection(&pc, &gd);
-    assert!(result.is_empty());
+    // Implemented 2026-08: aggregates the slot across every owner.
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd),
+        Ok(vec![p1, p0])
+    );
 }
 
 #[test]
-fn resolve_player_collection_memory_silent_empty() {
+fn resolve_player_collection_memory_reads_slot() {
     let mut gd = GameData::new();
     let p0 = gd.add_player("P1".to_string());
     gd.turn_order = vec![p0];
+    gd.memories.insert(
+        "Table_m".to_string(),
+        MemoryValue::PlayerCollection(vec![p0]),
+    );
     let pc = PlayerCollection::Memory {
         memory: front_end::ast::UseMemory::WithOwner {
             memory: "m".to_string(),
             owner: Box::new(front_end::ast::Owner::Table),
         },
     };
-    // Quirk: Memory returns empty vec (silent, no error)
-    let result: Vec<usize> = Evaluator::resolve_player_collection(&pc, &gd);
-    assert!(result.is_empty());
+    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p0]));
+}
+
+#[test]
+fn resolve_player_collection_memory_missing_errors() {
+    let gd = GameData::new();
+    let pc = PlayerCollection::Memory {
+        memory: front_end::ast::UseMemory::WithOwner {
+            memory: "m".to_string(),
+            owner: Box::new(front_end::ast::Owner::Table),
+        },
+    };
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd),
+        Err("Memory Table_m not found".to_string())
+    );
 }
 
 // ── P-23 ────────────────────────────────────────────────────────────────
 
 #[test]
-#[should_panic(expected = "PlayerCollection::Aggregate not yet implemented")]
-fn resolve_player_collection_aggregate_panics() {
-    let gd = GameData::new();
+fn resolve_player_collection_aggregate_returns_in_game() {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("P1".to_string());
+    let p1 = gd.add_player("P2".to_string());
+    gd.turn_order = vec![p0, p1];
+    gd.set_player_out(p1);
     let pc = PlayerCollection::Aggregate {
         aggregate: front_end::ast::AggregatePlayerCollection::Quantifier {
             quantifier: front_end::ast::Quantifier::All,
         },
     };
-    let _ = Evaluator::resolve_player_collection(&pc, &gd);
+    // Implemented 2026-08: `all`/`any` resolve to in-game players.
+    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p0]));
 }
 
 // ── P-24 ────────────────────────────────────────────────────────────────

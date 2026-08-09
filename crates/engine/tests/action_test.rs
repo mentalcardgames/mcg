@@ -91,3 +91,51 @@ fn stage_round_counter_incremented_exactly_once_per_traversal() {
         "I-5: stage counter incremented once per traversal, not twice"
     );
 }
+
+/// D-1 regression (2026-08): `cycle to next` with no eligible next player
+/// returns `Err` from `run_game` instead of panicking.
+#[test]
+fn cycle_to_next_with_no_eligible_player_errors() {
+    let ir = load_game("errors_cycle_no_next.cgdsl");
+    let err = match run_game(ir, GameData::new(), always_choice_0(), None, None) {
+        Err(e) => e,
+        Ok(_) => panic!("cycle to next must error, not panic"),
+    };
+    assert!(err.contains("No next player available"), "got: {err}");
+}
+
+/// SetMemory with no current player returns `Err` instead of panicking.
+#[test]
+fn set_memory_without_current_player_errors() {
+    let ir = load_game("errors_set_memory_no_current.cgdsl");
+    let err = match run_game(ir, GameData::new(), always_choice_0(), None, None) {
+        Err(e) => e,
+        Ok(_) => panic!("SetMemory must error, not panic"),
+    };
+    assert!(
+        err.contains("SetMemory requires a current player"),
+        "got: {err}"
+    );
+}
+
+/// D-11 regression (2026-08): a move into an empty `where`-set resolves to
+/// the base location ("Second"), not the location-0 sentinel ("First").
+#[test]
+fn empty_where_set_destination_uses_base_location() {
+    let ir = load_game("fix_empty_where_dest.cgdsl");
+    let gd =
+        run_game(ir, GameData::new(), always_choice_0(), None, None).expect("game should complete");
+    let first = gd.locations.iter().find(|l| l.name == "First").unwrap();
+    let second = gd.locations.iter().find(|l| l.name == "Second").unwrap();
+    assert_eq!(first.cards.len(), 0, "location 0 must NOT receive the card");
+    assert_eq!(second.cards.len(), 1, "base location receives the card");
+}
+
+/// D-5 regression (2026-08): `same Rank` combos match only the paired cards.
+#[test]
+fn combo_same_rank_matches_only_pairs() {
+    let ir = load_game("fix_combo_same_rank.cgdsl");
+    let gd =
+        run_game(ir, GameData::new(), always_choice_0(), None, None).expect("game should complete");
+    assert_eq!(gd.players[0].score, 2, "pair = 2 cards, not 3");
+}

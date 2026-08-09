@@ -1293,14 +1293,21 @@ impl fmt::Display for IfRule {
 
 impl fmt::Display for ChoiceRule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let flows = self
+        // Each option is an `or`-separated sequence of flow components.
+        let options = self
             .options
             .iter()
-            .map(|f| format!("{}", f)) // convert each int to string
-            .collect::<Vec<_>>() // collect into Vec<String>
+            .map(|option| {
+                option
+                    .iter()
+                    .map(|c| format!("{}", c))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .collect::<Vec<_>>()
             .join("\nor\n");
 
-        let s = &format!("choose {{\n {} }}\n", flows);
+        let s = &format!("choose {{\n {} }}\n", options);
         f.write_str(s)
     }
 }

@@ -1,0 +1,16 @@
+// Repro: moving to an empty `where`-set must resolve to the base location,
+// not the location-0 sentinel (fixed 2026-08, D-11). Before the fix the
+// destination evaluated to location index 0 ("First") and the card was
+// mislaid there.
+player P1
+turnorder (P:P1)
+location First on P:P1
+location Second on P:P1
+location Deck on table
+
+card on Deck: Rank(Ace, Two) for Suit(Diamonds)
+
+stage Play for current 1 times {
+  move top(Deck) private to Second where Rank is "Ghost"
+  end stage
+}

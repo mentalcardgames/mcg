@@ -110,17 +110,17 @@ The IR's first edges carry
 `point_maps`, and `memories` are *created*. Order matters:
 
 - `front_end::ast::SetUpRule::CreateLocation` resolves an owner via
-  `Evaluator::resolve_owner_to_names` (plural) and panics on failure
-  (`crates/engine/src/action.rs:92-95`,
-  `panic!("CreateLocation: failed to resolve owner {:?}: {}", owner, e)`), so
-  `CreatePlayer`/`CreateTeams` must precede it. `resolve_owner_to_names` now transparently routes
+  `Evaluator::resolve_owner_to_names` (plural); a resolution failure surfaces as a **recoverable
+  error** (`Err("CreateLocation: failed to resolve owner …")`, since the 2026-08 fallibility pass —
+  previously a panic), so `CreatePlayer`/`CreateTeams` must precede it.
+  `resolve_owner_to_names` now transparently routes
   `Owner::PlayerCollection { Aggregate { Quantifier::All } }` (the post-Stage-5 quantifier owner)
   through `crate::quantifier::resolve_player_candidates` so a setup `CreateLocation` with `Owner =
   All` produces one location per in-game player — see invariant I-10 in
   [`invariants.md`](./invariants.md).
-- `front_end::ast::SetUpRule::CreateCardOnLocation`
-  `panic!("CreateCardOnLocation: location {:?} not found", location)`
-  (`crates/engine/src/action.rs:108-115`) requires the location to already exist.
+- `front_end::ast::SetUpRule::CreateCardOnLocation` requires the location to already exist;
+  a missing location is a recoverable error (`Err("CreateCardOnLocation: location … not found")`,
+  previously a panic).
 - `front_end::ast::SetUpRule::{CreateTeams, CreateTurnorder, CreateTurnorderRandom,
   CreateLocation, CreateMemory, CreateMemoryWithMemoryType}` whose element collection is a
   `Quantifier::Any` are *rejected before dispatch* by the interpreter's setup-`Any` guard — see

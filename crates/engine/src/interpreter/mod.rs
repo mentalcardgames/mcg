@@ -98,8 +98,7 @@ impl Interpreter {
                     });
                 }
             }
-            self.execute_edge(edge);
-            return StepResult::Ok;
+            return self.dispatch(edge);
         }
 
         // (C0) Resume an in-flight quantifier prompt if its input has arrived.
@@ -167,8 +166,7 @@ impl Interpreter {
                             event: TraceEvent::Action { subtype, detail },
                         });
                     }
-                    self.execute_edge(edge.clone());
-                    StepResult::Ok
+                    self.dispatch(edge.clone())
                 }
                 Payload::Choice => {
                     let options: Vec<String> = self.ir.edge_labels(self.current_state);
@@ -184,7 +182,7 @@ impl Interpreter {
                             });
                         }
                         if let Some(choice_edge) = edges.get(input.idx()) {
-                            self.execute_edge(choice_edge.clone());
+                            return self.dispatch(choice_edge.clone());
                         }
                         StepResult::Ok
                     } else {
@@ -209,7 +207,7 @@ impl Interpreter {
                             (sender)(TraceEntry::Step { from, to, event });
                         }
                         if let Some(opt_edge) = edges.get(input.idx()) {
-                            self.execute_edge(opt_edge.clone());
+                            return self.dispatch(opt_edge.clone());
                         }
                         StepResult::Ok
                     } else {
@@ -257,8 +255,7 @@ impl Interpreter {
                         edges.get(1)
                     };
                     if let Some(e) = edge {
-                        self.execute_edge(e.clone());
-                        StepResult::Ok
+                        self.dispatch(e.clone())
                     } else {
                         StepResult::Error("Failed to get condition edge".to_string())
                     }
@@ -306,8 +303,7 @@ impl Interpreter {
                         self.game_data.leave_stage(stage.clone());
                     }
                     if let Some(e) = edge {
-                        self.execute_edge(e.clone());
-                        StepResult::Ok
+                        self.dispatch(e.clone())
                     } else {
                         StepResult::Error("Failed to get end condition edge".to_string())
                     }
@@ -326,8 +322,7 @@ impl Interpreter {
                             },
                         });
                     }
-                    self.execute_edge(edge.clone());
-                    StepResult::Ok
+                    self.dispatch(edge.clone())
                 }
                 Payload::EndStage(stage) => {
                     self.game_data.leave_stage(stage.clone());
@@ -340,8 +335,7 @@ impl Interpreter {
                             },
                         });
                     }
-                    self.execute_edge(edge.clone());
-                    StepResult::Ok
+                    self.dispatch(edge.clone())
                 }
                 Payload::Trigger => {
                     if let Some(ref sender) = self.trace_sender {
@@ -351,8 +345,7 @@ impl Interpreter {
                             event: TraceEvent::Trigger,
                         });
                     }
-                    self.execute_edge(edge.clone());
-                    StepResult::Ok
+                    self.dispatch(edge.clone())
                 }
             }
         } else {
@@ -363,9 +356,21 @@ impl Interpreter {
         }
     }
 
-    pub fn execute_edge(&mut self, edge: Edge<LoweredPayLoad>) {
+    /// Advances `current_state` to `edge.to` and executes the edge's payload.
+    /// Fallible since 2026-08: action-evaluation failures surface as
+    /// `Err(String)` instead of panicking.
+    pub fn execute_edge(&mut self, edge: Edge<LoweredPayLoad>) -> Result<(), String> {
         self.current_state = edge.to;
-        crate::action::execute(edge.payload, &mut self.game_data);
+        crate::action::execute(edge.payload, &mut self.game_data)
+    }
+
+    /// `execute_edge` followed by `StepResult::Ok`/`StepResult::Error` mapping —
+    /// the standard shape of the per-`Payload` dispatch arms.
+    fn dispatch(&mut self, edge: Edge<LoweredPayLoad>) -> StepResult {
+        match self.execute_edge(edge) {
+            Ok(()) => StepResult::Ok,
+            Err(e) => StepResult::Error(e),
+        }
     }
 
     /// Pushes input to the input buffer.

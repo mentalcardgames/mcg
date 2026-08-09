@@ -171,13 +171,11 @@ fn get_first_terminals(
             }
 
             // 3. Recurse into the rule definition
-            if !visited.contains(name) {
-                if let Some(sub_expr) = rule_map.get(name) {
-                    visited.push(name.clone());
-                    let res = get_first_terminals(sub_expr, rule_map, visited);
-                    visited.pop();
-                    return res;
-                }
+            if !visited.contains(name) && let Some(sub_expr) = rule_map.get(name) {
+                visited.push(name.clone());
+                let res = get_first_terminals(sub_expr, rule_map, visited);
+                visited.pop();
+                return res;
             }
             vec![]
         }
@@ -216,11 +214,9 @@ fn can_be_empty(expr: &Expr, rule_map: &HashMap<String, &Expr>, visited: &mut Ve
     match expr {
         Expr::Opt(_) | Expr::Rep(_) => true,
         Expr::Ident(name) => {
-            if !visited.contains(name) {
-                if let Some(sub_expr) = rule_map.get(name) {
-                    visited.push(name.clone());
-                    return can_be_empty(sub_expr, rule_map, visited);
-                }
+            if !visited.contains(name) && let Some(sub_expr) = rule_map.get(name) {
+                visited.push(name.clone());
+                return can_be_empty(sub_expr, rule_map, visited);
             }
             false
         },

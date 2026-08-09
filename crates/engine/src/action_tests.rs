@@ -125,7 +125,8 @@ fn flip_action_is_currently_a_noop() {
             status: Status::FaceUp,
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.cards, before_cards, "FlipAction must not mutate cards");
     assert_eq!(
         loc_snapshot(&gd),
@@ -146,7 +147,8 @@ fn bid_action_is_currently_a_noop() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(player_snapshot(&gd), before_players);
     assert_eq!(gd.memories, before_memories);
 }
@@ -164,7 +166,8 @@ fn bid_memory_action_is_currently_a_noop() {
             owner: Owner::Table,
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.memories, before.memories);
 }
 
@@ -179,7 +182,8 @@ fn demand_action_is_currently_a_noop() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(player_snapshot(&gd), before);
 }
 
@@ -195,7 +199,8 @@ fn demand_memory_action_is_currently_a_noop() {
             memory: "d".to_string(),
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.memories, before.memories);
 }
 
@@ -215,7 +220,8 @@ fn end_action_game_with_winner_is_currently_a_noop() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(
         gd.players[p0].in_game, before.players[p0].in_game,
         "GameWithWinner must not flip in_game (currently a TODO no-op)"
@@ -241,7 +247,7 @@ fn move_type_place_is_currently_a_noop() {
         from_loc: token_loc("Stock"),
         to_loc: token_loc("Hand"),
     };
-    execute_move(MoveType::Place { token }, &mut gd);
+    execute_move(MoveType::Place { token }, &mut gd).unwrap();
     assert_eq!(
         loc_snapshot(&gd),
         before,
@@ -266,7 +272,8 @@ fn scoring_rule_score_adds_to_player_score() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.players[p0].score, 10, "Score should add 10 to Alice");
 }
 
@@ -287,7 +294,8 @@ fn scoring_rule_score_memory_writes_to_memory_slot() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     match gd.get_memory("Alice_m") {
         Some(crate::game_data::MemoryValue::Int(n)) => assert_eq!(*n, 10),
         other => panic!("expected Int(10), got {:?}", other),
@@ -313,7 +321,8 @@ fn scoring_rule_winner_eliminates_non_winners() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert!(gd.players[p0].in_game, "Alice should still be in game");
     assert!(!gd.players[p1].in_game, "Bob should be eliminated");
 }
@@ -336,7 +345,8 @@ fn scoring_rule_winner_with_eliminates_lowest_score() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert!(
         gd.players[p0].in_game,
         "Alice (score=10) should win on highest score"
@@ -376,7 +386,8 @@ fn out_action_current_stage_clears_in_stage_flag() {
             out_of: OutOf::CurrentStage,
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(
         gd.players[0].in_stage.get("Play"),
         Some(&false),
@@ -409,7 +420,8 @@ fn out_action_named_stage_clears_named_flag() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.players[0].in_stage.get("Sub"), Some(&false));
     assert_eq!(
         gd.players[0].in_stage.get("Play"),
@@ -431,7 +443,8 @@ fn out_action_game_sets_in_game_false() {
             out_of: OutOf::Game,
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert!(!gd.players[0].in_game, "Alice out of game");
     assert!(gd.players[1].in_game, "Bob still in game");
 }
@@ -449,7 +462,8 @@ fn out_action_game_successful_sets_in_game_false() {
             out_of: OutOf::GameSuccessful,
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert!(!gd.players[0].in_game);
 }
 
@@ -466,7 +480,8 @@ fn out_action_game_fail_sets_in_game_false() {
             out_of: OutOf::GameFail,
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert!(!gd.players[0].in_game);
 }
 
@@ -483,7 +498,8 @@ fn end_action_turn_advances_current_player() {
             end_type: EndType::Turn,
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(
         gd.current_player,
         Some(1),
@@ -499,7 +515,8 @@ fn end_action_current_stage_leaves_stage() {
             end_type: EndType::CurrentStage,
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert!(
         gd.stage_stack.is_empty(),
         "EndAction::CurrentStage pops the current stage"
@@ -521,7 +538,8 @@ fn end_action_named_stage_leaves_named_stage() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     // leave_stage("Play") pops Sub and Play
     assert!(gd.stage_stack.is_empty());
 }
@@ -542,7 +560,8 @@ fn cycle_action_sets_current_player_to_named_player() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(
         gd.current_player,
         Some(1),
@@ -551,22 +570,28 @@ fn cycle_action_sets_current_player_to_named_player() {
 }
 
 #[test]
-#[should_panic(expected = "failed to eval player")]
-fn cycle_action_panics_when_player_eval_fails() {
+fn cycle_action_eval_failure_errors() {
+    // Fallible since 2026-08: eval failures surface as Err, not panics.
     let mut gd = two_players_in_play_stage();
     let expr = PlayerExpr::Memory {
         memory: UseSingleMemory::Memory {
             memory: "nonexistent".to_string(),
         },
     };
-    execute_action_rule(ActionRule::CycleAction { player: expr }, &mut gd);
+    let result = execute_action_rule(ActionRule::CycleAction { player: expr }, &mut gd);
+    assert_eq!(
+        result,
+        Err(
+            "CycleAction: failed to eval player Memory { memory: Memory { memory: \"nonexistent\" } }: memory access requires an explicit owner; use &M:nonexistent of <owner>"
+                .to_string()
+        )
+    );
 }
 
 #[test]
-#[should_panic(expected = "not found")]
-fn cycle_action_panics_when_player_not_in_players() {
+fn cycle_action_unknown_player_errors() {
     let mut gd = two_players_in_play_stage();
-    execute_action_rule(
+    let result = execute_action_rule(
         ActionRule::CycleAction {
             player: PlayerExpr::Literal {
                 name: "Ghost".to_string(),
@@ -574,22 +599,29 @@ fn cycle_action_panics_when_player_not_in_players() {
         },
         &mut gd,
     );
+    assert_eq!(
+        result,
+        Err("CycleAction: player Ghost not found in game_data.players".to_string())
+    );
 }
 
 #[test]
-#[should_panic(expected = "not in turn_order")]
-fn cycle_action_panics_when_player_not_in_turn_order() {
+fn cycle_action_player_not_in_turn_order_errors() {
     let mut gd = GameData::new();
     let p0 = gd.add_player("Alice".to_string());
     let _p1 = gd.add_player("Bob".to_string());
     gd.turn_order = vec![p0]; // Bob is in players but NOT in turn_order
-    execute_action_rule(
+    let result = execute_action_rule(
         ActionRule::CycleAction {
             player: PlayerExpr::Literal {
                 name: "Bob".to_string(),
             },
         },
         &mut gd,
+    );
+    assert_eq!(
+        result,
+        Err("CycleAction: player_idx 1 not in turn_order [0]".to_string())
     );
 }
 
@@ -624,7 +656,8 @@ fn shuffle_action_preserves_card_set_membership() {
             card_set: loc_cardset("Stock"),
         },
         &mut gd,
-    );
+    )
+    .unwrap();
 
     let mut after = gd.locations[stock].cards.clone();
     after.sort();
@@ -633,17 +666,18 @@ fn shuffle_action_preserves_card_set_membership() {
 }
 
 #[test]
-fn shuffle_action_on_missing_location_is_silent_noop() {
-    // ShuffleAction prints to stderr and continues when eval_cardset fails.
-    // Assert no panic and no mutation.
+fn shuffle_action_on_missing_location_errors() {
+    // ShuffleAction now surfaces eval failures as Err (recoverable) instead
+    // of printing to stderr and continuing.
     let mut gd = GameData::new();
     let before = loc_snapshot(&gd);
-    execute_action_rule(
+    let result = execute_action_rule(
         ActionRule::ShuffleAction {
             card_set: loc_cardset("Ghost"),
         },
         &mut gd,
     );
+    assert!(result.is_err(), "missing location must be an error");
     assert_eq!(
         loc_snapshot(&gd),
         before,
@@ -669,7 +703,8 @@ fn set_memory_action_stores_evaluated_int() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.get_memory("Alice_counter"), Some(&MemoryValue::Int(42)));
 }
 
@@ -685,7 +720,8 @@ fn reset_memory_action_zeros_int() {
             memory: "counter".to_string(),
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.get_memory("Alice_counter"), Some(&MemoryValue::Int(0)));
 }
 
@@ -707,7 +743,8 @@ fn move_classic_moves_all_cards_when_no_quantity() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.locations[stock].cards.len(), 0, "Stock emptied");
     assert_eq!(gd.locations[hand].cards.len(), 3, "Hand got all 3");
 }
@@ -729,7 +766,8 @@ fn move_classic_move_quantity_moves_only_n_cards() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.locations[stock].cards.len(), 1, "1 left in Stock");
     assert_eq!(gd.locations[hand].cards.len(), 2, "2 moved to Hand");
 }
@@ -748,7 +786,8 @@ fn move_deal_routes_to_execute_cardset_move() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.locations[stock].cards.len(), 0);
     assert_eq!(gd.locations[hand].cards.len(), 3);
 }
@@ -767,7 +806,8 @@ fn move_exchange_routes_to_execute_cardset_move() {
             },
         },
         &mut gd,
-    );
+    )
+    .unwrap();
     assert_eq!(gd.locations[stock].cards.len(), 0);
     assert_eq!(gd.locations[hand].cards.len(), 3);
 }
@@ -777,8 +817,7 @@ fn move_exchange_routes_to_execute_cardset_move() {
 // ---------------------------------------------------------------------------
 
 #[test]
-#[should_panic(expected = "failed to eval from cardset")]
-fn execute_cardset_move_panics_when_from_eval_fails() {
+fn execute_cardset_move_from_eval_failure_errors() {
     let mut gd = GameData::new();
     let _p = gd.add_player("Alice".to_string());
     let _hand = gd.add_location(
@@ -794,12 +833,15 @@ fn execute_cardset_move_panics_when_from_eval_fails() {
         },
     };
     let to = loc_cardset("Hand");
-    execute_cardset_move(from, None, Status::Private, to, &mut gd);
+    let result = execute_cardset_move(from, None, Status::Private, to, &mut gd);
+    assert_eq!(
+        result,
+        Err("execute_cardset_move: failed to eval from cardset Memory { memory: Memory { memory: \"ghost\" } }: memory access requires an explicit owner; use &M:ghost of <owner>".to_string())
+    );
 }
 
 #[test]
-#[should_panic(expected = "failed to eval dest cardset")]
-fn execute_cardset_move_panics_when_to_eval_fails() {
+fn execute_cardset_move_to_eval_failure_errors() {
     let mut gd = GameData::new();
     let _p = gd.add_player("Alice".to_string());
     let stock = gd.add_location(
@@ -817,7 +859,11 @@ fn execute_cardset_move_panics_when_to_eval_fails() {
             memory: "ghost".to_string(),
         },
     };
-    execute_cardset_move(from, None, Status::Private, to, &mut gd);
+    let result = execute_cardset_move(from, None, Status::Private, to, &mut gd);
+    assert_eq!(
+        result,
+        Err("execute_cardset_move: failed to eval dest cardset Memory { memory: Memory { memory: \"ghost\" } }: memory access requires an explicit owner; use &M:ghost of <owner>".to_string())
+    );
 }
 
 /// Pin for the corrected `>=` guard introduced in plan-2 Task 1. The guard
@@ -828,8 +874,7 @@ fn execute_cardset_move_panics_when_to_eval_fails() {
 /// `#[ignore]` to document the intent without producing a flaky failure.
 #[test]
 #[ignore = "requires a CardSet variant whose eval yields locations.len()"]
-#[should_panic(expected = ">= locations.len()")]
-fn execute_cardset_move_panics_when_dest_index_at_len() {
+fn execute_cardset_move_errors_when_dest_index_at_len() {
     let mut gd = GameData::new();
     let stock = gd.add_location(
         "Table".to_string(),
@@ -842,7 +887,8 @@ fn execute_cardset_move_panics_when_dest_index_at_len() {
     gd.locations[stock].cards.push(card_id);
     let from = loc_cardset("Stock");
     let to = loc_cardset("Ghost");
-    execute_cardset_move(from, None, Status::Private, to, &mut gd);
+    let result = execute_cardset_move(from, None, Status::Private, to, &mut gd);
+    assert!(result.is_err());
 }
 
 // ---------------------------------------------------------------------------
@@ -850,13 +896,11 @@ fn execute_cardset_move_panics_when_dest_index_at_len() {
 // ---------------------------------------------------------------------------
 
 #[test]
-#[should_panic(expected = "failed to resolve owner")]
-fn create_location_panics_when_owner_name_missing() {
+fn create_location_owner_resolve_failure_errors() {
     // Use `PlayerExpr::Runtime { Next }` against an empty `GameData` so
-    // `resolve_owner_to_names` returns `Err` and trips the panic at
-    // `action.rs:94` (`CreateLocation: failed to resolve owner …`).
+    // `resolve_owner_to_names` returns `Err` (fallible since 2026-08).
     let mut gd = GameData::new();
-    execute_setup_rule(
+    let result = execute_setup_rule(
         SetUpRule::CreateLocation {
             locations: vec!["Hand".to_string()],
             owner: Owner::Player {
@@ -867,17 +911,24 @@ fn create_location_panics_when_owner_name_missing() {
         },
         &mut gd,
     );
+    assert_eq!(
+        result,
+        Err("CreateLocation: failed to resolve owner Player { player: Runtime { runtime: Next } }: No current stage".to_string())
+    );
 }
 
 #[test]
-#[should_panic(expected = "location")]
-fn create_card_on_location_panics_when_location_missing() {
+fn create_card_on_location_missing_location_errors() {
     let mut gd = GameData::new();
-    execute_setup_rule(
+    let result = execute_setup_rule(
         SetUpRule::CreateCardOnLocation {
             location: "Ghost".to_string(),
             cards: vec![],
         },
         &mut gd,
+    );
+    assert_eq!(
+        result,
+        Err("CreateCardOnLocation: location \"Ghost\" not found".to_string())
     );
 }

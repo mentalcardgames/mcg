@@ -14,21 +14,25 @@ last_validated: 2026-08-09
 
 ## Engine correctness (small-to-medium projects)
 
-- **Graceful error handling instead of panics.** Replace the remaining panic
-  sites (D-1 `cycle to next`, `SetMemory`/`ResetMemory` without a current
-  player, `CreateLocation`/`CreateCardOnLocation` setup failures) with
-  recoverable `StepResult::Error`s by moving fallible resolution into the
-  interpreter. Small, well-scoped, high value.
-- **Collection-memory aggregation.** Implement the four `todo!()` evaluator
-  arms (D-4) so `size`/`sum`/`at` work over multi-owner memories — unlocks
-  team and cross-player bookkeeping.
-- **Combo semantics.** Fix per-card `same`/`distinct` combo matching (D-5) and
-  pin combo behaviour with fixtures.
-- **Card status / tokens.** Add a card-status map to `GameData`, implement
-  `FlipAction` and `Place`/tokens (D-6) — prerequisite for face-down
-  mechanics and privacy-aware play.
-- **Bidding/demand.** Write the semantic spec first, then implement
-  `BidAction`/`DemandAction` (D-7). Good project for a thesis that starts from
+- **~~Graceful error handling instead of panics~~** — DONE 2026-08-09: `action::execute`
+  and `Interpreter::execute_edge` are fallible; every DSL-reachable panic site
+  (incl. `cycle to next`, `SetMemory`/`ResetMemory`) now returns
+  `StepResult::Error`. Remaining work: make `end turn` with nobody eligible a
+  recoverable error too (currently silently sets `current_player = None`), and
+  remove the two internal `GameData` panics (`add_location`, `next_player`) by
+  making those methods fallible.
+- **~~Collection-memory aggregation~~** — DONE 2026-08-09 (the four `todo!()` arms
+  plus the silent-empty `PlayerCollection` memory reads). Follow-up: `SetMemory`
+  still inserts typed empty defaults for collection types — evaluate the actual
+  collections once the grammar supports them.
+- **~~Combo semantics~~** — DONE 2026-08-09 (group-wise evaluation). Follow-up:
+  pin straight/flush detection patterns (combos + filters) with fixtures.
+- **Card status / tokens (D-6).** The `card_statuses` slot now exists in
+  `GameData`; implement `FlipAction` (de/encrypt a card's face) and
+  `Place`/tokens with card cryptography. Prerequisite for face-down mechanics
+  and privacy-aware play.
+- **Bidding/demand (D-7).** Write the semantic spec first, then implement
+  `BidAction`/`DemandAction`. Good project for a thesis that starts from
   game-theory requirements.
 
 ## DSL / parser work (front_end)
@@ -64,6 +68,11 @@ last_validated: 2026-08-09
 
 ## Testing / tooling
 
+- **Injectable engine RNG.** `ShuffleAction`/`CreateTurnorderRandom` use
+  `rand::thread_rng()`; a seeded RNG (via `run_game` argument or
+  `GameData` field) would make games fully reproducible — enabling golden
+  replays and deterministic random-input tests (currently only the input
+  sequence is seed-reproducible; see `tests/random_play_test.rs`).
 - **Property-based DSL tests.** `front_end` already ships proptest
   generators; extend them to the engine (arbitrary `GameData` + IR, assert
   invariants I-1..I-23 hold after every `step()`).

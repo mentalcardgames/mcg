@@ -141,13 +141,15 @@ not a queue; the `validate_int_range` re-prompt path can re-push (see I-19).
 **`Interpreter::execute_edge`** — direct edge dispatch (advanced).
 
 ```rust
-// crates/engine/src/interpreter/mod.rs:366
-pub fn execute_edge(&mut self, edge: Edge<LoweredPayLoad>)
+// crates/engine/src/interpreter/mod.rs
+pub fn execute_edge(&mut self, edge: Edge<LoweredPayLoad>) -> Result<(), String>
 ```
 
 Intent: sets `current_state = edge.to` and calls
-`crate::action::execute(edge.payload, &mut self.game_data)`. Exposed for quantifier-driver resume
-and tests; a UI host normally never calls this.
+`crate::action::execute(edge.payload, &mut self.game_data)`. Fallible since
+2026-08: action-evaluation failures (e.g. `cycle to next` with no eligible
+*other* player) surface as `Err(String)` instead of panicking. Exposed for
+quantifier-driver resume and tests; a UI host normally never calls this.
 
 **`cgdsl_engine::IrExt`** — the single `pub` trait (consumed, not implemented, by hosts).
 

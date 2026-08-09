@@ -1,0 +1,12 @@
+// Repro: `cycle to next` with no eligible next player must surface as a
+// recoverable error, not a panic (fixed 2026-08, D-1 / I-13 — resolve_turn
+// never considers the current player, so with both players out there is no
+// next player).
+player P1, P2
+turnorder (P:P1, P:P2)
+
+stage Play for current 1 times {
+  set P:P1 out of game
+  set P:P2 out of game
+  cycle to next
+}

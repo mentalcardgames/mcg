@@ -43,19 +43,19 @@ last_validated: 2026-08-09
 
 | Construct | Grammar | IR | Engine | Status | Notes |
 |---|---|---|---|---|---|
-| `flip X to face up/down/private` | ✅ | ✅ | ❌ | ❌ | Silent no-op — cards have no status field. |
-| `shuffle X` | ✅ | ✅ | ✅ | ✅ | Shuffles only the selected cards in place; unselected cards in the location stay put (fixed 2026-08-09). |
+| `flip X to face up/down/private` | ✅ | ✅ | ❌ | ❌ | Silent no-op, **by design**: the per-card status slot (`GameData::card_statuses`) exists but is unused; `FlipAction` should become (de)encryption when card cryptography lands (`engine-vs-design.md` §1b). |
+| `shuffle X` | ✅ | ✅ | ✅ | ✅ | Shuffles only the selected cards in place; unselected cards in the location stay put (fixed 2026-08-09). Eval failures are recoverable errors (were `eprintln!` + continue). |
 | `set <players> out of game` / `of stage` / `of Play` | ✅ | ✅ | ✅ | ✅ | `GameSuccessful`/`GameFail` behave identically to `Game` (no success/fail tracking). |
-| `M is <expr>` (SetMemory) | ✅ | ✅ | ✅ | ⚠️ | **No `of owner` clause in grammar** — key is prefixed with the *current player's* name (bridge, see `developer-notes.md` §1.1). Collection types insert typed empty defaults. Panics with no current player. |
-| `reset M` | ✅ | ✅ | ✅ | ⚠️ | Same owner-bridge; only resets `Int` memories (silent no-op otherwise). |
-| `cycle to next` / `cycle to P:P2` | ✅ | ✅ | ✅ | ⚠️ | **Panics** when no eligible *other* player exists (`resolve_turn` never considers the current player, I-13). Games must guard with `if (size(playersin) >= 2)`. |
+| `M is <expr>` (SetMemory) | ✅ | ✅ | ✅ | ⚠️ | **No `of owner` clause in grammar** — key is prefixed with the *current player's* name (bridge, see `developer-notes.md` §1.1); errors (recoverably) with no current player. Collection types insert typed empty defaults. |
+| `reset M` | ✅ | ✅ | ✅ | ⚠️ | Same owner-bridge; only resets `Int` memories (silent no-op otherwise); errors (recoverably) with no current player. |
+| `cycle to next` / `cycle to P:P2` | ✅ | ✅ | ✅ | ✅ | No longer panics (fixed 2026-08-09): with no eligible *other* player (`resolve_turn` never considers the current player, I-13) it returns a recoverable `StepResult::Error` ("No next player available"). Games still guard with `if (size(playersin) >= 2)` to keep the turn flowing. |
 | `bid ...` / `bid M ...` | ✅ | ✅ | ❌ | ❌ | No-op (semantics never specified). |
 | `demand ...` / `demand ... as M` | ✅ | ✅ | ❌ | ❌ | No-op (semantics never specified). |
-| `end turn` | ✅ | ✅ | ✅ | ✅ | `next_player()`. |
+| `end turn` | ✅ | ✅ | ✅ | ✅ | `next_player()` — with nobody eligible this leaves `current_player = None` (no error). |
 | `end stage` | ✅ | ✅ | ✅ | ✅ | `CurrentStage` — leaves the current stage; IR jumps to the stage's exit (unreachable-code check downstream). |
 | `end Play` (named stage) | ✅ | ✅ | ✅ | ✅ | `Stage { name }` — jumps to that stage's exit. |
 | `end game with winner <players>` | ✅ | ✅ | ⚠️ | ⚠️ | IR jumps straight to the goal state; the action arm is an empty TODO (harmless — the jump ends the game). |
-| `deal <qty> from X <status> to Y` | ✅ | ✅ | ✅ | ✅ | Status is parsed but **ignored**. Quantity: literal ints ✅; runtime int exprs fall back to 1 (`resolve_quantity` evals against an empty `GameData`, D-5); `any` → `ChooseCards` prompt; range → prompt + re-prompt. |
+| `deal <qty> from X <status> to Y` | ✅ | ✅ | ✅ | ✅ | Status is parsed but **ignored**. Quantity: literal ints ✅; runtime int exprs evaluated against the **live** state (fixed 2026-08-09) and errors propagate; `any` → `ChooseCards` prompt; range → prompt + re-prompt. |
 | `exchange ...` / `move ...` (Classic) | ✅ | ✅ | ✅ | ✅ | Same code path as deal. |
 | `place ... token ...` | ✅ | ✅ | ❌ | ❌ | No-op. |
 
@@ -71,7 +71,7 @@ last_validated: 2026-08-09
 | `until end` | ✅ | ✅ | ✅ | ✅ | Infinite loop; exit only via `end stage`/`end game` inside. |
 | `if (bool) { ... }` | ✅ | ✅ | ✅ | ✅ | No `else` — use two complementary `if`s or `conditional`. |
 | `conditional { case (bool): ... case else: ... }` | ✅ | ✅ | ✅ | ⚠️ | `case (A > B)` fails to parse when both operands are complex int exprs (PEG greediness, D-3) — use sequential `if`s. |
-| `choose { ... or ... }` | ✅ | ✅ | ✅ | ✅ | One edge per option; `InputType::Choice`; options labelled by the first payload of each branch. |
+| `choose { ... or ... }` | ✅ | ✅ | ✅ | ✅ | One edge per `or`-separated option; each option is a *sequence* of flow components (e.g. `choose { deal X; if Y {} or deal Z }` = two options of two and one components — fixed 2026-08-09, previously every component became its own option). `InputType::Choice`; options labelled by the first payload of each branch. |
 | `optional { ... }` | ✅ | ✅ | ✅ | ✅ | Accept → body; decline → nothing (no else-branch action is possible — standing/refusal cannot be recorded). |
 | `trigger { ... }` | ✅ | ✅ | ✅ | ✅ | Body auto-executes once (payload itself is a no-op by design). |
 
@@ -102,21 +102,23 @@ last_validated: 2026-08-09
 |---|---|---|
 | literal, `(A + B)` binary | ✅ | `div` by zero → recoverable error. |
 | `turnorder[N]`, collection-at | ✅ | |
-| `size(cards X)` | ✅ | Syntax requires the `cards` prefix. `size(playersin)` / `playersout` / `others` ✅; `size(<PlayerCollection::Aggregate>)` → `todo!()` panic if ever reached directly (quantifier intercepts before). |
+| `size(cards X)` | ✅ | Syntax requires the `cards` prefix. `size(playersin)` / `playersout` / `others` ✅; `size((&P:M of all))` aggregates the slot across owners (implemented 2026-08-09). |
 | `sum of X using PM` | ✅ | Sums point-map values over the cardset. |
 | `min/max of X using PM` (ExtremaCardset) | ✅ | Returns card id; `min of top(...)` gives the card's value. |
 | stage round counters | ✅ | `stageroundcounter`, `stageroundcounter(Stage)`; `"No current stage"` error otherwise. |
 | `(&I:M of <owner>)` memory read | ✅ | Owner required — bare `&I:M` parses but **errors** ("memory access requires an explicit owner"). |
+| collection-memory aggregation `(&I:M of all)` | ✅ | Implemented 2026-08-09: one value per owner holding the slot; missing slot or wrong type → recoverable error. |
 
 ### StringExpr / PlayerExpr / TeamExpr
 | Construct | Status | Notes |
 |---|---|---|
 | `"literal"` | ✅ | Quoted. |
 | `key of top(Loc)` (KeyOf) | ✅ | |
-| `current` / `next` / `previous` / `competitor` | ⚠️ | `next` errors ("No next player available") when no eligible *other* player; `previous` ignores in-game/stage flags; `competitor` = first team-mate ≠ current. |
+| `current` / `next` / `previous` / `competitor` | ⚠️ | `next` errors ("No next player available") when no eligible *other* player — **recoverable since 2026-08-09** (`cycle to next` no longer panics); `previous` ignores in-game/stage flags; `competitor` = first team-mate ≠ current. |
 | `owner of <card position>` / `owner of min/max <memory>` | ✅ | `owner of memory` key order fixed 2026-08-09 (`P1_M`, was `M_P1`). |
-| player memory `(&P:M of ...)` | ⚠️ | PlayerCollection memory → first index; String memory → name; Int → error. |
+| player memory `(&P:M of ...)` | ✅ | PlayerCollection memory → first index; String memory → name; Int → error. |
 | `team of <player>` | ✅ | |
+| player collection memory `(&PC:M of all)` / `(&PC:M of ...)` | ✅ | Implemented 2026-08-09: reads the slot; the `of all`/multi-owner form aggregates across owners (was a silent `vec![]`). |
 
 ### CardPosition / CardSet / filters
 | Construct | Status | Notes |
@@ -124,9 +126,9 @@ last_validated: 2026-08-09
 | `top(Loc)` / `bottom(Loc)` / `Loc[N]` | ✅ | Index 0 = top. Bare location names resolve: current player's → Table's → any. |
 | `min/max of X using PM` / `using Precedence` | ✅ | |
 | `X of <owner>` (GroupOwner) | ✅ | Plain-location fast path (owner-resolved). `where`-groups are owner-resolved since 2026-08-09 (D-7); team/collection owners error. |
-| `X where <filter>` | ✅ | Filters: `size(...)`, `same K`, `distinct K`, `adjacent K using P`, `K higher/lower than "V" using P`, `K is "V"`/`is not`, `combo C`/`not combo C`, binary `(A and B)`. |
-| `combo C in X` / `not combo C in X` | ⚠️ | Per-card combo matching of `same`/`distinct` is broken (D-9). |
-| cardset memory `(&CS:M of ...)` | ⚠️ | Location inferred from the first card; falls back to location-0 sentinel (I-14) — a dest move may target the wrong pile. |
+| `X where <filter>` | ✅ | Filters: `size(...)`, `same K`, `distinct K`, `adjacent K using P`, `K higher/lower than "V" using P`, `K is "V"`/`is not`, `combo C`/`not combo C`, binary `(A and B)`. An empty filter result reports the base location (fixed 2026-08-09 — was the location-0 sentinel). |
+| `<combo> in X` / `not <combo> in X` | ✅ | Read-side syntax is the combo *name* (no `combo` keyword): `Pair in Hand`. Combos evaluate group-wise like `where` (fixed 2026-08-09 — per-card `same`/`distinct` matching was broken). |
+| cardset memory `(&CS:M of ...)` | ⚠️ | Location inferred from the first card; falls back to location-0 sentinel (I-14/D-15) — a dest move may target the wrong pile. |
 
 ## 6. Scoring
 

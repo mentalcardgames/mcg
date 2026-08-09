@@ -71,18 +71,15 @@ Move (3/4): Deal, Exchange, Classic.
 
 **CLI:** Interactive + test-file mode with player name tracking.
 
-**Tests:** 406 unit (1 ignored) + 57 integration tests passing across 11 `tests/` files (2026-08). 63 `.cgdsl` fixture files in `test_games/` (including the five handoff demo games: `blackjack.cgdsl`, `war.cgdsl`, `crazy_eights.cgdsl`, `five_card_draw.cgdsl`, `go_fish.cgdsl`).
+**Tests:** 414 unit (1 ignored) + 74 integration tests passing across 12 `tests/` files (2026-08). 75 `.cgdsl` fixture files in `test_games/` (including the five handoff demo games: `blackjack.cgdsl`, `war.cgdsl`, `crazy_eights.cgdsl`, `five_card_draw.cgdsl`, `go_fish.cgdsl`, the `errors_*` / `fix_*` regression fixtures, and the five `behavior_*` deterministic fixtures).
 
 ### 2.2 Not Implemented
 
-**`todo!()` Panics (4 sites):**
-
-| File | Line | Message | Triggered by |
-|------|------|---------|-------------|
-| `query/player.rs:246` | `PlayerCollection::Aggregate` | `end game with winner(for all ...)`, `OutOfPlayer` |
-| `query/int.rs:173` | `IntCollection::AggregateMemory` | `SizeOf`, `IntCollectionAt` |
-| `query/int.rs:266` | `TeamCollection::AggregateMemory` | `SizeOf` of TeamCollection |
-| `query/string.rs:60` | `StringCollection::AggregateMemory` | `StringCollectionAt`, `SizeOf` |
+**`todo!()` Panics (none remain):** all four collection-memory `todo!()` sites
+(`query/player.rs:240`, `query/int.rs:170,257`, `query/string.rs:55`) were implemented on
+2026-08-09 (multi-owner aggregation), and every DSL-reachable panic in `action.rs` became a
+recoverable `Err` (see `error-handling.md` §2). The only remaining panics are internal
+invariants (`add_location`, `next_player`) or unreachable-by-construction (`alloc_synth`).
 
 **Silent No-Ops / Stubs (11 action variants):**
 
@@ -94,12 +91,10 @@ Game end: `EndType::GameWithWinner` — empty body.
 
 SetMemory collection sub-variants: `PlayerCollection`, `StringCollection`, `TeamCollection`, `IntCollection`, `LocationCollection`, `CardSet` — insert empty defaults instead of evaluating.
 
-**Query — Silent Empty Returns:**
+**Query — Silent Empty Returns (fixed 2026-08-09):**
 
-| File:line | Variant | Returns |
-|-----------|---------|---------|
-| `query/player.rs:277` | `PlayerCollection::AggregateMemory` | `vec![]` |
-| `query/player.rs:282` | `PlayerCollection::Memory` | `vec![]` |
+`PlayerCollection::AggregateMemory` / `PlayerCollection::Memory` previously returned `vec![]`
+silently; both now read (or aggregate) the real memory slot and error on missing slots.
 
 **GameData — Known Quirks (documented in invariants.md):**
 
@@ -110,8 +105,9 @@ SetMemory collection sub-variants: `PlayerCollection`, `StringCollection`, `Team
 | `leave_stage` drains entire stack if stage absent | I-11 | `game_data.rs:252` |
 | `add_memory` wrong init for Player/TeamCollection | I-10 | `game_data.rs:280,286` |
 | `reset_memory` only affects Int | — | `game_data.rs:305` |
-| `CycleAction`/`cycle to next` panics when no eligible *other* player exists | I-13 | `action.rs:309` |
+| `CycleAction`/`cycle to next` with no eligible *other* player | I-13 | `action.rs` — recoverable `Err` since 2026-08-09 (was a panic) |
 | `ShuffleAction` only shuffles the selected cards in place | — | `action.rs:192` |
+| card status slot exists but is unused (encryption-deferred) | — | `game_data.rs` `card_statuses` |
 
 ### 2.3 Blocked by Missing Dependencies
 

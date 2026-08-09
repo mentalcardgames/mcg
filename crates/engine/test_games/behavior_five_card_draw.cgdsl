@@ -1,0 +1,53 @@
+// Behavioral fixture — Five-Card Draw scoring: sum + pair bonus (+10) +
+// flush bonus (+20), deterministic (no shuffle). Three single-suit groups
+// make the dealt hands exact:
+//   P1 = [Ten-D, Ten-D, Two-D, Three-D, Four-D] -> 10+10+2+3+4 = 29,
+//        pair of Tens (+10), flush (+20)        -> 59
+//   P2 = [Two-C, Three-C, Four-C, Five-C, Six-C] -> 20, flush (+20) = 40
+//   P3 = [Seven-H, Eight-H, Nine-H, Jack-H, King-H] -> 7+8+9+11+13 = 48,
+//        flush (+20)                            -> 68  (winner)
+// Everyone declines to draw; hands stay as dealt.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Deck on table
+location Discard on table
+
+card on Deck:
+  Rank(Ten, Ten, Two, Three, Four) for Suit(Diamonds)
+  ,
+  Rank(Two, Three, Four, Five, Six) for Suit(Clubs)
+  ,
+  Rank(Seven, Eight, Nine, Jack, King) for Suit(Hearts)
+
+points RankValue on Rank(
+  Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7,
+  Eight: 8, Nine: 9, Ten: 10, Jack: 11, King: 13
+)
+
+stage Deal for current 1 times {
+  deal 5 from Deck private to Hand of all
+}
+
+stage Draw for current 9 times {
+  optional {
+    deal any from Hand of current private to Discard
+    deal 1 from Deck private to Hand of current
+  }
+  cycle to next
+}
+
+stage Score for current 3 times {
+  score sum of Hand of current using RankValue to current
+  if (size(cards Hand where same Rank of current) > 1) {
+    score 10 to current
+  }
+  if (size(cards Hand where same Suit of current) == 5) {
+    score 20 to current
+  }
+  cycle to next
+}
+
+stage End for current 1 times {
+  winner is highest score
+}

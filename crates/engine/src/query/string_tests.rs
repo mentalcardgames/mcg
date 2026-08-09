@@ -206,9 +206,12 @@ fn eval_string_memory_no_owner_error() {
 }
 
 #[test]
-#[should_panic(expected = "StringCollection::AggregateMemory not yet implemented")]
-fn eval_string_collection_at_aggregate_memory_panics() {
-    let gd = GameData::new();
+fn eval_string_collection_at_aggregate_memory() {
+    // Implemented 2026-08: aggregates the slot across every owner.
+    let mut gd = GameData::new();
+    gd.add_player("P1".to_string());
+    gd.memories
+        .insert("P1_m".to_string(), MemoryValue::String("ace".to_string()));
     let expr = StringExpr::Query {
         query: QueryString::StringCollectionAt {
             string_collection: StringCollection::AggregateMemory {
@@ -224,7 +227,32 @@ fn eval_string_collection_at_aggregate_memory_panics() {
             int_expr: IntExpr::Literal { int: 0 },
         },
     };
-    let _ = Evaluator::eval_string(&expr, &gd);
+    assert_eq!(Evaluator::eval_string(&expr, &gd), Ok("ace".to_string()));
+}
+
+#[test]
+fn eval_string_collection_at_aggregate_memory_missing_errors() {
+    let mut gd = GameData::new();
+    gd.add_player("P1".to_string());
+    let expr = StringExpr::Query {
+        query: QueryString::StringCollectionAt {
+            string_collection: StringCollection::AggregateMemory {
+                memory: "m".to_string(),
+                multi: MultiOwner::PlayerCollection {
+                    player_collection: Box::new(PlayerCollection::Literal {
+                        players: vec![PlayerExpr::Literal {
+                            name: "P1".to_string(),
+                        }],
+                    }),
+                },
+            },
+            int_expr: IntExpr::Literal { int: 0 },
+        },
+    };
+    assert_eq!(
+        Evaluator::eval_string(&expr, &gd),
+        Err("Memory P1_m not found".to_string())
+    );
 }
 
 #[test]

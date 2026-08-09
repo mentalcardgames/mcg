@@ -23,7 +23,7 @@ last_validated: 2026-08-09
 
 ---
 
-## 1. Fixed during the 2026-08-09 audit
+## 1. Fixed during the 2026-08 audit
 
 | ID | Bug | Fix | Regression test |
 |---|---|---|---|
@@ -31,25 +31,27 @@ last_validated: 2026-08-09
 | F-2 | `execute_cardset_move` dest guard used `>` not `>=` — `dest_loc_idx == len` panicked with an index error | Guard now `>=` with a clear message (`action.rs:538`) | `action_tests` |
 | F-3 | `OwnerOfMemory` looked up `"{memory}_{owner}"` instead of `"{owner}_{memory}"` — always failed or hit the wrong slot | Key order corrected (`query/player.rs:93`) | `player_tests::eval_player_aggregate_owner_of_memory_{min,max}` |
 | F-4 | `GroupOwner` with a `where`-filter evaluated the base location against the *current* player, then filtered by owner — `Hand of P:P2 where Rank is "X"` returned nothing whenever current ≠ P2 | Base location resolved against the owner (`query/cardset.rs`, `owner_base_location`) | `go_fish` demo game + `cardset_tests` |
-| F-5 | `ShuffleAction` replaced the whole location with the evaluated set — `shuffle top 3 of Deck` discarded the rest of the deck | Selected cards shuffled in place; unselected untouched (`action.rs:192`) | `shuffle_test` |
+| F-5 | `ShuffleAction` replaced the whole location with the evaluated set — `shuffle top 3 of Deck` discarded the rest of the pile | Selected cards shuffled in place; unselected untouched (`action.rs:192`) | `shuffle_test` |
 | F-6 | Three `debug` tests hard-coded Unix `/tmp/` paths — failed on Windows | `std::env::temp_dir()` (`debug/tests.rs`) | suite is green on Windows |
 | F-7 | `blackjack_runs_end_to_end` hung forever (input closure returned a wrong `player_id`; the controller's validation re-prompted infinitely, I-15/I-23) | Closure tracks the current player via `event_sender` | `flow_test` |
+| F-8 | **Panic table removed — `action::execute` is fallible.** `cycle to next` with no eligible *other* player (D-1), `SetMemory`/`ResetMemory` without a current player, `CycleAction` eval/player/turn-order failures, `CreateLocation`/`CreateMemory` owner resolution, `CreateCardOnLocation`, `CreatePointMap`, `Score`/`ScoreMemory` int eval, and all `execute_cardset_move` failure modes now return `StepResult::Error` instead of panicking. `Interpreter::execute_edge` returns `Result<(), String>`; `ShuffleAction` eval failures are errors (were `eprintln!` + continue). | `action.rs` (all arms), `interpreter/mod.rs` | `action_tests` (7 former `#[should_panic]` pins converted) + `errors_cycle_no_next.cgdsl` + `errors_set_memory_no_current.cgdsl` |
+| F-9 | **`resolve_players` / `resolve_player_collection` are fallible.** Eval failures and unknown literal player names return `Err`; the `Aggregate` arm (previously `todo!()`) and the `AggregateMemory`/`Memory` arms (previously silent `vec![]`) are implemented. | `query/player.rs` | `player_tests` (converted panic pins, new aggregation tests) |
+| F-10 | **Combo per-card matching of `same`/`distinct`/`size` was wrong** (D-5): `Same` matched every card with the key, `Distinct` was inverted, `Size` always compared 1. Combos are now evaluated group-wise (like `where`); the broken per-card matcher is deleted. | `query/cardset.rs` | `fix_combo_same_rank.cgdsl` (pair = 2, not 3) |
+| F-11 | **Empty `where`-filtered sets resolved to location 0** (D-11): a move destination like `Second where Rank is "Ghost"` with no matches sent cards to the first location. `eval_group` now reports the base location of the groupable; `execute_cardset_move` no-ops on an empty source. | `query/cardset.rs`, `action.rs` | `fix_empty_where_dest.cgdsl` |
+| F-12 | **`resolve_quantity` evaluated against an empty `GameData`** (D-8): runtime-backed quantities silently fell back to 1 (or "accept any" for ranges). It now evaluates against the live state and propagates errors. | `query/int.rs` | `int_tests` (rewritten runtime tests) |
+| F-13 | **Collection-memory aggregation unimplemented** (D-4): the four `todo!()` arms (`IntCollection`/`TeamCollection`/`StringCollection` `AggregateMemory`, `PlayerCollection::Aggregate`) now aggregate the slot across every owner of `multi`. | `query/int.rs`, `query/string.rs`, `query/player.rs` | `int_tests`, `string_tests`, `player_tests` |
+| F-14 | **`choose` did not split on `or`** (parser bug, `front_end`): `choose { A B or C D }` produced four single-component options instead of two options of `[A, B]`/`[C, D]`. The AST now carries `options: Vec<Vec<FlowComponent>>`, the parser groups on `or`, the IR builder chains each option's sequence, the formatter renders groups, and the arbitrary generator produces non-empty groups. | `front_end`: `grammar.pest` (kw_or), `parser.rs`, `ast.rs`, `arbitrary.rs`, `ir.rs`, `fmt_ast.rs` | `front_end` `choice_rule_splits_options_on_or` / `choice_rule_single_option_no_or`; `go_fish.cgdsl` now behaves as authored (13 arms of deal+draw) |
+
+## 1b. Partially fixed
+
+- **Card status (D-6, data model only).** `GameData` now carries
+  `card_statuses: Vec<CardStatus>` (parallel to `cards`, default `FaceUp`,
+  accessors `card_status` / `set_card_status`). **Behaviour is intentionally
+  deferred**: `FlipAction` remains a no-op with a comment stating it should be
+  implemented together with card encryption — flipping a card is
+  (de)encrypting its face. The engine never reads or writes the slot today.
 
 ## 2. Open divergences (engine-side)
-
-### D-1 — `cycle to next` panics when no eligible *other* player exists
-- **Severity:** high (crash instead of recoverable error).
-- **Cause:** `GameData::resolve_turn` never considers the current player (I-13).
-  With exactly one eligible player left, `cycle to next` → `eval_player(Next)` →
-  `"No next player available"` → `panic!` at `action.rs:309`.
-- **Repro:** run `blackjack.cgdsl` with a script that busts two of three players
-  (the old fixture did this; the demo game now guards with
-  `if (size(playersin) >= 2)`).
-- **Wanted:** a recoverable `StepResult::Error` (or a no-op cycle), never a panic;
-  games should not need guards.
-- **Direction:** move the cycle resolution into the interpreter (which can return
-  `StepResult::Error`) or make `next_player` a fallible `GameData` method and
-  surface the error through `action::execute`'s return.
 
 ### D-2 — `until` / stage-exit semantics check at entry only
 - **Severity:** medium (game-design impact).
@@ -59,8 +61,8 @@ last_validated: 2026-08-09
   rotation late, and a player may be re-asked after an irreversible event.
 - **Repro:** `crazy_eights.cgdsl` / `go_fish.cgdsl` — the "hand empty" exit
   lags; the 30/24-turn caps guarantee termination.
-- **Wanted:** a mid-body exit mechanism (`end stage when <bool>`?) or
-  condition re-check after each body action.
+- **Wanted:** a mid-body exit mechanism (`end stage when <bool>`?) or a
+  condition re-check after each body action. **Deferred: parser work (see §5).**
 
 ### D-3 — `optional` decline runs nothing; refusal cannot be recorded
 - **Severity:** medium.
@@ -69,37 +71,14 @@ last_validated: 2026-08-09
   must be expressed as *separate* optionals or inverse `if`s — the demo games
   re-ask players each round instead of tracking their choice.
 - **Wanted:** `optional { ... } else { ... }` (grammar + IR + engine), or a
-  declarative per-player "acted this round" flag.
+  declarative per-player "acted this round" flag. **Deferred: parser work (see §5).**
 
-### D-4 — collection-memory aggregation is unimplemented (4 `todo!()` panics)
-- **Severity:** medium.
-- **Sites:** `IntCollection::AggregateMemory` (`query/int.rs:170`),
-  `TeamCollection::AggregateMemory` (`query/int.rs:257`),
-  `StringCollection::AggregateMemory` (`query/string.rs:55`),
-  and `PlayerCollection::Aggregate` (`query/player.rs:240`, reachable via
-  `end game with winner(for all ...)` / `OutOfPlayer` with quantifiers).
-- **Repro:** any DSL using `sum((&IC:M of all))`, `size(playersin)`-style
-  aggregates over multi-owner memories, or a quantifier in `out of`.
-- **Wanted:** multi-owner iteration in the evaluator (iterate the owner
-  collection, read each prefixed slot, aggregate).
-
-### D-5 — combo per-card matching of `same` / `distinct` is wrong
-- **Severity:** medium.
-- **Cause:** `card_matches_filter` implements `Same` as "some card in the whole
-  game with the same key-value is *this card*" (always true) and `Distinct` as
-  "another card shares the value" (inverted). `where same Rank` on a *group*
-  (via `apply_filter`) is correct; only the combo/`not combo` per-card path is
-  affected. `Size` in per-card matching always compares against 1.
-- **Repro:** `combo Pair where same Rank` matches every card that has a Rank.
-- **Wanted:** group-context-aware per-card matching (pass the group, or rework
-  combo evaluation to run over the group like `apply_filter`).
-
-### D-6 — status (face up/down/private) is parsed and ignored
+### D-6 — card status *behaviour* (face up/down/private) is unimplemented
 - **Severity:** medium (feature gap).
-- **Cause:** no card-status field in the data model; `FlipAction` is a silent
-  no-op; `MoveType::Place` and tokens likewise.
-- **Wanted:** a per-card status map in `GameData`, `FlipAction` execution, and
-  status-aware rendering (privacy is the foundation for P2P play).
+- **Status:** the data model slot exists (§1b); `FlipAction` is still a no-op and
+  `MoveType::Place`/tokens remain stubs.
+- **Wanted:** implement together with card encryption — flipping a card is
+  (de)encrypting its face; privacy is the foundation for P2P play.
 
 ### D-7 — bidding / demand semantics are undefined (silent no-ops)
 - **Severity:** low (no spec to violate, but games cannot be written).
@@ -107,14 +86,6 @@ last_validated: 2026-08-09
   `DemandMemoryAction` parse and lower, then do nothing.
 - **Wanted:** a written semantic spec first (what does a bid do to game state?),
   then an implementation.
-
-### D-8 — `resolve_quantity` evaluates against an empty `GameData`
-- **Severity:** low.
-- **Behaviour:** `deal (<runtime int expr>) from X ...` and range quantities
-  evaluate their int exprs against `GameData::new()`; memory/stage-backed exprs
-  fail and silently fall back to `1` (or "accept any count" for ranges).
-- **Wanted:** evaluate quantities against the live state (the
-  `validate_int_range` re-prompt path already handles live ranges at resume).
 
 ### D-9 — `GameSuccessful` / `GameFail` ≡ `Game`
 - **Severity:** low.
@@ -131,12 +102,6 @@ last_validated: 2026-08-09
 - **Wanted:** clarify the intended meaning (table position? turn position?) and
   pin it with a test.
 
-### D-11 — empty filter results resolve to location 0 (I-14)
-- **Severity:** low.
-- **Behaviour:** `X where <no match>` returns `(0, [])`; using such a set as a
-  move destination sends cards to the first location.
-- **Wanted:** a `Result`-level "empty set" marker; never silently use location 0.
-
 ### D-12 — `Previous` ignores in-game/stage eligibility
 - **Severity:** low.
 - **Behaviour:** `previous` returns the previous turn-order entry even if that
@@ -148,6 +113,22 @@ last_validated: 2026-08-09
 - **Behaviour:** memory-based winner extrema treat missing/negative/non-Int
   memories as 0.
 - **Wanted:** explicit behaviour for missing memories (error vs. skip).
+
+### D-14 — `SetMemory`/`ResetMemory` owner bridging (grammar gap)
+- **Severity:** medium.
+- **Behaviour:** the write rules have no `of <owner>` clause; the engine keys
+  to the *current player* and errors when there is none (recoverable since F-8).
+  "Set P2's memory" is inexpressible; a write aimed at a non-current player is a
+  silent trap.
+- **Wanted:** grammar support (`M is X of P:P2`), then drop the bridge.
+  **Deferred: parser work (see §5).**
+
+### D-15 — location-0 fallback remains for `CardSet::Memory` (I-14)
+- **Severity:** low.
+- **Behaviour:** a *memory-backed* cardset whose first card cannot be found in
+  any location still returns `(0, card_ids)`; the `where`-set case is fixed
+  (F-11) but the memory case keeps the sentinel.
+- **Wanted:** an explicit "empty set" marker at the `eval_cardset` boundary.
 
 ## 3. Parser / lowering divergences (front_end-side)
 
@@ -166,10 +147,7 @@ last_validated: 2026-08-09
   the engine rejects it ("memory access requires an explicit owner"). The
   grammar should make the owner mandatory (it already does in the `create`
   rules — only the read rules have the optional form).
-- **P-5 (`SetMemory`/`ResetMemory` lack `of owner`).** The write rules have no
-  owner clause; the engine bridges by prefixing the *current player* — which is
-  wrong for "set P2's memory" and a silent trap when `current` is `None`
-  (panic). Fix in the grammar (`M is X of P:P2`), then drop the bridge.
+- **P-5 (`SetMemory`/`ResetMemory` lack `of owner`).** See D-14.
 - **P-6 (`create` keyword unused).** `kw_create` exists but no rule uses it.
 - **P-7 (team-owned locations/memories parse but error).** `location X on T:T1`
   and `memory M on T:T1` are rejected at runtime ("team-owned locations are not
@@ -191,16 +169,51 @@ last_validated: 2026-08-09
 All five run end-to-end under `tests/demo_games_test.rs` (structural assertions:
 card conservation, completion, winner existence). TUI: `just tui crates/engine/test_games/<name>.cgdsl`.
 
-## 5. Audit trail
+## 5. Deferred — parser-dependent fixes (not implemented, by design)
 
-- Audit performed 2026-08-09: **406 unit + 57 integration tests green**;
-  `cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings` clean;
-  `cargo fmt -p cgdsl-engine -- --check` clean. The engine package previously
-  did not meet the clippy bar (12 pre-existing lints fixed the same day,
-  incl. `engine-tui`).
-- **Workspace-level clippy caveat:** `cargo clippy --workspace --all-targets
-  -- -D warnings` additionally fails on *pre-existing* lints in
-  `front_end/build.rs` (outside `crates/engine`, not touched by this audit).
+These three fixes require touching `front_end` (grammar, parser, or IR builder).
+They are deliberately **not** implemented in this handoff; the engine-side
+prerequisites are noted so a later project can pick them up:
+
+- **`optional { ... } else { ... }` (D-3).** Required work:
+  1. `grammar.pest`: `optional_rule` gains an optional `kw_else ~ "{" ~ flow_component+ ~ "}"` tail.
+  2. `parser.rs`: `OptionalRule` AST carries an `else_flows` field.
+  3. `ir.rs build_optional_rule`: emit a third edge (body / else-body / exit); the engine's
+     `Optional` payload arm already dispatches on `input.idx()` (accept=0, decline=1), so the
+     engine change is confined to the IR shape (decline must lead to the else-body, whose exit
+     merges with the accept path).
+  4. Engine: no `Payload` change needed; only tests for the new edge layout.
+- **`end stage when <bool>` mid-body exit (D-2).** Required work:
+  1. Grammar: a new flow rule (e.g. `end_stage_when = { kw_end ~ kw_stage ~ kw_when ~ "(" ~ bool_expr ~ ")" }`).
+  2. IR: emit a `Payload::EndCondition { negated: true, stage }` edge to the stage's exit — the
+     engine's `EndCondition` arm (incl. `leave_stage`) already implements exactly this; the IR
+     builder only ever emits `EndCondition` at stage *entry* today.
+  3. Engine: no change required.
+- **`for <players>` stage participation (P-1) / SimStage (P-2).** Required work:
+  1. IR: carry `stage.player`/`stage.players` into a new payload or a stage-region marker.
+  2. Engine: gate `ensure_stage_entered` on the participant collection (the `in_stage` map
+     already models participation); SimStage additionally needs per-player sub-FSMs in the IR.
+  3. Validation: reject `for` clauses referencing unknown players at parse time.
+
+## 6. Audit trail
+
+- Audit performed 2026-08-09 (second pass): **414 unit + 63 integration tests green**
+  (the panic-table removal converted 10 `#[should_panic]` pins into `Err`-assertion tests
+  and added 4 new fixtures); `cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings`
+  clean; `cargo fmt -p cgdsl-engine -- --check` clean.
+- **Third pass (same day):** `choose` splits on `or` (F-14, front_end fix) — `front_end`
+  now has 20 passing tests including two dedicated `choice_rule` regression tests and the
+  format↔parse proptests.
+- **Fourth pass (same day):** behavioral fixtures (`tests/behavior_test.rs`, 6 tests over
+  5 deterministic non-shuffled fixtures) verify exact rule outcomes. They caught a real
+  DSL-authoring bug in `go_fish.cgdsl`: each ask option dealt *before* checking emptiness,
+  so a successful ask also drew a card (draw-on-hit). Fixed by inverting the order
+  (check first, deal second). Total: 414 unit + 74 integration tests.
+- **Workspace-level clippy caveat (updated):** `cargo clippy --workspace --all-targets
+  -- -D warnings` still fails on *pre-existing* debt in the `front_end` **library**
+  (~200 `redundant field names` / doc-comment style lints across `parser.rs`, `ast.rs`,
+  `symbols.rs`, …). The two `front_end/build.rs` collapsible-`if` lints that also blocked
+  the check were fixed the same day (mechanical). The engine crate itself meets the bar.
 - Doc-drift corrected the same day: I-9 semantics, `execute_cardset_move` guard,
   I-18 synthetic-key naming (`Table_`-prefixed), test counts, `rand` dependency,
   `mcg-cli` location (it is a `native_mcg` binary, not a workspace crate),

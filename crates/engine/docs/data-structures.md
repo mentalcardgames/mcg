@@ -36,7 +36,11 @@ serialization is handled separately by `crates/engine/src/debug/mod.rs`).
 // crates/engine/src/game_data.rs:22
 pub type Card = HashMap<String, String>;
 
-// crates/engine/src/game_data.rs:24-39
+// crates/engine/src/game_data.rs:30-35  (added 2026-08, reserved for card encryption)
+#[derive(Clone, Debug, PartialEq, Copy)]
+pub enum CardStatus { FaceUp, FaceDown, Private }
+
+// crates/engine/src/game_data.rs:37-56
 #[derive(Clone)]
 pub struct GameData {
     pub table: OwnerData,
@@ -45,6 +49,7 @@ pub struct GameData {
     pub turn_order: Vec<usize>,
     pub locations: Vec<Location>,
     pub cards: Vec<Card>,
+    pub card_statuses: Vec<CardStatus>,
     pub combos: Vec<Combo>,
     pub precedences: Vec<Precedence>,
     pub point_maps: Vec<PointMap>,
@@ -60,18 +65,25 @@ attributes (e.g. `Rank → Ace`, `Suite → Hearts`). Cards are stored **only** 
 `crates::engine::game_data::GameData::cards: Vec<Card>` and referenced elsewhere by `usize` index
 (a "card id"). Locations hold card ids, not cards.
 
+`crates::engine::game_data::CardStatus` (`game_data.rs:30-35`) is a per-card visibility slot,
+stored **parallel to `cards`** in `GameData::card_statuses` (same indexing). It was added 2026-08
+and is currently **unused by the engine**: every card is created `FaceUp`, and `card_status` /
+`set_card_status` (`game_data.rs:182-192`) are the only accessors. It is reserved for the card
+encryption work — `FlipAction` should become (de)encrypting a card's face (see
+`engine-vs-design.md` §1b).
+
 | Struct | Location | Fields | Role |
 |---|---|---|---|
-| `crates::engine::game_data::OwnerData` | `crates/engine/src/game_data.rs:53-57` | `locations: Vec<usize>` | Ownership of location indices; held by both `GameData::table` and each `Player`. |
-| `crates::engine::game_data::Player` | `crates/engine/src/game_data.rs:59-66` | `name, score: i32, owner: OwnerData, in_game: bool, in_stage: HashMap<String,bool>` | Per-player state; `in_stage` tracks participation per named stage. |
-| `crates::engine::game_data::Location` | `crates/engine/src/game_data.rs:68-72` | `name: String, cards: Vec<usize>` | A named pile; `cards` is an ordered list of card ids. |
-| `crates::engine::game_data::Team` | `crates/engine/src/game_data.rs:74-78` | `name, players: Vec<usize>` | Named group of player indices. |
-| `crates::engine::game_data::Combo` | `crates/engine/src/game_data.rs:80-84` | `name: String, filter: front_end::ast::FilterExpr` | A named, reusable card filter (from `front_end::ast`). |
-| `crates::engine::game_data::Precedence` | `crates/engine/src/game_data.rs:87-92` | `name, key: String, values: Vec<String>` | Ordered values on one key, low→high. Used by `Adjacent`/`Higher`/`Lower`/`ExtremaPrecedence`. |
-| `crates::engine::game_data::PointMap` | `crates/engine/src/game_data.rs:95-99` | `name, map: HashMap<String,i32>` | Maps `"key:value"` → points. Used by `SumOfCardSet`, `ExtremaCardset`, `ExtremaPointMap`. |
+| `crates::engine::game_data::OwnerData` | `crates/engine/src/game_data.rs:67-71` | `locations: Vec<usize>` | Ownership of location indices; held by both `GameData::table` and each `Player`. |
+| `crates::engine::game_data::Player` | `crates/engine/src/game_data.rs:73-80` | `name, score: i32, owner: OwnerData, in_game: bool, in_stage: HashMap<String,bool>` | Per-player state; `in_stage` tracks participation per named stage. |
+| `crates::engine::game_data::Location` | `crates/engine/src/game_data.rs:82-86` | `name: String, cards: Vec<usize>` | A named pile; `cards` is an ordered list of card ids. |
+| `crates::engine::game_data::Team` | `crates/engine/src/game_data.rs:88-92` | `name, players: Vec<usize>` | Named group of player indices. |
+| `crates::engine::game_data::Combo` | `crates/engine/src/game_data.rs:94-98` | `name: String, filter: front_end::ast::FilterExpr` | A named, reusable card filter (from `front_end::ast`). |
+| `crates::engine::game_data::Precedence` | `crates/engine/src/game_data.rs:101-107` | `name, key: String, values: Vec<String>` | Ordered values on one key, low→high. Used by `Adjacent`/`Higher`/`Lower`/`ExtremaPrecedence`. |
+| `crates::engine::game_data::PointMap` | `crates/engine/src/game_data.rs:109-114` | `name, map: HashMap<String,i32>` | Maps `"key:value"` → points. Used by `SumOfCardSet`, `ExtremaCardset`, `ExtremaPointMap`. |
 
 ```rust
-// crates/engine/src/game_data.rs:41-51
+// crates/engine/src/game_data.rs:55-65
 #[derive(Clone)]
 pub enum MemoryValue {
     Int(i32),
@@ -90,11 +102,11 @@ variables. There is **no** separate `TeamCollection` variant — a stored team c
 represented as `MemoryValue::Team(String)` holding one team name (the read sites are
 `crates/engine/src/query/int.rs:277` and `crates/engine/src/query/player.rs:199`), and
 `front_end::ast::MemoryType::TeamCollection` initializes to `MemoryValue::Int(0)`
-(`crates/engine/src/game_data.rs:286`, inside `GameData::add_memory`'s match at
-`game_data.rs:276-291`), a known mismatch documented as invariant I-10 in
-[`invariants.md`](./invariants.md). The `MemoryValue::CardSet` variant is also used by the
-quantifier subsystem to carry player-chosen card ids — see the `SYNTH_MEMORY_KEY` discussion in
-[`observability.md`](./observability.md) and invariant I-18 in [`invariants.md`](./invariants.md).
+(`crates/engine/src/game_data.rs:304-319`, inside `GameData::add_memory`'s match), a known
+mismatch documented as invariant I-10 in [`invariants.md`](./invariants.md). The
+`MemoryValue::CardSet` variant is also used by the quantifier subsystem to carry player-chosen
+card ids — see the `SYNTH_MEMORY_KEY` discussion in [`observability.md`](./observability.md) and
+invariant I-18 in [`invariants.md`](./invariants.md).
 
 ---
 
@@ -154,18 +166,6 @@ only by `front_end::fsm_to_dot`.
 > USED by `Interpreter::step`'s `Payload::Choice` arm (`interpreter/mod.rs:174`) to derive the
 > human-readable label of each outgoing edge from the next state's first edge's payload. `IrExt` is
 > re-exported at the crate root (`crates/engine/src/lib.rs:12`).
-
-```rust
-pub type LoweredPayLoad = Payload<LoweredCtx>;
-// where LoweredCtx resolves: Condition→BoolExpr, EndCondition→EndCondition,
-//   GameRule→GameRule, Id→String.
-```
-
-So at the engine boundary,
-`front_end::ir::Ir<front_end::ir::LoweredPayLoad>` is
-`HashMap<front_end::ir::StateID, Vec<front_end::ir::Edge<front_end::ir::LoweredPayLoad>>>`
-plus `entry`/`goal`. The `front_end::ir::Edge::meta` field is **ignored** by the engine — it is read
-only by `front_end::fsm_to_dot`.
 
 ---
 
@@ -313,19 +313,23 @@ Arc<Mutex<usize>>` field shared with the composed trace-sender closure (see §1 
 
 ### 3.5 `Evaluator` — the read-side namespace
 
-`crates::engine::query::Evaluator` (`crates/engine/src/query/mod.rs:173`) is a zero-sized `pub
+`crates::engine::query::Evaluator` (`crates/engine/src/query/mod.rs:176`) is a zero-sized `pub
 struct` used purely as a namespace for associated functions (`eval_bool`, `eval_int`,
 `eval_string`, `eval_player`, `eval_team`, `eval_cardset`, `eval_card_position`,
 `eval_end_condition`, `eval_compare`, `eval_int_compare`, `resolve_players`,
-`resolve_player_collection`, `resolve_owner_to_name`, `resolve_owner_to_names`, `resolve_quantity`,
-`expand_types`, `check_attr_value_in_cardset`). It holds **no state**; every method takes `&GameData`
-(all reads are immutable). Post-Stage-5 the query module was split into submodules (`bool.rs`,
-`cardset.rs`, `int.rs`, `player.rs`, `string.rs`) all hanging methods off the shared `Evaluator`
-struct. `resolve_owner_to_names` (plural) is `pub` and now also routes
-`Owner::PlayerCollection` through `crate::quantifier::resolve_player_candidates`
-(`crates/engine/src/query/player.rs:301-327`) so it transparently supports the `Aggregate {
-Quantifier::All }` owner that the setup path produces. WARNING: the underlying
-`Evaluator::resolve_player_collection` (`crates/engine/src/query/player.rs:227-284`) still
-`todo!()`-panics on `PlayerCollection::Aggregate` (`player.rs:246`); the quantifier module's
-`resolve_player_candidates` (`crates/engine/src/quantifier.rs:140-153`) is the safe alternative and
-is what the engine's quantifier path uses.
+`resolve_player_collection`, `resolve_multi_owner_names`, `resolve_owner_to_name`,
+`resolve_owner_to_names`, `resolve_quantity`, `expand_types`, `check_attr_value_in_cardset`). It
+holds **no state**; every method takes `&GameData` (all reads are immutable). Post-Stage-5 the
+query module was split into submodules (`bool.rs`, `cardset.rs`, `int.rs`, `player.rs`,
+`string.rs`) all hanging methods off the shared `Evaluator` struct.
+
+**Fallibility (2026-08):** `resolve_players` and `resolve_player_collection` return
+`Result<Vec<usize>, String>` — player-expressions that cannot be evaluated (e.g. `next` with no
+eligible player) or that reference unknown players yield `Err` instead of panicking.
+`resolve_quantity` takes `&GameData` and evaluates runtime int expressions against the live
+state. `resolve_owner_to_names` (plural) routes `Owner::PlayerCollection` through
+`crate::quantifier::resolve_player_candidates` so it supports the `Aggregate { Quantifier::All }`
+owner that the setup path produces. The former `todo!()`/silent-empty collection-memory arms
+(`PlayerCollection::Aggregate`/`AggregateMemory`/`Memory`, `IntCollection::AggregateMemory`,
+`TeamCollection::AggregateMemory`, `StringCollection::AggregateMemory`) are implemented; see
+`engine-vs-design.md` F-9/F-13.

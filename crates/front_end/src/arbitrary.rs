@@ -207,8 +207,21 @@ pub fn gen_vec_min_1_ints(u: &mut arbitrary::Unstructured) -> arbitrary::Result<
     Ok(ints)
 }
 
-pub fn gen_flows_safe(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<FlowComponent>> {
-    let remaining = u.len();
+/// Generate 1..=4 `or`-separated choice options, each a non-empty sequence of
+/// flow components (mirrors `ChoiceRule::options` — see `grammar.pest`'s
+/// `choice_rule`, where every branch is `flow_component+`).
+pub fn gen_options_safe(
+    u: &mut arbitrary::Unstructured,
+) -> arbitrary::Result<Vec<Vec<FlowComponent>>> {
+    let n = u.int_in_range(1..=4)?;
+    let mut options = Vec::with_capacity(n);
+    for _ in 0..n {
+        options.push(gen_flows_safe(u)?);
+    }
+    Ok(options)
+}
+
+pub fn gen_flows_safe(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<FlowComponent>> {    let remaining = u.len();
 
     // 1. Hard Fallback (The Dead End)
     // If we have very little gas, return a single, simple action.

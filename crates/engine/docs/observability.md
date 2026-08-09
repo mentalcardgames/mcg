@@ -223,14 +223,14 @@ in `crates/engine/src/debug/tests.rs` (`from_marker` cases at lines 8-37, marker
 
 ## 5. Ad-hoc stderr
 
-The only direct stdlib logging in the production library is
-`eprintln!("ShuffleAction failed: {}", e)` (`crates/engine/src/action.rs:204`). There are no
-`dbg!`/`println!` calls in the library target (the `println!`s in
-`crates/engine/src/bin/cgdsl-play.rs` are CLI output, not engine telemetry). One additional
-`eprintln!` was added post-Stage-5 in the `run_game` startup path: when `MCG_TRACE_LOG` resolves
-to a path but `TraceLogger::open` fails (`crates/engine/src/controller/mod.rs:43-49`), a
-`Warning: failed to open trace log ...` message goes to stderr and the run continues without file
-logging — this is intentional grace, not a panic.
+There are **no** `eprintln!`/`println!`/`dbg!` calls left in the production library: the former
+`eprintln!("ShuffleAction failed: {}", e)` was converted to a recoverable `Err` on 2026-08-09
+(see `engine-vs-design.md` F-8). The `println!`s in `crates/engine/src/bin/cgdsl-play.rs` are
+CLI output, not engine telemetry. One `eprintln!` remains in the `run_game` startup path: when
+`MCG_TRACE_LOG` resolves to a path but `TraceLogger::open` fails
+(`crates/engine/src/controller/mod.rs:43-49`), a `Warning: failed to open trace log ...` message
+goes to stderr and the run continues without file logging — this is intentional grace, not a
+panic.
 
 ---
 

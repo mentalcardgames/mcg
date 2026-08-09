@@ -527,13 +527,17 @@ DSL intent
 
 ## 5. Control Flow
 
-### 5.1 `choose { A or B or C }`
+### 5.1 `choose { A B or C D }`
 
 **DSL:** `choose { move top(Hand) face down to Table or deal 1 from Stock to Hand }`
 
-**Engine:** Lowers to a `Payload::Choice` state. `edge_labels` on the IR
-resolve human-readable labels from the target state's first payload (action
-descriptions, condition text, etc.). The interpreter issues
+**Engine:** Each `or`-separated option is a **sequence** of flow components
+(`choose { A B or C }` = two options: `[A, B]` and `[C]` — fixed 2026-08-09,
+previously every component became its own option). Lowers to a
+`Payload::Choice` state with one edge per option; the chosen option's whole
+sequence executes in order. `edge_labels` on the IR resolve human-readable
+labels from the target state's first payload (action descriptions, condition
+text, etc.). The interpreter issues
 `NeedsInput(InputType::Choice { options, max_index })`. The player returns
 `InputKind::Choice { idx }` (0-based). The engine takes `edges[idx]` and
 executes it. Out-of-range indices silently stall (invariant I-8).

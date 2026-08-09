@@ -166,11 +166,24 @@ impl Evaluator {
                 }
                 Ok(result)
             }
-            IntCollection::AggregateMemory { memory: _, multi } => {
-                todo!(
-                    "IntCollection::AggregateMemory not yet implemented: {:?}",
-                    multi
-                )
+            // Aggregate an Int memory across every owner in `multi`, e.g.
+            // `(&I:M of all)` — one value per owner that holds the slot.
+            IntCollection::AggregateMemory { memory, multi } => {
+                let names = Self::resolve_multi_owner_names(multi, game_data)?;
+                let mut result = vec![];
+                for name in names {
+                    let key = format!("{}_{}", name, memory);
+                    match game_data.get_memory(&key) {
+                        Some(MemoryValue::Int(v)) => result.push(*v),
+                        Some(_) => {
+                            return Err(format!("Memory value is not an Int ({})", key));
+                        }
+                        None => {
+                            return Err(format!("Memory {} not found", key));
+                        }
+                    }
+                }
+                Ok(result)
             }
             IntCollection::Memory { memory } => {
                 let key = Self::resolve_collection_memory_key(memory, game_data)?;
@@ -195,7 +208,7 @@ impl Evaluator {
                 Self::eval_location_collection(col, game_data).map(|v| v.len() as i32)
             }
             Collection::PlayerCollection { player: col } => {
-                Ok(Self::resolve_player_collection(col, game_data).len() as i32)
+                Ok(Self::resolve_player_collection(col, game_data)?.len() as i32)
             }
             Collection::TeamCollection { team: col } => {
                 Self::eval_team_collection(col, game_data).map(|v| v.len() as i32)
@@ -232,7 +245,7 @@ impl Evaluator {
         }
     }
 
-    fn eval_team_collection(
+    pub(super) fn eval_team_collection(
         col: &TeamCollection,
         game_data: &GameData,
     ) -> Result<Vec<String>, String> {
@@ -253,11 +266,23 @@ impl Evaluator {
                     Ok(result)
                 }
             },
-            TeamCollection::AggregateMemory { memory: _, multi } => {
-                todo!(
-                    "TeamCollection::AggregateMemory not yet implemented: {:?}",
-                    multi
-                )
+            // Aggregate a Team memory across every owner in `multi`.
+            TeamCollection::AggregateMemory { memory, multi } => {
+                let names = Self::resolve_multi_owner_names(multi, game_data)?;
+                let mut result = vec![];
+                for name in names {
+                    let key = format!("{}_{}", name, memory);
+                    match game_data.get_memory(&key) {
+                        Some(MemoryValue::Team(v)) => result.push(v.clone()),
+                        Some(_) => {
+                            return Err(format!("Memory value is not a Team ({})", key));
+                        }
+                        None => {
+                            return Err(format!("Memory {} not found", key));
+                        }
+                    }
+                }
+                Ok(result)
             }
             TeamCollection::Memory { memory } => {
                 let key = Self::resolve_collection_memory_key(memory, game_data)?;
@@ -270,11 +295,18 @@ impl Evaluator {
         }
     }
 
-    pub fn resolve_quantity(qty: &Quantity, available: usize) -> Result<usize, String> {
+    /// Resolve a move `Quantity` against the *live* game state (previously it
+    /// evaluated against an empty `GameData`, silently falling back to 1 on
+    /// any runtime expression — see engine-vs-design.md D-8).
+    pub fn resolve_quantity(
+        qty: &Quantity,
+        available: usize,
+        game_data: &GameData,
+    ) -> Result<usize, String> {
         match qty {
             Quantity::Int { int } => {
-                let val = Self::eval_int(int, &GameData::new()).unwrap_or(1) as usize;
-                Ok(val.min(available))
+                let val = Self::eval_int(int, game_data)?;
+                Ok((val.max(0) as usize).min(available))
             }
             Quantity::Quantifier { quantifier } => match quantifier {
                 front_end::ast::Quantifier::All => Ok(available),
@@ -282,15 +314,14 @@ impl Evaluator {
             },
             Quantity::IntRange { int_range } => {
                 let (start_cmp, start_expr) = &int_range.start;
-                let start_satisfied = match Self::eval_int(start_expr, &GameData::new()) {
-                    Ok(target) => Self::eval_int_compare(available as i32, start_cmp, target),
-                    Err(_) => false,
-                };
+                let start_target = Self::eval_int(start_expr, game_data)?;
+                let start_satisfied =
+                    Self::eval_int_compare(available as i32, start_cmp, start_target);
                 if !start_satisfied {
                     return Ok(0);
                 }
                 for (op, cmp, int_expr) in &int_range.op_int {
-                    let target = Self::eval_int(int_expr, &GameData::new()).unwrap_or(0);
+                    let target = Self::eval_int(int_expr, game_data)?;
                     let satisfied = Self::eval_int_compare(available as i32, cmp, target);
                     match op {
                         front_end::ast::IntRangeOperator::And => {

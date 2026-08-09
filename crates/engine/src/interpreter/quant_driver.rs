@@ -111,7 +111,10 @@ impl Interpreter {
         edge: &Edge<LoweredPayLoad>,
         pc: front_end::ast::PlayerCollection,
     ) -> StepResult {
-        let names = self.resolve_player_names(&pc);
+        let names = match self.resolve_player_names(&pc) {
+            Ok(n) => n,
+            Err(e) => return StepResult::Error(e),
+        };
         if let Some((qty, from)) = crate::quantifier::card_site(edge) {
             let candidate_ids = match crate::query::Evaluator::eval_cardset(&from, &self.game_data)
             {
@@ -165,7 +168,10 @@ impl Interpreter {
         edge: &Edge<LoweredPayLoad>,
         pc: front_end::ast::PlayerCollection,
     ) -> StepResult {
-        let candidates = self.resolve_player_names(&pc);
+        let candidates = match self.resolve_player_names(&pc) {
+            Ok(n) => n,
+            Err(e) => return StepResult::Error(e),
+        };
         let n = candidates.len();
         self.pending_quant = Some(crate::quantifier::PendingQuant {
             state: self.current_state,
@@ -338,11 +344,15 @@ impl Interpreter {
 
     /// Resolve a dest-quantifier `PlayerCollection` to player names, dropping
     /// any index that no longer maps to a live player (defensive).
-    fn resolve_player_names(&self, pc: &front_end::ast::PlayerCollection) -> Vec<String> {
-        let idxs = crate::quantifier::resolve_player_candidates(pc, &self.game_data);
-        idxs.iter()
+    fn resolve_player_names(
+        &self,
+        pc: &front_end::ast::PlayerCollection,
+    ) -> Result<Vec<String>, String> {
+        let idxs = crate::quantifier::resolve_player_candidates(pc, &self.game_data)?;
+        Ok(idxs
+            .iter()
             .filter_map(|&i| self.game_data.players.get(i).map(|p| p.name.clone()))
-            .collect()
+            .collect())
     }
 
     /// Build the `display`/`min`/`max` for a `ChooseCards` prompt from the

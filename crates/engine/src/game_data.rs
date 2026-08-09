@@ -21,6 +21,18 @@ use std::collections::HashMap;
 // while we don't need any auxiliary functions on Cards, we can just use a type rather than a struct.
 pub type Card = HashMap<String, String>;
 
+/// Per-card visibility state, stored parallel to `GameData::cards` (indexed by
+/// card id). Reserved for the card-encryption work: flipping a card is
+/// (de)encrypting its face, so `FlipAction` will map onto this slot once
+/// cryptography lands. Currently every card starts `FaceUp` and nothing reads
+/// or writes the field (see `action.rs` `FlipAction`).
+#[derive(Clone, Debug, PartialEq, Copy)]
+pub enum CardStatus {
+    FaceUp,
+    FaceDown,
+    Private,
+}
+
 #[derive(Clone)]
 pub struct GameData {
     pub table: OwnerData,
@@ -29,6 +41,7 @@ pub struct GameData {
     pub turn_order: Vec<usize>,
     pub locations: Vec<Location>,
     pub cards: Vec<Card>,
+    pub card_statuses: Vec<CardStatus>,
     pub combos: Vec<Combo>,
     pub precedences: Vec<Precedence>,
     pub point_maps: Vec<PointMap>,
@@ -107,6 +120,7 @@ impl GameData {
             turn_order: vec![],
             locations: vec![],
             cards: vec![],
+            card_statuses: vec![],
             combos: vec![],
             precedences: vec![],
             point_maps: vec![],
@@ -155,11 +169,25 @@ impl GameData {
     // card stuff
     pub fn add_card(&mut self, _location_id: usize, card: Card) -> usize {
         self.cards.push(card);
+        self.card_statuses.push(CardStatus::FaceUp);
         self.cards.len() - 1
     }
 
     pub fn get_card(&self, card_id: usize) -> Option<&Card> {
         self.cards.get(card_id)
+    }
+
+    /// Current visibility state of a card (unused by the engine until card
+    /// encryption lands; see [`CardStatus`]).
+    pub fn card_status(&self, card_id: usize) -> Option<CardStatus> {
+        self.card_statuses.get(card_id).copied()
+    }
+
+    /// Reserve a card's status slot for future `FlipAction`/encryption use.
+    pub fn set_card_status(&mut self, card_id: usize, status: CardStatus) {
+        if let Some(slot) = self.card_statuses.get_mut(card_id) {
+            *slot = status;
+        }
     }
 
     /// Returns the index of the (first) location whose `cards` vec contains

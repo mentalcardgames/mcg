@@ -1,5 +1,5 @@
 use super::*;
-use crate::game_data::{Card, Location, MemoryValue};
+use crate::game_data::{Card, CardStatus, Location, MemoryValue};
 use front_end::ast::{
     CardSet, Group, Groupable, IntCollection, IntExpr, LocationCollection, MemoryType, Owner,
     PlayerCollection, PlayerExpr, StringCollection, StringExpr, TeamCollection, TeamExpr,
@@ -647,4 +647,16 @@ fn reset_memory_on_non_int_is_noop() {
 fn get_memory_returns_none_for_absent() {
     let gd = GameData::new();
     assert!(gd.get_memory("ghost").is_none());
+}
+
+#[test]
+fn card_status_defaults_to_face_up_and_is_settable() {
+    // Card status is reserved for the card-encryption work; the slot must
+    // exist and default to FaceUp without any engine behaviour reading it.
+    let mut gd = GameData::new();
+    let id = gd.add_card(0, Card::new());
+    assert_eq!(gd.card_status(id), Some(CardStatus::FaceUp));
+    gd.set_card_status(id, CardStatus::FaceDown);
+    assert_eq!(gd.card_status(id), Some(CardStatus::FaceDown));
+    assert_eq!(gd.card_status(99), None, "out-of-range id");
 }

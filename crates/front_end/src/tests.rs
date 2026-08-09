@@ -357,6 +357,33 @@ proptest! {
 }
 
 #[test]
+fn choice_rule_splits_options_on_or() {
+    // Regression (2026-08): `choose` branches must split on `or` — each
+    // branch is a *sequence* of flow components. Previously the parser
+    // flattened every component into its own option, so
+    // `choose { A B or C D }` produced 4 single-component options instead of
+    // two options of [A, B] and [C, D].
+    let dsl = "choose {\n  deal 1 from Deck private to Hand of P:P1\n  if (size(cards Deck) == 0) {\n    deal 1 from Deck private to Hand of P:P2\n  }\n  or\n  deal 2 from Deck private to Hand of P:P3\n}";
+    let choice = test_rule_consume(dsl, Rule::choice_rule, CGDSLParser::choice_rule)
+        .expect("choice_rule must parse");
+    let options = &choice.node.options;
+    assert_eq!(options.len(), 2, "two or-separated options");
+    assert_eq!(options[0].len(), 2, "first option holds two components");
+    assert_eq!(options[1].len(), 1, "second option holds one component");
+}
+
+#[test]
+fn choice_rule_single_option_no_or() {
+    // A choose block without any `or` is a single multi-component option.
+    let dsl = "choose {\n  deal 1 from Deck private to Hand of P:P1\n  deal 2 from Deck private to Hand of P:P2\n}";
+    let choice = test_rule_consume(dsl, Rule::choice_rule, CGDSLParser::choice_rule)
+        .expect("choice_rule must parse");
+    let options = &choice.node.options;
+    assert_eq!(options.len(), 1, "no or -> exactly one option");
+    assert_eq!(options[0].len(), 2, "both components in that option");
+}
+
+#[test]
 fn test_reparse_game() {
     parse_ast_parse(
     "

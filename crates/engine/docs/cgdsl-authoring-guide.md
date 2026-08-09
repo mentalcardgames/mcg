@@ -590,9 +590,23 @@ choose {
 }
 ```
 
-Presents a **multi-choice** prompt. Each arm is a separate flow-component
-block. The player selects one by index. There can be 1+ arms (though having
-only one is equivalent to an `optional`).
+Presents a **multi-choice** prompt. Each `or`-separated arm is a **sequence**
+of flow components executed in order when selected (fixed 2026-08-09 —
+previously every component became its own arm). The player selects one arm by
+index. There can be 1+ arms (though having only one is equivalent to an
+`optional`).
+
+```
+// Multi-statement arms: arm 1 = deal + conditional draw, arm 2 = pass.
+choose {
+    deal 1 from Deck private to Hand of P:P1
+    if (size(cards Deck) == 0) {
+        deal 1 from Deck private to Hand of P:P2
+    }
+    or
+    score 1 to P:P1
+}
+```
 
 ### 7.4 `conditional`
 
