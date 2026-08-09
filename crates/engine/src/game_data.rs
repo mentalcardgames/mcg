@@ -303,11 +303,15 @@ impl GameData {
     }
 
     pub fn reset_memory(&mut self, key: &str) {
-        if let Some(memory) = self.memories.get_mut(key) {
-            if let MemoryValue::Int(ref mut v) = *memory {
-                *v = 0;
-            }
+        if let Some(MemoryValue::Int(v)) = self.memories.get_mut(key) {
+            *v = 0;
         }
+    }
+}
+
+impl Default for GameData {
+    fn default() -> Self {
+        GameData::new()
     }
 }
 

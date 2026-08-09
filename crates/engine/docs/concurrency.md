@@ -130,7 +130,8 @@ the engine on a single dedicated thread and communicate via channels.
 
 **Not in `Cargo.toml`:** no unused dependencies remain.
 Error handling is stringly-typed (`Result<_, String>`).
-`rand` is imported from `front_end`'s dependency tree, not directly.
+`rand` is a direct dependency (declared in `crates/engine/Cargo.toml`) used by
+`ShuffleAction`, `CreateTurnorderRandom`, and the `engine-tui` binary.
 
 > Note: `crates/engine/src/bin/cgdsl-play.rs` is auto-discovered by cargo. Only `engine-tui`
 > has an explicit `[[bin]]` entry in `Cargo.toml`.

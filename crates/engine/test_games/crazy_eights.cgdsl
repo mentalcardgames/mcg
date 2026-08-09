@@ -1,0 +1,60 @@
+// Crazy Eights (simplified) — 3 players, shed all your cards.
+//
+// Rules:
+//   - Each player is dealt 5 cards; one card starts the Discard pile.
+//   - On your turn, play any card from your hand (choose which) or
+//     decline to play.
+//   - After declining, you may draw a card from the deck — house rule:
+//     the drawn card may be given to *any* player (choose who).
+//   - No match constraint on plays (8s are wild on the honor system).
+//   - The game ends when the deck runs out, a player empties their hand,
+//     or after 30 turns; the player with the fewest cards wins.
+//
+// Engine notes:
+//   - Playing uses the `deal any ...` quantifier, which prompts the
+//     player to pick cards (InputType::ChooseCards).
+//   - Drawing uses `Hand of any`, which prompts for a player
+//     (InputType::ChoosePlayer).
+//   - The "hand empty" end condition is only checked when the current
+//     player's turn starts, so a win is detected with up to one round
+//     of delay (the 30-turn cap guarantees termination).
+
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Deck on table
+location Discard on table
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King)
+    for Suit(Diamonds, Clubs, Hearts, Spades)
+
+shuffle Deck
+
+stage Deal for current 1 times {
+  deal 5 from Deck private to Hand of all
+  deal 1 from Deck private to Discard
+}
+
+stage Play for current until (Deck empty or Hand of current empty) or 30 times {
+  if (not Hand of current empty) {
+    optional {
+      deal any from Hand of current private to Discard
+    }
+  }
+  if (not Deck empty) {
+    optional {
+      deal 1 from Deck private to Hand of any
+    }
+  }
+  cycle to next
+}
+
+stage Score for current 3 times {
+  score size(cards Hand of current) to current
+  cycle to next
+}
+
+stage End for current 1 times {
+  winner is lowest score
+}

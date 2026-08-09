@@ -173,12 +173,12 @@ impl Evaluator {
     pub fn eval_end_condition(
         end_condition: &EndCondition,
         game_data: &GameData,
-        stage_name: &String,
+        stage_name: &str,
     ) -> Result<bool, String> {
         match end_condition {
             EndCondition::UntilEnd => Ok(false),
             EndCondition::UntilRep { reps } => {
-                let current = game_data.get_stage_counter(stage_name.clone());
+                let current = game_data.get_stage_counter(stage_name.to_string());
                 // evaluate target and handle error propagation
                 match Self::eval_int(&reps.times, game_data) {
                     Ok(target) => Ok(current >= target as u32),
@@ -192,7 +192,7 @@ impl Evaluator {
                 reps,
             } => {
                 let bool_result = Self::eval_bool(bool_expr, game_data)?;
-                let current = game_data.get_stage_counter(stage_name.clone());
+                let current = game_data.get_stage_counter(stage_name.to_string());
                 // evaluate target and handle error propagation
                 let rep_result = match Self::eval_int(&reps.times, game_data) {
                     Ok(target) => current >= target as u32,

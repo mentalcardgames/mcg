@@ -131,6 +131,12 @@ fn blackjack_runs_end_to_end() {
     // P1 hits (accept optional), P2 stands (decline), P3 hits
     let calls = std::sync::Arc::new(std::sync::Mutex::new(0usize));
     let calls_clone = calls.clone();
+    // Track the current player via the event_sender so every answer carries
+    // the right player_id (validation I-23 rejects mismatched ids and would
+    // otherwise re-prompt forever).
+    let current: std::sync::Arc<std::sync::Mutex<Option<String>>> =
+        std::sync::Arc::new(std::sync::Mutex::new(None));
+    let current_writer = current.clone();
     let gd = run_game(
         ir,
         GameData::new(),
@@ -139,28 +145,31 @@ fn blackjack_runs_end_to_end() {
             *count += 1;
             let n = *count;
             drop(count);
+            let who = current.lock().unwrap().clone();
             match it {
                 InputType::Optional { .. } => {
                     // P1 accepts (call 1), P2 declines (call 2), P3 accepts (call 3)
                     if n == 2 {
                         Input {
-                            player_id: "P2".into(),
+                            player_id: who.unwrap_or_else(|| "P2".into()),
                             kind: InputKind::OptionalDecline,
                         }
                     } else {
                         Input {
-                            player_id: if n == 1 { "P1".into() } else { "P3".into() },
+                            player_id: who.unwrap_or_else(|| "P1".into()),
                             kind: InputKind::OptionalAccept,
                         }
                     }
                 }
                 _ => Input {
-                    player_id: "P1".into(),
+                    player_id: who.unwrap_or_else(|| "P1".into()),
                     kind: InputKind::Choice { idx: 0 },
                 },
             }
         })),
-        None,
+        Some(Box::new(move |gd: &GameData| {
+            *current_writer.lock().unwrap() = gd.get_current_player().map(|p| p.name.clone());
+        })),
         None,
     )
     .expect("blackjack should complete");

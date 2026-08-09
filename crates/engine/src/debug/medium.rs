@@ -66,7 +66,7 @@ pub(super) fn format_game_data_medium(data: &GameData) -> String {
                 .iter()
                 .take(5)
                 .filter_map(|id| data.cards.get(*id))
-                .map(|c| format_card(c))
+                .map(format_card)
                 .collect::<Vec<_>>();
             format!("{} (first 5: {}, ...)", total, first_5.join(", "))
         } else {
@@ -74,7 +74,7 @@ pub(super) fn format_game_data_medium(data: &GameData) -> String {
                 .cards
                 .iter()
                 .filter_map(|id| data.cards.get(*id))
-                .map(|c| format_card(c))
+                .map(format_card)
                 .collect::<Vec<_>>();
             format!("{} ({})", total, card_names.join(", "))
         };

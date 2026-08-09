@@ -504,11 +504,15 @@ you trip over them; promote to dedicated tests when the area is touched.)
 
 Per §8.1, these are bugs to fix before writing the regression tests:
 
-- **I-9** (`set_memory` increments `Int` memories by 1 instead of assigning) —
-  `src/game_data.rs:297`. See [`invariants.md`](./invariants.md) I-9.
-- **`execute_cardset_move` off-by-one** — `src/action.rs:370` uses `>` not `>=`, so
-  `dest_loc_idx == locations.len()` slips past the guard and panics on the subsequent
-  index. Documented in [`invariants.md`](./invariants.md) / [`error-handling.md`](./error-handling.md).
+- **`cycle to next` panics with a single eligible player** — `src/action.rs:309`.
+  `resolve_turn` never considers the current player (invariant I-13), so a
+  `cycle to next` guard of `size(playersin) >= 2` is required in games that
+  eliminate players. A graceful `StepResult::Error` would be preferable to the
+  panic; documented in `engine-vs-design.md`.
+
+(Former entries — I-9 `set_memory` increment semantics and the
+`execute_cardset_move` `>`/`>=` off-by-one — were fixed on 2026-08-09; see
+`game_data.rs:301` and `action.rs:538`.)
 
 When fixing, file entries under [`developer-notes.md`](./known-bugs.md), land the corrected
 behavior and its regression test together.

@@ -28,6 +28,7 @@ pub enum InputSource {
 ///
 /// `entry` is saved *before* ownership of `ir` moves into the interpreter so the
 /// starting state handle can be supplied separately.
+#[allow(clippy::type_complexity)] // public API: two optional callback closures
 pub fn run_game(
     ir: Ir<LoweredPayLoad>,
     game_data: GameData,
@@ -134,6 +135,7 @@ pub fn run_game(
 }
 
 /// Drives the [`Interpreter`] forward, supplying external input when required.
+#[allow(clippy::type_complexity)] // mirrors the run_game callback types
 struct Controller {
     interpreter: Interpreter,
     input_source: InputSource,

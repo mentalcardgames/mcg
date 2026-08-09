@@ -1,0 +1,58 @@
+// War — 2-player automatic card game (no input required).
+//
+// Rules:
+//   - 52-card deck split evenly: 26 cards per player.
+//   - Each round both players reveal their top card; the higher rank
+//     (Ace high, Two low) takes both cards.
+//   - Ties discard both cards (simplification: no "war" redeal).
+//   - The game ends when either pile is empty; the player with the most
+//     captured cards wins.
+//
+// Engine notes:
+//   - Card comparison uses a point map over ranks (the DSL has no
+//     direct card-vs-card comparison operator).
+//   - This game needs no player input at all, so it runs to completion
+//     automatically (good for tracing/demonstrating the engine).
+
+player P1, P2
+turnorder (P:P1, P:P2)
+location P1Pile on P:P1
+location P2Pile on P:P2
+location P1Winnings on P:P1
+location P2Winnings on P:P2
+location Deck on table
+location Discard on table
+
+card on Deck:
+  Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace)
+    for Suit(Diamonds, Clubs, Hearts, Spades)
+
+points RankValue on Rank(
+  Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7,
+  Eight: 8, Nine: 9, Ten: 10, Jack: 11, Queen: 12, King: 13, Ace: 14
+)
+
+shuffle Deck
+deal 26 from Deck private to P1Pile
+deal 26 from Deck private to P2Pile
+
+stage Battle for current until (P1Pile empty or P2Pile empty) {
+  if (sum of top(P1Pile) using RankValue > sum of top(P2Pile) using RankValue) {
+    move top(P1Pile) private to P1Winnings
+    move top(P2Pile) private to P1Winnings
+  }
+  if (sum of top(P1Pile) using RankValue < sum of top(P2Pile) using RankValue) {
+    move top(P1Pile) private to P2Winnings
+    move top(P2Pile) private to P2Winnings
+  }
+  if (sum of top(P1Pile) using RankValue == sum of top(P2Pile) using RankValue) {
+    move top(P1Pile) private to Discard
+    move top(P2Pile) private to Discard
+  }
+}
+
+stage End for current 1 times {
+  score size(cards P1Winnings) to P:P1
+  score size(cards P2Winnings) to P:P2
+  winner is highest score
+}

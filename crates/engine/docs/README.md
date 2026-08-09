@@ -62,6 +62,11 @@ This crate is part of a larger workspace. Other crates you may need:
 11. [`concurrency.md`](./concurrency.md) — threading model, `Send`/`Sync`
 12. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
 
+**Handoff set (2026-08):**
+13. [`dsl-completeness.md`](./dsl-completeness.md) — per-construct status: grammar → IR → engine
+14. [`engine-vs-design.md`](./engine-vs-design.md) — divergence/bug catalog with repros + demo-game index
+15. [`NEXT_STEPS.md`](./NEXT_STEPS.md) — future-work project seeds (bachelor/master)
+
 ## Module Map
 
 ```
@@ -103,7 +108,7 @@ crates/engine/src/
 │   │   ├── main.rs, trace.rs
 │   │   └── ui/                    — state, layout, game_state, trace_log, input, controls
 │   └── cgdsl-play.rs              — CLI game driver (interactive + file replay)
-├── test_games/                    — 41 .cgdsl fixture files for integration tests
+├── test_games/                    — 63 .cgdsl fixture files (incl. the five demo games)
 └── tests/                         — integration tests (one file per feature area)
     ├── quantifier_test.rs
     ├── action_test.rs
@@ -112,7 +117,10 @@ crates/engine/src/
     ├── turn_test.rs
     ├── out_test.rs
     ├── memory_test.rs
-    └── flow_test.rs
+    ├── flow_test.rs
+    ├── optional_test.rs
+    ├── shuffle_test.rs
+    └── demo_games_test.rs         — the five handoff demo games driven end-to-end
 ```
 
 ## Key Concepts
@@ -142,7 +150,7 @@ crates/engine/src/
 ## Build and Test
 
 ```
-cargo test -p cgdsl-engine              # 445 tests
+cargo test -p cgdsl-engine              # 463 tests (406 unit + 57 integration)
 cargo test -p cgdsl-engine --test <name> # single integration test file
 cargo clippy -p cgdsl-engine --all-targets -- -D warnings
 cargo fmt -p cgdsl-engine -- --check

@@ -18,6 +18,9 @@ impl InputPanel {
         }
     }
 
+    // The render call takes the full prompt context; a struct would churn
+    // every call site for no behavioural gain.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
         f: &mut ratatui::Frame,

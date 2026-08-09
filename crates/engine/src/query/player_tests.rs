@@ -198,9 +198,9 @@ fn eval_player_aggregate_owner_of_memory_max() {
     let p1 = gd.add_player("P2".to_string());
     gd.turn_order = vec![p0, p1];
     gd.memories
-        .insert("score_P1".to_string(), MemoryValue::Int(42));
+        .insert("P1_score".to_string(), MemoryValue::Int(42));
     gd.memories
-        .insert("score_P2".to_string(), MemoryValue::Int(7));
+        .insert("P2_score".to_string(), MemoryValue::Int(7));
     let expr = PlayerExpr::Aggregate {
         aggregate: front_end::ast::AggregatePlayer::OwnerOfMemory {
             extrema: Extrema::Max,
@@ -217,9 +217,9 @@ fn eval_player_aggregate_owner_of_memory_min() {
     let p1 = gd.add_player("P2".to_string());
     gd.turn_order = vec![p0, p1];
     gd.memories
-        .insert("score_P1".to_string(), MemoryValue::Int(42));
+        .insert("P1_score".to_string(), MemoryValue::Int(42));
     gd.memories
-        .insert("score_P2".to_string(), MemoryValue::Int(7));
+        .insert("P2_score".to_string(), MemoryValue::Int(7));
     let expr = PlayerExpr::Aggregate {
         aggregate: front_end::ast::AggregatePlayer::OwnerOfMemory {
             extrema: Extrema::Min,

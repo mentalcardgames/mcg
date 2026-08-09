@@ -45,12 +45,10 @@ impl GameStatePanel {
 
         let scroll_offset = if auto_scroll {
             compute_auto_scroll(&line_strings, inner)
+        } else if scroll > compute_safe_max(inner) {
+            compute_safe_max(inner)
         } else {
-            if scroll > compute_safe_max(inner) {
-                compute_safe_max(inner)
-            } else {
-                scroll
-            }
+            scroll
         };
 
         let text: Text = content.into();
@@ -73,7 +71,7 @@ fn estimate_wrapped_lines(lines: &[&str], inner_width: u16) -> usize {
             if char_count == 0 {
                 1
             } else {
-                (char_count + width - 1) / width
+                char_count.div_ceil(width)
             }
         })
         .sum()

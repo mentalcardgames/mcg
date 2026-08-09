@@ -71,7 +71,7 @@ Move (3/4): Deal, Exchange, Classic.
 
 **CLI:** Interactive + test-file mode with player name tracking.
 
-**Tests:** 445 passing (405 unit + 40 integration). 41 `.cgdsl` test fixtures.
+**Tests:** 406 unit (1 ignored) + 57 integration tests passing across 11 `tests/` files (2026-08). 63 `.cgdsl` fixture files in `test_games/` (including the five handoff demo games: `blackjack.cgdsl`, `war.cgdsl`, `crazy_eights.cgdsl`, `five_card_draw.cgdsl`, `go_fish.cgdsl`).
 
 ### 2.2 Not Implemented
 
@@ -110,7 +110,8 @@ SetMemory collection sub-variants: `PlayerCollection`, `StringCollection`, `Team
 | `leave_stage` drains entire stack if stage absent | I-11 | `game_data.rs:252` |
 | `add_memory` wrong init for Player/TeamCollection | I-10 | `game_data.rs:280,286` |
 | `reset_memory` only affects Int | — | `game_data.rs:305` |
-| `execute_cardset_move` off-by-one (`>` not `>=`) | — | `action.rs:370` |
+| `CycleAction`/`cycle to next` panics when no eligible *other* player exists | I-13 | `action.rs:309` |
+| `ShuffleAction` only shuffles the selected cards in place | — | `action.rs:192` |
 
 ### 2.3 Blocked by Missing Dependencies
 

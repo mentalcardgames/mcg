@@ -1,8 +1,18 @@
 use crate::game_data::GameData;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::PathBuf;
 
 use super::*;
+
+/// Cross-platform scratch path for save tests (avoid Unix-only `/tmp/`).
+fn tmp_path(name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "test_mcg_debug_{}_{}.txt",
+        name,
+        std::process::id()
+    ))
+}
 
 #[test]
 fn test_debug_level_from_marker_valid() {
@@ -81,15 +91,20 @@ fn test_format_game_data_high() {
 
 #[test]
 fn test_save_game_data_creates_file() {
-    let _data = GameData::new();
-    let path = std::path::PathBuf::from("/tmp/test_mcg_debug.txt");
+    let data = GameData::new();
+    let path = tmp_path("create");
+    let _ = fs::remove_file(&path);
+
+    save_game_data(&data, &path).unwrap();
+
+    assert!(path.exists(), "save_game_data must create the file");
     let _ = fs::remove_file(&path);
 }
 
 #[test]
 fn test_save_game_data_appends_to_file() {
     let data = GameData::new();
-    let path = std::path::PathBuf::from("/tmp/test_mcg_debug_append.txt");
+    let path = tmp_path("append");
     let _ = fs::remove_file(&path);
 
     save_game_data(&data, &path).unwrap();
@@ -473,7 +488,7 @@ fn test_save_game_data_then_format() {
         vec!["Alice".to_string(), "Bob".to_string()],
     );
 
-    let path = std::path::PathBuf::from("/tmp/test_mcg_debug_roundtrip.txt");
+    let path = tmp_path("roundtrip");
     let _ = fs::remove_file(&path);
 
     save_game_data(&data, &path).unwrap();
@@ -489,12 +504,11 @@ fn test_save_game_data_then_format() {
 #[test]
 fn test_save_game_data_preserves_level_marker() {
     let data = GameData::new();
-    let path = std::path::PathBuf::from("/tmp/test_mcg_debug_marker.txt");
+    let path = tmp_path("marker");
     let _ = fs::remove_file(&path);
 
     {
         let mut file = OpenOptions::new()
-            .write(true)
             .create(true)
             .append(true)
             .open(&path)

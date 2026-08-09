@@ -1,10 +1,10 @@
 use super::*;
 use crate::game_data::GameData;
-use crate::interpreter::{Input, InputKind, InputType, Interpreter, TraceEntry, TraceEvent};
+use crate::interpreter::{Input, InputKind, InputType, Interpreter, TraceEntry};
 use front_end::ir::{Ir, LoweredPayLoad};
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Verify that [`read_test_file`] correctly parses `y`, `n`, and numeric
 /// lines in FIFO order into the corresponding [`Input`] variants.

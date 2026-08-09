@@ -742,7 +742,15 @@ optional {
 `optional` gives the player a hit/stand choice. Accept = draw a card;
 decline = stand (skip). The `if` checks for bust (>21) and auto-eliminates.
 Because `set … out of game` removes the player from the eligible pool,
-`cycle to next` naturally skips eliminated players.
+`cycle to next` skips eliminated players.
+
+> **Caveats (see `engine-vs-design.md` D-1/D-3):**
+> - Standing is **not recorded** — declining only skips this round, so the
+>   optional re-asks the same player next round. Bound the stage with
+>   `N times` and let players re-decline.
+> - `cycle to next` **panics** when no *other* player is still eligible
+>   (`resolve_turn` never considers the current player, I-13). Always guard:
+>   `if (size(playersin) >= 2) { cycle to next }`.
 
 ### 10.3 Deal N cards per player
 
@@ -782,9 +790,9 @@ winner is highest score
 ```
 
 All in-game players are compared; anyone not at the maximum score is
-eliminated. For Blackjack this naturally handles the case where some players
-busted (already eliminated) and the dealer busted (same score of 0 vs.
-survivors with 18+).
+eliminated. For Blackjack this handles the survivors after busted players
+were eliminated in play and players who did not beat the dealer were never
+scored (see §11.5).
 
 ### 10.7 Check hand is empty
 
@@ -864,48 +872,65 @@ players finish (§11.4).
 ### 11.3 Player turns — hit or stand
 
 ```
-stage Play for current 18 times {
-    optional {
-        deal 1 from Deck private to Hand of current
-        if (sum of Hand of current using BJ > 21) {
-            set current out of game
+stage Play for current 12 times {
+    if (not current out of game) {
+        optional {
+            deal 1 from Deck private to Hand of current
+            if (sum of Hand of current using BJ > 21) {
+                set current out of game
+            }
         }
     }
-    cycle to next
+    if (size(playersin) >= 2) {
+        cycle to next
+    }
 }
 ```
 
-18 iterations = worst-case (6 hits per player × 3 players). `optional`
-prompts hit/stand. Accept = draw one card, then check bust. Bust →
-`set current out of game` (removes from turn). After each `optional`,
-`cycle to next` advances to the next eligible player.
+12 iterations = 4 full rounds (4 × 3 players). `optional` prompts hit/stand.
+Accept = draw one card, then check bust. Bust → `set current out of game`.
+The `if (not current out of game)` guard skips the prompt for eliminated
+players. The `size(playersin) >= 2` guard prevents the `cycle to next` panic
+(D-1) once only one player remains — at that point the remaining player is
+re-asked until the round cap ends the stage.
 
-Once everyone has declined or busted, `optional` just skips (decline is
-always an option), and `cycle to next` is harmless.
+> **Why the guards?** `cycle to next` panics when no eligible *other* player
+> exists (I-13). A bare `cycle to next` in a game that eliminates players is
+> a crash waiting to happen.
 
 ### 11.4 Dealer — auto-play
 
 ```
-stage Dealer for current 9 times {
-    if (sum of DealerHand using BJ < 18) {
+stage Dealer for current 10 times {
+    if (sum of DealerHand using BJ < 17) {
         deal 1 from Deck private to DealerHand
     }
 }
 ```
 
-Dealer hits while hand < 18. 9 iterations handles the worst-case starting
-hand (Ace + 2 = 13, 8 hits to reach 21 with 20 unique values above 3).
+Dealer hits while hand < 17. 10 iterations bounds the worst case. No turn
+cycling needed — the `if` guard alone stops the dealer.
 
-### 11.5 Scoring — write hand totals
+### 11.5 Scoring — compare against the dealer
 
 ```
-stage Score for current 3 times {
-    score sum of Hand of current using BJ to current
-    cycle to next
+stage Score for current 1 times {
+    if (sum of Hand of P:P1 using BJ > sum of DealerHand using BJ) {
+        score sum of Hand of P:P1 using BJ to P:P1
+    }
+    if (sum of Hand of P:P2 using BJ > sum of DealerHand using BJ) {
+        score sum of Hand of P:P2 using BJ to P:P2
+    }
+    if (sum of Hand of P:P3 using BJ > sum of DealerHand using BJ) {
+        score sum of Hand of P:P3 using BJ to P:P3
+    }
 }
 ```
 
-Each surviving player's score field gets their hand total.
+Each player is scored explicitly — no turn cycling here, because
+"one pass per player" cannot be expressed safely with `cycle to next` once
+players drop out (D-1). Players whose hand does not beat the dealer are
+simply never scored; they are out of game either way.
 
 ### 11.6 Winner determination
 
@@ -915,9 +940,9 @@ stage End for current 1 times {
 }
 ```
 
-All in-game players (those who didn't bust) are compared by score. Highest
-survives as winner; ties are retained (multiple winners possible if two
-players both hit 21).
+Only in-game players (those who did not bust and beat the dealer) are
+compared by score. The highest survives; ties are retained (multiple winners
+possible). If every player busts, nobody is in game and nobody wins.
 
 ### 11.7 Full file
 
@@ -941,35 +966,46 @@ points BJ on Rank(
 shuffle Deck
 
 stage Deal for current 1 times {
-    deal 2 from Deck private to Hand of P:P1
-    deal 2 from Deck private to Hand of P:P2
-    deal 2 from Deck private to Hand of P:P3
-    deal 1 from Deck private to DealerHand
+  deal 2 from Deck private to Hand of P:P1
+  deal 2 from Deck private to Hand of P:P2
+  deal 2 from Deck private to Hand of P:P3
+  deal 1 from Deck private to DealerHand
 }
 
-stage Play for current 18 times {
+stage Play for current 12 times {
+  if (not current out of game) {
     optional {
-        deal 1 from Deck private to Hand of current
-        if (sum of Hand of current using BJ > 21) {
-            set current out of game
-        }
+      deal 1 from Deck private to Hand of current
+      if (sum of Hand of current using BJ > 21) {
+        set current out of game
+      }
     }
+  }
+  if (size(playersin) >= 2) {
     cycle to next
+  }
 }
 
-stage Dealer for current 9 times {
-    if (sum of DealerHand using BJ < 18) {
-        deal 1 from Deck private to DealerHand
-    }
+stage Dealer for current 10 times {
+  if (sum of DealerHand using BJ < 17) {
+    deal 1 from Deck private to DealerHand
+  }
 }
 
-stage Score for current 3 times {
-    score sum of Hand of current using BJ to current
-    cycle to next
+stage Score for current 1 times {
+  if (sum of Hand of P:P1 using BJ > sum of DealerHand using BJ) {
+    score sum of Hand of P:P1 using BJ to P:P1
+  }
+  if (sum of Hand of P:P2 using BJ > sum of DealerHand using BJ) {
+    score sum of Hand of P:P2 using BJ to P:P2
+  }
+  if (sum of Hand of P:P3 using BJ > sum of DealerHand using BJ) {
+    score sum of Hand of P:P3 using BJ to P:P3
+  }
 }
 
 stage End for current 1 times {
-    winner is highest score
+  winner is highest score
 }
 ```
 
@@ -979,7 +1015,7 @@ stage End for current 1 times {
 
 | Construct | Status | Notes |
 |-----------|--------|-------|
-| `unless` | ❌ Not in grammar | Use `if (not (<expr>))` |
+| `unless` | ❌ Not in grammar | Use `if (not <expr>)` — note `not (X)` with parens does **not** parse (P-8); write `not Hand empty`, `not current out of game` |
 | `for <players>` clause in stage | ⚠️ Dropped | All players always in-stage (B-1) |
 | SimStage (per-player FSM) | ❌ Not implemented | `build_sim_stage` = same IR as seq (B-3) |
 | `flip <cardset> to <status>` | ❌ Stub | Cards have no status field |
@@ -987,11 +1023,12 @@ stage End for current 1 times {
 | `create token` | ❌ Stub | Tokens not in data model |
 | `bid <quantity>` | ❌ Stub | Semantics undefined |
 | `demand <type>` | ❌ Stub | Semantics undefined |
-| `end game with winner <players>` | ❌ Stub | Empty dispatch |
+| `end game with winner <players>` | ⚠️ | IR jumps to the goal (game ends); the action arm is an empty TODO |
 | Mem collection writes | ⚠️ Stub | Collections insert empty defaults |
 | `reset memory` on non-Int | ⚠️ | Silently no-ops |
-| `owner of highest/lowest <mem>` | ⚠️ | Key-order bug: builds `<mem>_<player>` instead of `<player>_<mem>` |
+| `cycle to next` with one eligible player | ⚠️ | Panics (I-13, D-1) — guard with `size(playersin) >= 2` |
 | Aggregate memory (multi-owner) | ⚠️ | `todo!()` panics in query evaluators |
+| `owner of highest/lowest <mem>` | ✅ | Key-order bug fixed 2026-08-09 (`<player>_<mem>`) |
 
 ---
 

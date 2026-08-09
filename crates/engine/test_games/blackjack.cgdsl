@@ -1,8 +1,21 @@
-// Blackjack — 3 players + automatic dealer (casino rules)
-// Dealer gets 1 card up front, 2nd card after all players finish.
-// Dealer hits on <18, stands on >=18. Ace = 11.
-// Players can hit as many times as they want until they stand or bust.
-// Non-busted players at game end win.
+// Blackjack (casino-style, simplified) — 3 players vs. a table dealer.
+//
+// Rules:
+//   - 52-card deck, Ace counts 11 (no soft-ace handling).
+//   - Each player is dealt 2 cards; the dealer 1 (face up).
+//   - Players take turns: hit (accept the optional) or stand (decline).
+//     Busted hands (sum > 21) are eliminated automatically.
+//   - The dealer then draws while their hand sums below 17.
+//   - Players whose hand does not beat the dealer are eliminated; the
+//     remaining players score their hand and the highest score wins.
+//
+// Engine notes:
+//   - A player who stands is re-asked in later rounds (standing is not
+//     tracked), so the Play stage is bounded to 12 turns.
+//   - `cycle to next` is guarded by a "players still in game" check,
+//     because the engine panics when no eligible next player exists.
+//   - When every player busts, nobody wins (the WinnerWith rule keeps
+//     only players whose score matches the highest value; there are none).
 
 player P1, P2, P3
 turnorder (P:P1, P:P2, P:P3)
@@ -22,45 +35,55 @@ points BJ on Rank(
 
 shuffle Deck
 
-// Deal: 2 cards to each player, 1 card to dealer (face up)
 stage Deal for current 1 times {
-    deal 2 from Deck private to Hand of P:P1
-    deal 2 from Deck private to Hand of P:P2
-    deal 2 from Deck private to Hand of P:P3
-    deal 1 from Deck private to DealerHand
+  deal 2 from Deck private to Hand of P:P1
+  deal 2 from Deck private to Hand of P:P2
+  deal 2 from Deck private to Hand of P:P3
+  deal 1 from Deck private to DealerHand
 }
 
-// Players take turns hitting or standing. Up to 8 turns per player.
-// Stand = decline. Bust > 21 = eliminated.
-// 18 iterations = 6 per player. Remaining iterations after everyone
-// busts or stands are harmless (optional is declined, cycle skips busted).
-stage Play for current 18 times {
+// Each player may hit (accept) or stand (decline); up to 4 full rounds.
+// Note: `cycle to next` panics when no *other* player is still eligible
+// (resolve_turn never considers the current player), so cycling is guarded
+// by a "two or more players in game" check.
+stage Play for current 12 times {
+  if (not current out of game) {
     optional {
-        deal 1 from Deck private to Hand of current
-        if (sum of Hand of current using BJ > 21) {
-            set current out of game
-        }
+      deal 1 from Deck private to Hand of current
+      if (sum of Hand of current using BJ > 21) {
+        set current out of game
+      }
     }
+  }
+  if (size(playersin) >= 2) {
     cycle to next
+  }
 }
 
-// Dealer hits while < 18, stands at >= 18. Up to 9 attempts
-// (handles worst-case starting hand of 4 and 7 hits to reach 18).
-stage Dealer for current 9 times {
-    if (sum of DealerHand using BJ < 18) {
-        deal 1 from Deck private to DealerHand
-    }
+// Dealer draws while below 17 (bounded to 10 attempts).
+stage Dealer for current 10 times {
+  if (sum of DealerHand using BJ < 17) {
+    deal 1 from Deck private to DealerHand
+  }
 }
 
-// Score each surviving player's hand
-stage Score for current 3 times {
-    score sum of Hand of current using BJ to current
-    cycle to next
+// Eliminate players the dealer beats; survivors score their hand.
+// No turn cycling here: `cycle to next` cannot be expressed safely once
+// players drop out (see Play stage note), so each player is handled
+// explicitly. Busted players stay out of game and are ignored by the
+// winner rule regardless of their hand total.
+stage Score for current 1 times {
+  if (sum of Hand of P:P1 using BJ > sum of DealerHand using BJ) {
+    score sum of Hand of P:P1 using BJ to P:P1
+  }
+  if (sum of Hand of P:P2 using BJ > sum of DealerHand using BJ) {
+    score sum of Hand of P:P2 using BJ to P:P2
+  }
+  if (sum of Hand of P:P3 using BJ > sum of DealerHand using BJ) {
+    score sum of Hand of P:P3 using BJ to P:P3
+  }
 }
 
-// Declare all surviving players as winners
-// Players eliminated during Play are already out of game.
-// Any player still in_game at this point wins.
 stage End for current 1 times {
-    winner is highest score
+  winner is highest score
 }

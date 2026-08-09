@@ -361,7 +361,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 tui_state.pending_input = None;
                                             }
                                         } else if let Some(digit) = n.to_digit(10) {
-                                            if digit >= 1 && digit <= 9 {
+                                            if (1..=9).contains(&digit) {
                                                 let idx = digit as usize - 1;
                                                 if let Some(ref tx) = tui_state.input_tx {
                                                     let _ = tx.send(Input {

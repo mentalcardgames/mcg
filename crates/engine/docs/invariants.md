@@ -18,9 +18,10 @@ last_validated: 2026-07-28
 
 > **Read this before modifying any engine code.** These rules are derived directly from the source.
 > Violating them will silently corrupt game state or hang the run loop. Each invariant is numbered
-> (I-1 … I-20) and cross-referenced from other pages (e.g. `I-5`, `I-8`, `I-18`) — preserve those
+> (I-1 … I-23) and cross-referenced from other pages (e.g. `I-5`, `I-8`, `I-18`) — preserve those
 > IDs when editing. I-1 … I-15 predate the Stage-5 quantifier work; I-16 … I-20 were added in
-> Stage 5 and govern the quantifier subsystem.
+> Stage 5 and govern the quantifier subsystem; I-21 … I-23 were added with the Stage-6 input
+> validation work.
 
 For the panic conditions that enforce some of these, see [`error-handling.md`](./error-handling.md).
 
@@ -125,14 +126,14 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > request and **errors on exhaustion** (`controller/mod.rs:220-223`,
 > `"Test input file exhausted (input #{})"`).
 
-> **I-9 — `set_memory` does not set; it increments an `Int` memory by 1.**
+> **I-9 — `set_memory` assigns the caller-provided `MemoryValue` verbatim (was: increment-by-1).**
 > `crates::engine::game_data::GameData::set_memory` (`crates/engine/src/game_data.rs:297-303`)
-> ignores its `memory_type` argument entirely and, if the stored value is
-> `crates::engine::game_data::MemoryValue::Int`, does `*v += 1`. It silently no-ops on non-`Int`
-> memories. `crates::engine::game_data::GameData::reset_memory`
-> (`crates/engine/src/game_data.rs:305-311`) only resets `Int` memories. This is the current
-> behavior, not a spec'd design — agents implementing DSL `SetMemory` semantics must not assume
-> general assignment here.
+> inserts the `MemoryValue` it is given, overwriting any prior value. It is the write-side
+> primitive used by `ActionRule::SetMemory` *after* the `MemoryType` expression has been
+> evaluated by `action.rs` (which panics on eval failure). Earlier engine revisions
+> incremented an `Int` memory by 1 and ignored the type argument; that behavior is gone —
+> do not reintroduce it. `reset_memory` (`crates/engine/src/game_data.rs:305-311`) still only
+> resets `Int` memories (silent no-op on other variants).
 
 > **I-10 — `add_memory` initializes some `MemoryType`s to mismatched `MemoryValue`s.**
 > (`crates/engine/src/game_data.rs:276-291`):
@@ -191,7 +192,7 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 ## Quantifier Subsystem Invariants (I-16 … I-20)
 
 The Stage-5 quantifier preprocessor (`crates/engine/src/quantifier.rs` and
-`crates/engine/src/interpreter/quant_driver.rs`) introduces five new invariants. They govern
+`crates/engine/src/interpreter/quant_driver.rs`) introduces five invariants. They govern
 synthetic-state allocation, the overlay's key discipline, the synthetic memory slot, the
 pending-resume state match, and the setup-`Any` guard.
 
@@ -219,16 +220,19 @@ pending-resume state match, and the setup-`Any` guard.
 > (`interpreter/mod.rs:81-103`) only fires on a synthetic id, and the real-edge lookup
 > (`interpreter/mod.rs:110`) is reached as soon as the FSM returns to a real IR state.
 
-> **I-18 — `SYNTH_MEMORY_KEY` (`"__quantifier_overlay_cards"`) is written into
-> `game_data.memories` just before dispatching a replacement edge and is removed at the top of
-> `step()` once the FSM returns to a real IR state.**
-> The slot is written by `resume_cards_any_or_range` (`quant_driver.rs:261-264`) and
-> `resume_dest_all_then_cards` (`quant_driver.rs:304-307`) immediately before substituting the
-> chosen card ids into the replacement edge's `from`. It is removed by `step()`'s cleanup block
-> (`crates/engine/src/interpreter/mod.rs:65-79`) when (a) `current_state` is a real IR state, (b)
-> the overlay has no entry for it, and (c) `memories` still contains the slot. A user `.cgdsl`
-> program that later `CreateMemory`s the same key would otherwise be corrupted; this invariant
-> guarantees the slot's lifetime is bounded by the quantifier edge.
+> **I-18 — `SYNTH_MEMORY_KEY` (`"__quantifier_overlay_cards"`) is stored under the
+> owner-prefixed key `"Table___quantifier_overlay_cards"` in `game_data.memories` just before
+> dispatching a replacement edge and is removed at the top of `step()` once the FSM returns to
+> a real IR state.**
+> The slot is written by `resume_cards_any_or_range` (`quant_driver.rs:264-267`) and
+> `resume_dest_all_then_cards` (`quant_driver.rs:307-310`) immediately before substituting the
+> chosen card ids into the replacement edge's `from`; both sites prefix the key with `"Table_"`
+> (the memory-ownership model, see `developer-notes.md` §1.1). It is removed by `step()`'s
+> cleanup block (`crates/engine/src/interpreter/mod.rs:69-79`), which removes
+> `"Table_{SYNTH_MEMORY_KEY}"` when (a) `current_state` is a real IR state, (b) the overlay has
+> no entry for it, and (c) `memories` still contains the slot. A user `.cgdsl` program that
+> later `CreateMemory`s the same key would otherwise be corrupted; this invariant guarantees
+> the slot's lifetime is bounded by the quantifier edge.
 
 > **I-19 — `pending_quant.state` must equal `current_state` for the resume to fire.**
 > `crates::engine::interpreter::Interpreter::take_quant_resume`

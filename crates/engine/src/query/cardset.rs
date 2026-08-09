@@ -26,6 +26,55 @@ impl Evaluator {
                         })?;
                     return Ok((owned_loc, game_data.locations[owned_loc].cards.clone()));
                 }
+                // For filtered groups (where/combo/not-combo) whose base
+                // groupable is a plain location, resolve the base location
+                // against the *owner* first, then apply the filter. Without
+                // this, `Hand of P:P2 where Rank is "Ace"` would evaluate the
+                // where-clause against the *current* player's hand (the bare
+                // name `Hand` resolves to the current player first) and only
+                // then keep cards owned by P2 — usually an empty result.
+                if let Some((base_idx, base_cards)) =
+                    Self::owner_base_location(group, &owner_name, game_data)
+                {
+                    let (loc_idx, card_ids) = match group {
+                        Group::Where { filter, .. } => (
+                            base_idx,
+                            Self::apply_filter(filter, &base_cards, game_data)?,
+                        ),
+                        Group::Combo { combo, .. } => {
+                            let combo_filter = game_data
+                                .combos
+                                .iter()
+                                .find(|c| c.name == *combo)
+                                .map(|c| c.filter.clone())
+                                .ok_or(format!("Combo {} not found", combo))?;
+                            let filtered: Vec<usize> = base_cards
+                                .into_iter()
+                                .filter(|&card_id| {
+                                    Self::card_matches_filter(card_id, &combo_filter, game_data)
+                                })
+                                .collect();
+                            (base_idx, filtered)
+                        }
+                        Group::NotCombo { combo, .. } => {
+                            let combo_filter = game_data
+                                .combos
+                                .iter()
+                                .find(|c| c.name == *combo)
+                                .map(|c| c.filter.clone())
+                                .ok_or(format!("Combo {} not found", combo))?;
+                            let filtered: Vec<usize> = base_cards
+                                .into_iter()
+                                .filter(|&card_id| {
+                                    !Self::card_matches_filter(card_id, &combo_filter, game_data)
+                                })
+                                .collect();
+                            (base_idx, filtered)
+                        }
+                        _ => (base_idx, base_cards),
+                    };
+                    return Ok((loc_idx, card_ids));
+                }
                 // For filtered groups / combos / card positions without an
                 // owner, keep the existing filter-by-owner logic.
                 let (loc_idx, card_ids) = Self::eval_group(group, game_data)?;
@@ -121,6 +170,29 @@ impl Evaluator {
                     .unwrap_or(false)
             })
             .map(|(idx, _)| idx)
+    }
+
+    /// Resolve the base location of a structured group (`Where`/`Combo`/
+    /// `NotCombo`) whose groupable is a plain location, against a specific
+    /// owner. Returns `None` for any other group shape, in which case the
+    /// caller falls back to the legacy current-player-relative evaluation.
+    fn owner_base_location(
+        group: &Group,
+        owner_name: &str,
+        game_data: &GameData,
+    ) -> Option<(usize, Vec<usize>)> {
+        let groupable = match group {
+            Group::Where { groupable, .. }
+            | Group::Combo { groupable, .. }
+            | Group::NotCombo { groupable, .. } => groupable,
+            _ => return None,
+        };
+        let name = match groupable {
+            Groupable::Location { name } => name,
+            _ => return None,
+        };
+        let loc_idx = Self::find_owned_location(owner_name, name, game_data)?;
+        Some((loc_idx, game_data.locations[loc_idx].cards.clone()))
     }
 
     fn resolve_location_by_name(name: &str, game_data: &GameData) -> Option<usize> {
@@ -492,9 +564,8 @@ impl Evaluator {
         match filter {
             FilterExpr::Aggregate { aggregate } => match aggregate {
                 AggregateFilter::Size { cmp, int_expr } => {
-                    let cards = vec![card_id];
                     if let Ok(target) = Self::eval_int(int_expr, game_data) {
-                        let size = cards.len() as i32;
+                        let size = 1;
                         return Self::eval_int_compare(size, cmp, target);
                     }
                     false

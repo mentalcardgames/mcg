@@ -149,7 +149,7 @@ impl Evaluator {
             IntExpr::Memory { memory } => {
                 let key = Self::resolve_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
-                    Some(MemoryValue::Int(v)) => Ok(v.clone()),
+                    Some(MemoryValue::Int(v)) => Ok(*v),
                     Some(_) => Err("Memory value is not an Int".to_string()),
                     None => Err(format!("Memory {} not found", key)),
                 }
@@ -281,11 +281,10 @@ impl Evaluator {
                 front_end::ast::Quantifier::Any => Ok(1),
             },
             Quantity::IntRange { int_range } => {
-                let start_satisfied = match &int_range.start {
-                    (cmp, int_expr) => match Self::eval_int(int_expr, &GameData::new()) {
-                        Ok(target) => Self::eval_int_compare(available as i32, cmp, target),
-                        Err(_) => false,
-                    },
+                let (start_cmp, start_expr) = &int_range.start;
+                let start_satisfied = match Self::eval_int(start_expr, &GameData::new()) {
+                    Ok(target) => Self::eval_int_compare(available as i32, start_cmp, target),
+                    Err(_) => false,
                 };
                 if !start_satisfied {
                     return Ok(0);

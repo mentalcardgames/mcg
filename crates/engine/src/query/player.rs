@@ -73,7 +73,7 @@ impl Evaluator {
                             {
                                 return Ok("Table".to_string());
                             }
-                            for (_player_idx, player) in game_data.players.iter().enumerate() {
+                            for player in game_data.players.iter() {
                                 if player.owner.locations.contains(&loc_idx) {
                                     return Ok(player.name.clone());
                                 }
@@ -90,7 +90,7 @@ impl Evaluator {
                     for player in &game_data.players {
                         if player.in_game {
                             found = true;
-                            let mem_key_with_owner = format!("{}_{}", mem_key, player.name);
+                            let mem_key_with_owner = format!("{}_{}", player.name, mem_key);
                             if let Some(MemoryValue::Int(v)) =
                                 game_data.get_memory(&mem_key_with_owner)
                             {

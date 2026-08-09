@@ -195,9 +195,30 @@ pub(crate) fn execute_action_rule(action: ActionRule, game_data: &mut GameData) 
             let card_set_clone = card_set.clone();
             let result = crate::query::Evaluator::eval_cardset(&card_set_clone, game_data);
             match result {
-                Ok((location_idx, mut card_ids)) => {
-                    card_ids.shuffle(&mut rand::thread_rng());
-                    game_data.locations[location_idx].cards = card_ids;
+                Ok((location_idx, card_ids)) => {
+                    if let Some(loc) = game_data.locations.get_mut(location_idx) {
+                        // Only shuffle the *selected* cards, leaving any
+                        // unselected cards in the location untouched
+                        // (e.g. `shuffle top 3 of Deck` must not discard the
+                        // rest of the pile).
+                        let positions: Vec<usize> = loc
+                            .cards
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, id)| card_ids.contains(id))
+                            .map(|(i, _)| i)
+                            .collect();
+                        if positions.len() == loc.cards.len() {
+                            loc.cards.shuffle(&mut rand::thread_rng());
+                        } else if positions.len() > 1 {
+                            let mut shuffled: Vec<usize> =
+                                positions.iter().map(|&i| loc.cards[i]).collect();
+                            shuffled.shuffle(&mut rand::thread_rng());
+                            for (slot, id) in positions.into_iter().zip(shuffled) {
+                                loc.cards[slot] = id;
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     eprintln!("ShuffleAction failed: {}", e);
