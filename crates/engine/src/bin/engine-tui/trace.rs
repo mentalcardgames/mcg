@@ -21,6 +21,18 @@ impl TraceDetail {
     }
 
     pub fn passes(&self, entry: &TraceEntry) -> bool {
+        // The GameOver winner-set line is the game result — always visible,
+        // whatever the detail filter (2026-08-10).
+        let is_game_over = matches!(
+            entry,
+            TraceEntry::Step {
+                event: cgdsl_engine::TraceEvent::GameOver { .. },
+                ..
+            }
+        );
+        if is_game_over {
+            return true;
+        }
         match self {
             TraceDetail::Choices => {
                 matches!(

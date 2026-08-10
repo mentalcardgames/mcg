@@ -399,6 +399,11 @@ fn print_summary(state: &GameData) {
             }
         })
         .collect();
+    if remaining.is_empty() {
+        println!("Winners: none");
+    } else {
+        println!("Winners: {}", remaining.join(", "));
+    }
     println!("Players remaining in game: {}", remaining.len());
     for p in &state.players {
         println!(

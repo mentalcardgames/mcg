@@ -224,7 +224,18 @@ pub fn run_game_with(
     match run_result {
         Ok(gd) => {
             if let Some(ref logger) = logger {
-                logger.log_footer(&format!("GameOver after {} steps", steps));
+                // The winner set in the footer (2026-08-10): winners =
+                // every player still in game; "none" when nobody won.
+                let winners = gd.winner_names();
+                let winner_text = if winners.is_empty() {
+                    "none".to_string()
+                } else {
+                    winners.join(", ")
+                };
+                logger.log_footer(&format!(
+                    "GameOver after {} steps — winners: {}",
+                    steps, winner_text
+                ));
             }
             Ok(gd)
         }

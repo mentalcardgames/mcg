@@ -231,6 +231,77 @@ fn out_of_game_players_are_skipped_by_cycles_and_next_expressions() {
 }
 
 #[test]
+fn game_over_trace_names_the_winner_set() {
+    // No explicit winner statement: winners = players left in game.
+    let ir = load_game("winner_set_remaining.cgdsl");
+    let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
+    let trace_clone = trace.clone();
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
+        RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
+            trace_clone.lock().unwrap().push(e);
+        })),
+    )
+    .expect("game should complete");
+
+    let winners = trace
+        .lock()
+        .unwrap()
+        .iter()
+        .find_map(|e| match e {
+            TraceEntry::Step {
+                event: TraceEvent::GameOver { winners },
+                ..
+            } => Some(winners.clone()),
+            _ => None,
+        })
+        .expect("a GameOver trace event must be emitted");
+    assert_eq!(winners, vec!["P1".to_string(), "P3".to_string()]);
+    assert_eq!(gd.winner_names(), winners, "GameData agrees with the trace");
+}
+
+#[test]
+fn game_over_trace_names_declared_winner() {
+    // `end game with winner P:P1` eliminates everyone else (2026-08-10) —
+    // the survivor is the winner set.
+    let ir = load_game("winner_set_declared.cgdsl");
+    let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
+    let trace_clone = trace.clone();
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
+        RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
+            trace_clone.lock().unwrap().push(e);
+        })),
+    )
+    .expect("game should complete");
+
+    let winners = trace
+        .lock()
+        .unwrap()
+        .iter()
+        .find_map(|e| match e {
+            TraceEntry::Step {
+                event: TraceEvent::GameOver { winners },
+                ..
+            } => Some(winners.clone()),
+            _ => None,
+        })
+        .expect("a GameOver trace event must be emitted");
+    assert_eq!(winners, vec!["P1".to_string()]);
+    assert!(gd.players.iter().all(|p| p.in_game == (p.name == "P1")));
+}
+
+#[test]
 fn team_owned_locations_and_memories_are_per_member() {
     let ir = load_game("team_locations.cgdsl");
     let gd = run_game_with(

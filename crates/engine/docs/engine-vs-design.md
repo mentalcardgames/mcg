@@ -59,6 +59,7 @@ last_validated: 2026-08-10
 | F-26 | **Numeric input was impossible** — the mechanics matrix's "biggest single gap" for betting games (no `InputType::Number`, and `any` in pure int slots does not parse). | Engine-side: `InputType::Number { min, max, prompt }` / `Input::Number { value }`, controller validation, TestFile `n <N>` lines, TUI + `cgdsl-play` number entry. DSL surface (engine-only): `bid <qty> on <memory> of <owner>` — `any`/range prompt for a number (bounds validated, re-asked), literals write directly; plain `bid` without a target is an error (D-7 partially fixed; `demand` still undefined). | `ergonomics_test::bid_any_prompts_for_a_number_and_range_rejects_out_of_bounds`, `action_tests` bid pins |
 | F-27 | **Bare memory reads `&I:M` errored** ("memory access requires an explicit owner", P-4) while bare writes bridged to the current player — reads and writes disagreed. | Bare reads resolve through the same declared-owner → current-player resolution as writes. | `action_tests::cycle_action_eval_failure_errors` (updated), `memory_test` suite |
 | F-28 | **Quantity semantics did not match author intent** — `deal 3 from Hand` took the top 3 silently, so "play/discard exactly one card" had to be spelled `deal >= 1 and <= 1`, and `deal any` chose *cards* from the deck. | **Verb semantics (2026-08-10):** `deal` = automatic from the top (`deal N` = top N; `deal any`/`deal >= M and <= N` prompt for the **count** via `InputType::Number`, then deal that many; a degenerate `>= 2 and <= 2` deals automatically); `move`/`exchange` = the player picks (`move N` prompts pick-exactly-N, `SrcCardsExactN`; `any`/ranges unchanged). Positional sources (`top(X)`, `X[N]`, extrema) are automatic for any verb. The `>= 1 and <= 1` idiom is gone from the demo games. | `verb_semantics_test.rs` (6 tests: count prompts, degenerate range, count-to-all fan-out, exact-N + re-prompt, short-pile clamp, positional automatic); `quantifier_tests` scan_edge pins |
+| F-29 | **No winner set was ever computed or logged** — a game ending without an explicit winner rule reported nothing, and `end game with winner X` was a silent no-op (the declared winner did not even win). | `GameData::winner_names()` = every player still `in_game` (declaration order; empty = nobody won). `end game with winner X` now eliminates everyone not named (mirroring `winner is X`), so the rule "winners = in-game survivors" holds for explicit and implicit endings alike. The winner set is surfaced everywhere: a new `TraceEvent::GameOver { winners }` emitted on the transition into `GameOver` (TUI trace log, hosts), the trace-file footer (`=== GameOver after N steps — winners: … ===`), and `cgdsl-play`'s end summary. | `ergonomics_test` `game_over_trace_names_{remaining,declared_winner}`, `game_data_tests::winner_names_are_the_in_game_players`, `trace_tests::game_over_display_names_the_winner_set`, `action_tests::end_action_game_with_winner_eliminates_non_winners`, `controller/tests` footer assertion |
 
 ## 1b. Partially fixed
 
@@ -298,3 +299,12 @@ prerequisites are noted so a later project can pick them up:
   `cycle_skips_out_of_game.cgdsl` out-of-game-eligibility regression (I-13 /
   F-24 pin); `clippy --no-deps -D warnings` and `fmt --check` clean.
   Workspace caveat unchanged.
+- **Eighth pass (2026-08-10, winner set):** `GameData::winner_names()`
+  (winners = players still in game), `end game with winner X` now eliminates
+  everyone not named (F-29), and the winner set is logged everywhere: a new
+  `TraceEvent::GameOver { winners }` (TUI trace log + hosts), the trace-file
+  footer, and `cgdsl-play`'s summary. **Total: 550 tests green (442 lib + 5
+  cgdsl-play + 9 engine-tui + 94 integration, +1 ignored)**; new
+  `winner_set_{remaining,declared}.cgdsl` fixtures and the F-29 pins;
+  `clippy --no-deps -D warnings` and `fmt --check` clean. Workspace caveat
+  unchanged.

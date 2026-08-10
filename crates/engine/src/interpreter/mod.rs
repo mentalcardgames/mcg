@@ -166,6 +166,17 @@ impl Interpreter {
 
         if edges.is_empty() {
             if self.current_state == self.ir.goal {
+                // Emit the winner set once, on the transition into GameOver
+                // (2026-08-10): winners = every player still in game.
+                if let Some(ref sender) = self.trace_sender {
+                    (sender)(TraceEntry::Step {
+                        from: self.current_state.raw(),
+                        to: self.current_state.raw(),
+                        event: TraceEvent::GameOver {
+                            winners: self.game_data.winner_names(),
+                        },
+                    });
+                }
                 return StepResult::GameOver;
             }
             return StepResult::Error(EngineError::NoOutgoingEdges {

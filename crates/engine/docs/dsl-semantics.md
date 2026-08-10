@@ -392,7 +392,7 @@ success/fail outcome is tracked — see `engine-vs-design.md` D-9).
 | `end turn` | `gd.next_player()` — advances to next eligible player in turn order |
 | `end stage` | `gd.leave_stage(gd.get_current_stage())` |
 | `end <name>` | `gd.leave_stage(name)` |
-| `end game with winner <players>` | IR jumps straight to the goal state (game ends); the action arm itself is an empty TODO — the jump makes the stub harmless |
+| `end game with winner <players>` | **Since 2026-08-10** the declared winners eliminate everyone else (mirroring `winner is X`), then the IR jumps straight to the goal state (game ends) — the in-game survivors ARE the winner set (`GameData::winner_names`) |
 
 `next_player` calls `resolve_turn`, which scans `turn_order` for the next
 player with `in_game && in_stage[current_stage]`. If none found,
@@ -786,5 +786,3 @@ here:
   `demand` — semantics never specified.
 - `for <players>` stage clause — parsed, dropped during lowering (P-1).
 - `SimStage` — lowers identically to sequential stages (P-2).
-- `end game with winner <players>` — the IR jump to the goal ends the game; the
-  action arm is an empty TODO.

@@ -252,6 +252,23 @@ fn trace_event_summary_covers_memory_and_cycle_actions() {
 }
 
 #[test]
+fn game_over_display_names_the_winner_set() {
+    assert_eq!(
+        format!(
+            "{}",
+            TraceEvent::GameOver {
+                winners: vec!["P1".to_string(), "P3".to_string()],
+            }
+        ),
+        "GameOver: winners: P1, P3"
+    );
+    assert_eq!(
+        format!("{}", TraceEvent::GameOver { winners: vec![] }),
+        "GameOver: no winners"
+    );
+}
+
+#[test]
 fn summary_is_derived_not_stored() {
     // The summary must reflect the payload, not a cached string.
     let event = TraceEvent::Action { rule: deal_rule() };

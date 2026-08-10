@@ -365,6 +365,8 @@ authoring new ones):
 | `verb_move_exact_n_short_pile.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | Exact-N prompt clamps to the available cards |
 | `verb_positional_automatic.cgdsl` | `tests/verb_semantics_test.rs` | Positional sources (`top(X)`, `X[N]`) never prompt |
 | `cycle_skips_out_of_game.cgdsl` | `tests/ergonomics_test.rs` | Out-of-game-but-in-stage players are skipped by `cycle to next`/`previous` and the `next` expression (I-13 / F-24 regression) |
+| `winner_set_remaining.cgdsl` | `tests/ergonomics_test.rs` | Winner set = players left in game when no winner statement exists (F-29) |
+| `winner_set_declared.cgdsl` | `tests/ergonomics_test.rs` | `end game with winner X` eliminates the rest; the survivor is the winner set (F-29) |
 | `location_resolution.cgdsl`, `test.cgdsl` | TUI fixtures | Interactive play (load via `just tui <name>`) |
 
 **Authoring conventions:**

@@ -430,7 +430,9 @@ fn trace_file_has_stamped_header_and_footer() {
         "header must carry the game name"
     );
     assert!(
-        content.contains("GameOver after ") && content.ends_with(" steps ===\n"),
-        "footer must count steps: {content}"
+        content.contains("GameOver after ")
+            && content.contains("winners: ")
+            && content.ends_with(" ===\n"),
+        "footer must count steps and name the winner set: {content}"
     );
 }

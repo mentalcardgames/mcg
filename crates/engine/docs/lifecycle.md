@@ -267,8 +267,10 @@ For each trace mention, see `TraceEvent` variant definitions in
 - On `GameOver`: `run()` emits a final event and returns
   `Ok(self.interpreter.game_data.clone())` (`crates/engine/src/controller/mod.rs:281-282`) — a
   **full deep clone** of the terminal state. `GameOver` itself only fires when the current state
-  has **no outgoing edges AND `current_state == ir.goal`** (I-4). If a trace log is open,
-  `run_game_with` writes the `=== GameOver after N steps ===` footer.
+  has **no outgoing edges AND `current_state == ir.goal`** (I-4). The transition into `GameOver`
+  emits a `TraceEvent::GameOver { winners }` (the winner set — every player still in game;
+  empty when nobody won). If a trace log is open, `run_game_with` writes the
+  `=== GameOver after N steps — winners: <names> ===` footer.
 - On `Error(EngineError)`: `run()` returns `Err(EngineError)`
   (`crates/engine/src/controller/mod.rs:284`). The engine does **not** roll back mutations already
   applied before the error — see [`error-handling.md`](./error-handling.md). If a trace log is

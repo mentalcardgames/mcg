@@ -562,9 +562,18 @@ pub(crate) fn execute_action_rule(
                     }
                 }
                 front_end::ast::EndType::Stage { stage } => game_data.leave_stage(stage.clone()),
-                front_end::ast::EndType::GameWithWinner { players: _ } => {
-                    // TODO: not implemented (the IR jump to the goal state
-                    // already ends the game; see engine-vs-design.md)
+                front_end::ast::EndType::GameWithWinner { players } => {
+                    // 2026-08-10: the declared winners eliminate everyone
+                    // else (mirroring `winner is X`); the IR jump to the goal
+                    // then ends the game. The in-game survivors ARE the
+                    // winner set (`GameData::winner_names`).
+                    let winner_indices =
+                        crate::query::Evaluator::resolve_players(&players, game_data)?;
+                    for i in 0..game_data.players.len() {
+                        if !winner_indices.contains(&i) {
+                            game_data.set_player_out(i);
+                        }
+                    }
                 }
             }
             Ok(())

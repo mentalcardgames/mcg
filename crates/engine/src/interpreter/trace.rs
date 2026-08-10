@@ -61,6 +61,12 @@ pub enum TraceEvent {
         player: String,
         stage: String,
     },
+    /// The FSM reached the goal: the game is over. `winners` is the winner
+    /// set — every player still `in_game` (`GameData::winner_names`), which
+    /// is empty when nobody won (2026-08-10).
+    GameOver {
+        winners: Vec<String>,
+    },
     /// Free-form quantifier diagnostics ("5 players, awaiting card choice").
     Quantifier {
         kind: String,
@@ -225,6 +231,13 @@ impl std::fmt::Display for TraceEvent {
             TraceEvent::Trigger => write!(f, "Trigger"),
             TraceEvent::Skipped { player, stage } => {
                 write!(f, "Skipped: {player} (out of {stage})")
+            }
+            TraceEvent::GameOver { winners } => {
+                if winners.is_empty() {
+                    write!(f, "GameOver: no winners")
+                } else {
+                    write!(f, "GameOver: winners: {}", winners.join(", "))
+                }
             }
             TraceEvent::Quantifier { kind, detail } => {
                 write!(f, "Quantifier:{} {}", kind, detail)

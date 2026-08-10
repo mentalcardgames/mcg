@@ -106,6 +106,11 @@ pub enum TraceEvent {
     /// the instruction edge was advanced through without executing
     /// (2026-08-10, ineligible-player skip, I-24).
     Skipped { player: String, stage: String },
+    /// The FSM reached the goal: the game is over. `winners` is the winner
+    /// set — every player still `in_game` (`GameData::winner_names`), empty
+    /// when nobody won (2026-08-10). Emitted once, on the transition into
+    /// `StepResult::GameOver`.
+    GameOver { winners: Vec<String> },
     Quantifier { kind: String, detail: String },
 }
 ```
@@ -201,8 +206,11 @@ structured lines:
   where `NNN` is the controller's `step_count` (loop iterations), shared with the composed
   sender closure.
 - **Footer**:
-  - `=== GameOver after N steps ===` on success, or `=== Error: <e> (after N steps) ===` on
-    `Err` — `N` is the total loop-iteration count.
+  - `=== GameOver after N steps — winners: <names> ===` on success, where
+    `<names>` is the winner set (`GameData::winner_names()` — every player
+    still in game, in declaration order; `none` when nobody won), or
+    `=== Error: <e> (after N steps) ===` on `Err` — `N` is the total
+    loop-iteration count.
 - **Panic line**: `=== Panic: <msg> (after N steps) ===` written before the panic is converted
   (`capture_panics(true)`) or re-raised; see §3.2 and [`error-handling.md`](./error-handling.md) §2.
 

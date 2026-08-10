@@ -262,6 +262,19 @@ impl GameData {
         self.stage_stack.last().cloned()
     }
 
+    /// The winner set at game end: every player still `in_game`, in
+    /// declaration order. Both explicit winner declarations (`winner is X`,
+    /// `end game with winner X` — which eliminate everyone else) and
+    /// elimination-only endings reduce to this rule: the survivors ARE the
+    /// winners. An empty result means nobody won (2026-08-10).
+    pub fn winner_names(&self) -> Vec<String> {
+        self.players
+            .iter()
+            .filter(|p| p.in_game)
+            .map(|p| p.name.clone())
+            .collect()
+    }
+
     pub fn enter_stage(&mut self, stage: String, players_in: Vec<String>) {
         self.stage_stack.push(stage.clone());
 

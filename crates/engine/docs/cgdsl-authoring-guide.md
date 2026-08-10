@@ -536,12 +536,19 @@ semantics).
 end turn              // advance to next player
 end stage             // leave current stage
 end Play              // leave named stage
-end game with winner P:P1   // ends the game (IR jumps to goal)
+end game with winner P:P1   // declare the winner(s) and end the game
 ```
 
 `end turn` calls `next_player()` which scans `turn_order` for the next
 eligible player, wrapping onto the current player when it is the only
 eligible one (since 2026-08-10 it no longer strands the game).
+
+`end game with winner <players>` eliminates everyone not named (2026-08-10)
+and ends the game. **Winner set:** every player still in the game at the end
+is a winner (`GameData::winner_names`) — whether declared via
+`winner is …` / `end game with winner …` (which eliminate the rest) or
+simply because the game ran out of stages with players left in. With nobody
+left in the game, the winner set is empty.
 
 ### 6.5 Set player out
 
@@ -599,7 +606,6 @@ exists.
 | `bid <quantity>` (no memory target) | ❌ Recoverable error since 2026-08-10 — use the memory form |
 | `bid <quantity> on <memory> of <owner>` | ✅ **Numeric input prompt** (2026-08-10): `any`/range → `InputType::Number` prompt (bounds validated, re-asked); literal → writes `{owner}_{memory}` directly. See §6.8 |
 | `demand <type>` / `demand ... as <memory>` | ❌ Semantics undefined |
-| `end game with winner <players>` | ⚠️ Ends the game (IR jump to goal); the action arm itself is an empty TODO |
 
 ### 6.8 Numeric input — `bid <quantity> on <memory> of <owner>` (2026-08-10)
 
@@ -1092,7 +1098,7 @@ stage End for current 1 times {
 | `create token` | ❌ Stub | Tokens not in data model |
 | `bid <quantity>` (no target) | ❌ Error since 2026-08-10 | Use `bid <qty> on <memory> of <owner>` — the numeric input prompt (§6.8) |
 | `demand <type>` | ❌ Stub | Semantics undefined |
-| `end game with winner <players>` | ⚠️ | IR jumps to the goal (game ends); the action arm is an empty TODO |
+| `end game with winner <players>` | ✅ | Declares the winners (everyone else eliminated, 2026-08-10) and ends the game |
 | Collection memory writes | ✅ | Fully evaluated since 2026-08-10 |
 | `reset memory` on non-Int | ✅ | Resets every variant to its typed zero since 2026-08-10 |
 | Memory initial values | ✅ | `memory X 42 on P:P1` honours the value since 2026-08-10 |

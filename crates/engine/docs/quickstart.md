@@ -71,7 +71,7 @@ cargo run -p cgdsl-engine --bin cgdsl-play -- --log trace.log --debug-level high
 - **Trace file:** set `MCG_TRACE_LOG=path` (any path; `off`/`none` disables) or pass
   `--log <path>`. The file gets one line per FSM transition
   (`[Step NNN] [from->to] <event>`), a stamped header (engine version, UTC timestamp, game name),
-  and a step-counted footer (`=== GameOver after N steps ===`). Details and the resolution order:
+  and a step-counted footer naming the winner set (`=== GameOver after N steps — winners: … ===`). Details and the resolution order:
   [`observability.md`](./observability.md) §3.
 - **State dumps:** `--debug-level low|medium|high` prints `format_game_data` at the end of the
   run; `Low` = players/current stage/card counts, `Medium` adds scores/teams/memories,
@@ -105,7 +105,7 @@ For the full host contract (event/trace callbacks, manual Mode-B driving, the
 ## 6. Tests & tooling
 
 ```sh
-cargo test -p cgdsl-engine                 # full suite (546 tests)
+cargo test -p cgdsl-engine                 # full suite (550 tests)
 cargo test -p cgdsl-engine --test flow_test  # one integration file
 cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings
 cargo fmt -p cgdsl-engine -- --check

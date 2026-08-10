@@ -216,10 +216,13 @@ fn demand_memory_action_is_currently_a_noop() {
 }
 
 #[test]
-fn end_action_game_with_winner_is_currently_a_noop() {
+fn end_action_game_with_winner_eliminates_non_winners() {
+    // 2026-08-10: `end game with winner X` eliminates everyone not named
+    // (the IR jump to the goal then ends the game) — the in-game survivors
+    // ARE the winner set.
     let mut gd = GameData::new();
     let p0 = gd.add_player("Alice".to_string());
-    let before = gd.clone();
+    let p1 = gd.add_player("Bob".to_string());
     execute_action_rule(
         ActionRule::EndAction {
             end_type: EndType::GameWithWinner {
@@ -233,10 +236,9 @@ fn end_action_game_with_winner_is_currently_a_noop() {
         &mut gd,
     )
     .unwrap();
-    assert_eq!(
-        gd.players[p0].in_game, before.players[p0].in_game,
-        "GameWithWinner must not flip in_game (currently a TODO no-op)"
-    );
+    assert!(gd.players[p0].in_game, "Alice is the declared winner");
+    assert!(!gd.players[p1].in_game, "Bob is eliminated");
+    assert_eq!(gd.winner_names(), vec!["Alice".to_string()]);
 }
 
 #[test]

@@ -665,6 +665,19 @@ fn get_memory_returns_none_for_absent() {
 }
 
 #[test]
+fn winner_names_are_the_in_game_players() {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("P1".to_string());
+    let p1 = gd.add_player("P2".to_string());
+    gd.add_player("P3".to_string());
+    gd.set_player_out(p1);
+    assert_eq!(gd.winner_names(), vec!["P1".to_string(), "P3".to_string()]);
+    gd.set_player_out(p0);
+    gd.set_player_out(2);
+    assert!(gd.winner_names().is_empty(), "nobody won");
+}
+
+#[test]
 fn card_status_defaults_to_face_up_and_is_settable() {
     // Card status is reserved for the card-encryption work; the slot must
     // exist and default to FaceUp without any engine behaviour reading it.

@@ -60,7 +60,7 @@ last_validated: 2026-08-09
 | `end turn` | ✅ | ✅ | ✅ | ✅ | `next_player()` — with nobody eligible this leaves `current_player = None` (no error). |
 | `end stage` | ✅ | ✅ | ✅ | ✅ | `CurrentStage` — leaves the current stage; IR jumps to the stage's exit (unreachable-code check downstream). |
 | `end Play` (named stage) | ✅ | ✅ | ✅ | ✅ | `Stage { name }` — jumps to that stage's exit. |
-| `end game with winner <players>` | ✅ | ✅ | ⚠️ | ⚠️ | IR jumps straight to the goal state; the action arm is an empty TODO (harmless — the jump ends the game). |
+| `end game with winner <players>` | ✅ | ✅ | ✅ | ✅ | Declared winners eliminate everyone else (2026-08-10); the IR jump to the goal ends the game. Winner set = in-game players (`GameData::winner_names`). |
 | `deal <qty> from X <status> to Y` | ✅ | ✅ | ✅ | ✅ | **Verb semantics (2026-08-10):** `deal` = automatic from the top. Literal quantities deal the top N; `any`/`>= M and <= N` prompt for the **count** (`InputType::Number`, bounds re-validated) then deal that many; a degenerate range (`>= 2 and <= 2`) deals automatically. Status is parsed but **ignored**. Quantity: literal ints ✅; runtime int exprs evaluated against the **live** state (fixed 2026-08-09) and errors propagate. |
 | `exchange ...` / `move ...` (Classic) | ✅ | ✅ | ✅ | ✅ | **Verb semantics (2026-08-10):** `move`/`exchange` = the player picks. Literal `N` on a non-positional source prompts pick-exactly-N (`min=max=N`, clamped; `SrcCardsExactN`); `any`/ranges prompt as before; positional sources (`top(X)`…) are automatic for any verb. |
 | `place ... token ...` | ✅ | ✅ | ❌ | ❌ | No-op. |

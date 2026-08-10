@@ -234,6 +234,17 @@ impl TraceLogPanel {
                     Style::default().fg(Color::DarkGray),
                 ),
             ],
+            TraceEvent::GameOver { winners } => vec![
+                Span::styled("GameOver: ", Style::default().fg(Color::LightGreen)),
+                Span::styled(
+                    if winners.is_empty() {
+                        "no winners".to_string()
+                    } else {
+                        format!("winners: {}", winners.join(", "))
+                    },
+                    Style::default().fg(Color::Yellow),
+                ),
+            ],
             TraceEvent::Quantifier { kind, detail } => vec![
                 Span::styled(
                     format!("Quantifier:{}", kind),
