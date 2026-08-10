@@ -12,8 +12,31 @@
 //! [`SelectionDoesNotSatisfyRange`]'s message). They are stable strings; do
 //! not change them without updating `docs/error-handling.md` §1 and the
 //! tests that assert them.
+//!
+//! For coarse programmatic handling without matching every variant, use
+//! [`EngineError::kind`] / [`ErrorKind`].
 
 use front_end::ast::{CardSet, IntExpr, IntRange, Owner, PlayerExpr};
+
+/// Coarse classification of an [`EngineError`], for hosts that want to group
+/// or handle errors without matching every variant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ErrorKind {
+    /// Evaluator failures (`crates::engine::query`) — missing state, type
+    /// mismatches, out-of-range reads, etc.
+    Query,
+    /// Action-mutation failures (`crates::engine::action`).
+    Action,
+    /// FSM/step failures (`crates::engine::interpreter`).
+    Interpreter,
+    /// Quantifier fan-out / selection-validation failures.
+    Quantifier,
+    /// Controller / test-input failures.
+    Input,
+    /// An internal-invariant panic caught and converted
+    /// (`EngineError::InternalPanic`).
+    Internal,
+}
 
 /// The single error type for the whole engine crate.
 ///
@@ -487,4 +510,188 @@ pub enum EngineError {
     /// bug into a reportable `Err` instead of a process abort.
     #[error("internal engine panic: {message}")]
     InternalPanic { message: String },
+}
+
+impl EngineError {
+    /// Coarse classification of the error, mirroring the module that raised
+    /// it. Use this for grouping/handling without matching every variant.
+    pub fn kind(&self) -> ErrorKind {
+        match self {
+            EngineError::DivisionByZero
+            | EngineError::NoCurrentPlayer
+            | EngineError::NoCurrentStage
+            | EngineError::NoNextPlayerAvailable
+            | EngineError::PreviousPlayerNotFound
+            | EngineError::NoCompetitorFound
+            | EngineError::CardOwnerNotFound
+            | EngineError::OwnerOfMemoryNoPlayer
+            | EngineError::EmptyPlayerCollectionMemory
+            | EngineError::PlayerNotInAnyTeam { .. }
+            | EngineError::MemoryNotFound { .. }
+            | EngineError::MemoryNotInt
+            | EngineError::MemoryNotIntFor { .. }
+            | EngineError::MemoryNotIntCollection
+            | EngineError::MemoryNotLocationCollection
+            | EngineError::MemoryNotTeam
+            | EngineError::MemoryNotTeamFor { .. }
+            | EngineError::MemoryNotCardSet
+            | EngineError::MemoryNotString
+            | EngineError::MemoryNotStringFor { .. }
+            | EngineError::MemoryNotStringCollection
+            | EngineError::MemoryNotPlayerCollection
+            | EngineError::MemoryNotPlayerCollectionFor { .. }
+            | EngineError::MemoryNotValidPlayer
+            | EngineError::MemoryRequiresExplicitOwner { .. }
+            | EngineError::IntCollectionAtOutOfRange { .. }
+            | EngineError::StringCollectionAtOutOfRange { .. }
+            | EngineError::PointMapNotFound { .. }
+            | EngineError::NoCardForExtrema
+            | EngineError::NoValueInIntCollection
+            | EngineError::TurnOrderIndexOutOfRange { .. }
+            | EngineError::PlayerIndexNotFound { .. }
+            | EngineError::PlayerCollectionAtOutOfRange { .. }
+            | EngineError::PlayerCollectionIndexNotFound { .. }
+            | EngineError::ResolvePlayersPlayerNotFound { .. }
+            | EngineError::ResolvePlayerCollectionPlayerNotFound { .. }
+            | EngineError::OwnerNameFromPlayerCollection
+            | EngineError::OwnerNameFromTeamCollection
+            | EngineError::TeamCannotOwn { .. }
+            | EngineError::OwnerNamesFromTeamCollection
+            | EngineError::CardNotFound { .. }
+            | EngineError::CardKeyNotFound { .. }
+            | EngineError::LocationNotFoundForOwner { .. }
+            | EngineError::LocationNotFound { .. }
+            | EngineError::LocationNotFoundForCardPosition { .. }
+            | EngineError::CardPositionNotFound
+            | EngineError::PrecedenceNotFound { .. }
+            | EngineError::ValueNotFoundInPrecedence { .. }
+            | EngineError::ComboNotFound { .. }
+            | EngineError::CardAtIndexNotFound { .. }
+            | EngineError::CardAtTopNotFound { .. }
+            | EngineError::CardAtBottomNotFound { .. }
+            | EngineError::NoCardForExtremaPointMap
+            | EngineError::NoCardForExtremaPrecedence => ErrorKind::Query,
+
+            EngineError::CreateLocationOwnerResolution { .. }
+            | EngineError::CreateCardOnLocationLocationNotFound { .. }
+            | EngineError::CreateMemoryOwnerResolution { .. }
+            | EngineError::CreateMemoryWithTypeOwnerResolution { .. }
+            | EngineError::CreatePointMapIntEval { .. }
+            | EngineError::ShuffleActionEval { .. }
+            | EngineError::SetMemoryIntEval { .. }
+            | EngineError::SetMemoryStringEval { .. }
+            | EngineError::SetMemoryPlayerEval { .. }
+            | EngineError::SetMemoryTeamEval { .. }
+            | EngineError::SetMemoryNoCurrentPlayer
+            | EngineError::ResetMemoryNoCurrentPlayer
+            | EngineError::CycleActionPlayerEval { .. }
+            | EngineError::CycleActionPlayerNotFound { .. }
+            | EngineError::CycleActionTurnOrderNotFound { .. }
+            | EngineError::ScoreIntEval { .. }
+            | EngineError::ScoreMemoryIntEval { .. }
+            | EngineError::MoveFromCardsetEval { .. }
+            | EngineError::MoveDestCardsetEval { .. }
+            | EngineError::MoveDestLocationOutOfRange { .. } => ErrorKind::Action,
+
+            EngineError::CurrentStateNotFoundInIr { .. }
+            | EngineError::NoOutgoingEdges { .. }
+            | EngineError::NoEdgesFound { .. }
+            | EngineError::ConditionEdgeCount { .. }
+            | EngineError::EndConditionEdgeCount { .. }
+            | EngineError::ConditionEdgeMissing
+            | EngineError::EndConditionEdgeMissing
+            | EngineError::UnexpectedInputForOptional
+            | EngineError::AnyInSetupRule => ErrorKind::Interpreter,
+
+            EngineError::DestPlayerFanoutExceedsCap { .. }
+            | EngineError::SelectionDoesNotSatisfyRange { .. }
+            | EngineError::SelectionExceedsAvailable { .. }
+            | EngineError::ChoosePlayerIdxOutOfRange { .. }
+            | EngineError::ChooseCardsIndexOutOfRange => ErrorKind::Quantifier,
+
+            EngineError::TestFileOpen { .. }
+            | EngineError::TestFileRead { .. }
+            | EngineError::TestInputExhausted { .. }
+            | EngineError::InvalidTestInputP { .. }
+            | EngineError::InvalidTestInputPlayerZero { .. }
+            | EngineError::InvalidTestInputC { .. }
+            | EngineError::InvalidTestInputCardZero { .. }
+            | EngineError::InvalidTestInputNumber { .. }
+            | EngineError::InvalidTestInputChoiceZero { .. } => ErrorKind::Input,
+
+            EngineError::InternalPanic { .. } => ErrorKind::Internal,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kind_classifies_representative_variants() {
+        assert_eq!(EngineError::DivisionByZero.kind(), ErrorKind::Query);
+        assert_eq!(
+            EngineError::MemoryNotFound {
+                key: "k".to_string()
+            }
+            .kind(),
+            ErrorKind::Query
+        );
+        assert_eq!(
+            EngineError::CycleActionPlayerNotFound {
+                name: "x".to_string()
+            }
+            .kind(),
+            ErrorKind::Action
+        );
+        assert_eq!(
+            EngineError::CurrentStateNotFoundInIr { state: 3 }.kind(),
+            ErrorKind::Interpreter
+        );
+        assert_eq!(
+            EngineError::ChooseCardsIndexOutOfRange.kind(),
+            ErrorKind::Quantifier
+        );
+        assert_eq!(
+            EngineError::TestInputExhausted { input_sequence: 1 }.kind(),
+            ErrorKind::Input
+        );
+        assert_eq!(
+            EngineError::InternalPanic {
+                message: "boom".to_string()
+            }
+            .kind(),
+            ErrorKind::Internal
+        );
+    }
+
+    #[test]
+    fn every_variant_has_a_kind() {
+        // The classifier must be exhaustive; a representative per group is
+        // asserted above. This test guards against a variant being added to
+        // the enum without a `kind()` arm (compile error if one is missing).
+        let samples = [
+            EngineError::NoNextPlayerAvailable,
+            EngineError::ScoreIntEval {
+                int_expr: Box::new(IntExpr::Literal { int: 1 }),
+                source: Box::new(EngineError::DivisionByZero),
+            },
+            EngineError::NoEdgesFound { state: 0 },
+            EngineError::SelectionExceedsAvailable {
+                count: 5,
+                available: 2,
+            },
+            EngineError::InvalidTestInputC {
+                input_sequence: 0,
+                line: "x".to_string(),
+            },
+            EngineError::InternalPanic {
+                message: "x".to_string(),
+            },
+        ];
+        for e in samples {
+            let _ = e.kind();
+        }
+    }
 }

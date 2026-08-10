@@ -18,13 +18,16 @@ last_validated: 2026-08-10
 
 # Observability & Diagnostics
 
-The engine has **no `tracing`/`log` integration** (verified: zero imports of either in
-`crates/engine/src`). Telemetry is provided by four mechanisms, three legacy plus one new:
+The engine has **no hard `tracing`/`log` dependency** — `tracing` is an *optional* dependency
+behind the `tracing` cargo feature (§2.4); without the feature there are zero imports of either
+crate in `crates/engine/src`. Telemetry is provided by four mechanisms plus an optional bridge:
 
 1. A reactive `event_sender` callback (per-loop-iteration `&GameData` snapshot) — §1.
-2. A new per-FSM-transition `trace_sender` callback emitting `TraceEntry` values — §2.
+2. A per-FSM-transition `trace_sender` callback emitting `TraceEntry` values — §2.
 3. The `MCG_TRACE_LOG` trace file produced by `TraceLogger` (opt-in — see §3).
 4. The structured `crates::engine::debug` formatter/dumps (`DebugLevel` Low/Medium/High) — §4.
+5. An optional `tracing` bridge (`features = ["tracing"]`) that forwards `TraceEntry`s as
+   structured `tracing` events — §2.4.
 
 plus a single ad-hoc `eprintln!` (§5). For the error channels themselves, see
 [`error-handling.md`](./error-handling.md).
@@ -135,6 +138,22 @@ Each variant is emitted by exactly one arm of `Interpreter::step`
   (e.g. `move 1 Deck -> Hand of P:P1 (Private)`, `set score := 10`, `cycle to next`); falls back
   to `pretty()` for events without a structured form. Useful for hosts that want the semantic
   content without matching the AST themselves.
+
+### 2.4 `tracing` integration (feature: `tracing`)
+
+With the `tracing` cargo feature enabled (`cgdsl-engine = { features = ["tracing"] }`),
+`cgdsl_engine::tracing_trace_sender()` returns a `trace_sender`-compatible closure that forwards
+every `TraceEntry` to the `tracing` crate as a structured event on the `cgdsl_engine::trace`
+target at `TRACE` level:
+
+```rust
+let options = RunOptions::new().with_trace_sender(tracing_trace_sender());
+// filter with RUST_LOG=cgdsl_engine::trace=trace (or your subscriber's filter)
+```
+
+Each event carries structured fields: `from`/`to` (raw `StateID`s), `pretty` (the DSL one-liner),
+`summary` (`TraceEvent::summary()`), and `raw` (`TraceEvent::raw()`). The feature adds no runtime
+cost when disabled (the module is `#[cfg]`-gated and `tracing` is an optional dependency).
 
 ---
 

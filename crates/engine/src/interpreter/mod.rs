@@ -18,6 +18,11 @@ mod quant_driver;
 mod trace;
 mod types;
 
+#[cfg(feature = "tracing")]
+mod trace_tracing;
+#[cfg(feature = "tracing")]
+pub use trace_tracing::tracing_trace_sender;
+
 pub use ir_ext::IrExt;
 pub use trace::{TraceEntry, TraceEvent};
 pub use types::{Input, InputKind, InputType, StepResult};

@@ -100,6 +100,9 @@ Design notes:
   `Box<PlayerExpr>`, `Box<IntRange>`) and wrapping variants box their `source:
   Box<EngineError>` — this keeps the enum small (`clippy::result_large_err` clean) and
   gives a cheap `Error::source()` chain to the root cause.
+- **`EngineError::kind()`** returns a coarse [`ErrorKind`] classifier
+  (`Query` / `Action` / `Interpreter` / `Quantifier` / `Input` / `Internal`) for hosts that want to
+  group or handle errors without matching every variant — pure additive API on the enum.
 - The `validate_int_range` re-prompt path formats the error into the re-prompt prompt
   (`"{}. Please choose again."` in `quant_driver.rs`) — the `Display` of
   `SelectionDoesNotSatisfyRange` / `SelectionExceedsAvailable` is part of the UI contract.

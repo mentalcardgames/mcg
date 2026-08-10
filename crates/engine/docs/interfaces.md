@@ -31,16 +31,17 @@ constructs it. Hosts integrate either by handing a closure to `run_game` (Mode A
 
 ## §1. Public API Inventory
 
-This section inventories every symbol re-exported by `crates/engine/src/lib.rs:10-17`:
+This section inventories every symbol re-exported by `crates/engine/src/lib.rs:10-18`:
 
 ```rust
-// crates/engine/src/lib.rs:10-17
+// crates/engine/src/lib.rs:10-18
 pub use controller::{run_game, run_game_with, InputSource, RunOptions};
 pub use debug::{format_game_data, save_game_data, DebugLevel};
-pub use error::EngineError;
+pub use error::{EngineError, ErrorKind};
 pub use game_data::{Card, Combo, GameData, Location, OwnerData, Player, PointMap, Precedence};
 pub use interpreter::{Input, InputType, Interpreter, IrExt, StepResult, TraceEntry, TraceEvent};
 pub use quantifier::{PendingKind, PendingQuant, QuantSite};
+// #[cfg(feature = "tracing")] pub use interpreter::tracing_trace_sender;
 ```
 
 Grouped by concern below. Signatures are re-resolved verbatim from the post-refactor source;
@@ -719,7 +720,9 @@ dedicated thread and communicate via channels.
 
 - **Library target:** `front_end` (IR/AST/lowering); `serde_json` (`alloc_synth`'s `StateID`
   construction — `serde` is not a direct dependency); `rand` (`ShuffleAction`,
-  `CreateTurnorderRandom`); `thiserror` (the `EngineError` enum in `crates/engine/src/error.rs`).
+  `CreateTurnorderRandom`); `thiserror` (the `EngineError` enum in `crates/engine/src/error.rs`);
+  `tracing` (optional, behind the `tracing` feature — the `tracing_trace_sender` bridge, see
+  [`observability.md`](./observability.md) §2.4).
 - **`engine-tui` binary:** `ratatui` + `crossterm` (terminal UI), `crossbeam-channel` (input
   loop).
 - **`cgdsl-play` binary:** no extra dependencies (auto-discovered; only `engine-tui` has an

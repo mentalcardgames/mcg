@@ -9,11 +9,18 @@ path = "src/lib.rs"
 name = "engine-tui"
 path = "src/bin/engine-tui/main.rs"
 
+[features]
+default = []
+# Bridge `trace_sender` events into the `tracing` crate (see
+# `interpreter::trace_tracing` / observability.md §2.4).
+tracing = ["dep:tracing"]
+
 [dependencies]
 front_end = { path = "../front_end" }
 serde_json = "1"
 rand = "0.8"
 thiserror = "2"
+tracing = { version = "0.1", optional = true }
 ratatui = "0.28"
 crossterm = "0.28"
 crossbeam-channel = "0.5"
