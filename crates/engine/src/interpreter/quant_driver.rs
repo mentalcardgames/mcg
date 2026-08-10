@@ -19,6 +19,11 @@ impl Interpreter {
                 candidates: Vec<String>,
                 original: Edge<LoweredPayLoad>,
             },
+            SourcePlayer {
+                idx: usize,
+                candidates: Vec<String>,
+                original: Edge<LoweredPayLoad>,
+            },
             Cards {
                 selected: Vec<usize>,
                 candidate_ids: Vec<usize>,
@@ -53,6 +58,17 @@ impl Interpreter {
                     },
                     InputKind::ChoosePlayer { idx },
                 ) => Resume::Player {
+                    idx: *idx,
+                    candidates: candidates.clone(),
+                    original: original.clone(),
+                },
+                (
+                    crate::quantifier::PendingKind::SourcePlayerAny {
+                        candidates,
+                        original,
+                    },
+                    InputKind::ChoosePlayer { idx },
+                ) => Resume::SourcePlayer {
                     idx: *idx,
                     candidates: candidates.clone(),
                     original: original.clone(),
@@ -108,6 +124,11 @@ impl Interpreter {
                 candidates,
                 original,
             } => self.resume_dest_player_any(idx, candidates, original),
+            Resume::SourcePlayer {
+                idx,
+                candidates,
+                original,
+            } => self.resume_source_player_any(idx, candidates, original),
             Resume::Cards {
                 selected,
                 candidate_ids,
@@ -206,6 +227,33 @@ impl Interpreter {
             },
         });
         self.emit_quant_trace("DestPlayerAny", format!("{} candidates", n));
+        StepResult::NeedsInput(InputType::ChoosePlayer {
+            candidates,
+            prompt: "Choose a player".to_string(),
+        })
+    }
+
+    /// `SourcePlayerAny` arm (initial): like [`step_dest_player_any`], but the
+    /// chosen player becomes the move's *source* owner (e.g.
+    /// `deal Hand where Rank is "Ace" of any …` — "ask any player").
+    pub(super) fn step_source_player_any(
+        &mut self,
+        edge: &Edge<LoweredPayLoad>,
+        pc: front_end::ast::PlayerCollection,
+    ) -> StepResult {
+        let candidates = match self.resolve_player_names(&pc) {
+            Ok(n) => n,
+            Err(e) => return StepResult::Error(e),
+        };
+        let n = candidates.len();
+        self.pending_quant = Some(crate::quantifier::PendingQuant {
+            state: self.current_state,
+            kind: crate::quantifier::PendingKind::SourcePlayerAny {
+                candidates: candidates.clone(),
+                original: edge.clone(),
+            },
+        });
+        self.emit_quant_trace("SourcePlayerAny", format!("{} candidates", n));
         StepResult::NeedsInput(InputType::ChoosePlayer {
             candidates,
             prompt: "Choose a player".to_string(),
@@ -373,6 +421,30 @@ impl Interpreter {
         let s = crate::quantifier::alloc_synth(&mut self.next_synth);
         repl.to = original.to;
         self.emit_quant_trace("DestPlayerAny", format!("chose {}", name));
+        self.pending_overlay.insert(s, vec![repl]);
+        self.current_state = s;
+        StepResult::Ok
+    }
+
+    /// Resume a `SourcePlayerAny`: substitute the chosen player into the
+    /// original edge's `from` owner and dispatch the single replacement edge.
+    fn resume_source_player_any(
+        &mut self,
+        idx: usize,
+        candidates: Vec<String>,
+        original: Edge<LoweredPayLoad>,
+    ) -> StepResult {
+        let Some(name) = candidates.get(idx) else {
+            return StepResult::Error(EngineError::ChoosePlayerIdxOutOfRange {
+                idx,
+                len: candidates.len(),
+            });
+        };
+        let name = name.clone();
+        let mut repl = crate::quantifier::substitute_source_player(&original, name.clone());
+        let s = crate::quantifier::alloc_synth(&mut self.next_synth);
+        repl.to = original.to;
+        self.emit_quant_trace("SourcePlayerAny", format!("chose {}", name));
         self.pending_overlay.insert(s, vec![repl]);
         self.current_state = s;
         StepResult::Ok

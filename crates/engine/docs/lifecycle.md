@@ -189,15 +189,19 @@ The pre-dispatch arms, in order:
    Before per-`Payload` dispatch, `step()` calls `crate::quantifier::scan_edge(edge)` and, if it
    returns a non-`None` `QuantSite`, hands off to the dedicated quantifier arm:
    - `QuantSite::DestPlayerAll { pc }` → `step_dest_player_all`
-     (`interpreter/quant_driver.rs:134-189`) — fans out to every resolved player, or fires a single
+     (`interpreter/quant_driver.rs:155-210`) — fans out to every resolved player, or fires a single
      `ChooseCards` prompt first if the edge also carries an `All`-of-`Any` (in which case the
      fan-out is deferred to the resume branch `resume_dest_all_then_cards`).
    - `QuantSite::DestPlayerAny { pc }` → `step_dest_player_any`
-    (`interpreter/quant_driver.rs:191-215`) — issues a `ChoosePlayer` prompt; the resume is
-    `resume_dest_player_any` (`quant_driver.rs:359-380`).
+     (`interpreter/quant_driver.rs:212-237`) — issues a `ChoosePlayer` prompt; the resume is
+     `resume_dest_player_any` (`quant_driver.rs:407-429`).
+   - `QuantSite::SourcePlayerAny { pc }` → `step_source_player_any`
+     (`interpreter/quant_driver.rs:239-264`) — like `DestPlayerAny`, but the chosen player
+     becomes the move's *source* owner (e.g. `deal Hand where Rank is "X" of any …` — "ask any
+     player"); the resume is `resume_source_player_any` (`quant_driver.rs:431-454`).
    - `QuantSite::SrcCardsAnyOrRange { qty, from }` → `step_src_cards_any_or_range`
-    (`interpreter/quant_driver.rs:217-246`) — issues a `ChooseCards` prompt; the resume is
-    `resume_cards_any_or_range` (`quant_driver.rs:384-423`).
+     (`interpreter/quant_driver.rs:265-294`) — issues a `ChooseCards` prompt; the resume is
+     `resume_cards_any_or_range` (`quant_driver.rs:456-495`).
    - `QuantSite::None` → fall through to the per-`Payload` dispatch below.
 
 6. **Setup-`Any` guard** (`interpreter/mod.rs:160-163`). For a `Payload::Action` whose `GameRule`

@@ -144,6 +144,9 @@ impl Interpreter {
                     crate::quantifier::QuantSite::DestPlayerAny { pc } => {
                         self.step_dest_player_any(&edge_owned, pc)
                     }
+                    crate::quantifier::QuantSite::SourcePlayerAny { pc } => {
+                        self.step_source_player_any(&edge_owned, pc)
+                    }
                     crate::quantifier::QuantSite::ComboSource { combo, from } => {
                         self.step_combo_source(&edge_owned, combo, from)
                     }

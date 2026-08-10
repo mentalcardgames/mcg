@@ -272,6 +272,70 @@ fn quantifier_dest_any_deals_to_chosen_player() {
     assert!(!gd.memories.contains_key(&format!("Table_{}", SYNTH_KEY)));
 }
 
+/// `deal Hand where Rank is "Ace" of any …`: the *source* owner is `any` —
+/// one `ChoosePlayer` prompt per ask, and the chosen player's Ace moves.
+/// Asking a player without an Ace is a no-op (empty filtered set).
+#[test]
+fn quantifier_source_any_takes_from_chosen_player() {
+    let ir = load_game("quantifier_source_any.cgdsl");
+    let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
+    let trace_clone = trace.clone();
+    // Ask 1: P1 (holds the Ace) -> Ace moves back to Stock. Ask 2: P2 (no
+    // Ace) -> the filtered set is empty and the move is a no-op.
+    let picks = Arc::new(Mutex::new(vec![0usize, 1]));
+    let picks_clone = picks.clone();
+
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(move |it: InputType| match it {
+            InputType::ChoosePlayer { .. } => {
+                let mut p = picks_clone.lock().unwrap();
+                let idx = p.remove(0);
+                Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::ChoosePlayer { idx },
+                }
+            }
+            _ => Input {
+                player_id: "P1".into(),
+                kind: InputKind::Choice { idx: 0 },
+            },
+        })),
+        RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
+            trace_clone.lock().unwrap().push(e);
+        })),
+    )
+    .expect("game should complete");
+
+    assert_eq!(
+        player_location(&gd, 0, "Hand").unwrap().cards.len(),
+        0,
+        "P1's Ace moved out"
+    );
+    assert_eq!(
+        player_location(&gd, 1, "Hand").unwrap().cards.len(),
+        1,
+        "P2 unchanged (miss)"
+    );
+    assert_eq!(
+        player_location(&gd, 2, "Hand").unwrap().cards.len(),
+        1,
+        "P3 unchanged"
+    );
+    assert_eq!(
+        table_location(&gd, "Stock").unwrap().cards.len(),
+        1,
+        "only the Ace returned to Stock"
+    );
+    assert_eq!(
+        move_traces(&trace.lock().unwrap()),
+        5,
+        "3 setup deals + both asks dispatch as move edges (the miss is an empty-set no-op)"
+    );
+    assert!(!gd.memories.contains_key(&format!("Table_{}", SYNTH_KEY)));
+}
+
 /// `deal any from Stock private to Hand of all`: exactly one `ChooseCards`
 /// prompt, then a 3-player fan-out. The single chosen card is moved through
 /// each player's Hand in turn (cards are single-instance), ending in exactly

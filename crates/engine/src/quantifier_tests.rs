@@ -10,7 +10,8 @@ use super::*;
 use crate::game_data::MemoryValue;
 use crate::query::Evaluator;
 use front_end::ast::{
-    ActionRule, ClassicMove, GameRule, Group, Groupable, IntCompare, MoveType, Status,
+    ActionRule, AggregateFilter, ClassicMove, GameRule, Group, Groupable, IntCompare, MoveType,
+    Status,
 };
 use front_end::ir::Ir;
 
@@ -407,4 +408,91 @@ fn setup_contains_any_true_for_create_memory_any_owner() {
         owner: aggregate_owner(Quantifier::Any),
     };
     assert!(setup_contains_any(&setup));
+}
+
+/// A `Hand where Rank is "Ace" of <owner>` cardset (where-filtered GroupOwner).
+fn where_filtered_cardset(owner: Owner) -> CardSet {
+    CardSet::GroupOwner {
+        group: Group::Where {
+            groupable: Groupable::Location {
+                name: "Hand".to_string(),
+            },
+            filter: FilterExpr::Aggregate {
+                aggregate: AggregateFilter::KeyIsString {
+                    key: "Rank".to_string(),
+                    string: Box::new(front_end::ast::StringExpr::Literal {
+                        value: "Ace".to_string(),
+                    }),
+                },
+            },
+        },
+        owner,
+    }
+}
+
+#[test]
+fn scan_edge_source_player_any() {
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        where_filtered_cardset(aggregate_owner(Quantifier::Any)),
+        loc_cardset("Stock"),
+    );
+    assert!(matches!(
+        scan_edge(&edge),
+        QuantSite::SourcePlayerAny { .. }
+    ));
+}
+
+#[test]
+fn scan_edge_source_any_takes_precedence_over_card_quantity() {
+    // `deal any from Hand of any …`: the source owner must be resolved first
+    // (a multi-player owner cannot be evaluated), so the site is
+    // `SourcePlayerAny`, not `SrcCardsAnyOrRange`.
+    let edge = move_qty_edge(
+        Quantity::Quantifier {
+            quantifier: Quantifier::Any,
+        },
+        where_filtered_cardset(aggregate_owner(Quantifier::Any)),
+        loc_cardset("Stock"),
+    );
+    assert!(matches!(
+        scan_edge(&edge),
+        QuantSite::SourcePlayerAny { .. }
+    ));
+}
+
+#[test]
+fn substitute_source_player_rewrites_from_owner() {
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        where_filtered_cardset(aggregate_owner(Quantifier::Any)),
+        loc_cardset("Stock"),
+    );
+    let repl = substitute_source_player(&edge, "P2".to_string());
+    let Payload::Action(GameRule::Action {
+        action: ActionRule::Move { move_type },
+    }) = &repl.payload
+    else {
+        panic!("expected a move payload");
+    };
+    let MoveType::Classic { classic } = move_type else {
+        panic!("expected a classic move");
+    };
+    let front_end::ast::ClassicMove::MoveCardSet { move_cs } = classic;
+    let front_end::ast::MoveCardSet::MoveQuantity { from, .. } = move_cs else {
+        panic!("expected MoveQuantity");
+    };
+    assert_eq!(
+        from,
+        &where_filtered_cardset(Owner::Player {
+            player: front_end::ast::PlayerExpr::Literal {
+                name: "P2".to_string(),
+            },
+        }),
+        "the from owner must be substituted with the chosen player"
+    );
 }

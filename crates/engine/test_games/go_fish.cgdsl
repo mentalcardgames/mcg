@@ -1,19 +1,27 @@
-// Go Fish (simplified) — 3 players, ask the next player for a rank, lay
-// down books (sets of four).
+// Go Fish — 3 players, ask the next player for a rank you hold, lay down
+// books (sets of four).
 //
 // Rules:
 //   - 52-card deck; each player is dealt 7 cards.
-//   - On your turn, ask the next player for one rank: if they hold any
-//     cards of that rank, they must hand them over; otherwise you draw
-//     one card from the deck.
+//   - On your turn, ask the next player for one rank **that you hold**: if
+//     they hold any cards of that rank, they must hand them over; otherwise
+//     you draw one card from the deck (go fish). Ranks you do not hold are
+//     not offered (standard rule).
 //   - After the ask, you may lay down a book: four cards of the same rank.
 //     The engine validates the chosen set against the `Book` combo (submit
 //     0 cards to skip). Books land on your Books pile and score 4 points.
 //   - The game ends when the deck runs out or a player empties their hand
 //     (or after 24 turns); the most books wins.
 //
+// Remaining deviations from standard Go Fish (engine-gated, not authoring):
+//   - You may only ask the *next* player (standard: any player) — the
+//     engine has no "choose a player as move source" prompt.
+//   - A successful ask does not grant another ask — the engine has no
+//     conditional re-ask loop inside a turn.
+//
 // Engine notes:
-//   - The ask is a 13-way `choose` (one option per rank).
+//   - The ask is a 13-way `choose` (one option per rank); each option is
+//     guarded by `"<Rank>" in Hand of current` so unheld ranks are no-ops.
 //   - `Hand where Rank is "X" of next` combines a where-filter with an
 //     owner; the engine resolves the base location against the owner
 //     ("next"), not the current player.

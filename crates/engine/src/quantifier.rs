@@ -67,6 +67,13 @@ pub enum QuantSite {
         combo: String,
         from: CardSet,
     },
+    /// The move's `from` is a `CardSet::GroupOwner` whose owner is
+    /// `Owner::PlayerCollection { Quantifier::Any }` — the *source* player is
+    /// pick-one. Mirrors `DestPlayerAny` for the `from` side (e.g.
+    /// `deal Hand where Rank is "Ace" of any …` — "ask any player").
+    SourcePlayerAny {
+        pc: PlayerCollection,
+    },
 }
 
 /// State carried across the `NeedsInput` round-trip for a quantifier that
@@ -87,6 +94,12 @@ pub enum PendingKind {
     /// `DestPlayerAny`: a single player must be chosen from `candidates`; on
     /// resume, the chosen name is substituted into the original edge.
     DestPlayerAny {
+        candidates: Vec<String>,
+        original: Edge<LoweredPayLoad>,
+    },
+    /// `SourcePlayerAny`: like `DestPlayerAny`, but the chosen player is
+    /// substituted into the original edge's *`from`* owner.
+    SourcePlayerAny {
         candidates: Vec<String>,
         original: Edge<LoweredPayLoad>,
     },
@@ -290,6 +303,30 @@ fn combo_source(mcs: &MoveCardSet) -> Option<(String, CardSet)> {
     }
 }
 
+/// If `from` is a `CardSet::GroupOwner` whose owner is
+/// `Owner::PlayerCollection { PlayerCollection::Aggregate { Quantifier::Any } }`,
+/// return the collection — the candidate source for the `ChoosePlayer` prompt.
+fn source_any_site(from: &CardSet) -> Option<PlayerCollection> {
+    if let CardSet::GroupOwner {
+        owner:
+            Owner::PlayerCollection {
+                player_collection:
+                    pc @ PlayerCollection::Aggregate {
+                        aggregate:
+                            AggregatePlayerCollection::Quantifier {
+                                quantifier: Quantifier::Any,
+                            },
+                    },
+            },
+        ..
+    } = from
+    {
+        Some(pc.clone())
+    } else {
+        None
+    }
+}
+
 /// Rebuild the *pile* cardset that a combo group filters — i.e. drop the
 /// combo, keep the groupable (and owner). Used to prompt the player over the
 /// whole pile rather than the pre-matched subset.
@@ -345,6 +382,18 @@ pub fn scan_edge(edge: &Edge<LoweredPayLoad>) -> QuantSite {
         return QuantSite::ComboSource { combo, from };
     }
 
+    // Source-player quantifier: the `from` is owned by `any` — prompt the
+    // player, then substitute. Resolved *before* the card-amount site: a
+    // multi-player owner cannot be evaluated, so the card choice would fail
+    // if the source were still unresolved.
+    let from = match mcs {
+        front_end::ast::MoveCardSet::Move { from, .. } => from,
+        front_end::ast::MoveCardSet::MoveQuantity { from, .. } => from,
+    };
+    if let Some(pc) = source_any_site(from) {
+        return QuantSite::SourcePlayerAny { pc };
+    }
+
     // Card-amount quantifier (only MoveQuantity carries a quantity).
     if let front_end::ast::MoveCardSet::MoveQuantity { quantity, from, .. } = mcs {
         match quantity {
@@ -395,6 +444,29 @@ pub fn substitute_dest_player(
         *owner = Owner::Player {
             player: PlayerExpr::Literal { name: player_name },
         };
+    }
+    repl
+}
+
+/// Clone `edge` and replace the `from` card-set's owner with a concrete
+/// `Owner::Player { PlayerExpr::Literal { player_name } }` — the
+/// `SourcePlayerAny` counterpart of [`substitute_dest_player`]. If the edge's
+/// `from` is not a `GroupOwner` (defensive), the edge is returned unchanged.
+pub fn substitute_source_player(
+    edge: &Edge<LoweredPayLoad>,
+    player_name: String,
+) -> Edge<LoweredPayLoad> {
+    let mut repl = edge.clone();
+    if let Some(mcs) = move_cardset_mut(&mut repl) {
+        let from = match mcs {
+            front_end::ast::MoveCardSet::Move { from, .. } => from,
+            front_end::ast::MoveCardSet::MoveQuantity { from, .. } => from,
+        };
+        if let CardSet::GroupOwner { owner, .. } = from {
+            *owner = Owner::Player {
+                player: PlayerExpr::Literal { name: player_name },
+            };
+        }
     }
     repl
 }

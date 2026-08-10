@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all — mechanics capability matrix]
 topics: [mechanics, capability-matrix, handover, gaps]
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # Card Game Mechanics — Capability Matrix
@@ -51,6 +51,7 @@ last_validated: 2026-08-09
 | Deal fixed counts | most | ✅ | ✅ | ✅ | `deal 2 from Deck private to Hand of P:P1` |
 | Round-robin deal to all | Poker, Hearts | ✅ | ✅ | ✅ | `deal 1 … to Hand of all` (sequential fan-out) |
 | Deal to a chosen player | gift mechanics | ✅ | ✅ | ✅ | `to Hand of any` → `ChoosePlayer` |
+| Take from a chosen player | Go Fish ask | ✅ | ✅ | ✅ | `deal Hand where Rank is "X" of any …` — source `any` prompts `ChoosePlayer` (engine: `SourcePlayerAny`, 2026-08-10) |
 | Turn order fixed/random | any | ✅ | ✅ | ✅ | `turnorder all` / `turnorder all random` |
 | Teams | Bridge, Doppelkopf | ✅ | ✅ | ✅ | `team T1 with all` (`any` in setup rejected — I-20) |
 | First player by highest card | Spades, Hearts | ⚠️ | ✅ | ✅ | `owner of max of <cardset> using PM` works for one pile; **cross-player** comparison not expressible — DSL gap |
@@ -104,7 +105,7 @@ last_validated: 2026-08-09
 | Shuffle a pile (incl. partial) | any | ✅ | ✅ | ✅ | `shuffle Deck` — partial sets shuffled in place (F-5) |
 | Flip face up/down | Memory, Solitaire | ✅ | ✅ | ❌ | **Engine work (crypto)**: parses, no-op (D-6) |
 | Pass a card to a chosen player | Hearts passing | ✅ | ✅ | ✅ | `deal 1 … to Hand of any` |
-| Take cards from another player | Go Fish | ✅ | ✅ | ✅ | `deal (Hand where Rank is "X" of next) …` |
+| Take cards from another player | Go Fish | ✅ | ✅ | ✅ | `deal (Hand where Rank is "X" of next) …`; `of any` for a chosen target (2026-08-10) |
 | Steal / capture | Slapjack variants | ✅ | ✅ | ✅ | Moves with filters |
 | Return cards to the deck | most | ✅ | ✅ | ✅ | Any move into the deck location |
 | Side pile / kitty | Canasta, Euchre | ✅ | ✅ | ✅ | Any location works |
