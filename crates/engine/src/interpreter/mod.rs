@@ -22,7 +22,7 @@ pub use ir_ext::IrExt;
 pub use trace::{TraceEntry, TraceEvent};
 pub use types::{Input, InputKind, InputType, StepResult};
 
-use crate::interpreter::ir_ext::{payload_label, rule_signature};
+use crate::interpreter::ir_ext::payload_label;
 
 pub struct Interpreter {
     pub ir: Ir<LoweredPayLoad>,
@@ -90,16 +90,11 @@ impl Interpreter {
             let from = self.current_state.raw();
             let to = edge.to.raw();
             if let Payload::Action(gr) = &edge.payload {
-                let (subtype, detail, raw_detail) = rule_signature(gr);
                 if let Some(ref sender) = self.trace_sender {
                     (sender)(TraceEntry::Step {
                         from,
                         to,
-                        event: TraceEvent::Action {
-                            subtype,
-                            detail,
-                            raw_detail,
-                        },
+                        event: TraceEvent::Action { rule: gr.clone() },
                     });
                 }
             }
@@ -162,16 +157,11 @@ impl Interpreter {
                             return StepResult::Error(EngineError::AnyInSetupRule);
                         }
                     }
-                    let (subtype, detail, raw_detail) = rule_signature(gr);
                     if let Some(ref sender) = self.trace_sender {
                         (sender)(TraceEntry::Step {
                             from,
                             to,
-                            event: TraceEvent::Action {
-                                subtype,
-                                detail,
-                                raw_detail,
-                            },
+                            event: TraceEvent::Action { rule: gr.clone() },
                         });
                     }
                     self.dispatch(edge.clone())
@@ -249,8 +239,7 @@ impl Interpreter {
                             from,
                             to,
                             event: TraceEvent::Condition {
-                                expr: format!("{}", expr),
-                                raw_expr: format!("{:?}", expr),
+                                expr: expr.clone(),
                                 result,
                                 negated: *negated,
                                 took_else: should_take_else,
@@ -294,8 +283,7 @@ impl Interpreter {
                             from,
                             to,
                             event: TraceEvent::EndCondition {
-                                expr: format!("{}", expr),
-                                raw_expr: format!("{:?}", expr),
+                                expr: expr.clone(),
                                 stage: stage.clone(),
                                 result,
                                 exited: should_exit,

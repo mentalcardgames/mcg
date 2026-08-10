@@ -276,12 +276,17 @@ Filter by `TraceEvent` variant. The `move_traces` helper in
 
 ```rust
 fn move_traces(trace: &[TraceEntry]) -> usize {
+    use front_end::ast::{ActionRule, GameRule};
     trace.iter().filter(|e| matches!(e,
-        TraceEntry::Step { event: TraceEvent::Action { subtype, .. }, .. }
-        if subtype == "Action:Move"
+        TraceEntry::Step { event: TraceEvent::Action { rule }, .. }
+        if matches!(rule, GameRule::Action { action: ActionRule::Move { .. } })
     )).count()
 }
 ```
+
+Since 2026-08-10 `TraceEvent` carries typed AST payloads (`rule`/`expr`), so variant filters match
+on the node shape rather than on a subtype string; `TraceEvent::summary()` renders a compact
+structured one-liner when you need a readable line.
 
 The complete `TraceEvent` enum lives in `crates/engine/src/interpreter/trace.rs`:
 `Action`, `Choice`, `OptionalAccept`, `OptionalDecline`, `Condition`, `EndCondition`,

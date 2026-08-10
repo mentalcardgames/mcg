@@ -1,3 +1,15 @@
+//! Trace entry types for per-FSM-transition telemetry.
+//!
+//! Events carry **typed payloads** — the actual AST nodes — rather than
+//! pre-rendered strings: a host can inspect `rule`/`expr` directly and render
+//! whatever view it needs. The `Display`, [`TraceEvent::raw`] and
+//! [`TraceEvent::summary`] impls are *derived views* over that data; the
+//! trace-file lines are produced by `Display`, so the file format is stable.
+
+use front_end::ast::{BoolExpr, EndCondition, GameRule};
+
+use super::ir_ext::rule_signature;
+
 #[derive(Clone, Debug)]
 pub enum TraceEntry {
     Step {
@@ -9,12 +21,11 @@ pub enum TraceEntry {
 
 #[derive(Clone, Debug)]
 pub enum TraceEvent {
+    /// The full action rule being executed. Render it with [`TraceEvent::pretty`]
+    /// (DSL text), [`TraceEvent::raw`] (`Debug`), or [`TraceEvent::summary`]
+    /// (compact structured form).
     Action {
-        subtype: String,
-        /// Human-readable DSL text, e.g. `deal 1 from Deck private to Hand of P:P1`.
-        detail: String,
-        /// `Debug` representation of the rule, e.g. `Move { move_type: ... }`.
-        raw_detail: String,
+        rule: GameRule,
     },
     Choice {
         chosen_idx: usize,
@@ -22,22 +33,17 @@ pub enum TraceEvent {
     },
     OptionalAccept,
     OptionalDecline,
+    /// The evaluated boolean expression — the full node, not pre-rendered text.
     Condition {
-        /// Human-readable boolean expression, e.g. `(sum of Hand of current using BJ > 21)`.
-        expr: String,
-        /// `Debug` representation of the expression.
-        raw_expr: String,
+        expr: BoolExpr,
         result: bool,
         negated: bool,
         took_else: bool,
     },
     EndCondition {
-        /// Human-readable boolean expression.
-        expr: String,
-        /// `Debug` representation of the expression.
-        raw_expr: String,
-        stage: String,
+        expr: EndCondition,
         result: bool,
+        stage: String,
         exited: bool,
     },
     StageRoundCounter {
@@ -48,6 +54,7 @@ pub enum TraceEvent {
         stage: String,
     },
     Trigger,
+    /// Free-form quantifier diagnostics ("5 players, awaiting card choice").
     Quantifier {
         kind: String,
         detail: String,
@@ -62,41 +69,98 @@ impl TraceEvent {
     }
 
     /// "Raw" rendering: `Debug` representations where the engine has them
-    /// (action rules, condition expressions); identical to [`pretty`]
-    /// otherwise.
+    /// (action rules, condition expressions); identical to [`pretty`] otherwise.
     pub fn raw(&self) -> String {
         match self {
-            TraceEvent::Action {
-                subtype,
-                raw_detail,
-                ..
-            } => format!("Action:{} {}", subtype, raw_detail),
+            TraceEvent::Action { rule } => {
+                let (subtype, _, raw_detail) = rule_signature(rule);
+                format!("{} {}", subtype, raw_detail)
+            }
             TraceEvent::Condition {
-                raw_expr,
+                expr,
                 result,
                 negated,
                 took_else,
-                ..
             } => {
                 format!(
-                    "Condition: {} = {} (neg={}, else={})",
-                    raw_expr, result, negated, took_else
+                    "Condition: {:?} = {} (neg={}, else={})",
+                    expr, result, negated, took_else
                 )
             }
             TraceEvent::EndCondition {
-                raw_expr,
+                expr,
                 stage,
                 result,
                 exited,
-                ..
             } => {
                 format!(
-                    "EndCondition({}): {} = {} (exited={})",
-                    stage, raw_expr, result, exited
+                    "EndCondition({}): {:?} = {} (exited={})",
+                    stage, expr, result, exited
                 )
             }
             _ => format!("{}", self),
         }
+    }
+
+    /// Compact structured rendering for hosts that want the *semantic*
+    /// content (which cards moved where, which memory was written) instead of
+    /// DSL text. Falls back to [`pretty`] for events without a structured form.
+    pub fn summary(&self) -> String {
+        use front_end::ast::{ActionRule, GameRule};
+        match self {
+            TraceEvent::Action { rule } => match rule {
+                GameRule::Action {
+                    action: ActionRule::Move { move_type },
+                } => move_summary(move_type),
+                GameRule::Action {
+                    action:
+                        ActionRule::SetMemory {
+                            memory,
+                            memory_type,
+                        },
+                } => format!("set {memory} := {memory_type}"),
+                GameRule::Action {
+                    action: ActionRule::ResetMemory { memory },
+                } => format!("reset {memory}"),
+                GameRule::Action {
+                    action: ActionRule::CycleAction { player },
+                } => format!("cycle to {player}"),
+                GameRule::Action {
+                    action: ActionRule::OutAction { players, out_of },
+                } => format!("out {players} of {out_of}"),
+                _ => format!("{}", rule),
+            },
+            _ => format!("{}", self),
+        }
+    }
+}
+
+/// Structured one-liner for a Move action: which cards move where.
+fn move_summary(move_type: &front_end::ast::MoveType) -> String {
+    use front_end::ast::{ClassicMove, DealMove, ExchangeMove, MoveCardSet, MoveType};
+    let mcs = match move_type {
+        MoveType::Deal { deal } => match deal {
+            DealMove::MoveCardSet { deal_cs } => Some(deal_cs),
+        },
+        MoveType::Exchange { exchange } => match exchange {
+            ExchangeMove::MoveCardSet { exchange_cs } => Some(exchange_cs),
+        },
+        MoveType::Classic { classic } => match classic {
+            ClassicMove::MoveCardSet { move_cs } => Some(move_cs),
+        },
+        MoveType::Place { .. } => None,
+    };
+    match mcs {
+        Some(MoveCardSet::Move { from, status, to }) => {
+            format!("move {} -> {} ({:?})", from, to, status)
+        }
+        Some(MoveCardSet::MoveQuantity {
+            quantity,
+            from,
+            status,
+            to,
+        }) => format!("move {} {} -> {} ({:?})", quantity, from, to, status),
+        None => format!("{}", move_type),
     }
 }
 
@@ -111,9 +175,10 @@ impl std::fmt::Display for TraceEntry {
 impl std::fmt::Display for TraceEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TraceEvent::Action {
-                subtype, detail, ..
-            } => write!(f, "{} {}", subtype, detail),
+            TraceEvent::Action { rule } => {
+                let (subtype, detail, _) = rule_signature(rule);
+                write!(f, "{} {}", subtype, detail)
+            }
             TraceEvent::Choice {
                 chosen_idx,
                 options,
@@ -127,7 +192,6 @@ impl std::fmt::Display for TraceEvent {
                 result,
                 negated,
                 took_else,
-                ..
             } => {
                 write!(
                     f,
@@ -140,7 +204,6 @@ impl std::fmt::Display for TraceEvent {
                 result,
                 stage,
                 exited,
-                ..
             } => {
                 write!(
                     f,

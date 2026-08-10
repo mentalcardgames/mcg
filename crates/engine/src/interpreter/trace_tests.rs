@@ -1,4 +1,52 @@
 use super::*;
+use front_end::ast::{
+    ActionRule, BoolExpr, CompareBool, EndCondition as AstEndCondition, GameRule, Group, Groupable,
+    IntCompare, IntExpr, MoveCardSet, MoveType, Status,
+};
+
+/// `deal 1 from Deck private to Hand of P:P1`-shaped move rule.
+fn deal_rule() -> GameRule {
+    let loc = |name: &str| front_end::ast::CardSet::Group {
+        group: Group::Groupable {
+            groupable: Groupable::Location {
+                name: name.to_string(),
+            },
+        },
+    };
+    GameRule::Action {
+        action: ActionRule::Move {
+            move_type: MoveType::Deal {
+                deal: front_end::ast::DealMove::MoveCardSet {
+                    deal_cs: MoveCardSet::Move {
+                        from: loc("Deck"),
+                        status: Status::Private,
+                        to: loc("Hand"),
+                    },
+                },
+            },
+        },
+    }
+}
+
+/// `(2 == 2)`-shaped boolean expression.
+fn eq_expr() -> BoolExpr {
+    BoolExpr::Aggregate {
+        aggregate: front_end::ast::AggregateBool::Compare {
+            cmp_bool: CompareBool::Int {
+                int: IntExpr::Literal { int: 2 },
+                cmp: IntCompare::Eq,
+                int1: IntExpr::Literal { int: 2 },
+            },
+        },
+    }
+}
+
+/// `until (2 == 2)`-shaped end condition.
+fn until_expr() -> AstEndCondition {
+    AstEndCondition::UntilBool {
+        bool_expr: eq_expr(),
+    }
+}
 
 #[test]
 fn trace_entry_step_displays_bracketed_transition() {
@@ -14,14 +62,11 @@ fn trace_entry_step_displays_bracketed_transition() {
 
 #[test]
 fn trace_event_action_displays_subtype_and_detail() {
-    let event = TraceEvent::Action {
-        subtype: "Action:Move".to_string(),
-        detail: "deal 1 from Deck private to Hand of P:P1".to_string(),
-        raw_detail: "Move { move_type: Deal { .. } }".to_string(),
-    };
+    let event = TraceEvent::Action { rule: deal_rule() };
     let s = format!("{}", event);
     assert!(s.contains("Action:Move"));
-    assert!(s.contains("deal 1 from Deck"));
+    assert!(s.contains("Deck"));
+    assert!(s.contains("Hand"), "pretty shows the DSL text: {s}");
     let raw = event.raw();
     assert!(
         raw.contains("Move { move_type"),
@@ -34,33 +79,79 @@ fn trace_event_action_displays_subtype_and_detail() {
 }
 
 #[test]
+fn trace_event_action_carries_the_typed_rule() {
+    let event = TraceEvent::Action { rule: deal_rule() };
+    match &event {
+        TraceEvent::Action { rule } => match rule {
+            GameRule::Action {
+                action: ActionRule::Move { move_type },
+            } => assert!(matches!(move_type, MoveType::Deal { .. })),
+            other => panic!("expected a move rule, got {:?}", other),
+        },
+        other => panic!("expected Action event, got {:?}", other),
+    }
+    // The structured summary is derived from the typed payload.
+    let summary = event.summary();
+    assert!(
+        summary.contains("Deck"),
+        "summary names the source: {summary}"
+    );
+    assert!(
+        summary.contains("Hand"),
+        "summary names the target: {summary}"
+    );
+}
+
+#[test]
 fn trace_event_condition_displays_result_and_neg() {
     let event = TraceEvent::Condition {
-        expr: "(sum of Hand of current using BJ > 21)".to_string(),
-        raw_expr: "Aggregate { aggregate: Compare { .. } }".to_string(),
+        expr: eq_expr(),
         result: true,
         negated: false,
         took_else: true,
     };
     let s = format!("{}", event);
     assert!(s.contains("Condition:"));
-    assert!(s.contains("(sum of Hand of current using BJ > 21)"));
+    assert!(s.contains("2"), "pretty shows the DSL text: {s}");
     assert!(s.contains("true"));
     assert!(s.contains("neg=false"));
     assert!(s.contains("body=true"), "the body edge was taken: {s}");
     let raw = event.raw();
     assert!(raw.contains("Aggregate {"), "raw mode shows Debug: {raw}");
-    assert!(
-        !raw.contains("sum of Hand of current"),
-        "raw mode hides pretty text: {raw}"
-    );
+    assert!(!raw.contains("== 2"), "raw mode hides pretty text: {raw}");
+}
+
+#[test]
+fn trace_event_condition_carries_the_typed_expr() {
+    let event = TraceEvent::Condition {
+        expr: eq_expr(),
+        result: true,
+        negated: false,
+        took_else: true,
+    };
+    match &event {
+        TraceEvent::Condition { expr, result, .. } => {
+            assert!(*result);
+            assert!(
+                matches!(
+                    expr,
+                    BoolExpr::Aggregate {
+                        aggregate: front_end::ast::AggregateBool::Compare {
+                            cmp_bool: CompareBool::Int { .. }
+                        }
+                    }
+                ),
+                "hosts can inspect the typed expression"
+            );
+        }
+        other => panic!("expected Condition event, got {:?}", other),
+    }
 }
 
 #[test]
 fn trace_event_end_condition_displays_stage_and_exited() {
     let event = TraceEvent::EndCondition {
-        expr: "e".to_string(),
-        raw_expr: "Aggregate { .. }".to_string(),
+        expr: until_expr(),
         result: false,
         stage: "Play".to_string(),
         exited: true,
@@ -68,7 +159,7 @@ fn trace_event_end_condition_displays_stage_and_exited() {
     let s = format!("{}", event);
     assert!(s.contains("EndCondition(Play)"));
     assert!(s.contains("exited=true"));
-    assert!(event.raw().contains("Aggregate { .. }"));
+    assert!(event.raw().contains("UntilBool"));
 }
 
 #[test]
@@ -130,4 +221,39 @@ fn trace_event_quantifier_displays_kind_and_detail() {
     let s = format!("{}", event);
     assert!(s.contains("Quantifier:ChooseCards"));
     assert!(s.contains("pick 2"));
+}
+
+#[test]
+fn trace_event_summary_covers_memory_and_cycle_actions() {
+    let set = TraceEvent::Action {
+        rule: GameRule::Action {
+            action: ActionRule::SetMemory {
+                memory: "score".to_string(),
+                memory_type: front_end::ast::MemoryType::Int {
+                    int: IntExpr::Literal { int: 10 },
+                },
+            },
+        },
+    };
+    assert_eq!(set.summary(), "set score := 10");
+    let cycle = TraceEvent::Action {
+        rule: GameRule::Action {
+            action: ActionRule::CycleAction {
+                player: front_end::ast::PlayerExpr::Runtime {
+                    runtime: front_end::ast::RuntimePlayer::Next,
+                },
+            },
+        },
+    };
+    assert!(cycle.summary().starts_with("cycle to "));
+    // Events without a structured form fall back to the pretty rendering.
+    let trigger = TraceEvent::Trigger;
+    assert_eq!(trigger.summary(), "Trigger");
+}
+
+#[test]
+fn summary_is_derived_not_stored() {
+    // The summary must reflect the payload, not a cached string.
+    let event = TraceEvent::Action { rule: deal_rule() };
+    assert!(event.summary().contains("Private"));
 }

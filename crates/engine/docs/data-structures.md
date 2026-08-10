@@ -263,14 +263,14 @@ pub enum TraceEntry {
     Step { from: u32, to: u32, event: TraceEvent },
 }
 
-// crates/engine/src/interpreter/trace.rs:10-46
+// crates/engine/src/interpreter/trace.rs:14-67
 pub enum TraceEvent {
-    Action { subtype: String, detail: String },
+    Action { rule: GameRule },
     Choice { chosen_idx: usize, options: Vec<String> },
     OptionalAccept,
     OptionalDecline,
-    Condition { expr: String, result: bool, negated: bool, took_else: bool },
-    EndCondition { expr: String, result: bool, stage: String, exited: bool },
+    Condition { expr: BoolExpr, result: bool, negated: bool, took_else: bool },
+    EndCondition { expr: EndCondition, result: bool, stage: String, exited: bool },
     StageRoundCounter { stage: String, new_count: u32 },
     EndStage { stage: String },
     Trigger,

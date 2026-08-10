@@ -343,14 +343,14 @@ pub enum TraceEntry {
 ```
 
 ```rust
-// crates/engine/src/interpreter/trace.rs:10-52
+// crates/engine/src/interpreter/trace.rs:14-67
 pub enum TraceEvent {
-    Action { subtype: String, detail: String, raw_detail: String },
+    Action { rule: GameRule },
     Choice { chosen_idx: usize, options: Vec<String> },
     OptionalAccept,
     OptionalDecline,
-    Condition { expr: String, raw_expr: String, result: bool, negated: bool, took_else: bool },
-    EndCondition { expr: String, raw_expr: String, result: bool, stage: String, exited: bool },
+    Condition { expr: BoolExpr, result: bool, negated: bool, took_else: bool },
+    EndCondition { expr: EndCondition, result: bool, stage: String, exited: bool },
     StageRoundCounter { stage: String, new_count: u32 },
     EndStage { stage: String },
     Trigger,
@@ -358,9 +358,11 @@ pub enum TraceEvent {
 }
 ```
 
-`detail`/`expr` are DSL-level text (via the AST `Display` impls);
-`raw_detail`/`raw_expr` are the `Debug` forms. `TraceEvent::pretty()` /
-`TraceEvent::raw()` select between them (the TUI's `r` toggle uses this).
+Events carry **typed payloads** — the full `front_end::ast` nodes (`rule`/`expr`) — so hosts can
+inspect them directly; `detail`/`raw`-style text is derived at render time:
+`TraceEvent::pretty()` (DSL text, what `Display` and the trace file use), `TraceEvent::raw()`
+(`Debug` form; the TUI's `r` toggle), and `TraceEvent::summary()` (compact structured one-liner
+derived from the payload). See [`observability.md`](./observability.md) §2.2–2.3.
 
 Intent: `TraceEntry::Step { from, to, event }` is emitted once per FSM transition via the
 `trace_sender` callback; the `Quantifier` variant surfaces intermediate sub-steps ("chose player

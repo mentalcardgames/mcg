@@ -168,8 +168,8 @@ The pre-dispatch arms, in order:
 2. **(B) Overlay dispatch** (`interpreter/mod.rs:81-103`). If `current_state` has a synthetic
    replacement edge in `pending_overlay`, dispatch the first one through the normal `Action` trace
    + `execute_edge` path, then return `StepResult::Ok`. This arm fires once per fan-out edge for a
-   `DestPlayerAll` quantifier (and for the per-player edges of an `All`-of-`Any`), emitting one
-   `TraceEvent::Action` per synthetic transition.
+    `DestPlayerAll` quantifier (and for the per-player edges of an `All`-of-`Any`), emitting one
+    `TraceEvent::Action` (carrying the cloned `GameRule`) per synthetic transition.
 
 3. **(C0) Quantifier resume** (`interpreter/mod.rs:105-108` → `quant_driver.rs:15-101`). If a
    quantifier prompt is in flight (`pending_quant`) and its `state` equals `current_state` and an
@@ -211,7 +211,7 @@ After the pre-dispatch arms, the per-`Payload` dispatch
 (`interpreter/mod.rs:153-357`) of the **first** outgoing edge's payload:
 
 - `Payload::Action(_)` → run the setup-`Any` guard (only for `SetUp`), then execute unconditionally
-  and advance; emit `TraceEvent::Action { subtype, detail }`.
+  and advance; emit `TraceEvent::Action { rule }` (the cloned `GameRule`).
 - `Payload::Choice` → if the input buffer has an `Input`, pick `edges[input.idx()]` and execute;
   otherwise return `NeedsInput(InputType::Choice { … })`. Emits `TraceEvent::Choice`.
 - `Payload::Optional` → same as `Choice` but with `InputType::Optional(prompt)`;

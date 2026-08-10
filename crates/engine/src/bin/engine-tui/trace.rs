@@ -65,6 +65,7 @@ impl TraceDetail {
 }
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)] // Entry carries the full typed TraceEvent (AST nodes); the TUI stores these per-run
 pub enum DisplayTraceEntry {
     Entry {
         step_number: usize,

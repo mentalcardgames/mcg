@@ -50,15 +50,21 @@ fn table_location<'a>(gd: &'a GameData, loc_name: &str) -> Option<&'a Location> 
 
 /// Count `Action:Move` trace entries (the per-player / per-card dispatches).
 fn move_traces(trace: &[TraceEntry]) -> usize {
+    use front_end::ast::{ActionRule, GameRule};
     trace
         .iter()
         .filter(|e| {
             matches!(
                 e,
                 TraceEntry::Step {
-                    event: TraceEvent::Action { subtype, .. },
+                    event: TraceEvent::Action { rule },
                     ..
-                } if subtype == "Action:Move"
+                } if matches!(
+                    rule,
+                    GameRule::Action {
+                        action: ActionRule::Move { .. }
+                    }
+                )
             )
         })
         .count()

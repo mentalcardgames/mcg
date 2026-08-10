@@ -83,15 +83,19 @@ ids the quantifier subsystem allocates from `u32::MAX - 1` downward (see invaria
 
 ### 2.2 `TraceEvent`
 
+Since 2026-08-10 the events carry **typed payloads** — the actual AST nodes — not pre-rendered
+strings. Hosts inspect `rule`/`expr` directly; the text views are derived at render time
+(§2.3).
+
 ```rust
-// crates/engine/src/interpreter/trace.rs:10-52
+// crates/engine/src/interpreter/trace.rs:14-67
 pub enum TraceEvent {
-    Action { subtype: String, detail: String, raw_detail: String },
+    Action { rule: GameRule },
     Choice { chosen_idx: usize, options: Vec<String> },
     OptionalAccept,
     OptionalDecline,
-    Condition { expr: String, raw_expr: String, result: bool, negated: bool, took_else: bool },
-    EndCondition { expr: String, raw_expr: String, result: bool, stage: String, exited: bool },
+    Condition { expr: BoolExpr, result: bool, negated: bool, took_else: bool },
+    EndCondition { expr: EndCondition, result: bool, stage: String, exited: bool },
     StageRoundCounter { stage: String, new_count: u32 },
     EndStage { stage: String },
     Trigger,
@@ -99,19 +103,15 @@ pub enum TraceEvent {
 }
 ```
 
-`detail`/`expr` carry **DSL-level text** (e.g. `deal 1 from Deck private to
-Hand of P:P1`, `(sum of Hand of current using BJ > 21)`) — the AST `Display`
-implementations; `raw_detail`/`raw_expr` carry the `Debug` representations.
-`TraceEvent::pretty()` renders the simplified form (this is what `Display`
-uses, so the trace file is readable); `TraceEvent::raw()` renders the `Debug`
-form — the TUI toggles between them with `r`.
+`Action.rule` / `Condition.expr` / `EndCondition.expr` are the full `front_end::ast` nodes being
+executed/evaluated. The `Choice.options`, `Optional` prompt, `Quantifier.kind/detail`, stage names
+and counts are the only string fields — they have no structured equivalent.
 
 Each variant is emitted by exactly one arm of `Interpreter::step`
-(`crates/engine/src/interpreter/mod.rs:64-364`) or by the quantifier driver
-(`crates/engine/src/interpreter/quant_driver.rs:363-375`):
+(`crates/engine/src/interpreter/mod.rs`) or by the quantifier driver
+(`crates/engine/src/interpreter/quant_driver.rs`):
 - `Action` — `Payload::Action` arm (`interpreter/mod.rs:154-171`) and the overlay-dispatch branch
-  (`interpreter/mod.rs:91-100`); `subtype`/`detail` come from `rule_signature`
-  (`ir_ext.rs:28-96`).
+  (`interpreter/mod.rs:91-100`); the `GameRule` is cloned from the edge being dispatched.
 - `Choice` — `Payload::Choice` arm (`interpreter/mod.rs:173-194`).
 - `OptionalAccept`/`OptionalDecline` — `Payload::Optional` arm (`interpreter/mod.rs:195-228`).
 - `Condition` — `Payload::Condition` arm (`interpreter/mod.rs:229-265`).
@@ -122,12 +122,19 @@ Each variant is emitted by exactly one arm of `Interpreter::step`
 - `Quantifier` — quantifier initial prompt, resume, and fan-out arms
   (`interpreter/quant_driver.rs:128,174,202,230,268,326`).
 
-### 2.3 Display
+### 2.3 Text views (derived, not stored)
 
-Both `TraceEntry` and `TraceEvent` implement `std::fmt::Display`
-(`crates/engine/src/interpreter/trace.rs:48-102`) — `TraceEntry` formats as
-`[{from}->{to}] {event}`, so a one-line trace readout is `format!("{}", entry)`. This is what the
-file logger (§3) writes per step.
+- `TraceEntry` and `TraceEvent` implement `std::fmt::Display` — `TraceEntry` formats as
+  `[{from}->{to}] {event}`, so a one-line trace readout is `format!("{}", entry)`. This is what the
+  file logger (§3) writes per step.
+- `TraceEvent::pretty()` — the simplified DSL text (identical to `Display`).
+- `TraceEvent::raw()` — the `Debug` view: `Action` renders `<subtype> <Debug of rule>` (e.g.
+  `Action:Move Move { move_type: ... }`), `Condition`/`EndCondition` render `{:?}` of the
+  expression. The TUI toggles pretty/raw with `r`.
+- `TraceEvent::summary()` — a compact **structured** one-liner derived from the payload
+  (e.g. `move 1 Deck -> Hand of P:P1 (Private)`, `set score := 10`, `cycle to next`); falls back
+  to `pretty()` for events without a structured form. Useful for hosts that want the semantic
+  content without matching the AST themselves.
 
 ---
 
