@@ -464,6 +464,53 @@ fn scan_edge_source_any_takes_precedence_over_card_quantity() {
 }
 
 #[test]
+fn scan_edge_source_any_precedes_combo_source() {
+    // `move Book in Hand of any …`: the from is *both* a combo group and
+    // `any`-owned; the owner must be resolved before the combo filter can be
+    // evaluated, so the site is `SourcePlayerAny`.
+    let from = CardSet::GroupOwner {
+        group: Group::Combo {
+            combo: "Book".to_string(),
+            groupable: Groupable::Location {
+                name: "Hand".to_string(),
+            },
+        },
+        owner: aggregate_owner(Quantifier::Any),
+    };
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        from,
+        loc_cardset("Books"),
+    );
+    assert!(matches!(
+        scan_edge(&edge),
+        QuantSite::SourcePlayerAny { .. }
+    ));
+}
+
+#[test]
+fn edge_source_any_detects_chained_source() {
+    let edge = move_qty_edge(
+        Quantity::Quantifier {
+            quantifier: Quantifier::Any,
+        },
+        where_filtered_cardset(aggregate_owner(Quantifier::Any)),
+        loc_cardset("Stock"),
+    );
+    assert!(crate::quantifier::edge_source_any(&edge).is_some());
+    let clean = move_qty_edge(
+        Quantity::Quantifier {
+            quantifier: Quantifier::Any,
+        },
+        loc_cardset("Stock"),
+        loc_cardset("Discard"),
+    );
+    assert!(crate::quantifier::edge_source_any(&clean).is_none());
+}
+
+#[test]
 fn substitute_source_player_rewrites_from_owner() {
     let edge = move_qty_edge(
         Quantity::Int {

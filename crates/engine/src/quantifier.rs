@@ -353,7 +353,8 @@ pub fn combo_pile_cardset(from: &CardSet) -> CardSet {
 }
 
 /// Detect the quantifier site on `edge`, in precedence order
-/// `DestPlayerAll` > `DestPlayerAny` > `ComboSource` > `SrcCardsAnyOrRange`.
+/// `DestPlayerAll` > `DestPlayerAny` > `SourcePlayerAny` > `ComboSource` >
+/// `SrcCardsAnyOrRange`.
 ///
 /// If `to` is a `CardSet::GroupOwner` whose `owner` is
 /// `Owner::PlayerCollection { PlayerCollection::Aggregate { Quantifier::All } }`
@@ -361,6 +362,12 @@ pub fn combo_pile_cardset(from: &CardSet) -> CardSet {
 /// so that a combined `All`-of-`Any` edge (e.g. `deal any from Stock to Hand
 /// of all`) scans as `DestPlayerAll` and the card choice is handled by the
 /// resume branch via [`card_site`].
+///
+/// Otherwise, if the move's `from` is owned by `any` → `SourcePlayerAny`
+/// (resolved before the combo/quantity sites: a multi-player owner cannot be
+/// evaluated, so the player must be substituted first — and this ordering is
+/// what lets chained sites resolve sequentially, see
+/// `Interpreter::quantify_or_dispatch`).
 ///
 /// Otherwise, if the move's `from` is a combo group → `ComboSource` (lay-down
 /// with validation). Otherwise, if the edge is a `MoveQuantity` whose
@@ -376,14 +383,8 @@ pub fn scan_edge(edge: &Edge<LoweredPayLoad>) -> QuantSite {
         return dest;
     }
 
-    // Combo-source (lay-down) — takes precedence over the card-amount site
-    // so the chosen set is validated against the combo filter.
-    if let Some((combo, from)) = combo_source(mcs) {
-        return QuantSite::ComboSource { combo, from };
-    }
-
     // Source-player quantifier: the `from` is owned by `any` — prompt the
-    // player, then substitute. Resolved *before* the card-amount site: a
+    // player, then substitute. Resolved *before* the combo/quantity sites: a
     // multi-player owner cannot be evaluated, so the card choice would fail
     // if the source were still unresolved.
     let from = match mcs {
@@ -392,6 +393,12 @@ pub fn scan_edge(edge: &Edge<LoweredPayLoad>) -> QuantSite {
     };
     if let Some(pc) = source_any_site(from) {
         return QuantSite::SourcePlayerAny { pc };
+    }
+
+    // Combo-source (lay-down) — takes precedence over the card-amount site
+    // so the chosen set is validated against the combo filter.
+    if let Some((combo, from)) = combo_source(mcs) {
+        return QuantSite::ComboSource { combo, from };
     }
 
     // Card-amount quantifier (only MoveQuantity carries a quantity).
@@ -411,6 +418,18 @@ pub fn scan_edge(edge: &Edge<LoweredPayLoad>) -> QuantSite {
     }
 
     QuantSite::None
+}
+
+/// The `SourcePlayerAny` site of `edge`, if its `from` is owned by `any`.
+/// Used by the `DestPlayerAll` arm to resolve a chained source player *before*
+/// fanning out (the per-player replacement edges must carry a concrete owner).
+pub fn edge_source_any(edge: &Edge<LoweredPayLoad>) -> Option<PlayerCollection> {
+    let mcs = move_cardset_ref(edge)?;
+    let from = match mcs {
+        front_end::ast::MoveCardSet::Move { from, .. } => from,
+        front_end::ast::MoveCardSet::MoveQuantity { from, .. } => from,
+    };
+    source_any_site(from)
 }
 
 /// If `edge` also carries a card-amount quantifier site (`Quantifier::Any` or

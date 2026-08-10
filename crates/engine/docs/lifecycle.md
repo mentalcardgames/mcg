@@ -204,6 +204,13 @@ The pre-dispatch arms, in order:
      `resume_cards_any_or_range` (`quant_driver.rs:456-495`).
    - `QuantSite::None` → fall through to the per-`Payload` dispatch below.
 
+   **Chaining.** Every resume arm ends in `quantify_or_dispatch`
+   (`quant_driver.rs`): the substituted edge is re-scanned, and a *remaining*
+   site (e.g. the card-amount `any` on `deal any from Hand of any …`) chains
+   to its own prompt — player choice first, then cards. `step_dest_player_all`
+   additionally resolves a chained `SourcePlayerAny` *before* fanning out, so
+   the per-player replacement edges always carry a concrete owner.
+
 6. **Setup-`Any` guard** (`interpreter/mod.rs:160-163`). For a `Payload::Action` whose `GameRule`
    is `SetUp { setup }`, `step()` checks `crate::quantifier::setup_contains_any(setup)`. If any
    element collection of the setup uses `Quantifier::Any`, it returns

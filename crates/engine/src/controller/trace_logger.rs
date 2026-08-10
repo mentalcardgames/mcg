@@ -136,6 +136,11 @@ fn format_timestamp() -> String {
 mod tests {
     use super::*;
 
+    /// Serializes the tests that mutate `MCG_TRACE_LOG` — process env is
+    /// shared across the parallel test threads, so racing mutations would
+    /// make the assertions flaky.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn timestamp_is_iso_utc() {
         let ts = format_timestamp();
@@ -162,6 +167,7 @@ mod tests {
 
     #[test]
     fn resolve_log_path_prefers_explicit_path() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::remove_var("MCG_TRACE_LOG");
         let explicit = std::path::PathBuf::from("explicit.log");
         assert_eq!(
@@ -173,12 +179,14 @@ mod tests {
 
     #[test]
     fn resolve_log_path_defaults_to_off() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::remove_var("MCG_TRACE_LOG");
         assert_eq!(resolve_log_path(None), None, "no env, no option: no file");
     }
 
     #[test]
     fn resolve_log_path_honors_env_var() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("MCG_TRACE_LOG", "env-trace.log");
         assert_eq!(resolve_log_path(None), Some(PathBuf::from("env-trace.log")));
         std::env::set_var("MCG_TRACE_LOG", "off");

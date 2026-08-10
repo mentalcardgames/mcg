@@ -157,6 +157,12 @@ impl Interpreter {
         edge: &Edge<LoweredPayLoad>,
         pc: front_end::ast::PlayerCollection,
     ) -> StepResult {
+        // Chained source-player site: resolve it *first* (one prompt), then
+        // let the resume re-enter this arm with the substituted edge — the
+        // per-player fan-out edges must carry a concrete source owner.
+        if let Some(source_pc) = crate::quantifier::edge_source_any(edge) {
+            return self.step_source_player_any(edge, source_pc);
+        }
         let names = match self.resolve_player_names(&pc) {
             Ok(n) => n,
             Err(e) => return StepResult::Error(e),
@@ -367,13 +373,9 @@ impl Interpreter {
                     format!("Table_{}", crate::quantifier::SYNTH_MEMORY_KEY),
                     crate::game_data::MemoryValue::CardSet(chosen.clone()),
                 );
-                let mut repl = crate::quantifier::substitute_cardset_memory(&original, &chosen);
-                let s = crate::quantifier::alloc_synth(&mut self.next_synth);
-                repl.to = original.to;
+                let repl = crate::quantifier::substitute_cardset_memory(&original, &chosen);
                 self.emit_quant_trace("ComboSource", format!("laid down {}", chosen.len()));
-                self.pending_overlay.insert(s, vec![repl]);
-                self.current_state = s;
-                StepResult::Ok
+                self.dispatch_concrete(repl)
             }
             Ok(_) => {
                 let (display, _, max) = self.build_choose_cards(
@@ -403,7 +405,9 @@ impl Interpreter {
     }
 
     /// Resume a `DestPlayerAny`: substitute the chosen player into the original
-    /// edge and dispatch the single replacement edge.
+    /// edge, then re-scan — a remaining quantifier site (e.g. a card-amount
+    /// `any` on `deal any from Stock to Hand of any`) chains to its own
+    /// prompt; otherwise the concrete edge is dispatched.
     fn resume_dest_player_any(
         &mut self,
         idx: usize,
@@ -417,17 +421,13 @@ impl Interpreter {
             });
         };
         let name = name.clone();
-        let mut repl = crate::quantifier::substitute_dest_player(&original, name.clone());
-        let s = crate::quantifier::alloc_synth(&mut self.next_synth);
-        repl.to = original.to;
+        let repl = crate::quantifier::substitute_dest_player(&original, name.clone());
         self.emit_quant_trace("DestPlayerAny", format!("chose {}", name));
-        self.pending_overlay.insert(s, vec![repl]);
-        self.current_state = s;
-        StepResult::Ok
+        self.quantify_or_dispatch(repl)
     }
 
     /// Resume a `SourcePlayerAny`: substitute the chosen player into the
-    /// original edge's `from` owner and dispatch the single replacement edge.
+    /// original edge's `from` owner, then re-scan (chaining) or dispatch.
     fn resume_source_player_any(
         &mut self,
         idx: usize,
@@ -441,13 +441,9 @@ impl Interpreter {
             });
         };
         let name = name.clone();
-        let mut repl = crate::quantifier::substitute_source_player(&original, name.clone());
-        let s = crate::quantifier::alloc_synth(&mut self.next_synth);
-        repl.to = original.to;
+        let repl = crate::quantifier::substitute_source_player(&original, name.clone());
         self.emit_quant_trace("SourcePlayerAny", format!("chose {}", name));
-        self.pending_overlay.insert(s, vec![repl]);
-        self.current_state = s;
-        StepResult::Ok
+        self.quantify_or_dispatch(repl)
     }
 
     /// Resume a `CardsAnyOrRange`: validate the selection against any
@@ -479,16 +475,12 @@ impl Interpreter {
             format!("Table_{}", crate::quantifier::SYNTH_MEMORY_KEY),
             crate::game_data::MemoryValue::CardSet(chosen.clone()),
         );
-        let mut repl = crate::quantifier::substitute_cardset_memory(&original, &chosen);
-        let s = crate::quantifier::alloc_synth(&mut self.next_synth);
-        repl.to = original.to;
+        let repl = crate::quantifier::substitute_cardset_memory(&original, &chosen);
         self.emit_quant_trace(
             "SrcCardsAnyOrRange",
             format!("chose {} cards", chosen.len()),
         );
-        self.pending_overlay.insert(s, vec![repl]);
-        self.current_state = s;
-        StepResult::Ok
+        self.dispatch_concrete(repl)
     }
 
     /// Resume an `All`-of-`Any`: write the chosen ids into the synthetic
@@ -547,6 +539,40 @@ impl Interpreter {
                 StepResult::Ok
             }
             Err(e) => StepResult::Error(e),
+        }
+    }
+
+    /// Dispatch a concrete (quantifier-free) edge through the synthetic-overlay
+    /// path: allocate a synth id, insert the edge, advance `current_state`.
+    fn dispatch_concrete(&mut self, edge: Edge<LoweredPayLoad>) -> StepResult {
+        let s = crate::quantifier::alloc_synth(&mut self.next_synth);
+        self.pending_overlay.insert(s, vec![edge]);
+        self.current_state = s;
+        StepResult::Ok
+    }
+
+    /// If `edge` still carries a quantifier site, hand it to the matching step
+    /// arm (sequential **chaining** — e.g. `deal any from Hand of any …`
+    /// prompts for the source player, then for the cards); otherwise dispatch
+    /// the concrete edge. Every resume arm ends here.
+    fn quantify_or_dispatch(&mut self, edge: Edge<LoweredPayLoad>) -> StepResult {
+        match crate::quantifier::scan_edge(&edge) {
+            crate::quantifier::QuantSite::None => self.dispatch_concrete(edge),
+            crate::quantifier::QuantSite::DestPlayerAll { pc } => {
+                self.step_dest_player_all(&edge, pc)
+            }
+            crate::quantifier::QuantSite::DestPlayerAny { pc } => {
+                self.step_dest_player_any(&edge, pc)
+            }
+            crate::quantifier::QuantSite::SourcePlayerAny { pc } => {
+                self.step_source_player_any(&edge, pc)
+            }
+            crate::quantifier::QuantSite::SrcCardsAnyOrRange { qty, from } => {
+                self.step_src_cards_any_or_range(&edge, qty, from)
+            }
+            crate::quantifier::QuantSite::ComboSource { combo, from } => {
+                self.step_combo_source(&edge, combo, from)
+            }
         }
     }
 

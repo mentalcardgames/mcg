@@ -123,7 +123,7 @@ Each variant is emitted by exactly one arm of `Interpreter::step`
 - `EndStage` — `Payload::EndStage` arm (`interpreter/mod.rs:332-345`).
 - `Trigger` — `Payload::Trigger` arm (`interpreter/mod.rs:346-356`).
 - `Quantifier` — quantifier initial prompt, resume, and fan-out arms
-  (`interpreter/quant_driver.rs:180,203,229,256,284,343,373,423,447,485,543`).
+  (`interpreter/quant_driver.rs:186,209,235,262,290,349,377,425,445,479,535`).
 
 ### 2.3 Text views (derived, not stored)
 

@@ -1,0 +1,14 @@
+player P1, P2
+turnorder (P:P1, P:P2)
+location Hand on all
+location Discard on table
+location Deck on table
+card on Deck:
+  Rank(Ace, Two) for Suit(Hearts)
+stage Setup for current 1 times {
+  deal 1 from top(Deck) private to Hand of P:P1
+  deal 1 from top(Deck) private to Hand of P:P2
+}
+stage Ask for current 1 times {
+  deal any from Hand of any private to Discard
+}

@@ -336,6 +336,137 @@ fn quantifier_source_any_takes_from_chosen_player() {
     assert!(!gd.memories.contains_key(&format!("Table_{}", SYNTH_KEY)));
 }
 
+/// `deal any from Hand of any …`: TWO sequential prompts — first the source
+/// player (`ChoosePlayer`), then the cards (`ChooseCards`) — on a single
+/// edge. The player choice must be resolved before the card choice, since a
+/// multi-player owner cannot be evaluated.
+#[test]
+fn quantifier_chains_source_player_then_cards() {
+    let ir = load_game("quantifier_source_any_cards.cgdsl");
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let prompts_clone = prompts.clone();
+
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(move |it: InputType| {
+            prompts_clone.lock().unwrap().push(it.clone());
+            match it {
+                InputType::ChoosePlayer { .. } => Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::ChoosePlayer { idx: 0 }, // P1 (holds the Ace)
+                },
+                InputType::ChooseCards { .. } => Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::ChooseCards { selected: vec![0] },
+                },
+                _ => Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::Choice { idx: 0 },
+                },
+            }
+        })),
+        RunOptions::default(),
+    )
+    .expect("game should complete");
+
+    let kinds: Vec<&str> = prompts
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|it| match it {
+            InputType::ChoosePlayer { .. } => "player",
+            InputType::ChooseCards { .. } => "cards",
+            _ => "other",
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        vec!["player", "cards"],
+        "source player must be prompted before the cards"
+    );
+    assert_eq!(
+        player_location(&gd, 0, "Hand").unwrap().cards.len(),
+        0,
+        "P1's Ace moved out"
+    );
+    assert_eq!(
+        player_location(&gd, 1, "Hand").unwrap().cards.len(),
+        1,
+        "P2 untouched"
+    );
+    assert_eq!(
+        table_location(&gd, "Discard").unwrap().cards.len(),
+        1,
+        "exactly one card moved"
+    );
+}
+
+/// `deal any from Deck private to Hand of any`: TWO sequential prompts —
+/// destination player first, then the card choice (previously the card
+/// choice was silently dropped after the player substitution).
+#[test]
+fn quantifier_chains_dest_player_then_cards() {
+    let ir = load_game("quantifier_dest_any_cards.cgdsl");
+    let prompts = Arc::new(Mutex::new(Vec::new()));
+    let prompts_clone = prompts.clone();
+
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(move |it: InputType| {
+            prompts_clone.lock().unwrap().push(it.clone());
+            match it {
+                InputType::ChoosePlayer { .. } => Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::ChoosePlayer { idx: 1 }, // P2
+                },
+                InputType::ChooseCards { .. } => Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::ChooseCards { selected: vec![0] },
+                },
+                _ => Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::Choice { idx: 0 },
+                },
+            }
+        })),
+        RunOptions::default(),
+    )
+    .expect("game should complete");
+
+    let kinds: Vec<&str> = prompts
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|it| match it {
+            InputType::ChoosePlayer { .. } => "player",
+            InputType::ChooseCards { .. } => "cards",
+            _ => "other",
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        vec!["player", "cards"],
+        "destination player must be prompted before the cards"
+    );
+    assert_eq!(
+        player_location(&gd, 1, "Hand").unwrap().cards.len(),
+        1,
+        "P2 received the chosen card"
+    );
+    assert_eq!(
+        player_location(&gd, 0, "Hand").unwrap().cards.len(),
+        1,
+        "P1 keeps the setup card"
+    );
+    assert_eq!(
+        table_location(&gd, "Deck").unwrap().cards.len(),
+        0,
+        "the deck is drained"
+    );
+}
+
 /// `deal any from Stock private to Hand of all`: exactly one `ChooseCards`
 /// prompt, then a 3-player fan-out. The single chosen card is moved through
 /// each player's Hand in turn (cards are single-instance), ending in exactly

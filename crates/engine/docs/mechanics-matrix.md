@@ -156,6 +156,7 @@ last_validated: 2026-08-10
 | Choose a player | target cards, gifts | ✅ | ✅ | ✅ | `Hand of any` → `ChoosePlayer` |
 | Choose one card | many | ✅ | ✅ | ✅ | `deal any from …` |
 | Choose a range-sized subset | Poker discard | ✅ | ✅ | ✅ | `deal >= 1 and <= 3 from …` (re-prompts) |
+| Chained choices on one move | Go Fish ask | ✅ | ✅ | ✅ | `deal any from Hand of any …` — sequential prompts (player, then cards) since 2026-08-10 |
 | Validated combo lay-down | Rummy, Go Fish books | ✅ | ✅ | ✅ | Combo-source move (0 = skip, re-prompt on mismatch) |
 | **Enter a number** (bid amount, ante) | Poker, Cribbage | ❌ | ❌ | ❌ | **Engine input contract + DSL**: no numeric `InputType`; no prompt syntax — the biggest single gap for betting games |
 | Hidden simultaneous choices | Poker, RPS | ❌ | ❌ | ❌ | Needs SimStage (P-2) + per-player input routing |
