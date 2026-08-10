@@ -59,7 +59,7 @@ minutes (CLI flags, logging, debugging), then follow the path below.
 3. [`lifecycle.md`](./lifecycle.md) — when things happen: setup → stage → play → terminate
 
 **Modifying engine code:**
-4. [`invariants.md`](./invariants.md) — 23 guardrails. **Read before touching anything.**
+4. [`invariants.md`](./invariants.md) — 25 guardrails. **Read before touching anything.**
 5. [`data-structures.md`](./data-structures.md) — field-level layout of every struct and enum
 6. [`contributing.md`](./contributing.md) — development cheatsheet: which files to touch when adding features
 
@@ -102,6 +102,7 @@ crates/engine/src/
 │   ├── ir_ext_tests.rs
 │   ├── trace.rs                   — TraceEntry, TraceEvent, Display impls
 │   ├── trace_tests.rs
+│   ├── trace_tracing.rs           — optional `tracing` bridge (feature-gated)
 │   ├── types.rs                   — Input, InputKind, InputType, StepResult
 │   └── types_tests.rs
 ├── quantifier.rs                  — scan_edge, alloc_synth, substitute, fan-out
@@ -137,28 +138,33 @@ crates/engine/src/
     ├── shuffle_test.rs
     ├── demo_games_test.rs         — the five handoff demo games driven end-to-end
     ├── behavior_test.rs           — deterministic (non-shuffled) behavioral fixtures with exact expected outcomes
+    ├── ergonomics_test.rs         — turn-flow, memory, team, winner-set regressions
+    ├── verb_semantics_test.rs     — `deal`/`move` quantity semantics
     └── random_play_test.rs        — monkey tests: random inputs, 40 seeds per game
 ```
 
 ## Key Concepts
 
 - **IR (Intermediate Representation):** The parser lowers `.cgdsl` into a graph of states and edges.
-  Each edge carries a `Payload` (Action, Choice, Optional, Condition, EndCondition, Trigger, StageRoundCounter).
-  States are identified by `StateID` (u32). The interpreter advances through the graph one edge at a time.
+  Each edge carries a `Payload` (Action, Choice, Optional, Condition, EndCondition, EndStage,
+  StageRoundCounter, Trigger). States are identified by `StateID` (u32). The interpreter advances
+  through the graph one edge at a time.
 
 - **GameData:** The live game state — players, teams, turn order, locations, cards, memories, scores,
   stage counters, and the stage stack. All mutations go through `action.rs`. All reads go through `query/`.
 
-- **Input:** When the interpreter hits a `Choice`, `Optional`, `ChoosePlayer`, or `ChooseCards` payload,
-  it returns `StepResult::NeedsInput(InputType)` and waits. The controller delivers player input as
+- **Input:** When the interpreter needs player input — a `Choice`/`Optional` prompt, a quantifier
+  `ChoosePlayer`/`ChooseCards` prompt, or a `Number` prompt (from `bid`/`deal` count) — it returns
+  `StepResult::NeedsInput(InputType)` and waits. The controller delivers player input as
   `Input { player_id, kind: InputKind }`. Inputs from non-current players are rejected.
 
-- **Quantifier Preprocessor:** Edges carrying `all`/`any`/range quantifiers are intercepted before
-  dispatch. `all` fans out to one synthetic edge per player. `any` issues a ChoosePlayer/ChooseCards
-  prompt. `>= M and <= N` validates the selection and re-prompts on failure.
+- **Quantifier Preprocessor:** Edges carrying `all`/`any`/range quantities and dest quantifiers are
+  intercepted before dispatch. `all` fans out to one synthetic edge per player. `any` issues a
+  `ChoosePlayer`/`ChooseCards` prompt (or a count prompt on `deal`); literal quantities on
+  `move`/`exchange` prompt pick-exactly-N; ranges validate and re-prompt on failure.
 
-- **Memory:** Per-player key-value store (`HashMap<String, MemoryValue>`) with owner-prefixed keys
-  (`"P1_M"`, `"Table_pot"`). See [`developer-notes.md`](./developer-notes.md) §1.1 for the ownership model.
+- **Memory:** Owner-prefixed key-value store (`HashMap<String, MemoryValue>`) with keys like
+  `"P1_M"`, `"Table_pot"`, `"Red_M"` (team slots). See [`developer-notes.md`](./developer-notes.md) §1.1 for the ownership model.
 
 - **Scoring:** `score N to P1` adds to `Player::score`. `winner is P1` eliminates all other players.
   `winner is highest score` compares scores across all in-game players and eliminates non-matching.

@@ -84,13 +84,14 @@ encryption work — `FlipAction` should become (de)encrypting a card's face (see
 
 ```rust
 // crates/engine/src/game_data.rs:55-65
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MemoryValue {
     Int(i32),
     String(String),
     CardSet(Vec<usize>),
     PlayerCollection(Vec<usize>),
     Team(String),
+    TeamCollection(Vec<String>),
     IntCollection(Vec<i32>),
     StringCollection(Vec<String>),
     LocationCollection(Vec<usize>),
@@ -229,19 +230,21 @@ pub enum InputKind {
     OptionalDecline,
     ChoosePlayer { idx: usize },
     ChooseCards { selected: Vec<usize> },
+    Number { value: i32 },
 }
 
 // Accessors delegate: Input::idx() → self.kind.idx(), etc.
 // crates/engine/src/interpreter/types.rs:49-55  (step outcome)
-pub enum StepResult { Ok, NeedsInput(InputType), GameOver, Error(String) }
+pub enum StepResult { Ok, NeedsInput(InputType), GameOver, Error(EngineError) }
 
 // crates/engine/src/interpreter/types.rs:57-78  (prompt the host must answer)
 #[derive(Clone, Debug)]
 pub enum InputType {
     Choice { options: Vec<String>, max_index: usize },
     Optional(String),
-    ChoosePlayer { candidates: Vec<String>, prompt: String },       // post-Stage-5
-    ChooseCards { display: Vec<Card>, min: usize, max: usize, prompt: String }, // post-Stage-5
+    ChoosePlayer { candidates: Vec<String>, prompt: String },
+    ChooseCards { display: Vec<Card>, min: usize, max: usize, prompt: String },
+    Number { min: Option<i32>, max: Option<i32>, prompt: String },
 }
 ```
 
@@ -254,7 +257,7 @@ pub enum InputType {
 
 `InputKind` methods live at `crates/engine/src/interpreter/types.rs:38-69`; `Input` delegates at `types.rs:22-35`.
 
-### 3.3 `TraceEntry` / `TraceEvent` — the per-step trace seam (post-Stage-5)
+### 3.3 `TraceEntry` / `TraceEvent` — the per-step trace seam
 
 ```rust
 // crates/engine/src/interpreter/trace.rs:14-21
@@ -273,7 +276,9 @@ pub enum TraceEvent {
     StageRoundCounter { stage: String, new_count: u32 },
     EndStage { stage: String },
     Trigger,
-    Quantifier { kind: String, detail: String },     // post-Stage-5
+    Skipped { player: String, stage: String },
+    GameOver { winners: Vec<String> },
+    Quantifier { kind: String, detail: String },
 }
 ```
 

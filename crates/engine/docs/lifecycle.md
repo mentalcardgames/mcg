@@ -67,10 +67,11 @@ Key sequencing facts:
   `crates::engine::interpreter::Input`, and pushes it via
   `crates::engine::interpreter::Interpreter::provide_input`
   (`crates/engine/src/interpreter/mod.rs:369-371`). The next `step()` pops it (LIFO — see I-7).
-  New in Stage 5: a `NeedsInput` can now also carry `InputType::ChoosePlayer` or
-  `InputType::ChooseCards` from a quantifier site; the controller runs the same loop, just with the
-new prompt shapes (see `get_input`'s validation at `controller/mod.rs:439-457` and the new
-`TestFile` syntaxes at `controller/mod.rs:328-426`).
+  A `NeedsInput` can carry `InputType::Choice`, `InputType::Optional`,
+  `InputType::ChoosePlayer`/`ChooseCards` (from quantifier sites), or
+  `InputType::Number` (from `bid`/`deal` count prompts); the controller runs the same loop for
+  all of them (see `get_input`'s validation at `controller/mod.rs:439-457` and the `TestFile`
+  syntaxes at `controller/mod.rs:328-426`).
 - `crates::engine::interpreter::Interpreter::execute_edge`
   (`crates/engine/src/interpreter/mod.rs:362-367`) is the single mutator boundary: it sets
   `current_state = edge.to` and then calls
@@ -114,7 +115,7 @@ The IR's first edges carry
   error** (`Err("CreateLocation: failed to resolve owner …")`), so `CreatePlayer`/`CreateTeams`
   must precede it.
   `resolve_owner_to_names` now transparently routes
-  `Owner::PlayerCollection { Aggregate { Quantifier::All } }` (the post-Stage-5 quantifier owner)
+  `Owner::PlayerCollection { Aggregate { Quantifier::All } }` (the quantifier owner)
   through `Evaluator::resolve_player_collection` so a setup `CreateLocation` with `Owner =
   All` produces one location per in-game player — see invariant I-10 in
   [`invariants.md`](./invariants.md).
@@ -140,7 +141,7 @@ either advances `current_state` via
 `NeedsInput`/`GameOver`/`Error`. Conditions and end-conditions are evaluated live against the
 current `GameData` by `crates::engine::query::Evaluator`.
 
-`step()`'s body has a fixed pre-dispatch sequence (post-Stage-5), then the per-`Payload` dispatch:
+`step()`'s body has a fixed pre-dispatch sequence, then the per-`Payload` dispatch:
 
 ```
 (A) SYNTH_MEMORY_KEY cleanup      interpreter/mod.rs:71-85

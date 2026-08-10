@@ -39,7 +39,7 @@ last_validated: 2026-08-11
 | `card on Deck: Rank(...) for Suit(...)` | ✅ | ✅ | ✅ | ✅ | Cartesian product of all key-value sets (`expand_types`). |
 | `token <n> X on Loc` | ✅ | ✅ | ❌ | ❌ | No-op (no token data model). |
 | `precedence P on Rank(Ace, Two, ...)` | ✅ | ✅ | ✅ | ✅ | Values ordered low → high. |
-| `combo Pair where same Rank` | ✅ | ✅ | ✅ | ⚠️ | `where`-matching works for size/key filters; `same`/`distinct` inside *combo per-card matching* are broken (see `engine-vs-design.md` D-9). |
+| `combo Pair where same Rank` | ✅ | ✅ | ✅ | ✅ | Combos evaluate group-wise (like `where`): `Pair in Hand` returns the paired cards. |
 | `memory M on P:P1` / `on table` / `on all` | ✅ | ✅ | ✅ | ✅ | Key is owner-prefixed (`P1_M`, `Table_pot`); team owners → one team-keyed slot (`Red_M`). |
 | `memory X <expr> on ...` (typed) | ✅ | ✅ | ✅ | ✅ | Initial value honoured; Player→owner name, TeamCollection→own variant. |
 | `points BJ on Rank(Ace: 11, ...)` | ✅ | ✅ | ✅ | ✅ | Map key `"Rank:Ace"` → int. |
@@ -52,12 +52,12 @@ last_validated: 2026-08-11
 | `flip X to face up/down/private` | ✅ | ✅ | ❌ | ❌ | Silent no-op, **by design**: the per-card status slot (`GameData::card_statuses`) exists but is unused; `FlipAction` should become (de)encryption when card cryptography lands (see `dsl-semantics.md` §3.8). |
 | `shuffle X` | ✅ | ✅ | ✅ | ✅ | Shuffles only the selected cards in place; unselected cards in the location stay put. Eval failures are recoverable errors. |
 | `set <players> out of game` / `of stage` / `of Play` | ✅ | ✅ | ✅ | ✅ | `GameSuccessful`/`GameFail` behave identically to `Game` (no success/fail tracking). |
-| `M is <expr>` (SetMemory) | ✅ | ✅ | ✅ | ✅ | Owner resolved declared-first, else current player ; collections fully evaluated. |
+| `M is <expr>` (SetMemory) | ✅ | ✅ | ✅ | ✅ | Owner resolved declared-first, else current player; collections fully evaluated. |
 | `reset M` | ✅ | ✅ | ✅ | ✅ | Same owner resolution; resets every variant to its typed zero. |
 | `cycle to next` / `cycle to P:P2` | ✅ | ✅ | ✅ | ✅ | Self-wraps when the current player is the only eligible one; no-ops when nobody is eligible — no `size(playersin) >= 2` guard needed. |
 | `bid <qty> on <memory> of <owner>` | ✅ | ✅ | ✅ | ✅ | **Numeric input prompt**: `any`/range → `InputType::Number` (bounds validated, re-asked); literal → writes `{owner}_{memory}`. Plain `bid` (no target) → recoverable error. |
 | `demand ...` / `demand ... as M` | ✅ | ✅ | ❌ | ❌ | No-op (semantics never specified). |
-| `end turn` | ✅ | ✅ | ✅ | ✅ | `next_player()` — with nobody eligible this leaves `current_player = None` (no error). |
+| `end turn` | ✅ | ✅ | ✅ | ✅ | `next_player()` — advances to the next eligible player (wrapping onto the current player when it is the only eligible one). |
 | `end stage` | ✅ | ✅ | ✅ | ✅ | `CurrentStage` — leaves the current stage; IR jumps to the stage's exit (unreachable-code check downstream). |
 | `end Play` (named stage) | ✅ | ✅ | ✅ | ✅ | `Stage { name }` — jumps to that stage's exit. |
 | `end game with winner <players>` | ✅ | ✅ | ✅ | ✅ | Declared winners eliminate everyone else; the IR jump to the goal ends the game. Winner set = in-game players (`GameData::winner_names`). |
@@ -76,10 +76,10 @@ last_validated: 2026-08-11
 | `until <bool> and/or N times` | ✅ | ✅ | ✅ | ✅ | Boolean AND/OR counter. |
 | `until end` | ✅ | ✅ | ✅ | ✅ | Infinite loop; exit only via `end stage`/`end game` inside. |
 | `if (bool) { ... }` | ✅ | ✅ | ✅ | ✅ | No `else` — use two complementary `if`s or `conditional`. |
-| `conditional { case (bool): ... case else: ... }` | ✅ | ✅ | ✅ | ⚠️ | `case (A > B)` fails to parse when both operands are complex int exprs (PEG greediness, D-3) — use sequential `if`s. |
+| `conditional { case (bool): ... case else: ... }` | ✅ | ✅ | ✅ | ⚠️ | `case (A > B)` fails to parse when both operands are complex int exprs (PEG greediness, P-8) — use sequential `if`s. |
 | `choose { ... or ... }` | ✅ | ✅ | ✅ | ✅ | One edge per `or`-separated option; each option is a *sequence* of flow components (e.g. `choose { deal X; if Y {} or deal Z }` = two options of two and one components). `InputType::Choice`; options labelled by the first payload of each branch. |
 | `optional { ... }` | ✅ | ✅ | ✅ | ✅ | Accept → body; decline → nothing (no else-branch action is possible — standing/refusal cannot be recorded). |
-| `trigger { ... }` | ✅ | ✅ | ✅ | ✅ | Body auto-executes once (payload itself is a no-op by design). |
+| `trigger { ... }` | ✅ | ✅ | ✅ | ✅ | Body executes each time the flow reaches it (the payload itself is a no-op marker). |
 
 ## 4. End conditions & stage bookkeeping
 
@@ -93,14 +93,14 @@ last_validated: 2026-08-11
 ### BoolExpr
 | Construct | Status | Notes |
 |---|---|---|
-| int compare `A > B` etc. | ✅ | Works in `if (A > B)`; **fails inside `case (...)`/`until (...)` when both sides are complex** (D-3). |
+| int compare `A > B` etc. | ✅ | Works in `if (A > B)`; **fails inside `case (...)`/`until (...)` when both sides are complex** (P-8). |
 | cardset compare `X == Y` / `!=` | ✅ | Compares `(location, card ids)` tuples. |
 | string compare `"A" == "B"` | ✅ | |
 | player/team compare | ✅ | |
 | `S in X` / `S not in X` (StringInCardSet) | ⚠️ | Matches *any* attribute value of any card in the set. |
 | `X empty` / `X not empty` | ✅ | |
-| `(A and B)` / `(A or B)` | ✅ | Parenthesised only; single-parenthesized bools (`(X)`) do **not** parse (D-2). |
-| `not X` | ✅ | **`not (X)` does not parse** — write `not X` (D-2). |
+| `(A and B)` / `(A or B)` | ✅ | Parenthesised only; single-parenthesized bools (`(X)`) do **not** parse (P-8). |
+| `not X` | ✅ | **`not (X)` does not parse** — write `not X` (P-8). |
 | `<players> out of <X>` | ✅ | `out of game` / `of stage` / `of Play`; Successful/Fail ≡ Game. |
 
 ### IntExpr
@@ -120,7 +120,7 @@ last_validated: 2026-08-11
 |---|---|---|
 | `"literal"` | ✅ | Quoted. |
 | `key of top(Loc)` (KeyOf) | ✅ | |
-| `current` / `next` / `previous` / `competitor` | ✅ | `next`/`previous` skip ineligible players and self-wrap when alone ; `competitor` = first team-mate ≠ current. |
+| `current` / `next` / `previous` / `competitor` | ✅ | `next`/`previous` skip ineligible players and self-wrap when alone; `competitor` = first team-mate ≠ current. |
 | `owner of <card position>` / `owner of min/max <memory>` | ✅ | `owner of memory` reads `{player}_{memory}`. |
 | player memory `(&P:M of ...)` | ✅ | PlayerCollection memory → first index; String memory → name; Int → error. |
 | `team of <player>` | ✅ | |
@@ -129,12 +129,12 @@ last_validated: 2026-08-11
 ### CardPosition / CardSet / filters
 | Construct | Status | Notes |
 |---|---|---|
-| `top(Loc)` / `bottom(Loc)` / `Loc[N]` | ✅ | Index 0 = top. Bare location names resolve: current player's → Table's → any. |
+| `top(Loc)` / `bottom(Loc)` / `Loc[N]` | ✅ | Index 0 = top. Bare location names resolve: current player's → their team's → Table's → any. |
 | `min/max of X using PM` / `using Precedence` | ✅ | |
-| `X of <owner>` (GroupOwner) | ✅ | Plain-location fast path (owner-resolved). `where`-groups are owner-resolved; team/collection owners error. |
+| `X of <owner>` (GroupOwner) | ✅ | Plain-location fast path (owner-resolved). `where`-groups are owner-resolved; team owners resolve to the team's shared pile; collection owners error. |
 | `X where <filter>` | ✅ | Filters: `size(...)`, `same K`, `distinct K`, `adjacent K using P`, `K higher/lower than "V" using P`, `K is "V"`/`is not`, `combo C`/`not combo C`, binary `(A and B)`. An empty filter result reports the base location. |
 | `<combo> in X` / `not <combo> in X` | ✅ | Read-side syntax is the combo *name* (no `combo` keyword): `Pair in Hand`. Combos evaluate group-wise like `where`. **Lay-down moves** (`move <combo> in X …`) prompt the player to choose cards from the pile and **validate** the choice against the combo filter, re-prompting on mismatch; **0 cards = skip**; combine with `until <combo> in X empty` for a lay-down-all stage loop. Read-side evaluation still over-approximates pairs (D-16). |
-| cardset memory `(&CS:M of ...)` | ⚠️ | Location inferred from the first card; falls back to location-0 sentinel (I-14/D-15) — a dest move may target the wrong pile. |
+| cardset memory `(&CS:M of ...)` | ⚠️ | Location inferred from the first card; falls back to location-0 sentinel (I-14) — a dest move may target the wrong pile. |
 
 ## 6. Scoring
 
@@ -167,8 +167,8 @@ players remain in the game or in the stage.
 1. `not (X)` and `(X)` (single bool in parens) do not parse - the binary wrapper requires `bool_op`. Write `not X` or `if (X)`.
 2. `not <combo> in X empty` — a leading `not` before a combo group **binds to the boolean** (the positive spelling `combo in X not empty` also works).
 3. `case (A > B)` / `until (A > B)` fail when both operands are non-literal int exprs (the inner `int_expr_bool` greedily consumes the whole parenthesis). Workaround: `if (A > B)` or split into two conditions.
-4. Parenthesised cardsets in moves (`deal (X) ...`) fail - the quantity slot tries to parse the `(`. Write `deal X ...` (where-clauses bind fine without parens).
+4. Parenthesised cardsets in moves (`deal (X) ...`) fail — the quantity slot tries to parse the `(`. Write `deal X ...` (where-clauses bind fine without parens).
 5. `size(cards X)` needs the `cards` keyword; `playersin`/`playersout`/`others` are single tokens (no spaces).
 6. String literals are double-quoted (`Rank is "Ace"`); filter keyword is `is`, not `==`.
-6. Where-clauses precede the owner: `Hand where Rank is "Ace" of next`.
-7. All identifiers start with a capital letter (Pest `ident` rule).
+7. Where-clauses precede the owner: `Hand where Rank is "Ace" of next`.
+8. All identifiers start with a capital letter (Pest `ident` rule).

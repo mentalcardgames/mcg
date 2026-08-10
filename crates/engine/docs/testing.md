@@ -351,7 +351,7 @@ authoring new ones):
 | `quantifier_range.cgdsl` | `tests/quantifier_test.rs:148` | `IntRange` quantity, re-prompt on 0 |
 | `quantifier_dest_any.cgdsl` | `tests/quantifier_test.rs:206` | `AggregatePlayerCollection::Quantifier::Any` dest |
 | `quantifier_all_then_any.cgdsl` | `tests/quantifier_test.rs:253` | Stack of two quantifier sites |
-| `setup_location_all.cgdsl` / `_literal.cgdsl` / `_any_errors.cgdsl` | `tests/quantifier_test.rs:334ff` | `SetUpRule` quantifier handling |
+| `setup_location_all.cgdsl` / `_literal.cgdsl` / `_any.cgdsl` | `tests/quantifier_test.rs:572ff` | `SetUpRule` location quantifier handling (all / literal / any-prompt) |
 | `setup_turnorder_all.cgdsl` / `setup_teams_all.cgdsl` | `tests/quantifier_test.rs:412,431` | Setup `All` resolution |
 | `turn_switch.cgdsl` | `controller/tests.rs:210` | Stage entry + turn advance |
 | `skip_ineligible.cgdsl` | `tests/ergonomics_test.rs` | Ineligible-player skip + stage auto-end (I-24): eliminated players never prompted, post-elimination instructions skipped, empty winner set |
@@ -520,8 +520,9 @@ you trip over them; promote to dedicated tests when the area is touched.)
   (env var `MCG_TRACE_LOG`) have no direct tests. Only exercised indirectly via
   `run_game` when the env var is set.
 - `src/interpreter/quant_driver.rs` resume arms (`step_dest_player_all`,
-  `step_dest_player_any`, `step_src_cards_any_or_range`, `take_quant_resume`) are only
-  reachable via the 8 integration tests in `tests/quantifier_test.rs`; no direct unit
+  `step_dest_player_any`, `step_src_cards_any_or_range`,
+  `step_src_cards_exact_n`, `step_deal_count`, `take_quant_resume`) are only
+  reachable via the integration tests in `tests/quantifier_test.rs`; no direct unit
   tests of the resume state machine.
 - `src/query/{bool,int,string,player,cardset}.rs` — the `Evaluator` methods are currently
   exercised only transitively through `interpreter::step` and `action::execute_*`. No

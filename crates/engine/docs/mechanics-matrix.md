@@ -62,7 +62,7 @@ last_validated: 2026-08-11
 | Mechanic | Example games | DSL | Parser | Engine | Notes / what's missing |
 |---|---|---|---|---|---|
 | Scores | most | ✅ | ✅ | ✅ | `score N to <players>` |
-| Per-player counters / flags | Uno direction | ✅ | ✅ | ✅ | `M is 1` targets the declared slot, else the current player  |
+| Per-player counters / flags | Uno direction | ✅ | ✅ | ✅ | `M is 1` targets the declared slot, else the current player|
 | Per-player set-table writes | Go Fish books | ✅ | ✅ | ✅ | `score N to M of <players>` → `{player}_M` |
 | Chips / money | Poker | ✅ | ✅ | ✅ | Memory arithmetic + the **numeric input prompt** (`bid any on Pot of table`) |
 | Bankruptcy / zero chips | Poker | ✅ | ✅ | ⚠️ | Expressible via chip-memory conditions; no "not playable" state exists (see `plans/bankrupt.md`) — engine gap |
@@ -77,7 +77,7 @@ last_validated: 2026-08-11
 | Mechanic | Example games | DSL | Parser | Engine | Notes / what's missing |
 |---|---|---|---|---|---|
 | Sequential turns | most | ✅ | ✅ | ✅ | `cycle to next` |
-| Turn order reversal | Uno, Mao | ✅ | ✅ | ✅ | `cycle to previous` skips ineligible players and wraps to self  |
+| Turn order reversal | Uno, Mao | ✅ | ✅ | ✅ | `cycle to previous` skips ineligible players and wraps to self|
 | Skip a player's turn | Uno skip card | ✅ | ✅ | ✅ | `cycle to next` twice |
 | Choose who acts next | target cards | ✅ | ✅ | ✅ | `cycle to P:P2` / `Hand of any` |
 | Turn / round caps | any bounded game | ✅ | ✅ | ✅ | `for current N times` |
@@ -102,7 +102,7 @@ last_validated: 2026-08-11
 | Lay down sets / books | Rummy, Go Fish | ✅ | ✅ | ✅ | `combo Set where (same Rank and size >= 3)` + validated lay-down move (D-16 note: 2+2 splits pass) |
 | Draw from top / bottom / Nth | most | ✅ | ✅ | ✅ | `top(Loc)` / `bottom(Loc)` / `Loc[N]` |
 | Exchange cards | Draw Poker | ✅ | ✅ | ✅ | `exchange` |
-| Shuffle a pile (incl. partial) | any | ✅ | ✅ | ✅ | `shuffle Deck` — partial sets shuffled in place  |
+| Shuffle a pile (incl. partial) | any | ✅ | ✅ | ✅ | `shuffle Deck` — partial sets shuffled in place|
 | Flip face up/down | Memory, Solitaire | ✅ | ✅ | ❌ | **Engine work (crypto)**: parses, no-op (D-6) |
 | Pass a card to a chosen player | Hearts passing | ✅ | ✅ | ✅ | `deal 1 … to Hand of any` |
 | Take cards from another player | Go Fish | ✅ | ✅ | ✅ | `deal (Hand where Rank is "X" of next) …`; `of any` for a chosen target |
@@ -156,7 +156,7 @@ last_validated: 2026-08-11
 | Choose a player | target cards, gifts | ✅ | ✅ | ✅ | `Hand of any` → `ChoosePlayer` |
 | Choose one card | many | ✅ | ✅ | ✅ | `move 1 from …` (pick exactly one) |
 | Choose a range-sized subset | Poker discard | ✅ | ✅ | ✅ | `move >= 1 and <= 3 from …` (re-prompts) |
-| Chained choices on one move | Go Fish ask | ✅ | ✅ | ✅ | `move any from Hand of any …` — sequential prompts (player, then cards)  |
+| Chained choices on one move | Go Fish ask | ✅ | ✅ | ✅ | `move any from Hand of any …` — sequential prompts (player, then cards)|
 | Validated combo lay-down | Rummy, Go Fish books | ✅ | ✅ | ✅ | Combo-source move (0 = skip, re-prompt on mismatch) |
 | **Enter a number** (bid amount, ante) | Poker, Cribbage | ✅ | ✅ | ✅ | **`bid <qty> on <memory> of <owner>`**: `any`/range → `InputType::Number` prompt; literal → direct write. Grammar-level `any` in *pure* int slots (`score any …`) remains front_end work (§9) |
 | Hidden simultaneous choices | Poker, RPS | ❌ | ❌ | ❌ | Needs SimStage (P-2) + per-player input routing |
@@ -181,7 +181,6 @@ last_validated: 2026-08-11
 | ~~Elimination-game turn flow~~ | **Done** — self-wrapping `next`/`cycle`, ineligible-player skip, stage auto-end (I-24) | §4 |
 | Replay determinism | **Engine** (seeded RNG) | NEXT_STEPS §4 |
 
-Suggested order of work: see [`NEXT_STEPS.md`](./NEXT_STEPS.md) — the numeric
-input prompt and per-group combo filters are the two highest-value additions
-for opening up new game families (numeric input now exists engine-side;
-per-group combo filters remain the top DSL-filter gap).
+Suggested order of work: see [`NEXT_STEPS.md`](./NEXT_STEPS.md) — per-group
+combo filters (D-16 read-side) are the top remaining DSL-filter gap for
+opening up new game families.

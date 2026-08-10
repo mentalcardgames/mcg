@@ -12,7 +12,7 @@ Where to touch when adding or modifying engine functionality.
 
 ## Adding a new Action Rule
 
-4 files to change, in order:
+6 files to change, in order:
 
 | # | File | What to do |
 |---|------|-----------|

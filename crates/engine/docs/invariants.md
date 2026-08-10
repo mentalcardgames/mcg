@@ -257,8 +257,7 @@ pending-resume state match, and the setup-`Any` guard.
 > *every* any-site of the setup (`quantifier::substitute_setup_any`) *before* calling
 > `execute_edge` — no `GameData` mutation occurs until the prompt is answered. `Quantifier::All`
 > in setup is supported (it expands to all in-game players via `resolve_owner_to_names` →
-> `Evaluator::resolve_player_collection`, see I-10's setup note in
-> [`lifecycle.md`](./lifecycle.md) §2).
+> `Evaluator::resolve_player_collection`, see [`lifecycle.md`](./lifecycle.md) §2).
 
 > **I-21 — Stale input on quantifier prompt mismatch is discarded.**
 > `take_quant_resume` (`crates/engine/src/interpreter/quant_driver.rs:78`) pops mismatched input

@@ -273,7 +273,7 @@ pub enum StepResult {
     Ok,
     NeedsInput(InputType),
     GameOver,
-    Error(String),
+    Error(EngineError),
 }
 ```
 

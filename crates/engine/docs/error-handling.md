@@ -44,8 +44,8 @@ Three error channels exist, all carrying the same `EngineError`:
 ### 1.1 The `EngineError` variant catalog
 
 `crates/engine/src/error.rs` is the **authoritative catalog** — it groups variants by raising
-module and carries a doc comment per variant. The `Display` strings (the messages tests assert
-against) are unchanged from the pre-enum string errors; representative examples:
+module and carries a doc comment per variant. The `Display` messages are the **stable public
+diagnostic surface** — tests assert them via `to_string()`; representative examples:
 
 - **Query/evaluator** (`query/`): `DivisionByZero` ("Division by zero"),
   `MemoryNotFound { key }` ("Memory {key} not found"), `MemoryNotInt` /
@@ -60,8 +60,7 @@ against) are unchanged from the pre-enum string errors; representative examples:
   `PlayerIndexNotFound { idx }`, `PlayerCollectionAtOutOfRange { idx }`,
   `PlayerCollectionIndexNotFound { idx }`, `ResolvePlayersPlayerNotFound { name }`,
   `ResolvePlayerCollectionPlayerNotFound { name }`, `OwnerNameFromPlayerCollection`,
-  `OwnerNameFromTeamCollection`, `TeamCannotOwn { name }`,
-  `OwnerNamesFromTeamCollection`, `CardNotFound { card_id }`,
+  `OwnerNameFromTeamCollection`, `CardNotFound { card_id }`,
   `CardKeyNotFound { key, card_id }`, `LocationNotFoundForOwner { name, owner }`,
   `LocationNotFound { name }`, `LocationNotFoundForCardPosition { name }`,
   `CardPositionNotFound`, `PrecedenceNotFound { name }`,
@@ -73,11 +72,13 @@ against) are unchanged from the pre-enum string errors; representative examples:
   (`{owner:?}`, `{int_expr:?}`, `{cardset:?}`, `{player:?}`) and a boxed `source`:
   `CreateLocationOwnerResolution`, `CreateCardOnLocationLocationNotFound`,
   `CreateMemoryOwnerResolution`, `CreateMemoryWithTypeOwnerResolution`,
-  `CreatePointMapIntEval`, `ShuffleActionEval`, `SetMemoryIntEval`,
+  `CreateMemoryTypeEval`, `CreatePointMapIntEval`, `ShuffleActionEval`, `SetMemoryIntEval`,
   `SetMemoryStringEval`, `SetMemoryPlayerEval`, `SetMemoryTeamEval`,
-  `SetMemoryNoCurrentPlayer`, `ResetMemoryNoCurrentPlayer`,
+  `SetMemoryCollectionEval`, `SetMemoryNoCurrentPlayer`, `ResetMemoryNoCurrentPlayer`,
   `CycleActionPlayerEval`, `CycleActionPlayerNotFound`,
   `CycleActionTurnOrderNotFound`, `ScoreIntEval`, `ScoreMemoryIntEval`,
+  `WinnerMemoryNotInt`, `BidWithoutMemoryTarget`, `BidQuantityEval`,
+  `BidQuantityMustBeLiteral`, `BidOwnerResolution`,
   `MoveFromCardsetEval`, `MoveDestCardsetEval`, `MoveDestLocationOutOfRange`.
 - **Interpreter** (`interpreter/mod.rs`): `CurrentStateNotFoundInIr { state }`,
   `NoOutgoingEdges { state }`, `NoEdgesFound { state }`, `ConditionEdgeCount { state, found }`,
@@ -116,13 +117,13 @@ Design notes:
 **Recoverable** (surfaced as `Err(EngineError)` / `crates::engine::interpreter::StepResult::Error`):
 all `crates::engine::query::Evaluator` `Result` returns; condition/end-condition edge-count
 violations; missing current state in the IR; dead-end non-goal states; test-file
-open/parse/exhaustion errors; the quantifier-resume / setup-guard errors listed in §1. **Since
-every DSL-reachable `action.rs` failure is recoverable too** — `action::execute` and
-`Interpreter::execute_edge` return `Result<(), EngineError>`, and the former panic sites (`cycle
-to next` with no eligible *other* player, `SetMemory`/`ResetMemory` without a current player,
+open/parse/exhaustion errors; the quantifier-resume / setup-guard errors listed in §1. **Every
+DSL-reachable `action.rs` failure is recoverable too** — `action::execute` and
+`Interpreter::execute_edge` return `Result<(), EngineError>`, covering the former panic sites
+(`cycle to next` with no eligible player, `SetMemory`/`ResetMemory` without a current player,
 `CreateLocation`/`CreateCardOnLocation`/`CreatePointMap` setup failures,
-`Score`/`ScoreMemory`/`CycleAction` eval failures, `execute_cardset_move` source/dest failures)
-now terminate `run_game` with `Err(EngineError)` instead of aborting the process (see
+`Score`/`ScoreMemory`/`CycleAction` eval failures, `execute_cardset_move` source/dest failures);
+they terminate `run_game` with `Err(EngineError)` instead of aborting the process (see
 `engine-vs-design.md`). These terminate `crates::engine::controller::run_game` with `Err` and
 leave `crates::engine::game_data::GameData` in whatever partially-mutated state it reached (the
 engine does **not** roll back applied mutations on error —
@@ -130,13 +131,12 @@ engine does **not** roll back applied mutations on error —
 evaluator call can fail). The `validate_int_range` re-prompt path is a partial exception: it
 returns `NeedsInput` (not `Error`) so the controller re-asks the player and the run continues.
 
-**Unrecoverable** (process-aborting `panic!` / `.expect()` / `.unwrap()` / `todo!`). Since the
-these are **internal invariants only** — none are reachable from
-well-formed DSL input:
+**Unrecoverable** (process-aborting `panic!` / `.expect()` / `.unwrap()` / `todo!`). These are
+**internal invariants only** — none are reachable from well-formed DSL input:
 
 | Site | Condition | Failure mode |
 |---|---|---|
-| `crates/engine/src/game_data.rs:139-156` | `crates::engine::game_data::GameData::add_location` owner (non-Table) not in `players` | `panic!("add_location: owner {} not found in players", owner_name)` — unreachable via DSL since `CreateLocation` resolves the owner first |
+| `crates/engine/src/game_data.rs:139-156` | `crates::engine::game_data::GameData::add_location` owner (non-Table, non-team) not in `players` | `panic!("add_location: owner {} not found in players", owner_name)` — unreachable via DSL since `CreateLocation` resolves the owner first |
 | `crates/engine/src/game_data.rs:228-246` | `crates::engine::game_data::GameData::next_player` found idx missing from `turn_order` | `panic!("next_player: next_player {} not found in turn_order {:?}", next_player, self.turn_order)` (see I-13 — safe given `resolve_turn`'s contract) |
 | `crates/engine/src/quantifier.rs:138` | `crates::engine::quantifier::alloc_synth` `serde_json::from_value` failure | `.expect("StateID deserialisation from a valid u32 cannot fail")` — the input is `Value::from(raw: u32)` and `StateID` derives `Deserialize` as a transparent newtype around `u32`, so this expect is unreachable by construction. Listed for completeness; it does not fire on any real input. |
 

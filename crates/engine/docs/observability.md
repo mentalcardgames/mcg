@@ -57,7 +57,7 @@ fine-grained per-transition seam is the `trace_sender` of §2.
 
 ---
 
-## 2. Per-Transition Trace Sender (`trace_sender`) — post-Stage-5
+## 2. Per-Transition Trace Sender (`trace_sender`)
 
 ```rust
 // crates/engine/src/controller/mod.rs:101
@@ -122,17 +122,18 @@ and counts are the only string fields — they have no structured equivalent.
 Each variant is emitted by exactly one arm of `Interpreter::step`
 (`crates/engine/src/interpreter/mod.rs`) or by the quantifier driver
 (`crates/engine/src/interpreter/quant_driver.rs`):
-- `Action` — `Payload::Action` arm (`interpreter/mod.rs:159-172`) and the overlay-dispatch branch
-  (`interpreter/mod.rs:92-105`); the `GameRule` is cloned from the edge being dispatched.
-- `Choice` — `Payload::Choice` arm (`interpreter/mod.rs:173-194`).
-- `OptionalAccept`/`OptionalDecline` — `Payload::Optional` arm (`interpreter/mod.rs:195-228`).
-- `Condition` — `Payload::Condition` arm (`interpreter/mod.rs:229-265`).
-- `EndCondition` — `Payload::EndCondition` arm (`interpreter/mod.rs:266-314`).
-- `StageRoundCounter` — `Payload::StageRoundCounter` arm (`interpreter/mod.rs:315-331`).
-- `EndStage` — `Payload::EndStage` arm (`interpreter/mod.rs:332-345`).
-- `Trigger` — `Payload::Trigger` arm (`interpreter/mod.rs:346-356`).
-- `Quantifier` — quantifier initial prompt, resume, and fan-out arms
-  (`interpreter/quant_driver.rs:186,209,235,262,290,349,377,425,445,479,535`).
+- `Action` — `Payload::Action` arm and the overlay-dispatch branch; the `GameRule` is cloned from
+  the edge being dispatched.
+- `Choice` — `Payload::Choice` arm.
+- `OptionalAccept`/`OptionalDecline` — `Payload::Optional` arm.
+- `Condition` — `Payload::Condition` arm.
+- `EndCondition` — `Payload::EndCondition` arm.
+- `StageRoundCounter` — `Payload::StageRoundCounter` arm.
+- `EndStage` — `Payload::EndStage` arm.
+- `Trigger` — `Payload::Trigger` arm.
+- `Skipped` — the (S) ineligible-player skip check (I-24).
+- `GameOver` — the transition into `StepResult::GameOver` (I-25).
+- `Quantifier` — the quantifier initial-prompt, resume, and fan-out arms in `quant_driver.rs`.
 
 ### 2.3 Text views (derived, not stored)
 
