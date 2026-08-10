@@ -79,7 +79,7 @@ fn stage_round_counter_incremented_exactly_once_per_traversal() {
 /// — the game completes with an empty winner set instead of erroring.
 #[test]
 fn cycle_to_next_with_no_eligible_player_auto_ends() {
-    let ir = load_game("errors_cycle_no_next.cgdsl");
+    let ir = load_game("auto_end_cycle_no_eligible.cgdsl");
     let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
         .expect("cycle to next with nobody eligible must no-op and auto-end");
     assert!(
@@ -94,7 +94,7 @@ fn cycle_to_next_with_no_eligible_player_auto_ends() {
 /// current player when reached at top level.)
 #[test]
 fn set_memory_without_current_player_is_skipped_and_auto_ends() {
-    let ir = load_game("errors_set_memory_no_current.cgdsl");
+    let ir = load_game("auto_end_set_memory_skipped.cgdsl");
     let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
         .expect("skipped SetMemory must not error");
     assert!(

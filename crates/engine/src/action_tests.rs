@@ -62,23 +62,8 @@ fn fixture_stock_to_hand() -> (GameData, usize, usize, Vec<usize>) {
     (gd, stock_idx, hand_idx, card_ids)
 }
 
-#[test]
-fn execute_cardset_move_rejects_dest_index_equal_to_len() {
-    // Regression for the off-by-one fixed in plan-2 Task 1: `dest_loc_idx
-    // == locations.len()` must panic (the corrected `>=` guard), not slip
-    // through and panic on the subsequent index. Constructing a
-    // `CardSet` whose eval yields `locations.len()` is not generally
-    // possible (eval_cardset uses a sentinel-0 fallback), so the load-bearing
-    // regression coverage lives in the integration test
-    // `move_top_card_to_hand_succeeds` + the from/to-eval `#[should_panic]`
-    // tests below. This unit test documents the intent and exists to keep
-    // the test file compiling.
-    let (mut gd, _stock, _hand, _card_ids) = fixture_stock_to_hand();
-    let _ = &mut gd;
-}
-
 // ---------------------------------------------------------------------------
-// Task 2 â€” TODO no-op pins
+// Task 2 — TODO no-op pins
 // ---------------------------------------------------------------------------
 
 /// Comparable snapshot of `locations` (which doesn't `derive(PartialEq/Debug)`).
@@ -136,7 +121,7 @@ fn flip_action_is_currently_a_noop() {
 }
 
 #[test]
-fn bid_action_is_currently_a_noop() {
+fn bid_action_without_target_errors() {
     let mut gd = GameData::new();
     let before_players = player_snapshot(&gd);
     let before_memories = gd.memories.clone();
@@ -873,33 +858,8 @@ fn execute_cardset_move_to_eval_failure_errors() {
     assert_eq!(result.unwrap_err().to_string(), "execute_cardset_move: failed to eval dest cardset Memory { memory: Memory { memory: \"ghost\" } }: memory access requires an explicit owner; use &M:ghost of <owner>".to_string());
 }
 
-/// Pin for the corrected `>=` guard introduced in plan-2 Task 1. The guard
-/// only fires when a `CardSet` eval yields `locations.len()`, which is not
-/// generally producible via the public `CardSet` variants (eval_cardset uses
-/// a sentinel-0 fallback). The reliable regression coverage lives in the
-/// integration tests in `tests/action_test.rs`. This test is kept
-/// `#[ignore]` to document the intent without producing a flaky failure.
-#[test]
-#[ignore = "requires a CardSet variant whose eval yields locations.len()"]
-fn execute_cardset_move_errors_when_dest_index_at_len() {
-    let mut gd = GameData::new();
-    let stock = gd.add_location(
-        "Table".to_string(),
-        Location {
-            name: "Stock".to_string(),
-            cards: vec![],
-        },
-    );
-    let card_id = gd.add_card(stock, HashMap::new());
-    gd.locations[stock].cards.push(card_id);
-    let from = loc_cardset("Stock");
-    let to = loc_cardset("Ghost");
-    let result = execute_cardset_move(from, None, Status::Private, to, &mut gd);
-    assert!(result.is_err());
-}
-
 // ---------------------------------------------------------------------------
-// Task 10 â€” SetUpRule panic sites
+// Task 10 — SetUpRule panic sites
 // ---------------------------------------------------------------------------
 
 #[test]

@@ -795,6 +795,10 @@ pub(crate) fn execute_cardset_move(
         })?
         .0;
 
+    // Note: `dest_loc_idx == locations.len()` is not generally producible
+    // from DSL — `eval_cardset` falls back to a location-0 sentinel — so the
+    // `>=` guard is exercised via the from/to-eval error tests in
+    // `src/action_tests.rs` rather than a direct off-by-one regression test.
     if dest_loc_idx >= game_data.locations.len() {
         return Err(EngineError::MoveDestLocationOutOfRange {
             dest_loc_idx,
