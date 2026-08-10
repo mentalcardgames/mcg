@@ -37,9 +37,9 @@ Each of the leaves of this payload tree should be accounted for in the execute_e
 */
 
 use crate::error::EngineError;
-use crate::game_data::{Combo, GameData, Location, PointMap, Precedence, Team};
+use crate::game_data::{Combo, GameData, Location, MemoryValue, PointMap, Precedence, Team};
 use front_end::ast::{
-    ActionRule, GameRule, MoveType, OutOf, Quantity, ScoringRule, SetUpRule, Status,
+    ActionRule, GameRule, MemoryType, MoveType, OutOf, Quantity, ScoringRule, SetUpRule, Status,
 };
 use front_end::ir::LoweredPayLoad;
 
@@ -145,9 +145,9 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
                     owner: Box::new(owner.clone()),
                     source: Box::new(source),
                 })?;
-            for name in names {
+            for name in &names {
                 let key = format!("{}_{}", name, memory);
-                game_data.add_memory(key, owner.clone(), None);
+                game_data.add_memory(key, name, None, None);
             }
             Ok(())
         }
@@ -161,9 +161,27 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
                     owner: Box::new(owner.clone()),
                     source: Box::new(source),
                 })?;
-            for name in names {
+            // Evaluate the declared type-expression at setup time (2026-08-10):
+            // `memory Pot 100 on table` now really initialises `Table_pot` to
+            // 100 instead of silently storing 0 (the previous behaviour).
+            let initial = evaluate_memory_type(&memory_type, game_data).map_err(|source| {
+                EngineError::CreateMemoryTypeEval {
+                    memory_type: Box::new(memory_type.clone()),
+                    source: Box::new(source),
+                }
+            })?;
+            for name in &names {
                 let key = format!("{}_{}", name, memory);
-                game_data.add_memory(key, owner.clone(), Some(memory_type.clone()));
+                // A player-owned slot of a Player-typed memory initialises to
+                // its own owner (so `&P:X of P:Pi` reads the slot's player);
+                // Table-owned slots use the evaluated player expression.
+                let slot_initial = match &memory_type {
+                    MemoryType::Player { player } if is_player_name(name, game_data) => {
+                        MemoryValue::String(name.clone())
+                    }
+                    _ => initial.clone(),
+                };
+                game_data.add_memory(key, name, Some(memory_type.clone()), Some(slot_initial));
             }
             Ok(())
         }
@@ -197,6 +215,62 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
             Ok(())
         }
     }
+}
+
+/// Evaluates a `MemoryType` expression against the live state at setup time
+/// (2026-08-10). Collections are evaluated to their real contents where the
+/// evaluators exist; anything that cannot be evaluated meaningfully falls
+/// back to the typed default (the caller passes the result as the memory's
+/// initial value).
+fn evaluate_memory_type(
+    memory_type: &MemoryType,
+    game_data: &GameData,
+) -> Result<MemoryValue, EngineError> {
+    use crate::query::Evaluator;
+    Ok(match memory_type {
+        MemoryType::Int { int } => MemoryValue::Int(Evaluator::eval_int(int, game_data)?),
+        MemoryType::String { string } => {
+            MemoryValue::String(Evaluator::eval_string(string, game_data)?)
+        }
+        MemoryType::Player { player } => {
+            MemoryValue::String(Evaluator::eval_player(player, game_data)?)
+        }
+        MemoryType::Team { team } => MemoryValue::Team(Evaluator::eval_team(team, game_data)?),
+        MemoryType::PlayerCollection { players } => {
+            let indices = Evaluator::resolve_player_collection(players, game_data)?;
+            MemoryValue::PlayerCollection(indices)
+        }
+        MemoryType::StringCollection { strings } => {
+            MemoryValue::StringCollection(Evaluator::eval_string_collection(strings, game_data)?)
+        }
+        MemoryType::TeamCollection { teams } => {
+            MemoryValue::TeamCollection(Evaluator::eval_team_collection(teams, game_data)?)
+        }
+        MemoryType::IntCollection { ints } => {
+            MemoryValue::IntCollection(Evaluator::eval_int_collection(ints, game_data)?)
+        }
+        MemoryType::LocationCollection { locations } => {
+            let names = Evaluator::eval_location_collection(locations, game_data)?;
+            let mut out = Vec::new();
+            for name in names {
+                let idx = game_data
+                    .locations
+                    .iter()
+                    .position(|l| l.name == name)
+                    .ok_or(EngineError::LocationNotFound { name })?;
+                out.push(idx);
+            }
+            MemoryValue::LocationCollection(out)
+        }
+        MemoryType::CardSet { card_set } => {
+            let (_loc_idx, card_ids) = Evaluator::eval_cardset(card_set, game_data)?;
+            MemoryValue::CardSet(card_ids)
+        }
+    })
+}
+
+fn is_player_name(name: &str, game_data: &GameData) -> bool {
+    game_data.players.iter().any(|p| p.name == name)
 }
 
 pub(crate) fn execute_action_rule(
@@ -273,8 +347,6 @@ pub(crate) fn execute_action_rule(
             memory,
             memory_type,
         } => {
-            use crate::game_data::MemoryValue;
-            use front_end::ast::MemoryType;
             let value: MemoryValue = match memory_type {
                 MemoryType::Int { int } => {
                     let n =
@@ -313,37 +385,95 @@ pub(crate) fn execute_action_rule(
                         })?;
                     MemoryValue::Team(name)
                 }
-                // TODO: evaluate the remaining variants when Evaluator gains
-                // the corresponding helpers (see test-plan-4). For now, insert
-                // a typed default so the key exists and the variant is not lost.
-                MemoryType::PlayerCollection { .. } => MemoryValue::PlayerCollection(vec![]),
-                MemoryType::StringCollection { .. } => MemoryValue::StringCollection(vec![]),
-                MemoryType::TeamCollection { .. } => MemoryValue::Int(0),
-                MemoryType::IntCollection { .. } => MemoryValue::IntCollection(vec![]),
-                MemoryType::LocationCollection { .. } => MemoryValue::LocationCollection(vec![]),
-                MemoryType::CardSet { .. } => MemoryValue::CardSet(vec![]),
-            };
-            // NOTE(grammar-gap): set_memory grammar has no owner clause.
-            // Prefix key with current player name until grammar supports
-            // explicit `of <owner>`.
-            let key = match game_data.get_current_player() {
-                Some(p) => format!("{}_{}", p.name, memory),
-                None => {
-                    return Err(EngineError::SetMemoryNoCurrentPlayer);
+                // Evaluated collections (2026-08-10): previously every
+                // collection type inserted a typed empty default.
+                MemoryType::PlayerCollection { players } => {
+                    let indices =
+                        crate::query::Evaluator::resolve_player_collection(&players, game_data)
+                            .map_err(|source| EngineError::SetMemoryCollectionEval {
+                                source: Box::new(source),
+                            })?;
+                    MemoryValue::PlayerCollection(indices)
+                }
+                MemoryType::StringCollection { strings } => {
+                    let out = crate::query::Evaluator::eval_string_collection(&strings, game_data)
+                        .map_err(|source| EngineError::SetMemoryCollectionEval {
+                            source: Box::new(source),
+                        })?;
+                    MemoryValue::StringCollection(out)
+                }
+                MemoryType::TeamCollection { teams } => {
+                    let names = crate::query::Evaluator::eval_team_collection(&teams, game_data)
+                        .map_err(|source| EngineError::SetMemoryCollectionEval {
+                            source: Box::new(source),
+                        })?;
+                    MemoryValue::TeamCollection(names)
+                }
+                MemoryType::IntCollection { ints } => {
+                    let out = crate::query::Evaluator::eval_int_collection(&ints, game_data)
+                        .map_err(|source| EngineError::SetMemoryCollectionEval {
+                            source: Box::new(source),
+                        })?;
+                    MemoryValue::IntCollection(out)
+                }
+                MemoryType::LocationCollection { locations } => {
+                    let names =
+                        crate::query::Evaluator::eval_location_collection(&locations, game_data)
+                            .map_err(|source| EngineError::SetMemoryCollectionEval {
+                                source: Box::new(source),
+                            })?;
+                    let mut out = Vec::new();
+                    for name in names {
+                        let idx = game_data
+                            .locations
+                            .iter()
+                            .position(|l| l.name == name)
+                            .ok_or(EngineError::LocationNotFound { name })?;
+                        out.push(idx);
+                    }
+                    MemoryValue::LocationCollection(out)
+                }
+                MemoryType::CardSet { card_set } => {
+                    let (_loc_idx, card_ids) =
+                        crate::query::Evaluator::eval_cardset(&card_set, game_data).map_err(
+                            |source| EngineError::SetMemoryCollectionEval {
+                                source: Box::new(source),
+                            },
+                        )?;
+                    MemoryValue::CardSet(card_ids)
                 }
             };
-            game_data.set_memory(key, value);
+            // NOTE(grammar-gap): the write rules have no `of <owner>` clause.
+            // Since 2026-08-10 the target owner is resolved like the reads:
+            // the declared slot wins when exactly one exists (`memory pot on
+            // table` → `pot is 5` writes `Table_pot`), otherwise the current
+            // player's slot (D-14).
+            let owner = game_data.memory_write_owner(
+                &memory,
+                game_data.get_current_player().map(|p| p.name.as_str()),
+            );
+            match owner {
+                Some(owner) => {
+                    let key = format!("{}_{}", owner, memory);
+                    game_data.set_memory(key, value);
+                }
+                None => return Err(EngineError::SetMemoryNoCurrentPlayer),
+            }
             Ok(())
         }
         ActionRule::ResetMemory { memory } => {
-            // NOTE(grammar-gap): reset_memory grammar has no owner clause.
-            let key = match game_data.get_current_player() {
-                Some(p) => format!("{}_{}", p.name, memory),
-                None => {
-                    return Err(EngineError::ResetMemoryNoCurrentPlayer);
+            // Same owner resolution as SetMemory (D-14).
+            let owner = game_data.memory_write_owner(
+                &memory,
+                game_data.get_current_player().map(|p| p.name.as_str()),
+            );
+            match owner {
+                Some(owner) => {
+                    let key = format!("{}_{}", owner, memory);
+                    game_data.reset_memory(&key);
                 }
-            };
-            game_data.reset_memory(&key);
+                None => return Err(EngineError::ResetMemoryNoCurrentPlayer),
+            }
             Ok(())
         }
         ActionRule::CycleAction { player } => {
@@ -353,7 +483,20 @@ pub(crate) fn execute_action_rule(
                         player: Box::new(player.clone()),
                         source: Box::new(source),
                     }
-                })?;
+                });
+            let player_name = match player_name {
+                Ok(name) => name,
+                // 2026-08-10: `cycle to next` with no eligible player at all
+                // (not even the current one) is a no-op, not an error — the
+                // stage's auto-end (no players in game / in stage) terminates
+                // the game from the loop-back (D-1 / I-13 relaxed).
+                Err(EngineError::CycleActionPlayerEval { source, .. })
+                    if matches!(*source, EngineError::NoNextPlayerAvailable) =>
+                {
+                    return Ok(());
+                }
+                Err(e) => return Err(e),
+            };
             let player_idx = game_data
                 .players
                 .iter()
@@ -372,16 +515,42 @@ pub(crate) fn execute_action_rule(
             game_data.current_player = Some(turn_idx);
             Ok(())
         }
-        ActionRule::BidAction { quantitiy: _ } => {
-            //TODO: not implemented yet.
-            Ok(())
+        ActionRule::BidAction { quantitiy } => {
+            // 2026-08-10: plain `bid <qty>` (no memory target) has no defined
+            // semantics — surface a recoverable error instead of a silent
+            // no-op (D-7). Use `bid <qty> on <memory> of <owner>`.
+            Err(EngineError::BidWithoutMemoryTarget {
+                quantity: Box::new(quantitiy.clone()),
+            })
         }
         ActionRule::BidMemoryAction {
-            memory: _,
-            quantity: _,
-            owner: _,
+            memory,
+            quantity,
+            owner,
         } => {
-            // TODO: not implemented yet
+            // 2026-08-10: `bid <qty> on <memory> of <owner>` = "prompt (or
+            // take) a number and store it in the owner's memory slot".
+            // Literal/int-expr quantities are resolved here; `any`/ranges
+            // are intercepted by the interpreter as a `InputType::Number`
+            // prompt and reach this arm with a literal substitution (D-7).
+            let value = match quantity {
+                Quantity::Int { int } => crate::query::Evaluator::eval_int(&int, game_data)
+                    .map_err(|source| EngineError::BidQuantityEval {
+                        source: Box::new(source),
+                    })?,
+                other => {
+                    return Err(EngineError::BidQuantityMustBeLiteral {
+                        quantity: Box::new(other.clone()),
+                    });
+                }
+            };
+            let owner_name = crate::query::Evaluator::resolve_owner_to_name(&owner, game_data)
+                .map_err(|source| EngineError::BidOwnerResolution {
+                    owner: Box::new(owner.clone()),
+                    source: Box::new(source),
+                })?;
+            let key = format!("{}_{}", owner_name, memory);
+            game_data.set_memory(key, MemoryValue::Int(value));
             Ok(())
         }
         ActionRule::EndAction { end_type } => {
@@ -473,32 +642,41 @@ pub(crate) fn execute_scoring_rule(
                 winner_type,
             } => {
                 // NOTE: Position = turn-order index (lower = earlier in turn).
-                let values: Vec<(usize, usize)> = game_data
-                    .players
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, p)| p.in_game)
-                    .map(|(i, p)| {
-                        let val = match &winner_type {
-                            front_end::ast::WinnerType::Score => p.score as usize,
-                            front_end::ast::WinnerType::Position => game_data
-                                .turn_order
-                                .iter()
-                                .position(|&x| x == i)
-                                .unwrap_or(usize::MAX),
-                            front_end::ast::WinnerType::Memory { memory } => {
-                                let key = format!("{}_{}", p.name, memory);
-                                match game_data.get_memory(&key) {
-                                    Some(crate::game_data::MemoryValue::Int(n)) => {
-                                        (*n).max(0) as usize
-                                    }
-                                    _ => 0,
+                // 2026-08-10: players missing from `turn_order` are excluded
+                // from the comparison (D-10 — previously they scored
+                // `usize::MAX`, letting a non-participant win `lowest
+                // position`). Memory extrema skip players without the slot
+                // and error on a non-Int value (D-13).
+                let mut values: Vec<(usize, usize)> = Vec::new();
+                for (i, p) in game_data.players.iter().enumerate() {
+                    if !p.in_game {
+                        continue;
+                    }
+                    let val = match &winner_type {
+                        front_end::ast::WinnerType::Score => Some(p.score as usize),
+                        front_end::ast::WinnerType::Position => {
+                            game_data.turn_order.iter().position(|&x| x == i)
+                        }
+                        front_end::ast::WinnerType::Memory { memory } => {
+                            let key = format!("{}_{}", p.name, memory);
+                            match game_data.get_memory(&key) {
+                                Some(crate::game_data::MemoryValue::Int(n)) => {
+                                    Some((*n).max(0) as usize)
+                                }
+                                None => None,
+                                Some(_) => {
+                                    return Err(EngineError::WinnerMemoryNotInt {
+                                        memory: memory.clone(),
+                                        player: p.name.clone(),
+                                    })
                                 }
                             }
-                        };
-                        (i, val)
-                    })
-                    .collect();
+                        }
+                    };
+                    if let Some(v) = val {
+                        values.push((i, v));
+                    }
+                }
 
                 if values.is_empty() {
                     return Ok(());

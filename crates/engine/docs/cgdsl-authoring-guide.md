@@ -135,13 +135,17 @@ location Hand on all                // one Hand per player
 location Hand on P:P1               // Hand only for P1
 location Deck on table              // one global Deck
 location Discard, Stock on table    // comma-separated: multiple at once
+location TeamPile on T:Red          // one TeamPile per team member (since 2026-08-10)
 ```
 
 The `on` clause accepts any owner expression (`P:Name`, `table`, `all`,
-`any`, player collections, etc.).
+`any`, player collections, team owners, etc.). A **team owner** (`on T:Red`)
+creates one location per team member, exactly like `on (P:P1, P:P2)` — the
+data model has no shared team-entity pile (P-7).
 
-⚠️ `on any` is **rejected** at runtime (quantifier `any` is not supported in
-setup). Use `on all` for per-player locations.
+⚠️ `on any` prompts for one player at setup (I-20, relaxed 2026-08-10) — the
+chosen player is substituted before the rule runs. Use `on all` for a
+per-player location for everyone.
 
 ### 3.5 Cards
 
@@ -214,8 +218,10 @@ See §4.6 for filter syntax.
 
 ```
 memory M on table                          // no type → defaults to Int(0)
-memory InitialScore 42 on P:P1             // Int, initialised to 0 (value ignored)
-memory NameOfFirst "Ace" on P:P1           // String, initialised to ""
+memory InitialScore 42 on P:P1             // Int, initialised to 42 (value honoured since 2026-08-10)
+memory NameOfFirst "Ace" on P:P1           // String, initialised to "Ace"
+memory Winner P:P1 on table                // Player, initialised to the evaluated player's name
+memory Scores (1, 2, 3) on table           // IntCollection, initialised to the evaluated list
 ```
 
 Memories are stored in a global `HashMap` keyed as `<Owner>_<MemoryName>`.
@@ -224,6 +230,9 @@ whatever owner they specify (§5.6).
 
 ⚠️ Setup `with I: 0` syntax does **not** exist in the grammar. Use a bare
 expression: `memory Name 42 on P:P1`.
+
+⚠️ **Team owners** (`memory M on T:Red`) create one slot **per team member**
+(`P1_M`, `P2_M`, …) — mirroring `location X on T:Red` (§3.4).
 
 ### 3.10 Tokens
 
@@ -419,8 +428,11 @@ trigger {
 
 A `trigger` block inside a stage fires on every iteration (when the flow
 reaches it). A top-level `trigger` fires once before any stage. There is
-no dedicated `on enter` syntax — place a `trigger` block at the start of
-a stage body to simulate entry-only behaviour.
+no dedicated `on enter` syntax: a `trigger` at the start of a stage body
+fires **every iteration**, so "entry-only" behaviour is expressed with a
+1-iteration stage (`stage X for current 1 times`) or a
+`if (stageroundcounter == 1)` guard (the counter starts at 0 and increments
+once per loop-back).
 
 Triggers are lowered as `Payload::Trigger` edges and dispatched immediately.
 
@@ -487,11 +499,11 @@ cycle to current
 ```
 
 Sets `current_player` in `turn_order`. `next` walks turn order, skipping
-eliminated or out-of-stage players. If the target cannot be resolved (e.g.
-`cycle to next` with no eligible *other* player — `resolve_turn` never
-considers the current player, I-13), the engine returns a **recoverable
-error** instead of crashing. Games that eliminate players guard the cycle
-with `if (size(playersin) >= 2)`.
+eliminated or out-of-stage players; with no eligible *other* player the turn
+wraps onto the current player (I-13, relaxed 2026-08-10), and with nobody
+eligible at all `cycle to next` is a **no-op** — games that eliminate players
+need no guards, and the stage auto-ends when no players remain (§2.6
+semantics).
 
 ### 6.4 End scope
 
@@ -503,8 +515,8 @@ end game with winner P:P1   // ends the game (IR jumps to goal)
 ```
 
 `end turn` calls `next_player()` which scans `turn_order` for the next
-eligible player. If none remain, `current_player` becomes `None` (stuck
-game — no error).
+eligible player, wrapping onto the current player when it is the only
+eligible one (since 2026-08-10 it no longer strands the game).
 
 ### 6.5 Set player out
 
@@ -521,32 +533,37 @@ the player's `in_stage[<name>] = false`.
 ### 6.6 Memory operations
 
 ```
-// Set memory (action — uses current player for owner prefix)
+// Set memory (action — the target owner is resolved automatically)
 M is 42                      // Int
 M is "Hello"                  // String
 M is P:Alice                  // Player (stored as String)
 M is T:Red                    // Team
-M is (1, 2, 3)                // IntCollection  ⚠️ stub: inserts empty
-M is ("A", "B")               // StringCollection ⚠️ stub
-M is (P:Alice, P:Bob)        // PlayerCollection ⚠️ stub
+M is (1, 2, 3)                // IntCollection (evaluated since 2026-08-10)
+M is ("A", "B")               // StringCollection
+M is (P:Alice, P:Bob)        // PlayerCollection
+M is (top(Hand), bottom(Hand)) // CardSet
 
 // Read back (expression — requires explicit owner)
 (&I:M of P:P1)   // reads Int memory
 score (&I:M of current) to current
 
-// Reset
+// Reset (resets every variant to its typed zero since 2026-08-10)
 reset M
 ```
 
-⚠️ `reset M` only works when the memory holds `MemoryValue::Int`. Other
-types are silently ignored.
+⚠️ **Write/read owner resolution (D-14, since 2026-08-10):** the write rules
+have no `of <owner>` clause, so `M is 5` / `reset M` (and bare reads `&I:M`)
+target the **declared owner** when exactly one slot ends in `_M` exists —
+`memory pot on table` + `pot is 5` writes `Table_pot` — and otherwise the
+**current player's** slot. This replaced the old behaviour where a
+table-declared memory was silently written under the current player's name.
 
-⚠️ Bare `&I:M` (no `of <owner>`) is valid in the grammar but **fails at
-runtime** — the engine requires an explicit owner.
+⚠️ Collection memory variants are fully evaluated (literals, and
+`Memory`-form copies of existing collection slots).
 
-⚠️ Collection memory variants (PlayerCollection, StringCollection,
-IntCollection, etc.) are parsed but **insert empty defaults** — the
-evaluation is not yet implemented.
+⚠️ Bare `&I:M` (no `of <owner>`) resolves through the same owner resolution
+as writes; it errors only when neither a declared slot nor a current player
+exists.
 
 ### 6.7 Stubs
 
@@ -554,9 +571,23 @@ evaluation is not yet implemented.
 |--------|--------|
 | `flip <cardset> to <status>` | ⏳ No-op by design — becomes (de)encryption with card crypto; the status slot exists |
 | `place <token> from ... to ...` | ❌ Tokens not modeled |
-| `bid <quantity>` / `bid ... on <memory>` | ❌ Semantics undefined |
+| `bid <quantity>` (no memory target) | ❌ Recoverable error since 2026-08-10 — use the memory form |
+| `bid <quantity> on <memory> of <owner>` | ✅ **Numeric input prompt** (2026-08-10): `any`/range → `InputType::Number` prompt (bounds validated, re-asked); literal → writes `{owner}_{memory}` directly. See §6.8 |
 | `demand <type>` / `demand ... as <memory>` | ❌ Semantics undefined |
 | `end game with winner <players>` | ⚠️ Ends the game (IR jump to goal); the action arm itself is an empty TODO |
+
+### 6.8 Numeric input — `bid <quantity> on <memory> of <owner>` (2026-08-10)
+
+```
+bid any on Pot of table                  // prompt for any number
+bid >= 1 and <= 10 on Bet of table       // prompt, bounded 1..=10
+bid 5 on Pot of table                    // literal: write 5, no prompt
+```
+
+Asks the current player for a number and stores it in the owner's memory slot
+(`InputType::Number`). Out-of-range answers are rejected and re-asked. This is
+the DSL surface for betting/ante mechanics while the grammar has no `any` in
+pure int expressions (see `engine-vs-design.md` §5).
 
 ---
 
@@ -716,14 +747,15 @@ Issues a **`ChooseCards` prompt** with the candidate card IDs. `any` allows
 1–all; ranges enforce min/max. The chosen card IDs are written to a
 synthetic memory slot and consumed by the replacement edge.
 
-### 9.4 `any` in setup — rejected
+### 9.4 `any` in setup — prompts (since 2026-08-10)
 
 ```
-location Hand on any       // ❌ runtime error
+location Hand on any       // prompts for one player (I-20)
 ```
 
-Any quantifier `any` in a setup rule returns a runtime error before any
-mutation occurs.
+Any quantifier `any` in a setup rule issues a `ChoosePlayer` prompt before
+any mutation; the chosen player is substituted into every any-site of the
+rule. (Previously rejected with a runtime error.)
 
 ---
 
@@ -758,17 +790,19 @@ optional {
 
 `optional` gives the player a hit/stand choice. Accept = draw a card;
 decline = stand (skip). The `if` checks for bust (>21) and auto-eliminates.
-Because `set … out of game` removes the player from the eligible pool,
-`cycle to next` skips eliminated players.
+Since 2026-08-10 no guards are needed around this pattern:
 
-> **Caveats (see `engine-vs-design.md` D-1/D-3):**
+- a busted player is **never prompted again** — once `set current out of
+  game` fires, the rest of their turn is skipped (ineligible-player skip,
+  I-24);
+- `cycle to next` never errors — with no eligible *other* player the turn
+  wraps onto the current player (or no-ops when nobody at all is eligible),
+  and the stage auto-ends when no players remain in the game.
+
+> **Caveats (see `engine-vs-design.md` D-3):**
 > - Standing is **not recorded** — declining only skips this round, so the
 >   optional re-asks the same player next round. Bound the stage with
 >   `N times` and let players re-decline.
-> - `cycle to next` returns a **recoverable error** when no *other* player is
->   still eligible (`resolve_turn` never considers the current player, I-13) —
->   it no longer crashes, but the game would end with an error. Always guard:
->   `if (size(playersin) >= 2) { cycle to next }`.
 
 ### 10.3 Deal N cards per player
 
@@ -891,30 +925,21 @@ players finish (§11.4).
 
 ```
 stage Play for current 12 times {
-    if (not current out of game) {
-        optional {
-            deal 1 from Deck private to Hand of current
-            if (sum of Hand of current using BJ > 21) {
-                set current out of game
-            }
+    optional {
+        deal 1 from Deck private to Hand of current
+        if (sum of Hand of current using BJ > 21) {
+            set current out of game
         }
     }
-    if (size(playersin) >= 2) {
-        cycle to next
-    }
+    cycle to next
 }
 ```
 
 12 iterations = 4 full rounds (4 × 3 players). `optional` prompts hit/stand.
 Accept = draw one card, then check bust. Bust → `set current out of game`.
-The `if (not current out of game)` guard skips the prompt for eliminated
-players. The `size(playersin) >= 2` guard prevents the `cycle to next` panic
-(D-1) once only one player remains — at that point the remaining player is
-re-asked until the round cap ends the stage.
-
-> **Why the guards?** `cycle to next` errors when no eligible *other* player
-> exists (I-13). A bare `cycle to next` in a game that eliminates players is
-> a crash waiting to happen.
+No guards are needed (2026-08-10): a busted player is skipped automatically
+(ineligible-player skip, I-24) and `cycle to next` wraps/no-ops instead of
+erroring (I-13 relaxed).
 
 ### 11.4 Dealer — auto-play
 
@@ -991,17 +1016,13 @@ stage Deal for current 1 times {
 }
 
 stage Play for current 12 times {
-  if (not current out of game) {
-    optional {
-      deal 1 from Deck private to Hand of current
-      if (sum of Hand of current using BJ > 21) {
-        set current out of game
-      }
+  optional {
+    deal 1 from Deck private to Hand of current
+    if (sum of Hand of current using BJ > 21) {
+      set current out of game
     }
   }
-  if (size(playersin) >= 2) {
-    cycle to next
-  }
+  cycle to next
 }
 
 stage Dealer for current 10 times {
@@ -1039,12 +1060,15 @@ stage End for current 1 times {
 | `flip <cardset> to <status>` | ⏳ No-op by design | Becomes (de)encryption with card crypto; the status slot exists |
 | `place <token>` | ❌ Stub | Tokens not in data model |
 | `create token` | ❌ Stub | Tokens not in data model |
-| `bid <quantity>` | ❌ Stub | Semantics undefined |
+| `bid <quantity>` (no target) | ❌ Error since 2026-08-10 | Use `bid <qty> on <memory> of <owner>` — the numeric input prompt (§6.8) |
 | `demand <type>` | ❌ Stub | Semantics undefined |
 | `end game with winner <players>` | ⚠️ | IR jumps to the goal (game ends); the action arm is an empty TODO |
-| Mem collection writes | ⚠️ Stub | Collections insert empty defaults |
-| `reset memory` on non-Int | ⚠️ | Silently no-ops |
-| `cycle to next` with one eligible player | ⚠️ | Recoverable error (I-13, D-1) — guard with `size(playersin) >= 2` to keep the turn flowing |
+| Collection memory writes | ✅ | Fully evaluated since 2026-08-10 |
+| `reset memory` on non-Int | ✅ | Resets every variant to its typed zero since 2026-08-10 |
+| Memory initial values | ✅ | `memory X 42 on P:P1` honours the value since 2026-08-10 |
+| `cycle to next` with one eligible player | ✅ | Self-wraps since 2026-08-10 — no `size(playersin) >= 2` guard needed |
+| Prompting eliminated players | ✅ | Never happens since 2026-08-10 (ineligible-player skip, I-24); stages auto-end with an empty winner set |
+| Team-owned locations/memories | ✅ | Per-member instances since 2026-08-10 (P-7) |
 | Aggregate memory (multi-owner) | ✅ | Implemented 2026-08-09 (`(&I:M of all)` aggregates per-owner slots) |
 | `owner of highest/lowest <mem>` | ✅ | Key-order bug fixed 2026-08-09 (`<player>_<mem>`) |
 

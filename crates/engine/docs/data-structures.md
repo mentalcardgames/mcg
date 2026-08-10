@@ -98,15 +98,15 @@ pub enum MemoryValue {
 ```
 
 `crates::engine::game_data::MemoryValue` is the dynamically-typed storage for DSL "memory"
-variables. There is **no** separate `TeamCollection` variant — a stored team collection is
-represented as `MemoryValue::Team(String)` holding one team name (the read sites are
-`crates/engine/src/query/int.rs:271-295` and `crates/engine/src/query/player.rs:186-195`), and
-`front_end::ast::MemoryType::TeamCollection` initializes to `MemoryValue::Int(0)`
-(`crates/engine/src/game_data.rs:314-329`, inside `GameData::add_memory`'s match), a known
-mismatch documented as invariant I-10 in [`invariants.md`](./invariants.md). The
-`MemoryValue::CardSet` variant is also used by the quantifier subsystem to carry player-chosen
-card ids — see the `SYNTH_MEMORY_KEY` discussion in [`observability.md`](./observability.md) and
-invariant I-18 in [`invariants.md`](./invariants.md).
+variables. `MemoryValue::TeamCollection(Vec<String>)` (added 2026-08-10) holds a stored team
+collection — previously a stored team collection was represented as `MemoryValue::Team(String)`
+holding one team name (the read sites are `crates/engine/src/query/int.rs:271-295` and
+`crates/engine/src/query/player.rs:186-195`), and `front_end::ast::MemoryType::TeamCollection`
+initialized to `MemoryValue::Int(0)`, a known mismatch documented as invariant I-10 in
+[`invariants.md`](./invariants.md) (fixed 2026-08-10). The `MemoryValue::CardSet` variant is also
+used by the quantifier subsystem to carry player-chosen card ids — see the `SYNTH_MEMORY_KEY`
+discussion in [`observability.md`](./observability.md) and invariant I-18 in
+[`invariants.md`](./invariants.md).
 
 ---
 

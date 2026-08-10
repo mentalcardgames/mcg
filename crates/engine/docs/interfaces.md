@@ -226,6 +226,11 @@ pub enum Input {
     ChooseCards {
         selected: Vec<usize>,
     },
+    /// A numeric answer (`InputType::Number`), e.g. from `bid any on
+    /// <memory> of <owner>` (2026-08-10).
+    Number {
+        value: i32,
+    },
 }
 ```
 
@@ -249,6 +254,14 @@ pub enum InputType {
         display: Vec<crate::game_data::Card>,
         min: usize,
         max: usize,
+        prompt: String,
+    },
+    /// Prompt the player to enter a number (`bid any on <memory> of
+    /// <owner>`; 2026-08-10). `min`/`max` are advisory bounds from the
+    /// quantity's `IntRange` when present (`None` = unbounded).
+    Number {
+        min: Option<i32>,
+        max: Option<i32>,
         prompt: String,
     },
 }
@@ -470,6 +483,7 @@ For test-suite writers. The on-disk replay format (`crates/engine/src/controller
 | `<N>` | `Input { player_id: "P1", kind: InputKind::Choice { idx: N-1 } }` (1-based) |
 | `p <N>` | `Input { player_id: "P1", kind: InputKind::ChoosePlayer { idx: N-1 } }` (1-based candidate index) |
 | `c <csv>` | `Input { player_id: "P1", kind: InputKind::ChooseCards { selected: <0-based> } }` — input is 1-based, internally converted; comma-separated |
+| `n <N>` | `Input { player_id: "P1", kind: InputKind::Number { value: N } }` (numeric prompt, 2026-08-10) |
 | `Name:y` / `Name:<N>` / etc. | Same as above, with `player_id: "Name"` (defaults to `"P1"` when no prefix) |
 
 Blank lines and `#…` comment lines are ignored (`controller/mod.rs:330-343`). On exhaustion the
@@ -564,6 +578,7 @@ than re-prompting.
 | `Optional(prompt)` | `Input { player_id, kind: InputKind::OptionalAccept }` \| `InputKind::OptionalDecline` | none — either variant is accepted |
 | `ChoosePlayer { candidates, prompt }` | `Input { player_id, kind: InputKind::ChoosePlayer { idx } }` | `idx < candidates.len()` |
 | `ChooseCards { display, min, max, prompt }` | `Input::ChooseCards { selected }` | every `i` in `selected` is `< display.len()` AND `selected.len() >= min` AND `<= max` |
+| `Number { min, max, prompt }` | `Input::Number { value }` | `min.is_none_or(\|m\| value >= m)` AND `max.is_none_or(\|x\| value <= x)` |
 
 > **Pitfall (most error-prone).** `Input::ChooseCards.selected` are indices **INTO `display`**, not
 > card ids. A UI that renders `display` as a list should map the user's selected row → the row's

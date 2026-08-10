@@ -163,10 +163,15 @@ setup-`Any` guard prompts for a player (`step_setup_any`), never `panic!` (`inte
 - `front_end::ast::ActionRule::FlipAction` (`crates/engine/src/action.rs:207-211`) — payload fields
   ignored entirely; the per-card status slot (`GameData::card_statuses`) exists but is unused.
   Intended to become (de)encryption when card cryptography lands (see `engine-vs-design.md` §1b).
-- `front_end::ast::ActionRule::BidAction`, `BidMemoryAction`, `DemandAction`, `DemandMemoryAction`,
+- `front_end::ast::ActionRule::BidAction` (plain `bid <qty>` without a memory target) is
+  **no longer a silent no-op** — since 2026-08-10 it returns
+  `EngineError::BidWithoutMemoryTarget` (see `dsl-semantics.md` §3.7).
+- `front_end::ast::ActionRule::BidMemoryAction`, `DemandAction`, `DemandMemoryAction`,
   `front_end::ast::EndType::GameWithWinner`,
   `front_end::ast::SetUpRule::CreateTokenOnLocation`, `front_end::ast::MoveType::Place`
-  (`crates/engine/src/action.rs`) — `// TODO` no-ops.
+  (`crates/engine/src/action.rs`) — `// TODO` no-ops. (`BidMemoryAction` is **implemented**
+  since 2026-08-10: literal quantities write the owner's slot; `any`/ranges are prompted by
+  the interpreter as `InputType::Number`.)
 - `front_end::ir::Payload::Trigger` traversal: `crates::engine::interpreter::Interpreter::step`
   advances the state (`execute_edge`) but `crates::engine::action::execute`'s catch-all
   `_ => {}` performs no mutation.

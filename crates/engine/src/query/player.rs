@@ -35,11 +35,14 @@ impl Evaluator {
                     let current_idx = game_data
                         .current_player
                         .ok_or(EngineError::NoCurrentPlayer)?;
-                    let turn_len = game_data.turn_order.len();
-                    let prev_idx = (current_idx + turn_len - 1) % turn_len;
-                    let player_idx = *game_data
-                        .turn_order
-                        .get(prev_idx)
+                    let current_stage = game_data
+                        .get_current_stage()
+                        .ok_or(EngineError::NoCurrentStage)?;
+                    // D-12 fix: `previous` skips ineligible players, mirroring
+                    // `next`, and wraps onto the current player when it is the
+                    // only eligible one.
+                    let player_idx = game_data
+                        .previous_eligible_player(current_idx, &current_stage)
                         .ok_or(EngineError::PreviousPlayerNotFound)?;
                     game_data
                         .players
@@ -196,6 +199,15 @@ impl Evaluator {
                 let key = Self::resolve_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::Team(v)) => Ok(v.clone()),
+                    Some(MemoryValue::TeamCollection(v)) => {
+                        // A team-collection memory cannot name a single team;
+                        // surface the first entry if there is exactly one.
+                        if v.len() == 1 {
+                            Ok(v[0].clone())
+                        } else {
+                            Err(EngineError::MemoryNotTeam)
+                        }
+                    }
                     Some(_) => Err(EngineError::MemoryNotTeam),
                     None => Err(EngineError::MemoryNotFound { key }),
                 }
@@ -362,6 +374,11 @@ impl Evaluator {
         }
     }
 
+    /// Resolves an `Owner` to the list of entity names that own the
+    /// locations/memories being created. Since 2026-08-10 team owners are
+    /// supported: `location X on T:T1` creates one instance **per team
+    /// member** (mirroring `on all`), because the data model has no
+    /// team-entity ownership slot (P-7, fixed).
     pub fn resolve_owner_to_names(
         owner: &Owner,
         game_data: &GameData,
@@ -370,8 +387,8 @@ impl Evaluator {
             Owner::Table => Ok(vec!["Table".to_string()]),
             Owner::Player { player } => Ok(vec![Self::eval_player(player, game_data)?]),
             Owner::Team { team } => {
-                let name = Self::eval_team(team, game_data)?;
-                Err(EngineError::TeamCannotOwn { name })
+                let team_name = Self::eval_team(team, game_data)?;
+                Ok(Self::team_member_names(&team_name, game_data))
             }
             Owner::PlayerCollection {
                 player_collection: pc,
@@ -382,8 +399,34 @@ impl Evaluator {
                     .map(|i| game_data.players[i].name.clone())
                     .collect())
             }
-            Owner::TeamCollection { .. } => Err(EngineError::OwnerNamesFromTeamCollection),
+            Owner::TeamCollection { team_collection } => {
+                let team_names = Self::eval_team_collection(team_collection, game_data)?;
+                let mut names: Vec<String> = Vec::new();
+                for team_name in team_names {
+                    for member in Self::team_member_names(&team_name, game_data) {
+                        if !names.contains(&member) {
+                            names.push(member);
+                        }
+                    }
+                }
+                Ok(names)
+            }
         }
+    }
+
+    /// The player names of a named team (empty when the team is unknown).
+    fn team_member_names(team_name: &str, game_data: &GameData) -> Vec<String> {
+        game_data
+            .teams
+            .iter()
+            .find(|t| t.name == team_name)
+            .map(|t| {
+                t.players
+                    .iter()
+                    .filter_map(|&i| game_data.players.get(i).map(|p| p.name.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 

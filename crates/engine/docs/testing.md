@@ -354,6 +354,10 @@ authoring new ones):
 | `setup_location_all.cgdsl` / `_literal.cgdsl` / `_any_errors.cgdsl` | `tests/quantifier_test.rs:334ff` | `SetUpRule` quantifier handling |
 | `setup_turnorder_all.cgdsl` / `setup_teams_all.cgdsl` | `tests/quantifier_test.rs:412,431` | Setup `All` resolution |
 | `turn_switch.cgdsl` | `controller/tests.rs:210` | Stage entry + turn advance |
+| `skip_ineligible.cgdsl` | `tests/ergonomics_test.rs` | Ineligible-player skip + stage auto-end (I-24): eliminated players never prompted, post-elimination instructions skipped, empty winner set |
+| `memory_initial_value.cgdsl` | `tests/ergonomics_test.rs` | Memory declarations honour their initial value (F-18); typed init (I-10) |
+| `bid_prompt.cgdsl` + `.txt` | `tests/ergonomics_test.rs` | Numeric input prompt (`InputType::Number`): `bid any`/range, out-of-bounds re-ask (F-26) |
+| `team_locations.cgdsl` | `tests/ergonomics_test.rs` | Team-owned locations/memories = per-member instances (F-25) |
 | `location_resolution.cgdsl`, `test.cgdsl` | TUI fixtures | Interactive play (load via `just tui <name>`) |
 
 **Authoring conventions:**
@@ -527,7 +531,9 @@ Per §8.1, these are bugs to fix before writing the regression tests:
 
 (The former panic table — `cycle to next`, `SetMemory`, the `execute_cardset_move`
 guard, and the collection-memory `todo!()`s — was converted to recoverable errors
-on 2026-08-09; see `engine-vs-design.md` §1.)
+on 2026-08-09; see `engine-vs-design.md` §1. The 2026-08-10 ergonomics pass
+fixed `cycle to next` entirely (self-wrap + no-op, F-16) and replaced its
+error paths with the stage auto-end (I-24).)
 
 When fixing, file entries under [`engine-vs-design.md`](./engine-vs-design.md), land the corrected
 behavior and its regression test together.

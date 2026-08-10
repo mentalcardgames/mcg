@@ -1,7 +1,7 @@
 use super::*;
 use crate::game_data::{Card, CardStatus, Location, MemoryValue};
 use front_end::ast::{
-    CardSet, Group, Groupable, IntCollection, IntExpr, LocationCollection, MemoryType, Owner,
+    CardSet, Group, Groupable, IntCollection, IntExpr, LocationCollection, MemoryType,
     PlayerCollection, PlayerExpr, StringCollection, StringExpr, TeamCollection, TeamExpr,
 };
 
@@ -41,10 +41,11 @@ fn set_memory_int_stores_evaluated_value_not_increment() {
     let mut gd = GameData::new();
     gd.add_memory(
         "Table_counter".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::Int {
             int: IntExpr::Literal { int: 0 },
         }),
+        None,
     );
     // simulate the post-fix path: action.rs evaluated IntExpr::Literal{5}
     gd.set_memory("Table_counter".to_string(), MemoryValue::Int(5));
@@ -62,12 +63,13 @@ fn set_memory_overwrites_non_int_variant() {
     let mut gd = GameData::new();
     gd.add_memory(
         "Table_label".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::String {
             string: StringExpr::Literal {
                 value: String::new(),
             },
         }),
+        None,
     );
     gd.set_memory(
         "Table_label".to_string(),
@@ -287,13 +289,11 @@ fn next_player_skips_ineligible_player() {
 }
 
 #[test]
-fn next_player_becomes_none_when_only_other_is_out_of_game() {
-    // I-13: resolve_turn scans only the OTHER players (loop 1..len),
-    // never the current one. In a 2-player game where the only other
-    // player is out of game, no eligible OTHER is found, so
-    // current_player becomes None (stuck) — even though the current
-    // player is still eligible. This is the documented I-13 behavior;
-    // pin it.
+fn next_player_wraps_to_current_when_only_other_is_out_of_game() {
+    // I-13 relaxed (2026-08-10): when no *other* player is eligible but the
+    // current player still is, the turn wraps onto the current player
+    // instead of stranding the game (`cycle to next` no longer errors and
+    // `end turn` no longer sets current_player = None).
     let mut gd = GameData::new();
     let p0 = gd.add_player("Alice".to_string());
     let p1 = gd.add_player("Bob".to_string());
@@ -306,8 +306,9 @@ fn next_player_becomes_none_when_only_other_is_out_of_game() {
     gd.current_player = Some(1); // Bob is current
     gd.next_player();
     assert_eq!(
-        gd.current_player, None,
-        "I-13: only-other-player out of game => stuck (None), not wrap-to-current"
+        gd.current_player,
+        Some(1),
+        "I-13 relaxed: wraps onto the still-eligible current player"
     );
 }
 
@@ -449,10 +450,11 @@ fn add_memory_int_initializes_to_zero() {
     let mut gd = GameData::new();
     gd.add_memory(
         "Table_counter".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::Int {
             int: IntExpr::Literal { int: 0 },
         }),
+        None,
     );
     assert_eq!(gd.get_memory("Table_counter"), Some(&MemoryValue::Int(0)));
 }
@@ -462,12 +464,13 @@ fn add_memory_string_initializes_to_empty() {
     let mut gd = GameData::new();
     gd.add_memory(
         "Table_label".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::String {
             string: StringExpr::Literal {
                 value: String::new(),
             },
         }),
+        None,
     );
     assert_eq!(
         gd.get_memory("Table_label"),
@@ -478,47 +481,51 @@ fn add_memory_string_initializes_to_empty() {
 #[test]
 fn add_memory_none_initializes_to_int_zero() {
     let mut gd = GameData::new();
-    gd.add_memory("Table_anon".to_string(), Owner::Table, None);
+    gd.add_memory("Table_anon".to_string(), "Table", None, None);
     assert_eq!(gd.get_memory("Table_anon"), Some(&MemoryValue::Int(0)));
 }
 
 #[test]
-fn add_memory_player_initializes_to_int_zero_mismatched() {
-    // I-10: MemoryType::Player initializes to MemoryValue::Int(0), NOT
-    // a player. Reads as Player will fail type checks until something
-    // writes a correctly-typed value. Pin the mismatch.
+fn add_memory_player_initializes_to_owner_name_string() {
+    // I-10 fix (2026-08-10): a Player-typed memory initialises to the
+    // owner's own name as a String (matching SetMemory's storage
+    // convention), not `Int(0)` — reads as Player no longer fail the type
+    // check out of the box.
     let mut gd = GameData::new();
     gd.add_memory(
-        "Table_p".to_string(),
-        Owner::Table,
+        "P1_role".to_string(),
+        "P1",
         Some(MemoryType::Player {
             player: PlayerExpr::Literal {
                 name: "Alice".to_string(),
             },
         }),
+        None,
     );
     assert_eq!(
-        gd.get_memory("Table_p"),
-        Some(&MemoryValue::Int(0)),
-        "I-10: Player memory inits to Int(0), not a player"
+        gd.get_memory("P1_role"),
+        Some(&MemoryValue::String("P1".to_string())),
+        "I-10 fixed: Player memory inits to the owner's name"
     );
 }
 
 #[test]
-fn add_memory_team_collection_initializes_to_int_zero_mismatched() {
-    // I-10: TeamCollection also inits to Int(0).
+fn add_memory_team_collection_initializes_to_empty_team_collection() {
+    // I-10 fix (2026-08-10): TeamCollection now has its own MemoryValue
+    // variant and inits to an empty team list, not `Int(0)`.
     let mut gd = GameData::new();
     gd.add_memory(
         "Table_tc".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::TeamCollection {
             teams: TeamCollection::Literal { teams: vec![] },
         }),
+        None,
     );
     assert_eq!(
         gd.get_memory("Table_tc"),
-        Some(&MemoryValue::Int(0)),
-        "I-10: TeamCollection memory inits to Int(0)"
+        Some(&MemoryValue::TeamCollection(vec![])),
+        "I-10 fixed: TeamCollection memory inits to an empty team list"
     );
 }
 
@@ -527,10 +534,11 @@ fn add_memory_collection_variants_init_to_empty_vecs() {
     let mut gd = GameData::new();
     gd.add_memory(
         "Table_pcs".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::PlayerCollection {
             players: PlayerCollection::Literal { players: vec![] },
         }),
+        None,
     );
     assert_eq!(
         gd.get_memory("Table_pcs"),
@@ -538,10 +546,11 @@ fn add_memory_collection_variants_init_to_empty_vecs() {
     );
     gd.add_memory(
         "Table_scs".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::StringCollection {
             strings: StringCollection::Literal { strings: vec![] },
         }),
+        None,
     );
     assert_eq!(
         gd.get_memory("Table_scs"),
@@ -549,10 +558,11 @@ fn add_memory_collection_variants_init_to_empty_vecs() {
     );
     gd.add_memory(
         "Table_ics".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::IntCollection {
             ints: IntCollection::Literal { ints: vec![] },
         }),
+        None,
     );
     assert_eq!(
         gd.get_memory("Table_ics"),
@@ -560,10 +570,11 @@ fn add_memory_collection_variants_init_to_empty_vecs() {
     );
     gd.add_memory(
         "Table_lcs".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::LocationCollection {
             locations: LocationCollection::Literal { locations: vec![] },
         }),
+        None,
     );
     assert_eq!(
         gd.get_memory("Table_lcs"),
@@ -571,7 +582,7 @@ fn add_memory_collection_variants_init_to_empty_vecs() {
     );
     gd.add_memory(
         "Table_cs".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::CardSet {
             card_set: CardSet::Group {
                 group: Group::Groupable {
@@ -581,6 +592,7 @@ fn add_memory_collection_variants_init_to_empty_vecs() {
                 },
             },
         }),
+        None,
     );
     assert_eq!(
         gd.get_memory("Table_cs"),
@@ -597,12 +609,13 @@ fn add_memory_team_initializes_to_empty_team_string() {
     let mut gd = GameData::new();
     gd.add_memory(
         "Table_t".to_string(),
-        Owner::Table,
+        "Table",
         Some(MemoryType::Team {
             team: TeamExpr::Literal {
                 name: "T1".to_string(),
             },
         }),
+        None,
     );
     assert_eq!(
         gd.get_memory("Table_t"),
@@ -613,7 +626,7 @@ fn add_memory_team_initializes_to_empty_team_string() {
 #[test]
 fn reset_memory_zeros_int() {
     let mut gd = GameData::new();
-    gd.add_memory("Table_counter".to_string(), Owner::Table, None);
+    gd.add_memory("Table_counter".to_string(), "Table", None, None);
     gd.set_memory("Table_counter".to_string(), MemoryValue::Int(5));
     gd.reset_memory("Table_counter");
     assert_eq!(gd.get_memory("Table_counter"), Some(&MemoryValue::Int(0)));
@@ -627,10 +640,12 @@ fn reset_memory_on_absent_is_noop() {
 }
 
 #[test]
-fn reset_memory_on_non_int_is_noop() {
-    // Per current behavior, reset_memory only touches Int memories.
+fn reset_memory_resets_all_variants() {
+    // 2026-08-10: reset_memory now resets every variant to its typed zero
+    // (previously only Int memories were touched; the rest silently
+    // no-oped).
     let mut gd = GameData::new();
-    gd.add_memory("Table_label".to_string(), Owner::Table, None);
+    gd.add_memory("Table_label".to_string(), "Table", None, None);
     gd.set_memory(
         "Table_label".to_string(),
         MemoryValue::String("hello".to_string()),
@@ -638,8 +653,8 @@ fn reset_memory_on_non_int_is_noop() {
     gd.reset_memory("Table_label");
     assert_eq!(
         gd.get_memory("Table_label"),
-        Some(&MemoryValue::String("hello".to_string())),
-        "reset_memory must not touch non-Int memories"
+        Some(&MemoryValue::String(String::new())),
+        "reset_memory must reset String memories to empty"
     );
 }
 

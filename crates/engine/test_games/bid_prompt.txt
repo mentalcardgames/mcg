@@ -1,0 +1,7 @@
+# Answers for bid_prompt.cgdsl:
+#   n 7   -> Pot := 7   (any: unbounded)
+#   n 99  -> rejected (outside 1..=10), re-prompted
+#   n 3   -> Bet := 3   (range 1..=10)
+n 7
+n 99
+n 3

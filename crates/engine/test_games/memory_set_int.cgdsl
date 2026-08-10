@@ -1,4 +1,5 @@
-// Exercise: M is 42 sets global memory M to Int(42)
+// Exercise: M is 42 sets memory M to Int(42). Declared on table, the
+// write targets the declared slot (Table_M) - D-14 fixed 2026-08-10.
 player P1
 turnorder (P:P1)
 memory M on table

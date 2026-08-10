@@ -8,11 +8,11 @@ The StepResult enum has the following variants:
  - Error: there was an error executing the step, and the game state may be in an inconsistent state.
 */
 
+use front_end::ast::GameRule;
 use front_end::ir::{Edge, Ir, LoweredPayLoad, Payload, StateID};
 
 use crate::error::EngineError;
 use crate::game_data::GameData;
-
 mod ir_ext;
 mod quant_driver;
 mod trace;
@@ -82,6 +82,50 @@ impl Interpreter {
             self.game_data
                 .memories
                 .remove(&format!("Table_{}", crate::quantifier::SYNTH_MEMORY_KEY));
+        }
+
+        // (S) Ineligible-player instruction skip (2026-08-10).
+        // A player who is out of the game, or out of the current stage, is
+        // never offered prompts and none of their instructions run: every
+        // skippable edge (moves, scores, conditions, choices, optionals,
+        // triggers, quantifier sites) is advanced through without executing.
+        // Only cycle/end actions and the stage bookkeeping (end-condition,
+        // round counter, stage exit) still execute, so the stage loops back
+        // and the next eligible player (moved into place by the cycle) takes
+        // over. A stage with no players left auto-exits at its end-condition,
+        // and a game with no players left runs out to the goal with an empty
+        // winner set — see the `EndCondition` arm below.
+        let skip = self
+            .pending_overlay
+            .get(&self.current_state)
+            .or_else(|| self.ir.states.get(&self.current_state))
+            .and_then(|edges| edges.first())
+            .map(|edge| payload_is_skippable(&edge.payload) && self.current_player_ineligible())
+            .unwrap_or(false);
+        if skip {
+            let edge = self
+                .pending_overlay
+                .get(&self.current_state)
+                .or_else(|| self.ir.states.get(&self.current_state))
+                .and_then(|edges| edges.first())
+                .cloned()
+                .expect("skip implies an outgoing edge exists");
+            if let Some(ref sender) = self.trace_sender {
+                (sender)(TraceEntry::Step {
+                    from: self.current_state.raw(),
+                    to: edge.to.raw(),
+                    event: TraceEvent::Skipped {
+                        player: self
+                            .game_data
+                            .get_current_player()
+                            .map(|p| p.name.clone())
+                            .unwrap_or_default(),
+                        stage: self.game_data.get_current_stage().unwrap_or_default(),
+                    },
+                });
+            }
+            self.current_state = edge.to;
+            return StepResult::Ok;
         }
 
         // (B) Overlay dispatch: a synthetic state has its replacement edge(s)
@@ -168,6 +212,39 @@ impl Interpreter {
                             return self.step_setup_any(&edge.clone());
                         }
                     }
+                    // `bid any on <memory> of <owner>` / `bid >= M and <= N
+                    // on ...` — the numeric-input prompt (2026-08-10): the
+                    // interpreter intercepts the quantity and asks for a
+                    // number, then substitutes a literal before dispatch.
+                    if let front_end::ast::GameRule::Action {
+                        action:
+                            front_end::ast::ActionRule::BidMemoryAction {
+                                memory,
+                                quantity,
+                                owner,
+                            },
+                    } = gr
+                    {
+                        if matches!(
+                            quantity,
+                            front_end::ast::Quantity::Quantifier {
+                                quantifier: front_end::ast::Quantifier::Any
+                            } | front_end::ast::Quantity::IntRange { .. }
+                        ) {
+                            // Clone out of the `self.ir` borrow before
+                            // calling a `&mut self` method.
+                            let edge_owned = edge.clone();
+                            let memory_owned = memory.clone();
+                            let quantity_owned = quantity.clone();
+                            let owner_owned = owner.clone();
+                            return self.step_bid_number(
+                                &edge_owned,
+                                &memory_owned,
+                                &quantity_owned,
+                                &owner_owned,
+                            );
+                        }
+                    }
                     if let Some(ref sender) = self.trace_sender {
                         (sender)(TraceEntry::Step {
                             from,
@@ -207,7 +284,8 @@ impl Interpreter {
                                 InputKind::OptionalDecline => TraceEvent::OptionalDecline,
                                 InputKind::Choice { .. }
                                 | InputKind::ChoosePlayer { .. }
-                                | InputKind::ChooseCards { .. } => {
+                                | InputKind::ChooseCards { .. }
+                                | InputKind::Number { .. } => {
                                     return StepResult::Error(
                                         EngineError::UnexpectedInputForOptional,
                                     )
@@ -288,7 +366,24 @@ impl Interpreter {
                         Ok(r) => r,
                         Err(e) => return StepResult::Error(e),
                     };
-                    let should_exit = result == *negated;
+                    let mut should_exit = result == *negated;
+                    // Auto-end (2026-08-10): if no players remain in the game
+                    // or no players remain in this stage, the stage exits
+                    // immediately (an empty winner set ends the game once the
+                    // flow reaches the goal). Only applies when the game has
+                    // players at all (zero-player fixtures keep pure dispatch
+                    // semantics).
+                    if !self.game_data.players.is_empty() {
+                        let no_players_in_game = self.game_data.players.iter().all(|p| !p.in_game);
+                        let no_players_in_stage = self
+                            .game_data
+                            .players
+                            .iter()
+                            .all(|p| !*p.in_stage.get(stage).unwrap_or(&false));
+                        if no_players_in_game || no_players_in_stage {
+                            should_exit = true;
+                        }
+                    }
                     if let Some(ref sender) = self.trace_sender {
                         (sender)(TraceEntry::Step {
                             from,
@@ -382,6 +477,156 @@ impl Interpreter {
     /// Pushes input to the input buffer.
     pub fn provide_input(&mut self, input: Input) {
         self.input_buffer.push(input);
+    }
+
+    /// `true` while the current player must not act: they are out of the
+    /// game, or out of the current stage (or there is no current player).
+    /// Only meaningful inside a stage — without a current stage nothing is
+    /// skipped (setup and top-level rules always run).
+    fn current_player_ineligible(&self) -> bool {
+        let Some(stage) = self.game_data.get_current_stage() else {
+            return false;
+        };
+        let Some(current) = self.game_data.get_current_player() else {
+            return true;
+        };
+        !current.in_game || !*current.in_stage.get(&stage).unwrap_or(&false)
+    }
+
+    /// Prompts the current player for a number (`bid any` / `bid >= M and
+    /// <= N on <memory> of <owner>`, 2026-08-10). The answer arrives as
+    /// `InputKind::Number { value }`; the edge is then re-dispatched with a
+    /// literal quantity. Out-of-range answers are discarded and re-prompted
+    /// (the controller validates `Player`-sourced answers the same way).
+    fn step_bid_number(
+        &mut self,
+        original: &Edge<LoweredPayLoad>,
+        memory: &str,
+        quantity: &front_end::ast::Quantity,
+        owner: &front_end::ast::Owner,
+    ) -> StepResult {
+        let (min, max) = bid_bounds(quantity, &self.game_data);
+        if let Some(input) = self.input_buffer.pop() {
+            let value = match input.kind {
+                InputKind::Number { value } => value,
+                // Stale non-number input: discard and re-prompt (I-21-style).
+                _ => return StepResult::NeedsInput(bid_prompt(memory, owner, min, max)),
+            };
+            if min.is_some_and(|m| value < m) || max.is_some_and(|m| value > m) {
+                return StepResult::NeedsInput(bid_prompt(memory, owner, min, max));
+            }
+            let mut edge = original.clone();
+            if let Payload::Action(front_end::ast::GameRule::Action { action }) = &mut edge.payload
+            {
+                *action = front_end::ast::ActionRule::BidMemoryAction {
+                    memory: memory.to_string(),
+                    quantity: front_end::ast::Quantity::Int {
+                        int: front_end::ast::IntExpr::Literal { int: value },
+                    },
+                    owner: owner.clone(),
+                };
+            }
+            if let Some(ref sender) = self.trace_sender {
+                (sender)(TraceEntry::Step {
+                    from: self.current_state.raw(),
+                    to: edge.to.raw(),
+                    event: TraceEvent::Action {
+                        rule: GameRule::Action {
+                            action: front_end::ast::ActionRule::BidMemoryAction {
+                                memory: memory.to_string(),
+                                quantity: front_end::ast::Quantity::Int {
+                                    int: front_end::ast::IntExpr::Literal { int: value },
+                                },
+                                owner: owner.clone(),
+                            },
+                        },
+                    },
+                });
+            }
+            self.dispatch(edge)
+        } else {
+            StepResult::NeedsInput(bid_prompt(memory, owner, min, max))
+        }
+    }
+}
+
+fn bid_prompt(
+    memory: &str,
+    owner: &front_end::ast::Owner,
+    min: Option<i32>,
+    max: Option<i32>,
+) -> InputType {
+    let bounds = match (min, max) {
+        (Some(m), Some(x)) => format!(" between {m} and {x}"),
+        (Some(m), None) => format!(" of at least {m}"),
+        (None, Some(x)) => format!(" of at most {x}"),
+        (None, None) => String::new(),
+    };
+    InputType::Number {
+        min,
+        max,
+        prompt: format!("Enter a number{bounds} to bid into {memory} of {owner:?}"),
+    }
+}
+
+/// Advisory min/max bounds for a `bid` quantity (`any` → unbounded;
+/// `>= M and <= N` → the range's bounds; `or`-joined ranges contribute
+/// nothing). Bound expressions that cannot be evaluated are ignored — the
+/// bounds are a convenience, not a security boundary.
+fn bid_bounds(
+    quantity: &front_end::ast::Quantity,
+    game_data: &GameData,
+) -> (Option<i32>, Option<i32>) {
+    use front_end::ast::{IntCompare, IntRangeOperator};
+    let mut min: Option<i32> = None;
+    let mut max: Option<i32> = None;
+    let mut consider = |cmp: &IntCompare, target: i32| match cmp {
+        IntCompare::Ge | IntCompare::Gt => min = Some(target),
+        IntCompare::Le | IntCompare::Lt => max = Some(target),
+        IntCompare::Eq => {
+            min = Some(target);
+            max = Some(target);
+        }
+        IntCompare::Neq => {}
+    };
+    match quantity {
+        front_end::ast::Quantity::Quantifier { .. } => (None, None),
+        front_end::ast::Quantity::IntRange { int_range } => {
+            let (start_cmp, start_expr) = &int_range.start;
+            if let Ok(t) = crate::query::Evaluator::eval_int(start_expr, game_data) {
+                consider(start_cmp, t);
+            }
+            for (op, cmp, expr) in &int_range.op_int {
+                if matches!(op, IntRangeOperator::And) {
+                    if let Ok(t) = crate::query::Evaluator::eval_int(expr, game_data) {
+                        consider(cmp, t);
+                    }
+                }
+            }
+            (min, max)
+        }
+        front_end::ast::Quantity::Int { .. } => (None, None),
+    }
+}
+
+/// Whether an edge's payload is subject to the ineligible-player skip
+/// (everything except stage bookkeeping, setup rules, and cycle/end
+/// actions).
+fn payload_is_skippable(payload: &LoweredPayLoad) -> bool {
+    match payload {
+        Payload::EndCondition { .. } | Payload::StageRoundCounter(_) | Payload::EndStage(_) => {
+            false
+        }
+        Payload::Action(gr) => match gr {
+            front_end::ast::GameRule::SetUp { .. } => false,
+            front_end::ast::GameRule::Action { action } => !matches!(
+                action,
+                front_end::ast::ActionRule::CycleAction { .. }
+                    | front_end::ast::ActionRule::EndAction { .. }
+            ),
+            front_end::ast::GameRule::Scoring { .. } => true,
+        },
+        _ => true,
     }
 }
 

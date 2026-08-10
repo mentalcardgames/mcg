@@ -23,6 +23,11 @@ pub enum InputKind {
     ChooseCards {
         selected: Vec<usize>,
     },
+    /// A numeric answer (`InputType::Number`), e.g. from `bid any on <memory>
+    /// of <owner>` (2026-08-10).
+    Number {
+        value: i32,
+    },
 }
 
 impl Input {
@@ -47,6 +52,7 @@ impl InputKind {
             InputKind::OptionalDecline => 1,
             InputKind::ChoosePlayer { .. } => 0,
             InputKind::ChooseCards { .. } => 0,
+            InputKind::Number { .. } => 0,
         }
     }
 
@@ -94,6 +100,14 @@ pub enum InputType {
         display: Vec<crate::game_data::Card>,
         min: usize,
         max: usize,
+        prompt: String,
+    },
+    /// Prompt the player to enter a number (`bid any on <memory> of
+    /// <owner>`; 2026-08-10). `min`/`max` are advisory bounds from the
+    /// quantity's `IntRange` when present (`None` = unbounded).
+    Number {
+        min: Option<i32>,
+        max: Option<i32>,
         prompt: String,
     },
 }

@@ -322,6 +322,7 @@ impl Controller {
     /// - `<N>`      → `InputKind::Choice { idx: N-1 }` (1-based choice index)
     /// - `p <N>`    → `InputKind::ChoosePlayer { idx: N-1 }` (1-based candidate index)
     /// - `c <csv>`  → `InputKind::ChooseCards { selected: [..] }` (1-based, comma-separated)
+    /// - `n <N>`    → `InputKind::Number { value: N }` (numeric prompt, 2026-08-10)
     ///
     /// Each line may optionally start with a `Name:` prefix (e.g. `P2:y`, `P3:c 1,3`).
     /// Lines without a prefix default to player `"P1"`.
@@ -396,6 +397,15 @@ impl Controller {
             InputKind::ChooseCards {
                 selected: selected.into_iter().map(|n| n - 1).collect(),
             }
+        } else if let Some(rest) = lower.strip_prefix("n ") {
+            let rest = rest.trim();
+            let value: i32 = rest
+                .parse()
+                .map_err(|_| EngineError::InvalidTestInputNumber {
+                    input_sequence: self.input_sequence,
+                    line: line.clone(),
+                })?;
+            InputKind::Number { value }
         } else {
             match lower.as_str() {
                 "y" | "yes" => InputKind::OptionalAccept,
@@ -454,6 +464,9 @@ fn validate_player_input(input: &Input, input_type: &InputType, current_player_n
             !selected.iter().any(|&i| i >= display.len())
                 && selected.len() >= *min
                 && selected.len() <= *max
+        }
+        (InputKind::Number { value }, InputType::Number { min, max, .. }) => {
+            min.is_none_or(|m| *value >= m) && max.is_none_or(|m| *value <= m)
         }
         _ => true,
     }

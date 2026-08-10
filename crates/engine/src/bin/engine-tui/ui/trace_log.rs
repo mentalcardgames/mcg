@@ -226,6 +226,14 @@ impl TraceLogPanel {
                 "Trigger",
                 Style::default().fg(Color::LightBlue),
             )],
+            TraceEvent::Skipped { player, stage } => vec![
+                Span::styled("Skipped: ", Style::default().fg(Color::DarkGray)),
+                Span::raw(player.clone()),
+                Span::styled(
+                    format!(" (out of {})", stage),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ],
             TraceEvent::Quantifier { kind, detail } => vec![
                 Span::styled(
                     format!("Quantifier:{}", kind),

@@ -24,7 +24,6 @@ last_validated: 2026-08-10
 ---
 
 ## 1. Fixed during the 2026-08 audit
-
 | ID | Bug | Fix | Regression test |
 |---|---|---|---|
 | F-1 | `set_memory` incremented `Int` memories by 1 instead of assigning (I-9) | Now assigns the evaluated `MemoryValue` (`game_data.rs:339-341`) | `game_data_tests` / `memory_test` suite |
@@ -42,6 +41,23 @@ last_validated: 2026-08-10
 | F-13 | **Collection-memory aggregation unimplemented** (D-4): the four `todo!()` arms (`IntCollection`/`TeamCollection`/`StringCollection` `AggregateMemory`, `PlayerCollection::Aggregate`) now aggregate the slot across every owner of `multi`. | `query/int.rs`, `query/string.rs`, `query/player.rs` | `int_tests`, `string_tests`, `player_tests` |
 | F-14 | **`choose` did not split on `or`** (parser bug, `front_end`): `choose { A B or C D }` produced four single-component options instead of two options of `[A, B]`/`[C, D]`. The AST now carries `options: Vec<Vec<FlowComponent>>`, the parser groups on `or`, the IR builder chains each option's sequence, the formatter renders groups, and the arbitrary generator produces non-empty groups. | `front_end`: `grammar.pest` (kw_or), `parser.rs`, `ast.rs`, `arbitrary.rs`, `ir.rs`, `fmt_ast.rs` | `front_end` `choice_rule_splits_options_on_or` / `choice_rule_single_option_no_or`; `go_fish.cgdsl` now behaves as authored (13 arms of deal+draw) |
 | F-15 | **`not <combo> in X empty` bound `not` to the combo** (parser ambiguity, `front_end`): `not Book in Hand of current empty` parsed as `CardSetEmpty(NotCombo(Book, Hand))` — "the cards not matching Book are empty" — almost never true, so guards like `if (not Book in Hand of current empty)` silently never fired. Root cause: `bool_expr` tried `card_set_empty`/`card_set_not_empty` before `bool_expr_unary`, and a combo group may itself start with `not`. Fix: `bool_expr_unary` moved before the cardset-empty rules, so a leading `not` binds to the boolean (`Unary(Not, CardSetEmpty(Combo-in-X))`); `Book in Hand of current not empty` remains `CardSetNotEmpty`. Also renamed the trace label `else=` → `body=` (it reports whether the if-*body* edge was taken). | `front_end`: `grammar.pest` (bool_expr rule order) | `front_end` `not_combo_empty_parses_as_boolean_negation` / `combo_not_empty_parses_as_card_set_not_empty`; `go_fish.cgdsl` book guard |
+
+## 1c. Fixed during the 2026-08-10 ergonomics pass
+
+| ID | Bug | Fix | Regression test |
+|---|---|---|---|
+| F-16 | **`cycle to next` / `next` / `end turn` stranded or errored when only the current player was eligible** (D-1 / I-13): `resolve_turn` never considered the current player, so every elimination game needed `if (size(playersin) >= 2)` guards and the all-bust corner errored with `NoNextPlayerAvailable`. | `next_eligible_player`/`previous_eligible_player` wrap onto the **current player** when it is the only eligible one; `cycle to next` with **nobody** eligible (not even the current player) is a **no-op** instead of an error. `end turn` behaves the same. | `game_data_tests::next_player_wraps_to_current_when_only_other_is_out_of_game`, `query/player_tests::eval_player_runtime_next_wraps_to_self_when_alone_eligible`, `action_test::cycle_to_next_with_no_eligible_player_auto_ends` |
+| F-17 | **Eliminated players were still prompted** — blackjack needed `if (not current out of game)` guards so a busted player was not re-asked. | Ineligible-player skip (I-24): while the current player is out of game / out of the current stage, every skippable instruction edge is advanced through without executing (only cycle/end actions and stage bookkeeping run), and no prompt is ever issued to them. Stages auto-end when no players remain in the game or in the stage (empty winner set). | `ergonomics_test::eliminated_players_are_never_prompted_and_game_auto_ends` (+ trace test); `blackjack.cgdsl` guards removed |
+| F-18 | **`memory X <expr> on <owner>` silently dropped the initial value** — `memory Pot 100 on table` initialised `Table_Pot` to 0. | The declared type-expression is evaluated at setup (`evaluate_memory_type`) and honoured as the initial value; Player/Team/String types initialise typed slots (I-10 fixed: Player → owner name as `String`, TeamCollection → its own `MemoryValue::TeamCollection` variant). | `ergonomics_test::memory_declarations_honor_initial_values`, `game_data_tests::add_memory_player_initializes_to_owner_name_string` |
+| F-19 | **Collection memory writes were stubs** — `M is (1,2,3)` inserted typed empty defaults; `M is (P:A,P:B)` nothing usable. | All `MemoryType` collection variants are evaluated (`eval_int_collection`/`eval_string_collection`/`eval_team_collection`/`eval_location_collection`/`resolve_player_collection`/`eval_cardset`), including `Memory`-form copies of existing collection slots. | `action_tests::bid_memory_action_writes_literal_to_owner_slot`, `memory_test` suite |
+| F-20 | **`reset M` silently no-oped on non-Int memories.** | `reset_memory` resets every variant to its typed zero (`String`→`""`, collections→empty, …). | `game_data_tests::reset_memory_resets_all_variants` |
+| F-21 | **`M is 5` after `memory pot on table` wrote `P1_pot`, not `Table_pot`** (D-14) — the silent trap where a value "disappears". | Write-owner resolution: bare writes (`M is X`, `reset M`) and bare reads (`&I:M`) target the **declared owner** when exactly one slot ends in `_{M}` exists, else the current player (the bridge), else a recoverable error. | `memory_test` suite (fixtures now assert `Table_M`) |
+| F-22 | **`winner is highest/lowest position` let a non-participant win** (D-10): players absent from `turn_order` scored `usize::MAX`, so `lowest position` could be won by someone not in the turn order. | Players missing from `turn_order` are **excluded** from the comparison. | `scoring_test` (position fixtures) |
+| F-23 | **`winner is highest/lowest <memory>` treated missing/non-Int memories as 0** (D-13). | Players **without the slot are skipped**; a present but **non-Int** slot is a recoverable error (`WinnerMemoryNotInt`). | `scoring_test` (memory fixtures) |
+| F-24 | **`previous` ignored eligibility** (D-12) — `cycle to previous` (Uno reversal) landed on out players while `next` skipped them. | `previous` uses a mirrored reverse scan with the same eligibility rules and self-wrap. | `query/player_tests::eval_player_runtime_previous_skips_ineligible_and_wraps_to_self` |
+| F-25 | **Team-owned locations/memories parsed but errored** (P-7): `location X on T:T1` → `TeamCannotOwn`. | `resolve_owner_to_names` maps a team owner to its **member names** — `location X on T:T1` creates one instance per team member (mirroring `on all`); team collections union their members. | `query/player_tests::resolve_owner_to_names_team_resolves_members`, `ergonomics_test::team_owned_locations_and_memories_are_per_member` |
+| F-26 | **Numeric input was impossible** — the mechanics matrix's "biggest single gap" for betting games (no `InputType::Number`, and `any` in pure int slots does not parse). | Engine-side: `InputType::Number { min, max, prompt }` / `Input::Number { value }`, controller validation, TestFile `n <N>` lines, TUI + `cgdsl-play` number entry. DSL surface (engine-only): `bid <qty> on <memory> of <owner>` — `any`/range prompt for a number (bounds validated, re-asked), literals write directly; plain `bid` without a target is an error (D-7 partially fixed; `demand` still undefined). | `ergonomics_test::bid_any_prompts_for_a_number_and_range_rejects_out_of_bounds`, `action_tests` bid pins |
+| F-27 | **Bare memory reads `&I:M` errored** ("memory access requires an explicit owner", P-4) while bare writes bridged to the current player — reads and writes disagreed. | Bare reads resolve through the same declared-owner → current-player resolution as writes. | `action_tests::cycle_action_eval_failure_errors` (updated), `memory_test` suite |
 
 ## 1b. Partially fixed
 
@@ -81,12 +97,12 @@ last_validated: 2026-08-10
 - **Wanted:** implement together with card encryption — flipping a card is
   (de)encrypting its face; privacy is the foundation for P2P play.
 
-### D-7 — bidding / demand semantics are undefined (silent no-ops)
-- **Severity:** low (no spec to violate, but games cannot be written).
-- **Behaviour:** `BidAction`, `BidMemoryAction`, `DemandAction`,
-  `DemandMemoryAction` parse and lower, then do nothing.
-- **Wanted:** a written semantic spec first (what does a bid do to game state?),
-  then an implementation.
+### D-7 — bidding semantics were undefined (silent no-ops)
+- **Status:** **partially fixed 2026-08-10** (F-26). `bid <qty> on <memory> of
+  <owner>` is now the **numeric input prompt** (write the number into the
+  owner's slot); a plain `bid <qty>` without a target is a recoverable error.
+  `DemandAction`/`DemandMemoryAction` remain silent no-ops — a written spec is
+  still wanted before they gain semantics.
 
 ### D-9 — `GameSuccessful` / `GameFail` ≡ `Game`
 - **Severity:** low.
@@ -96,33 +112,25 @@ last_validated: 2026-08-10
 - **Wanted:** a game-outcome flag, or remove the keywords from the grammar.
 
 ### D-10 — `winner is highest position` uses turn-order index
-- **Severity:** low (ambiguous design).
-- **Behaviour:** position = 0-based index in `turn_order`; players not in
-  `turn_order` score `usize::MAX` (so `lowest position` can be won by a player
-  who is *not* in the turn order). Documented in `developer-notes.md` §1.3.
-- **Wanted:** clarify the intended meaning (table position? turn position?) and
-  pin it with a test.
+- **Status:** **fixed 2026-08-10** (F-22) — players absent from `turn_order`
+  are excluded from the comparison. The interpretation itself (position =
+  0-based turn-order index) is now pinned by tests; see `developer-notes.md` §1.3.
 
 ### D-12 — `Previous` ignores in-game/stage eligibility
-- **Severity:** low.
-- **Behaviour:** `previous` returns the previous turn-order entry even if that
-  player is out; `next` skips ineligible players (asymmetric).
-- **Wanted:** consistent eligibility semantics for both directions.
+- **Status:** **fixed 2026-08-10** (F-24) — `previous` uses a reverse scan with
+  the same eligibility rules as `next`, including the self-wrap.
 
 ### D-13 — `WinnerWith` memory extrema clamps negatives, misses non-Ints
-- **Severity:** low.
-- **Behaviour:** memory-based winner extrema treat missing/negative/non-Int
-  memories as 0.
-- **Wanted:** explicit behaviour for missing memories (error vs. skip).
+- **Status:** **fixed 2026-08-10** (F-23) — players without the slot are
+  skipped; a present but non-Int slot is a recoverable error
+  (`WinnerMemoryNotInt`).
 
 ### D-14 — `SetMemory`/`ResetMemory` owner bridging (grammar gap)
-- **Severity:** medium.
-- **Behaviour:** the write rules have no `of <owner>` clause; the engine keys
-  to the *current player* and errors when there is none (recoverable since F-8).
-  "Set P2's memory" is inexpressible; a write aimed at a non-current player is a
-  silent trap.
-- **Wanted:** grammar support (`M is X of P:P2`), then drop the bridge.
-  **Deferred: parser work (see §5).**
+- **Status:** **fixed 2026-08-10** (F-21, engine-side) — bare writes and reads
+  resolve the declared owner first (exactly one existing `_{memory}` slot),
+  then the current player, then a recoverable error. A grammar `of <owner>`
+  clause on the write rules would still remove the bridge entirely
+  (**deferred: parser work, §5**).
 
 ### D-15 — location-0 fallback remains for `CardSet::Memory` (I-14)
 - **Severity:** low.
@@ -174,15 +182,18 @@ stage Laydown for current until Set in Hand empty
   etc. error with "quantifier 'any' is not supported in setup rules". `All`
   works. Wanted: either implement setup-`Any` (prompt before setup) or document
   `Any` as play-phase-only in the language reference.
-- **P-4 (bare memory refs parse but error).** `&I:M` without `of <owner>` parses;
-  the engine rejects it ("memory access requires an explicit owner"). The
-  grammar should make the owner mandatory (it already does in the `create`
-  rules — only the read rules have the optional form).
-- **P-5 (`SetMemory`/`ResetMemory` lack `of owner`).** See D-14.
+- **P-4 (bare memory refs parse but error).** **Fixed 2026-08-10 (F-27)**
+  engine-side: bare `&I:M` reads resolve through the declared-owner →
+  current-player resolution, matching bare writes. The grammar could still
+  make the owner mandatory (the `create` rules already do).
+- **P-5 (`SetMemory`/`ResetMemory` lack `of owner`).** See D-14 — bridged
+  engine-side (F-21); a grammar `of <owner>` clause remains deferred.
 - **P-6 (`create` keyword unused).** `kw_create` exists but no rule uses it.
-- **P-7 (team-owned locations/memories parse but error).** `location X on T:T1`
-  and `memory M on T:T1` are rejected at runtime ("team-owned locations are not
-  in the data model"). Either implement team ownership or reject in validation.
+- **P-7 (team-owned locations/memories parse but error).** **Fixed 2026-08-10
+  (F-25)** — team owners resolve to their member names (one instance per
+  member). A *shared* team-owned pile (one location per team entity) is still
+  not in the data model; `Hand of T:Red`-style cardset reads with a team owner
+  still error (a multi-owner cardset is ambiguous).
 - **P-8 (PEG parens quirks).** `not (X)`, `(X)` and `case (A > B)`/`until (A > B)`
   with complex operands do not parse (see `dsl-completeness.md` §8). These are
   grammar-shape issues that silently steer authors away from valid programs.
@@ -191,7 +202,7 @@ stage Laydown for current until Set in Hand empty
 
 | Game | File | Interactivity | Engine features exercised | Known simplifications |
 |---|---|---|---|---|
-| Blackjack | `test_games/blackjack.cgdsl` | optionals per turn | optionals, points, `sum`, `size(playersin)`, guarded `cycle`, `winner is highest score` | Ace = 11 only; standing re-asks each round (D-3); dealer is a tableau, not a player |
+| Blackjack | `test_games/blackjack.cgdsl` | optionals per turn | optionals, points, `sum`, `size(playersin)`, `cycle to next` (unguarded — self-wrap + skip mode, F-16/F-17), `winner is highest score` | Ace = 11 only; standing re-asks each round (D-3); dealer is a tableau, not a player |
 | War | `test_games/war.cgdsl` | none (automatic) | `until (A or B)` exit, point-map comparison, `if` chains, moves, scoring | ties discard both cards (no war redeal) |
 | Crazy Eights | `test_games/crazy_eights.cgdsl` | choose-card + choose-player per turn | `deal any` (ChooseCards), `Hand of any` (ChoosePlayer), `until (A or B) or N times`, lowest-score winner | no match constraint on plays; draw may be gifted to any player (house rule) |
 | Five-Card Draw | `test_games/five_card_draw.cgdsl` | choose-card per draw round | `Hand of all` fan-out, `deal any` discard, `where same Rank/Suit` filters, score bonuses | draw-1 variant; additive scoring (no straights/full houses) |
@@ -202,7 +213,7 @@ card conservation, completion, winner existence). TUI: `just tui crates/engine/t
 
 ## 5. Deferred — parser-dependent fixes (not implemented, by design)
 
-These three fixes require touching `front_end` (grammar, parser, or IR builder).
+These fixes require touching `front_end` (grammar, parser, or IR builder).
 They are deliberately **not** implemented in this handoff; the engine-side
 prerequisites are noted so a later project can pick them up:
 
@@ -225,6 +236,11 @@ prerequisites are noted so a later project can pick them up:
   2. Engine: gate `ensure_stage_entered` on the participant collection (the `in_stage` map
      already models participation); SimStage additionally needs per-player sub-FSMs in the IR.
   3. Validation: reject `for` clauses referencing unknown players at parse time.
+- **`any` / ranges in pure int slots (`score any to …`, `M is any`), and a
+  dedicated "exactly one card" shorthand** (`deal >= 1 and <= 1 from …` is the
+  current spelling for *choose exactly one card*). Engine-side
+  `InputType::Number` exists (F-26); the grammar surface for prompting in
+  arbitrary int expressions does not (`quantity`-slot `any` means choose-*cards*).
 
 ## 6. Audit trail
 
@@ -258,3 +274,14 @@ prerequisites are noted so a later project can pick them up:
   integration, +1 ignored)**; `clippy --no-deps -D warnings` and `fmt --check` clean in
   both feature configurations. Workspace caveat unchanged: `cargo clippy --workspace`
   still fails on pre-existing `code_gen` lints (outside this crate).
+- **Sixth pass (2026-08-10, the ergonomics pass):** ineligible-player skip +
+  stage auto-end (F-17, I-24), self-wrapping `next`/`previous`/`cycle` (F-16,
+  F-24), memory initial values + typed init + full reset + evaluated collection
+  writes + declared-owner write resolution (F-18…F-21, F-27), winner-extrema
+  fixes (F-22, F-23), team-owned locations/memories (F-25), and the numeric
+  input prompt via `bid … on <memory> of <owner>` (F-26, `InputType::Number`).
+  `blackjack.cgdsl` lost both guards. **Total: 536 tests green (437 lib + 5
+  cgdsl-play + 9 engine-tui + 85 integration, +1 ignored)**; new
+  `ergonomics_test.rs` (5 tests) and the F-16…F-27 regression pins;
+  `clippy --no-deps -D warnings` and `fmt --check` clean. Workspace caveat
+  unchanged.

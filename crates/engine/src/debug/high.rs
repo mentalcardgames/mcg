@@ -108,6 +108,9 @@ pub(super) fn format_game_data_high(data: &GameData) -> String {
                 format!("PlayerCollection({:?})", ids)
             }
             crate::game_data::MemoryValue::Team(s) => format!("Team(\"{}\")", s),
+            crate::game_data::MemoryValue::TeamCollection(names) => {
+                format!("TeamCollection({:?})", names)
+            }
             crate::game_data::MemoryValue::IntCollection(ids) => {
                 format!("IntCollection({:?})", ids)
             }

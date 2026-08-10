@@ -195,12 +195,21 @@ impl Evaluator {
                 Ok(format!("{}_{}", name, memory))
             }
             UseSingleMemory::Memory { memory } => {
-                // NOTE(grammar-gap): memory references without an
-                // explicit owner should not be reachable once the
-                // grammar enforces `of <owner>` everywhere.
-                Err(crate::error::EngineError::MemoryRequiresExplicitOwner {
-                    key: memory.clone(),
-                })
+                // Bare memory references (no `of <owner>`) resolve like the
+                // write bridge does (D-14, fixed 2026-08-10): the declared
+                // owner wins when exactly one slot exists, otherwise the
+                // current player's slot is addressed. Only when neither
+                // exists does the reference error.
+                let owner = game_data.memory_write_owner(
+                    memory,
+                    game_data.get_current_player().map(|p| p.name.as_str()),
+                );
+                match owner {
+                    Some(name) => Ok(format!("{}_{}", name, memory)),
+                    None => Err(crate::error::EngineError::MemoryRequiresExplicitOwner {
+                        key: memory.clone(),
+                    }),
+                }
             }
         }
     }

@@ -1,4 +1,4 @@
-// Exercise: M is 42 then reset M zeros M back to Int(0)
+// Exercise: M is 42 then reset M zeros M back to Int(0) - Table_M.
 player P1
 turnorder (P:P1)
 memory M on table

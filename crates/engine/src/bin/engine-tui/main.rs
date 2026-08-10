@@ -188,6 +188,7 @@ fn driver() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     tui_state.choose_cursor,
                     &tui_state.choose_selected,
                     &tui_state.current_player_name,
+                    &tui_state.number_buffer,
                 );
             }
 

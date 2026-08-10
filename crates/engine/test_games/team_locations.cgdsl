@@ -1,0 +1,13 @@
+// Team-owned locations and memories (2026-08-10): `location X on T:Red`
+// creates one instance per team member (mirroring `on all`), and the same
+// goes for `memory M on T:Red`.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+team Red with (P:P1, P:P2)
+location TeamPile on T:Red
+memory TeamFlag on T:Red
+
+stage Play for current 1 times {
+  TeamFlag is 5
+  end stage
+}

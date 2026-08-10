@@ -1,0 +1,13 @@
+// Memory declarations honor their initial value (2026-08-10): the int
+// expression is evaluated at setup time instead of being silently dropped,
+// and Player/Team/String types initialise typed slots.
+player P1
+turnorder (P:P1)
+memory Pot 100 on table
+memory Name "Alice" on table
+memory Winner P:P1 on table
+
+stage Play for current 1 times {
+  score (&I:Pot of table) to P:P1
+  end stage
+}

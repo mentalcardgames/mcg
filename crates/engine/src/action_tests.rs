@@ -140,35 +140,46 @@ fn bid_action_is_currently_a_noop() {
     let mut gd = GameData::new();
     let before_players = player_snapshot(&gd);
     let before_memories = gd.memories.clone();
-    execute_action_rule(
+    // 2026-08-10: a bare `bid <qty>` (no memory target) is an error, not a
+    // silent no-op (D-7) — use `bid <qty> on <memory> of <owner>`.
+    let result = execute_action_rule(
         ActionRule::BidAction {
             quantitiy: Quantity::Int {
                 int: IntExpr::Literal { int: 1 },
             },
         },
         &mut gd,
-    )
-    .unwrap();
+    );
+    assert!(
+        matches!(result, Err(EngineError::BidWithoutMemoryTarget { .. })),
+        "bare bid must error with a clear message"
+    );
     assert_eq!(player_snapshot(&gd), before_players);
     assert_eq!(gd.memories, before_memories);
 }
 
 #[test]
-fn bid_memory_action_is_currently_a_noop() {
+fn bid_memory_action_writes_literal_to_owner_slot() {
+    // 2026-08-10: `bid <qty> on <memory> of <owner>` = "store the number in
+    // the owner's memory slot". Literal quantities write directly; `any`/
+    // ranges are prompted by the interpreter before dispatch.
     let mut gd = GameData::new();
-    let before = gd.clone();
     execute_action_rule(
         ActionRule::BidMemoryAction {
             memory: "bid".to_string(),
             quantity: Quantity::Int {
-                int: IntExpr::Literal { int: 1 },
+                int: IntExpr::Literal { int: 7 },
             },
             owner: Owner::Table,
         },
         &mut gd,
     )
     .unwrap();
-    assert_eq!(gd.memories, before.memories);
+    assert_eq!(
+        gd.get_memory("Table_bid"),
+        Some(&crate::game_data::MemoryValue::Int(7)),
+        "bid writes the number into the owner's memory slot"
+    );
 }
 
 #[test]
@@ -572,6 +583,9 @@ fn cycle_action_sets_current_player_to_named_player() {
 #[test]
 fn cycle_action_eval_failure_errors() {
     // Fallible since 2026-08: eval failures surface as Err, not panics.
+    // The bare memory ref now resolves to the current player's slot
+    // (D-14, 2026-08-10), so the failure is "memory not found" instead of
+    // "requires an explicit owner" — still a recoverable error.
     let mut gd = two_players_in_play_stage();
     let expr = PlayerExpr::Memory {
         memory: UseSingleMemory::Memory {
@@ -580,7 +594,7 @@ fn cycle_action_eval_failure_errors() {
     };
     let result = execute_action_rule(ActionRule::CycleAction { player: expr }, &mut gd);
     assert_eq!(result.unwrap_err().to_string(),
-            "CycleAction: failed to eval player Memory { memory: Memory { memory: \"nonexistent\" } }: memory access requires an explicit owner; use &M:nonexistent of <owner>"
+            "CycleAction: failed to eval player Memory { memory: Memory { memory: \"nonexistent\" } }: Memory Alice_nonexistent not found"
                 .to_string()
         );
 }

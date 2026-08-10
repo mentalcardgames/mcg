@@ -97,43 +97,42 @@ fn stage_round_counter_incremented_exactly_once_per_traversal() {
     );
 }
 
-/// D-1 regression (2026-08): `cycle to next` with no eligible next player
-/// returns `Err` from `run_game` instead of panicking.
+/// I-13 relaxed (2026-08-10): `cycle to next` with no eligible player at all
+/// is now a no-op, and the stage auto-ends when no players are in the game
+/// — the game completes with an empty winner set instead of erroring.
 #[test]
-fn cycle_to_next_with_no_eligible_player_errors() {
+fn cycle_to_next_with_no_eligible_player_auto_ends() {
     let ir = load_game("errors_cycle_no_next.cgdsl");
-    let err = match run_game_with(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         always_choice_0(),
         RunOptions::default(),
-    ) {
-        Err(e) => e,
-        Ok(_) => panic!("cycle to next must error, not panic"),
-    };
+    )
+    .expect("cycle to next with nobody eligible must no-op and auto-end");
     assert!(
-        err.to_string().contains("No next player available"),
-        "got: {err}"
+        gd.players.iter().all(|p| !p.in_game),
+        "all players out => empty winner set"
     );
 }
 
-/// SetMemory with no current player returns `Err` instead of panicking.
+/// 2026-08-10: an ineligible (or missing) current player's instructions are
+/// skipped entirely — `Counter is 5` after the last player was eliminated
+/// never runs, and the stage auto-ends. (`SetMemory` still errors without a
+/// current player when reached at top level.)
 #[test]
-fn set_memory_without_current_player_errors() {
+fn set_memory_without_current_player_is_skipped_and_auto_ends() {
     let ir = load_game("errors_set_memory_no_current.cgdsl");
-    let err = match run_game_with(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         always_choice_0(),
         RunOptions::default(),
-    ) {
-        Err(e) => e,
-        Ok(_) => panic!("SetMemory must error, not panic"),
-    };
+    )
+    .expect("skipped SetMemory must not error");
     assert!(
-        err.to_string()
-            .contains("SetMemory requires a current player"),
-        "got: {err}"
+        gd.players.iter().all(|p| !p.in_game),
+        "empty winner set after auto-end"
     );
 }
 

@@ -50,6 +50,7 @@ pub(super) fn format_game_data_medium(data: &GameData) -> String {
             crate::game_data::MemoryValue::CardSet(ids) => format!("{:?}", ids),
             crate::game_data::MemoryValue::PlayerCollection(ids) => format!("{:?}", ids),
             crate::game_data::MemoryValue::Team(s) => s.clone(),
+            crate::game_data::MemoryValue::TeamCollection(names) => format!("{:?}", names),
             crate::game_data::MemoryValue::IntCollection(ids) => format!("{:?}", ids),
             crate::game_data::MemoryValue::StringCollection(ids) => format!("{:?}", ids),
             crate::game_data::MemoryValue::LocationCollection(ids) => format!("{:?}", ids),

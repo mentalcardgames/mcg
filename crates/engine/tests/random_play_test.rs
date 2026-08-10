@@ -168,6 +168,19 @@ impl RandomPlayer {
                         }
                     }
                 }
+                InputType::Number { min, max, .. } => {
+                    let low = min.unwrap_or(-1000);
+                    let high = max.unwrap_or(1000);
+                    let value = if invalid || high <= low {
+                        high + 1 + r.gen_range(0..5)
+                    } else {
+                        r.gen_range(low..=high)
+                    };
+                    Input {
+                        player_id: who,
+                        kind: InputKind::Number { value },
+                    }
+                }
             }
         }))
     }

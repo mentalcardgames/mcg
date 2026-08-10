@@ -164,6 +164,10 @@ fn crazy_eights_runs_to_completion() {
                     player_id: who,
                     kind: InputKind::Choice { idx: 0 },
                 },
+                InputType::Number { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::Number { value: 0 },
+                },
             }
         })),
         RunOptions::new().with_event_sender(tracker.sender()),
@@ -306,6 +310,10 @@ fn crazy_eights_draw_every_turn() {
                     player_id: who,
                     kind: InputKind::Choice { idx: 0 },
                 },
+                InputType::Number { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::Number { value: 0 },
+                },
             }
         })),
         RunOptions::new().with_event_sender(tracker.sender()),
@@ -361,6 +369,10 @@ fn go_fish_rotating_asks() {
                     player_id: who,
                     kind: InputKind::ChooseCards { selected: vec![] }, // skip book
                 },
+                InputType::Number { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::Number { value: 0 },
+                },
             }
         })),
         RunOptions::new().with_event_sender(tracker.sender()),
@@ -406,6 +418,10 @@ fn go_fish_runs_to_completion() {
                 InputType::ChooseCards { .. } => Input {
                     player_id: who,
                     kind: InputKind::ChooseCards { selected: vec![] }, // skip book
+                },
+                InputType::Number { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::Number { value: 0 },
                 },
             }
         })),

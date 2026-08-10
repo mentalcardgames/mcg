@@ -1,4 +1,4 @@
-// Exercise: M is "hello" sets global memory M to String("hello")
+// Exercise: M is "hello" sets memory M to String("hello") - Table_M.
 player P1
 turnorder (P:P1)
 memory M on table

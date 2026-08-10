@@ -188,6 +188,12 @@ pub(super) fn handle_key(code: KeyCode, state: &mut TuiState) -> bool {
                     .map(|p| p.name.clone())
                     .unwrap_or_else(|| format!("Player{}", state.perspective_idx));
                 match &state.pending_input {
+                    Some(InputType::Number { .. }) => {
+                        // accumulate digits into the number buffer
+                        if n.is_ascii_digit() || (n == '-' && state.number_buffer.is_empty()) {
+                            state.number_buffer.push(n);
+                        }
+                    }
                     Some(InputType::ChooseCards { .. }) | Some(InputType::ChoosePlayer { .. }) => {
                         // ignored: use arrows/space/enter for these
                     }
@@ -230,6 +236,15 @@ pub(super) fn handle_key(code: KeyCode, state: &mut TuiState) -> bool {
                 }
             }
         }
+        KeyCode::Backspace => {
+            if state.waiting_for_input
+                && is_current_player(state)
+                && matches!(&state.pending_input, Some(InputType::Number { .. }))
+                && !state.number_buffer.is_empty()
+            {
+                state.number_buffer.pop();
+            }
+        }
         KeyCode::Enter => {
             if state.waiting_for_input && is_current_player(state) {
                 let player_name = state
@@ -239,6 +254,21 @@ pub(super) fn handle_key(code: KeyCode, state: &mut TuiState) -> bool {
                     .map(|p| p.name.clone())
                     .unwrap_or_else(|| format!("Player{}", state.perspective_idx));
                 match &state.pending_input {
+                    Some(InputType::Number { min, max, .. }) => {
+                        if let Ok(value) = state.number_buffer.trim().parse::<i32>() {
+                            if min.is_none_or(|m| value >= m) && max.is_none_or(|x| value <= x) {
+                                if let Some(ref tx) = state.input_tx {
+                                    let _ = tx.send(Input {
+                                        player_id: player_name,
+                                        kind: InputKind::Number { value },
+                                    });
+                                    state.waiting_for_input = false;
+                                    state.pending_input = None;
+                                    state.number_buffer.clear();
+                                }
+                            }
+                        }
+                    }
                     Some(InputType::ChooseCards { min, max, .. }) => {
                         let selected: Vec<usize> = state
                             .choose_selected

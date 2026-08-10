@@ -18,10 +18,10 @@ last_validated: 2026-08-10
 
 > **Read this before modifying any engine code.** These rules are derived directly from the source.
 > Violating them will silently corrupt game state or hang the run loop. Each invariant is numbered
-> (I-1 … I-23) and cross-referenced from other pages (e.g. `I-5`, `I-8`, `I-18`) — preserve those
+> (I-1 … I-24) and cross-referenced from other pages (e.g. `I-5`, `I-8`, `I-18`) — preserve those
 > IDs when editing. I-1 … I-15 predate the Stage-5 quantifier work; I-16 … I-20 were added in
 > Stage 5 and govern the quantifier subsystem; I-21 … I-23 were added with the Stage-6 input
-> validation work.
+> validation work; I-24 was added with the 2026-08-10 ineligible-player skip & auto-end work.
 
 For the panic conditions that enforce some of these, see [`error-handling.md`](./error-handling.md).
 
@@ -136,15 +136,17 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > (`crates/engine/src/game_data.rs:343-345`) still only resets `Int` memories (silent no-op on
 > other variants).
 
-> **I-10 — `add_memory` initializes some `MemoryType`s to mismatched `MemoryValue`s.**
-> (`crates/engine/src/game_data.rs:276-291`):
-> `front_end::ast::MemoryType::Player` → `MemoryValue::Int(0)` (not a player),
-> `front_end::ast::MemoryType::TeamCollection` → `MemoryValue::Int(0)` (not a collection). Reads of
-> these (`crates/engine/src/query/player.rs:150-170` for `PlayerExpr::Memory`,
-> `crates/engine/src/query/int.rs:271-281` for `TeamCollection::Memory`) will therefore fail type
-> checks (`"Memory value is not a valid player"` / `"Memory value is not a Team"`) until something
-> writes a correctly-typed value. Agents adding new memory writes must respect the read-side
-> expected `MemoryValue` variant.
+> **I-10 — `add_memory` initialises typed memories correctly (fixed 2026-08-10).**
+> `crates/engine/src/game_data.rs` `add_memory(key, owner_name, memory_type,
+> initial)` inserts the caller-provided `initial` `MemoryValue` verbatim, or a
+> per-type default: `Int`→`Int(0)`, `String`→`""`, `Team`→`""`, collections →
+> empty. `MemoryType::Player` → `MemoryValue::String(owner_name)` (player
+> memories store *names*, matching `SetMemory`'s convention) and
+> `MemoryType::TeamCollection` → `MemoryValue::TeamCollection(vec![])` — the
+> former `Int(0)` mismatches (I-10) are gone. Setup-time evaluation of the
+> declared expression happens in `action.rs` (`evaluate_memory_type`). Agents
+> adding new memory writes must respect the read-side expected `MemoryValue`
+> variant.
 
 > **I-11 — `leave_stage` pops the stage stack until (and including) the named stage.**
 > (`crates/engine/src/game_data.rs:252-259`). This permits multi-stage jumps (an end-condition that
@@ -164,17 +166,20 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > rely on `in_stage[current_stage]`; without `ensure_stage_entered` they find no
 > eligible player and `current_player` becomes `None`.
 
-> **I-13 — `resolve_turn` / `next_player` find the next *eligible* player, wrapping the turn order.**
-> (`crates/engine/src/game_data.rs:308-313` for `resolve_turn`, `:228-246` for `next_player`).
-> Eligible = `in_game && in_stage[current_stage]`. If none is eligible, `current_player` becomes
-> `None` and the game is effectively stuck (no `Error` is raised).
+> **I-13 — `resolve_turn` / `next_player` find the next *eligible* player, wrapping; self-wrap since
+> 2026-08-10.**
+> (`crates/engine/src/game_data.rs` `next_eligible_player` / `previous_eligible_player`). Eligible =
+> `in_game && in_stage[current_stage]`. The scan skips ineligible players; with no eligible *other*
+> player the **current player itself** is returned when it is still eligible (the turn wraps onto
+> itself instead of stranding the game), and `None` only when nobody — including the current player
+> — is eligible.
 > `crates::engine::game_data::GameData::next_player` uses `unwrap_or_else(|| panic!(...))` on the
-> found position (`crates/engine/src/game_data.rs:236`) — safe only because `resolve_turn`
-> returning `Some(idx)` guarantees the idx is in `turn_order`.
-> **Note (2026-08-09):** `cycle to next` resolving to no eligible *other* player is now a
-> **recoverable** `StepResult::Error` (`EngineError::NoNextPlayerAvailable`), not a panic — see
-> `error-handling.md` §2 / `engine-vs-design.md` F-8. `end turn` still silently leaves
-> `current_player = None`.
+> found position — safe only because `resolve_turn` returning `Some(idx)` guarantees the idx is in
+> `turn_order`.
+> **Note (2026-08-10):** `cycle to next` with **no** eligible player (not even the current one) is
+> a **no-op** (`Ok(()))` — it no longer errors. The stage's auto-end (I-24) terminates the stage
+> from the loop-back. `end turn` behaves identically (it no longer strands `current_player = None`
+> while the current player is still eligible).
 
 > **I-14 — `eval_cardset` returns `(location_idx, card_ids)`; the location is best-effort.**
 > `crates::engine::query::Evaluator::eval_cardset` returns `(usize, Vec<usize>)`. For
@@ -285,3 +290,24 @@ pending-resume state match, and the setup-`Any` guard.
 > check uses the player **name** (`Player::name: String`) for readability. The `Player`
 > closure path re-prompts on rejection; the `TestFile` path parses `player_id` from an
 > optional `Name:` prefix (defaulting to `"P1"`).
+
+> **I-24 — Ineligible-player skip & stage auto-end (2026-08-10).**
+> A player who is out of the game or out of the current stage is never asked for input and
+> none of their instructions execute:
+> - `Interpreter::step()` checks (before the quantifier preprocessor and per-payload dispatch)
+>   `current_player_ineligible()` (no current stage → never ineligible; else `!in_game` or
+>   `!in_stage[current_stage]`). When ineligible and the first outgoing edge's payload is
+>   *skippable* (`payload_is_skippable`: everything except `EndCondition`/`StageRoundCounter`/
+>   `EndStage` bookkeeping, `SetUp` rules, and `CycleAction`/`EndAction`), the edge is advanced
+>   through **without executing** and a `TraceEvent::Skipped { player, stage }` is emitted.
+> - Bookkeeping payloads process normally, so the stage's loop-back re-evaluates the end
+>   condition (with the new current player, moved by the cycle action) — "the stage skips all
+>   instructions except cycle actions until the end of the stage".
+> - **Auto-end:** the `EndCondition` arm also exits the stage when (a) **no player is in the
+>   game** (`players` non-empty and all `!in_game` — the game then runs out to the goal with an
+>   empty winner set) or (b) **no player is in this stage** (`in_stage[stage]` all `false`).
+>   These checks are skipped for zero-player `GameData`s so hand-built dispatch tests keep pure
+>   semantics.
+> - The skip applies per edge while the condition holds; there is no persistent "skip mode"
+>   flag — each step re-evaluates eligibility, so skipping naturally stops once a cycle lands
+>   on an eligible player.

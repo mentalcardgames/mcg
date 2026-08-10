@@ -123,22 +123,30 @@ supports the shorthand `key_value_int_list` form.
 
 ### 1.9 `memory <name> [<expr>] on <owner>`
 
-**DSL:** `memory M on current` / `memory InitialScore 42 on table` /
+**DSL:** `memory M on current` / `memory InitialScore 42 on P:P1` /
 `memory Name "Ace" on P:P1`
 
-**Engine:** Calls `gd.add_memory(key, owner, memory_type)` where `key` is
-`format!("{}_{}", owner_name, name)`. Stores the entry in a global `HashMap`
-(`gd.memories`). The optional type-expression determines the initial
-`MemoryValue`:
-- `Int { int }` → `MemoryValue::Int(0)` (the value is ignored)
-- `String { .. }` → `MemoryValue::String("")`
-- None / other → `MemoryValue::Int(0)`
+**Engine:** Calls `gd.add_memory(key, owner_name, memory_type, initial)`
+where `key` is `format!("{}_{}", owner_name, name)`. Stores the entry in a
+global `HashMap` (`gd.memories`). Since 2026-08-10 the type-expression is
+**evaluated at setup time** and honoured as the initial value (previously the
+int value was silently dropped and every type defaulted to `Int(0)`):
+
+- `Int { int }` → `MemoryValue::Int(eval_int(int))` (e.g. `memory Pot 100 on
+  table` really initialises `Table_pot` to 100)
+- `String { string }` → the evaluated string
+- `Player { player }` → the evaluated player **name** (as a `String`,
+  matching the `SetMemory` storage convention); a player-owned slot
+  initialises to its **own owner** instead (so `&P:X of P:Pi` reads the
+  slot's own player) — I-10 fixed
+- `Team { team }` → the evaluated team name
+- Collections (`PlayerCollection`, `StringCollection`, `IntCollection`,
+  `TeamCollection`, `LocationCollection`, `CardSet`) → their evaluated
+  contents (empty when the collection has no members)
+- `None` / other → `MemoryValue::Int(0)`
 
 **NOTE:** The grammar has no `with I:` syntax; the type is just a bare
-expression: `memory M 42 on P:P1`. `Player` type initializes to `Int(0)`
-rather than a player-index variant. `TeamCollection` initializes to `Int(0)`
-rather than a collection variant. These are known type mismatches (invariant
-I-10). Reads through `eval_player` / `eval_team` on these slots will fail.
+expression: `memory M 42 on P:P1`.
 
 ---
 
@@ -210,6 +218,39 @@ jump, not by condition evaluation.
 
 ---
 
+### 2.6 Ineligible-player skip & stage auto-end (2026-08-10)
+
+A player who is **out of the game** or **out of the current stage** is never
+offered input, and none of their instructions run:
+
+- Every *skippable* edge (moves, scores, conditions, choices, optionals,
+  triggers, quantifier sites) is **advanced through without executing** while
+  the current player is ineligible.
+- Only **cycle actions** (`cycle to ...`), **end actions** (`end turn` /
+  `end stage` / `end <name>`), and the stage bookkeeping (end-condition
+  evaluation, round counter, stage exit) still execute — so `cycle to next`
+  keeps moving the turn to the next eligible player, and the stage loops
+  normally ("the stage skips all instructions except cycle actions until the
+  end of the stage; NOT `end stage` — the stage loops again with the new
+  player").
+- The skip is computed per step and stage-scoped: without a current stage
+  (setup, top-level rules) nothing is skipped.
+
+**Auto-end:** at every stage end-condition evaluation the engine also exits
+the stage when (a) **no players remain in the game** — the game then runs
+out to the goal with an **empty winner set** — or (b) **no players remain in
+the stage** (everyone was set out of it). This replaces the former
+`cycle to next` error and the silent stuck-game paths.
+
+**`next` / `previous` eligibility (I-13 / D-12, fixed 2026-08-10):**
+`next` and `previous` skip ineligible players in their scan direction and
+wrap onto the **current player itself** when it is the only eligible one
+(`cycle to next` in a 1-player endgame keeps the turn). `cycle to next` with
+**no** eligible player at all (not even the current one) is a **no-op** —
+the auto-end above terminates the stage. `end turn` behaves the same.
+
+---
+
 ### 2.5 `end stage` / `end <stage_name>`
 
 **DSL:** `end stage` (current) / `end Play` (named)
@@ -224,7 +265,7 @@ stage is not found on the stack, the entire stack is drained (invariant I-11).
 
 ---
 
-### 2.6 Simultaneous Stages (`SimStage`)
+### 2.7 Simultaneous Stages (`SimStage`)
 
 **DSL:** (parsed but not distinguished from `SeqStage` at IR level)
 
@@ -296,10 +337,12 @@ player not in `turn_order`) are **recoverable errors**.
 
 `next` resolves via `RuntimePlayer::Next` → the next eligible player's name
 (wrapping turn order, skipping players who are out of game or out of the
-current stage). With no eligible *other* player — `resolve_turn` never
-considers the current player (I-13) — `cycle to next` errors with
-"No next player available"; games that eliminate players guard with
-`if (size(playersin) >= 2)`.
+current stage). Since 2026-08-10, with no eligible *other* player the turn
+**wraps onto the current player** when it is still eligible (I-13 relaxed —
+elimination games no longer need `if (size(playersin) >= 2)` guards), and
+`cycle to next` with **no eligible player at all** is a **no-op** (the stage's
+auto-end, §2.6, terminates the game). `previous` mirrors `next` with a reverse
+scan and the same self-wrap (D-12 fixed).
 
 ---
 
@@ -353,24 +396,55 @@ reset M
 ```
 
 **Engine:**
-- `SetMemory`: Evaluates the `MemoryType` expression. Inserts the result into
-  `gd.memories` under the key `"<CurrentPlayerName>_<memory>"` (the current
-  player is automatically used as the owner prefix — a grammar gap, see
-  `engine-vs-design.md` D-14). With no current player, this is a recoverable
-  error. Int, String, Player (stored as String), and Team variants have full
-  evaluation. PlayerCollection, StringCollection, IntCollection,
-  LocationCollection, CardSet, and TeamCollection insert empty or mismatched
-  defaults.
-- `ResetMemory`: Prefixes the memory name with the current player name, then
-  calls `gd.reset_memory(&key)` which zeros the value if it is
-  `MemoryValue::Int`, silently no-ops otherwise.
-- Memory reads (e.g. `&I:M` in a score expression) **require an explicit
-  owner** via `&I:M of <owner>` or `(&I:M of <owner>)`. Bare `&I:M`
-  (without `of`) is valid in the grammar but fails at runtime.
+- `SetMemory`: Evaluates the `MemoryType` expression (all variants —
+  collections are evaluated to their real contents since 2026-08-10;
+  previously they inserted typed empty defaults). Inserts the result into
+  `gd.memories` under the key `"<Owner>_<memory>"`.
+- **Write-owner resolution (D-14, fixed 2026-08-10):** the write rules have
+  no `of <owner>` clause in the grammar, so the target owner is resolved as:
+  1. the **declared owner** — if exactly one existing slot ends in
+     `_{memory}` (e.g. `memory pot on table` → `Table_pot` exists), that
+     owner wins (`pot is 5` writes `Table_pot`);
+  2. else the **current player** (the legacy bridge);
+  3. else a recoverable error (`SetMemoryNoCurrentPlayer` /
+     `ResetMemoryNoCurrentPlayer`).
+- `ResetMemory`: resets the slot to its **typed zero** for every variant
+  (2026-08-10; previously only `Int` was reset and everything else silently
+  no-oped): `Int`→0, `String`→`""`, `Team`→`""`, collections→empty.
+- Bare memory reads (`&I:M` without `of <owner>`) resolve through the same
+  owner resolution as writes (declared owner → current player → error) so
+  reads and writes agree (P-4, fixed 2026-08-10).
 
 ---
 
-### 3.7 `flip <cardset> to <status>`
+### 3.7 `bid <quantity> on <memory> of <owner>` — the numeric input prompt (2026-08-10)
+
+**DSL:**
+```
+bid any on Pot of table                  ← prompt for any number
+bid >= 1 and <= 10 on Bet of table       ← prompt, bounded 1..=10
+bid 5 on Pot of table                    ← literal: write 5, no prompt
+```
+
+**Engine:** `bid <qty> on <memory> of <owner>` = "prompt the current player
+for a number and store it in the owner's memory slot":
+
+- `Quantity::Int` (literal or runtime int expression) writes the evaluated
+  value directly without prompting.
+- `any` / `>= M and <= N` issue `NeedsInput(InputType::Number { min, max,
+  prompt })` (new 2026-08-10); the answer is `Input::Number { value }`,
+  bounds are validated and out-of-range answers are rejected and re-asked
+  (both by the controller for `Player`-sourced input and by the
+  interpreter's resume path). The resumed edge carries the literal.
+- The write targets `{owner}_{memory}` via `resolve_owner_to_name` (Table,
+  player, or team name).
+- A plain `bid <qty>` **without** a memory target is a recoverable error
+  (`BidWithoutMemoryTarget`) — previously a silent no-op (D-7, partially
+  fixed: the memory form now has semantics; `demand` remains undefined).
+
+---
+
+### 3.8 `flip <cardset> to <status>`
 
 **DSL:** `flip top(Hand) to face up`
 
@@ -380,20 +454,11 @@ exists but is unused (see `engine-vs-design.md` §1b).
 
 ---
 
-### 3.8 `place <token> from <location> to <location>`
+### 3.9 `place <token> from <location> to <location>`
 
 **DSL:** `place Marker from Hand to Table`
 
 **Engine:** No-op. Tokens are not modeled in `GameData`.
-
----
-
-### 3.9 `bid <quantity>` / `bid <quantity> on <memory> of <owner>`
-
-**DSL:** `bid 5` / `bid &I:n on pot of Table`
-
-**Engine:** No-op. Bidding mechanics never specified (see `engine-vs-design.md`
-D-7).
 
 ---
 
@@ -466,17 +531,16 @@ winner is highest m          ← memory-backed
 | WinnerType | Value per player `i` |
 |------------|---------------------|
 | `Score` | `gd.players[i].score` (as `usize`) |
-| `Position` | index of player `i` in `gd.turn_order` (0-based). Missing → `usize::MAX` |
-| `Memory { key }` | reads `gd.memories["<player_name>_<key>"]`, expects `Int(n)` → `n as usize`, else `0` |
+| `Position` | index of player `i` in `gd.turn_order` (0-based). Players **absent from `turn_order` are excluded** from the comparison (D-10, fixed 2026-08-10 — previously they scored `usize::MAX`, letting a non-participant win `lowest position`) |
+| `Memory { key }` | reads `gd.memories["<player_name>_<key>"]`. Players **without the slot are skipped** (D-13, fixed 2026-08-10 — previously treated as 0); a **non-Int** slot is a recoverable error (`WinnerMemoryNotInt`) |
 
 Then finds the target value: `Max` → highest across all in-game players, `Min`
 → lowest. Eliminates all players whose value ≠ target via `set_player_out`.
 Ties are honored — all players matching the target value remain in game. With
-no in-game players, nothing is eliminated.
+no in-game players (or none left after exclusion), nothing is eliminated.
 
 **NOTE:** `Position` is interpreted as turn-order index (lower = earlier in
-turn); this may not match the intended DSL semantics (see `engine-vs-design.md`
-D-10). `Memory` reads the **per-player** slot (owner-prefixed), so it is only
+turn). `Memory` reads the **per-player** slot (owner-prefixed), so it is only
 useful when the memory was written per player (e.g. via `score ... to memory`).
 
 ---
@@ -669,7 +733,8 @@ here:
 - `unless` — not in the grammar at all; use `if (not <expr>)`.
 - `token` / `place` — tokens are not modeled in `GameData`.
 - `flip` — status behaviour deferred to card encryption (§1b).
-- `bid` / `demand` — semantics never specified.
+- `bid <qty>` without a memory target — errors since 2026-08-10 (see §3.7);
+  `demand` — semantics never specified.
 - `for <players>` stage clause — parsed, dropped during lowering (P-1).
 - `SimStage` — lowers identically to sequential stages (P-2).
 - `end game with winner <players>` — the IR jump to the goal ends the game; the

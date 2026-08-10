@@ -12,10 +12,12 @@
 // Engine notes:
 //   - A player who stands is re-asked in later rounds (standing is not
 //     tracked), so the Play stage is bounded to 12 turns.
-//   - `cycle to next` is guarded by a "players still in game" check,
-//     because the engine panics when no eligible next player exists.
-//   - When every player busts, nobody wins (the WinnerWith rule keeps
-//     only players whose score matches the highest value; there are none).
+//   - `cycle to next` wraps onto the current player when nobody else is
+//     eligible, and a player who is out of the game is never prompted
+//     (their instructions are skipped) — so no guards are needed
+//     (2026-08-10, I-13 relaxed).
+//   - When every player busts, the stage auto-ends with an empty winner
+//     set (no player is in the game any more).
 
 player P1, P2, P3
 turnorder (P:P1, P:P2, P:P3)
@@ -43,21 +45,17 @@ stage Deal for current 1 times {
 }
 
 // Each player may hit (accept) or stand (decline); up to 4 full rounds.
-// Note: `cycle to next` panics when no *other* player is still eligible
-// (resolve_turn never considers the current player), so cycling is guarded
-// by a "two or more players in game" check.
+// Busted players are skipped automatically (no `if (not current out of
+// game)` guard needed) and `cycle to next` never errors (it wraps onto
+// the current player when it is the only eligible one).
 stage Play for current 12 times {
-  if (not current out of game) {
-    optional {
-      deal 1 from Deck private to Hand of current
-      if (sum of Hand of current using BJ > 21) {
-        set current out of game
-      }
+  optional {
+    deal 1 from Deck private to Hand of current
+    if (sum of Hand of current using BJ > 21) {
+      set current out of game
     }
   }
-  if (size(playersin) >= 2) {
-    cycle to next
-  }
+  cycle to next
 }
 
 // Dealer draws while below 17 (bounded to 10 attempts).
@@ -68,10 +66,9 @@ stage Dealer for current 10 times {
 }
 
 // Eliminate players the dealer beats; survivors score their hand.
-// No turn cycling here: `cycle to next` cannot be expressed safely once
-// players drop out (see Play stage note), so each player is handled
-// explicitly. Busted players stay out of game and are ignored by the
-// winner rule regardless of their hand total.
+// Each player is handled explicitly (one pass per player — the dealer
+// plays once, so no cycling is needed). Busted players stay out of game
+// and are ignored by the winner rule regardless of their hand total.
 stage Score for current 1 times {
   if (sum of Hand of P:P1 using BJ > sum of DealerHand using BJ) {
     score sum of Hand of P:P1 using BJ to P:P1

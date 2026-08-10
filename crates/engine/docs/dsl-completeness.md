@@ -35,12 +35,13 @@ last_validated: 2026-08-09
 | `player P1, P2` | ✅ | ✅ | ✅ | ✅ | Appends players + initial turn order. `player` (no `create` keyword; `kw_create` exists in the grammar but is unused). |
 | `team T1 with all` / `with (P:P1, P:P2)` | ✅ | ✅ | ✅ | ✅ | `All` resolves to in-game players (via `Evaluator::resolve_player_collection`); `Any` prompts for one player (setup-`Any`, I-20 — relaxed 2026-08-10). |
 | `turnorder all` / `(P:P1, P:P2)` / `... random` | ✅ | ✅ | ✅ | ✅ | `random` uses `rand::thread_rng()`. |
-| `location Hand on all` / `on P:P1` / `on table` | ✅ | ✅ | ✅ | ✅ | `on all` → one location per player; `on T:T1` parses but **errors** at runtime (team-owned locations not in the data model); `on any` prompts for one player (I-20). |
+| `location Hand on all` / `on P:P1` / `on table` | ✅ | ✅ | ✅ | ✅ | `on all` → one location per player; `on T:T1` → one per team member (P-7, fixed 2026-08-10); `on any` prompts for one player (I-20). |
 | `card on Deck: Rank(...) for Suit(...)` | ✅ | ✅ | ✅ | ✅ | Cartesian product of all key-value sets (`expand_types`). |
 | `token <n> X on Loc` | ✅ | ✅ | ❌ | ❌ | No-op (no token data model). |
 | `precedence P on Rank(Ace, Two, ...)` | ✅ | ✅ | ✅ | ✅ | Values ordered low → high. |
 | `combo Pair where same Rank` | ✅ | ✅ | ✅ | ⚠️ | `where`-matching works for size/key filters; `same`/`distinct` inside *combo per-card matching* are broken (see `engine-vs-design.md` D-9). |
-| `memory M on P:P1` / `on table` / `on all` | ✅ | ✅ | ✅ | ⚠️ | Key is owner-prefixed (`P1_M`, `Table_pot`). `MemoryType::Player`/`TeamCollection` initialize to `Int(0)` (I-10) — mismatched reads until written. |
+| `memory M on P:P1` / `on table` / `on all` | ✅ | ✅ | ✅ | ✅ | Key is owner-prefixed (`P1_M`, `Table_pot`); team owners → per-member slots (2026-08-10). |
+| `memory X <expr> on ...` (typed) | ✅ | ✅ | ✅ | ✅ | Initial value honoured (2026-08-10); Player→owner name, TeamCollection→own variant (I-10 fixed). |
 | `points BJ on Rank(Ace: 11, ...)` | ✅ | ✅ | ✅ | ✅ | Map key `"Rank:Ace"` → int. |
 | top-level actions (e.g. `shuffle Deck`, `deal 1 ...`) | ✅ | ✅ | ✅ | ✅ | Setup phase is just the flow before the first stage. |
 
@@ -51,10 +52,10 @@ last_validated: 2026-08-09
 | `flip X to face up/down/private` | ✅ | ✅ | ❌ | ❌ | Silent no-op, **by design**: the per-card status slot (`GameData::card_statuses`) exists but is unused; `FlipAction` should become (de)encryption when card cryptography lands (`engine-vs-design.md` §1b). |
 | `shuffle X` | ✅ | ✅ | ✅ | ✅ | Shuffles only the selected cards in place; unselected cards in the location stay put (fixed 2026-08-09). Eval failures are recoverable errors (were `eprintln!` + continue). |
 | `set <players> out of game` / `of stage` / `of Play` | ✅ | ✅ | ✅ | ✅ | `GameSuccessful`/`GameFail` behave identically to `Game` (no success/fail tracking). |
-| `M is <expr>` (SetMemory) | ✅ | ✅ | ✅ | ⚠️ | **No `of owner` clause in grammar** — key is prefixed with the *current player's* name (bridge, see `developer-notes.md` §1.1); errors (recoverably) with no current player. Collection types insert typed empty defaults. |
-| `reset M` | ✅ | ✅ | ✅ | ⚠️ | Same owner-bridge; only resets `Int` memories (silent no-op otherwise); errors (recoverably) with no current player. |
-| `cycle to next` / `cycle to P:P2` | ✅ | ✅ | ✅ | ✅ | No longer panics (fixed 2026-08-09): with no eligible *other* player (`resolve_turn` never considers the current player, I-13) it returns a recoverable `StepResult::Error` ("No next player available"). Games still guard with `if (size(playersin) >= 2)` to keep the turn flowing. |
-| `bid ...` / `bid M ...` | ✅ | ✅ | ❌ | ❌ | No-op (semantics never specified). |
+| `M is <expr>` (SetMemory) | ✅ | ✅ | ✅ | ✅ | Owner resolved declared-first, else current player (D-14, fixed 2026-08-10); collections fully evaluated (F-19). |
+| `reset M` | ✅ | ✅ | ✅ | ✅ | Same owner resolution; resets every variant to its typed zero (F-20). |
+| `cycle to next` / `cycle to P:P2` | ✅ | ✅ | ✅ | ✅ | Self-wraps when the current player is the only eligible one; no-ops when nobody is eligible (I-13 relaxed, F-16) — no `size(playersin) >= 2` guard needed. |
+| `bid <qty> on <memory> of <owner>` | ✅ | ✅ | ✅ | ✅ | **Numeric input prompt** (F-26): `any`/range → `InputType::Number` (bounds validated, re-asked); literal → writes `{owner}_{memory}`. Plain `bid` (no target) → recoverable error. |
 | `demand ...` / `demand ... as M` | ✅ | ✅ | ❌ | ❌ | No-op (semantics never specified). |
 | `end turn` | ✅ | ✅ | ✅ | ✅ | `next_player()` — with nobody eligible this leaves `current_player = None` (no error). |
 | `end stage` | ✅ | ✅ | ✅ | ✅ | `CurrentStage` — leaves the current stage; IR jumps to the stage's exit (unreachable-code check downstream). |
@@ -111,7 +112,7 @@ last_validated: 2026-08-09
 | `sum of X using PM` | ✅ | Sums point-map values over the cardset. |
 | `min/max of X using PM` (ExtremaCardset) | ✅ | Returns card id; `min of top(...)` gives the card's value. |
 | stage round counters | ✅ | `stageroundcounter`, `stageroundcounter(Stage)`; `"No current stage"` error otherwise. |
-| `(&I:M of <owner>)` memory read | ✅ | Owner required — bare `&I:M` parses but **errors** ("memory access requires an explicit owner"). |
+| `(&I:M of <owner>)` memory read | ✅ | Owner required — **bare `&I:M` resolves declared-owner → current player since 2026-08-10** (F-27), erroring only when neither exists. |
 | collection-memory aggregation `(&I:M of all)` | ✅ | Implemented 2026-08-09: one value per owner holding the slot; missing slot or wrong type → recoverable error. |
 
 ### StringExpr / PlayerExpr / TeamExpr
@@ -119,7 +120,7 @@ last_validated: 2026-08-09
 |---|---|---|
 | `"literal"` | ✅ | Quoted. |
 | `key of top(Loc)` (KeyOf) | ✅ | |
-| `current` / `next` / `previous` / `competitor` | ⚠️ | `next` errors ("No next player available") when no eligible *other* player — **recoverable since 2026-08-09** (`cycle to next` no longer panics); `previous` ignores in-game/stage flags; `competitor` = first team-mate ≠ current. |
+| `current` / `next` / `previous` / `competitor` | ✅ | `next`/`previous` skip ineligible players and self-wrap when alone (I-13 relaxed / D-12 fixed, 2026-08-10); `competitor` = first team-mate ≠ current. |
 | `owner of <card position>` / `owner of min/max <memory>` | ✅ | `owner of memory` key order fixed 2026-08-09 (`P1_M`, was `M_P1`). |
 | player memory `(&P:M of ...)` | ✅ | PlayerCollection memory → first index; String memory → name; Int → error. |
 | `team of <player>` | ✅ | |
@@ -143,8 +144,8 @@ last_validated: 2026-08-09
 | `score <int> to M of <players>` (ScoreMemory) | ✅ | Writes `{player}_{M}` (does **not** touch `Player::score`). |
 | `winner is <players>` | ✅ | Eliminates everyone not named. |
 | `winner is min/max score` | ✅ | Among in-game players; ties → multiple winners; no candidates → nobody eliminated. |
-| `winner is min/max position` | ⚠️ | Turn-order index (0-based); players absent from `turn_order` get `usize::MAX` — likely not the intended semantics (see `developer-notes.md` §1.3). |
-| `winner is min/max <memory>` | ⚠️ | Int memories; missing/negative → 0; non-Int → 0. |
+| `winner is min/max position` | ✅ | Turn-order index (0-based); players absent from `turn_order` are **excluded** (D-10, fixed 2026-08-10). |
+| `winner is min/max <memory>` | ✅ | Int memories; players without the slot are skipped; a non-Int slot is a recoverable error (D-13, fixed 2026-08-10). |
 
 ## 7. Input contract (host-facing)
 
@@ -154,6 +155,12 @@ last_validated: 2026-08-09
 | `Optional(prompt)` | `OptionalAccept` \| `OptionalDecline` | Decline takes the "no" edge. |
 | `ChoosePlayer { candidates }` | `ChoosePlayer { idx }`, `idx < len` | From `Hand of any` dest quantifiers. |
 | `ChooseCards { display, min, max }` | `ChooseCards { selected }` | Indices **into `display`**; min/max enforced by the controller; range violations re-prompt. |
+| `Number { min, max, prompt }` | `Number { value }` | From `bid any on <memory> of <owner>` (2026-08-10); bounds enforced by controller + interpreter resume; TestFile line `n <N>`. |
+
+Ineligible players are never prompted (I-24): a player out of the game or out
+of the current stage has their instruction edges skipped instead (only
+cycle/end actions and stage bookkeeping run), and stages auto-end when no
+players remain in the game or in the stage.
 
 ## 8. Known parse-level quirks (PEG)
 

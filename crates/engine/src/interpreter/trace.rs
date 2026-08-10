@@ -54,6 +54,13 @@ pub enum TraceEvent {
         stage: String,
     },
     Trigger,
+    /// The current player is out of the game / out of the current stage:
+    /// the instruction edge was advanced through without executing
+    /// (2026-08-10, ineligible-player skip).
+    Skipped {
+        player: String,
+        stage: String,
+    },
     /// Free-form quantifier diagnostics ("5 players, awaiting card choice").
     Quantifier {
         kind: String,
@@ -216,6 +223,9 @@ impl std::fmt::Display for TraceEvent {
             }
             TraceEvent::EndStage { stage } => write!(f, "EndStage: {}", stage),
             TraceEvent::Trigger => write!(f, "Trigger"),
+            TraceEvent::Skipped { player, stage } => {
+                write!(f, "Skipped: {player} (out of {stage})")
+            }
             TraceEvent::Quantifier { kind, detail } => {
                 write!(f, "Quantifier:{} {}", kind, detail)
             }

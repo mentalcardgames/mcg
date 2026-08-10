@@ -102,6 +102,10 @@ pub enum TraceEvent {
     StageRoundCounter { stage: String, new_count: u32 },
     EndStage { stage: String },
     Trigger,
+    /// The current player is out of the game / out of the current stage:
+    /// the instruction edge was advanced through without executing
+    /// (2026-08-10, ineligible-player skip, I-24).
+    Skipped { player: String, stage: String },
     Quantifier { kind: String, detail: String },
 }
 ```

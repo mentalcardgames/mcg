@@ -1,11 +1,11 @@
-// Tests: SetMemory writes per-player, then read via evaluator memory expression
-// M is 5 during P1's turn → "P1_M". score (&I:M of P:P1) to P:P1 → reads 5
+// Tests: SetMemory writes the declared Table slot, then read via evaluator
+// memory expression. M is 5 -> "Table_M"; score (&I:M of table) reads 5.
 player P1, P2
 turnorder (P:P1, P:P2)
 memory M on table
 
 stage Play for current 1 times {
   M is 5
-  score (&I:M of P:P1) to P:P1
+  score (&I:M of table) to P:P1
   end stage
 }

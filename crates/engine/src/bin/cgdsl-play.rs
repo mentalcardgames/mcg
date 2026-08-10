@@ -355,6 +355,33 @@ fn interactive_input(input_type: InputType, player_name: &str) -> Input {
                 }
                 println!("Selection out of range, try again.");
             }
+            InputType::Number { min, max, prompt } => {
+                let bounds = match (min, max) {
+                    (Some(m), Some(x)) => format!("{m}..={x}"),
+                    (Some(m), None) => format!("{m}.."),
+                    (None, Some(x)) => format!("..={x}"),
+                    (None, None) => "any".to_string(),
+                };
+                print!("\n{prompt} ({bounds}): ");
+                io::stdout().flush().ok();
+                let mut line = String::new();
+                if handle.read_line(&mut line).is_err() {
+                    eprintln!("Input error");
+                    continue;
+                }
+                match line.trim().parse::<i32>() {
+                    Ok(n) if min.is_none_or(|m| n >= m) && max.is_none_or(|x| n <= x) => {
+                        return Input {
+                            player_id,
+                            kind: InputKind::Number { value: n },
+                        };
+                    }
+                    _ => {
+                        println!("Invalid number, try again.");
+                        continue;
+                    }
+                }
+            }
         }
     }
 }

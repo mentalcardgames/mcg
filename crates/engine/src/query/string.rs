@@ -41,7 +41,7 @@ impl Evaluator {
         }
     }
 
-    pub(super) fn eval_string_collection(
+    pub(crate) fn eval_string_collection(
         col: &StringCollection,
         game_data: &GameData,
     ) -> Result<Vec<String>, EngineError> {

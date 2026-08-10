@@ -70,7 +70,9 @@ fn eval_player_runtime_next_eligible() {
 }
 
 #[test]
-fn eval_player_runtime_next_none() {
+fn eval_player_runtime_next_wraps_to_self_when_alone_eligible() {
+    // I-13 relaxed (2026-08-10): with no *other* eligible player, `next`
+    // wraps onto the current player instead of erroring.
     let mut gd = GameData::new();
     let p0 = gd.add_player("P1".to_string());
     let p1 = gd.add_player("P2".to_string());
@@ -81,8 +83,9 @@ fn eval_player_runtime_next_none() {
         runtime: RuntimePlayer::Next,
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
-        "No next player available".to_string()
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P1".to_string(),
+        "no other eligible player => next = current (self-wrap)"
     );
 }
 
@@ -94,6 +97,7 @@ fn eval_player_runtime_previous_wraps() {
     let p0 = gd.add_player("P1".to_string());
     let p1 = gd.add_player("P2".to_string());
     gd.turn_order = vec![p0, p1];
+    gd.enter_stage("Play".to_string(), vec!["P1".to_string(), "P2".to_string()]);
     gd.current_player = Some(0);
     let expr = PlayerExpr::Runtime {
         runtime: RuntimePlayer::Previous,
@@ -105,10 +109,38 @@ fn eval_player_runtime_previous_wraps() {
 }
 
 #[test]
+fn eval_player_runtime_previous_skips_ineligible_and_wraps_to_self() {
+    // D-12 fixed (2026-08-10): `previous` skips ineligible players like
+    // `next` does, and wraps onto the current player when it is the only
+    // eligible one.
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("P1".to_string());
+    let p1 = gd.add_player("P2".to_string());
+    let p2 = gd.add_player("P3".to_string());
+    gd.turn_order = vec![p0, p1, p2];
+    gd.enter_stage(
+        "Play".to_string(),
+        vec!["P1".to_string(), "P2".to_string(), "P3".to_string()],
+    );
+    gd.set_player_stage_flag(p2, "Play".to_string(), false); // P3 out of stage
+    gd.current_player = Some(2); // P3 is current but ineligible...
+    let expr = PlayerExpr::Runtime {
+        runtime: RuntimePlayer::Previous,
+    };
+    // ...so `previous` skips past P2? No: P3 is current; scanning backwards
+    // from P3: P2 eligible -> P2.
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P2".to_string()
+    );
+}
+
+#[test]
 fn eval_player_runtime_previous_missing() {
     let mut gd = GameData::new();
     gd.add_player("P1".to_string());
     gd.turn_order = vec![0];
+    gd.enter_stage("Play".to_string(), vec!["P1".to_string()]);
     gd.current_player = Some(0);
     gd.players.clear();
     let expr = PlayerExpr::Runtime {
@@ -479,26 +511,35 @@ fn eval_player_i2_empty_turn_order_safe() {
 // â”€â”€ P-12 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
-fn eval_player_i10_player_memory_mismatched_init() {
+fn eval_player_player_memory_init_to_owner_name_reads() {
+    // I-10 fix (2026-08-10): a Player-typed memory initialises to the
+    // owner's name, so reading it as a player now succeeds out of the box.
     let mut gd = GameData::new();
+    gd.add_player("P1".to_string());
     gd.add_memory(
-        "Table_p".to_string(),
-        Owner::Table,
+        "P1_role".to_string(),
+        "P1",
         Some(MemoryType::Player {
             player: PlayerExpr::Literal {
                 name: "Alice".to_string(),
             },
         }),
+        None,
     );
     let expr = PlayerExpr::Memory {
         memory: UseSingleMemory::WithOwner {
-            memory: "p".to_string(),
-            owner: Box::new(SingleOwner::Table),
+            memory: "role".to_string(),
+            owner: Box::new(SingleOwner::Player {
+                player: PlayerExpr::Literal {
+                    name: "P1".to_string(),
+                },
+            }),
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
-        "Memory value is not a valid player".to_string()
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P1".to_string(),
+        "player-typed memory reads as its owner's name"
     );
 }
 
@@ -988,26 +1029,69 @@ fn resolve_owner_to_names_player_collection_all() {
 }
 
 #[test]
-fn resolve_owner_to_names_team_err() {
-    let gd = GameData::new();
+fn resolve_owner_to_names_team_resolves_members() {
+    // P-7 fixed (2026-08-10): `location X on T:T1` creates one instance
+    // per team member (mirroring `on all`).
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("P1".to_string());
+    let p1 = gd.add_player("P2".to_string());
+    gd.add_player("P3".to_string());
+    gd.teams = vec![Team {
+        name: "Red".to_string(),
+        players: vec![p0, p1],
+    }];
     let owner = Owner::Team {
         team: TeamExpr::Literal {
             name: "Red".to_string(),
         },
     };
-    assert_eq!(Evaluator::resolve_owner_to_names(&owner, &gd).unwrap_err().to_string(), "resolve_owner_to_names: team 'Red' cannot own a location or memory (team-owned locations are not in the data model)".to_string());
+    let names = Evaluator::resolve_owner_to_names(&owner, &gd).unwrap();
+    assert_eq!(names, vec!["P1".to_string(), "P2".to_string()]);
 }
 
 #[test]
-fn resolve_owner_to_names_team_collection_err() {
-    let gd = GameData::new();
+fn resolve_owner_to_names_team_collection_resolves_union() {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("P1".to_string());
+    let p1 = gd.add_player("P2".to_string());
+    let p2 = gd.add_player("P3".to_string());
+    gd.teams = vec![
+        Team {
+            name: "Red".to_string(),
+            players: vec![p0, p1],
+        },
+        Team {
+            name: "Blue".to_string(),
+            players: vec![p2],
+        },
+    ];
     let owner = Owner::TeamCollection {
-        team_collection: TeamCollection::Literal { teams: vec![] },
+        team_collection: TeamCollection::Literal {
+            teams: vec![
+                TeamExpr::Literal {
+                    name: "Red".to_string(),
+                },
+                TeamExpr::Literal {
+                    name: "Blue".to_string(),
+                },
+            ],
+        },
     };
+    let names = Evaluator::resolve_owner_to_names(&owner, &gd).unwrap();
     assert_eq!(
-        Evaluator::resolve_owner_to_names(&owner, &gd)
-            .unwrap_err()
-            .to_string(),
-        "resolve_owner_to_names: TeamCollection cannot resolve to owner names".to_string()
+        names,
+        vec!["P1".to_string(), "P2".to_string(), "P3".to_string()]
     );
+}
+
+#[test]
+fn resolve_owner_to_names_unknown_team_resolves_empty() {
+    let gd = GameData::new();
+    let owner = Owner::Team {
+        team: TeamExpr::Literal {
+            name: "Ghost".to_string(),
+        },
+    };
+    let names = Evaluator::resolve_owner_to_names(&owner, &gd).unwrap();
+    assert!(names.is_empty(), "unknown team => no owners");
 }

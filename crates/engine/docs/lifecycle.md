@@ -145,6 +145,7 @@ current `GameData` by `crates::engine::query::Evaluator`.
 
 ```
 (A) SYNTH_MEMORY_KEY cleanup      interpreter/mod.rs:71-85
+(S) ineligible-player skip        interpreter/mod.rs (2026-08-10, I-24)
 (B) overlay dispatch                 interpreter/mod.rs:84-106
 (C0) quantifier resume              interpreter/mod.rs:109-112  (take_quant_resume)
       - resolve real IR edges for current_state            interpreter/mod.rs:114-131
@@ -165,13 +166,24 @@ The pre-dispatch arms, in order:
    `CreateMemory`s the same key by coincidence is unaffected (invariant I-18). See
    [`invariants.md`](./invariants.md) I-18.
 
-2. **(B) Overlay dispatch** (`interpreter/mod.rs:84-106`). If `current_state` has a synthetic
+2. **(S) Ineligible-player skip** (2026-08-10, I-24). If the current player is out of the
+   game or out of the current stage (`current_player_ineligible`; no current stage → never
+   ineligible) and the first outgoing edge's payload is *skippable*
+   (`payload_is_skippable` — everything except `EndCondition`/`StageRoundCounter`/`EndStage`
+   bookkeeping, `SetUp` rules, and `CycleAction`/`EndAction`), the edge is advanced through
+   **without executing** (a `TraceEvent::Skipped` is emitted) and `step()` returns `Ok`. The
+   check runs before the overlay dispatch and quantifier preprocessor, so quantifier prompt
+   sites are skipped wholesale. Bookkeeping still processes normally — the stage loops back,
+   the end-condition is re-evaluated (with the auto-end checks below), and the next eligible
+   player (moved into place by the executed cycle action) takes over.
+
+3. **(B) Overlay dispatch** (`interpreter/mod.rs:84-106`). If `current_state` has a synthetic
    replacement edge in `pending_overlay`, dispatch the first one through the normal `Action` trace
    + `execute_edge` path, then return `StepResult::Ok`. This arm fires once per fan-out edge for a
     `DestPlayerAll` quantifier (and for the per-player edges of an `All`-of-`Any`), emitting one
     `TraceEvent::Action` (carrying the cloned `GameRule`) per synthetic transition.
 
-3. **(C0) Quantifier resume** (`interpreter/mod.rs:109-112` → `quant_driver.rs:15-101`). If a
+4. **(C0) Quantifier resume** (`interpreter/mod.rs:109-112` → `quant_driver.rs:15-101`). If a
    quantifier prompt is in flight (`pending_quant`) and its `state` equals `current_state` and an
    input has arrived matching the prompt kind, `take_quant_resume` consumes both and dispatches the
    chosen answer (see `resume_dest_player_any` at `quant_driver.rs:359-380`,
@@ -182,10 +194,10 @@ The pre-dispatch arms, in order:
    `CardsAnyOrRange` prompt is in flight), the stale input is popped from the buffer (preventing an
    infinite prompt loop) and the pending quantifier is left intact to receive the next input.
 
-4. **Real IR edge lookup** (`interpreter/mod.rs:114-131`). If `current_state` is not in
+5. **Real IR edge lookup** (`interpreter/mod.rs:114-131`). If `current_state` is not in
    `ir.states` → `Error`. If `edges.is_empty()` → `GameOver` if at `ir.goal`, else `Error`.
 
-5. **(C1) Quantifier preprocessor** (`interpreter/mod.rs:137-153` → `quantifier::scan_edge`).
+6. **(C1) Quantifier preprocessor** (`interpreter/mod.rs:137-153` → `quantifier::scan_edge`).
    Before per-`Payload` dispatch, `step()` calls `crate::quantifier::scan_edge(edge)` and, if it
    returns a non-`None` `QuantSite`, hands off to the dedicated quantifier arm:
    - `QuantSite::DestPlayerAll { pc }` → `step_dest_player_all`
@@ -236,6 +248,8 @@ After the pre-dispatch arms, the per-`Payload` dispatch
 - `Payload::EndCondition { expr, negated, stage }` → `ensure_stage_entered(stage)` (enters on first
   encounter), evaluate `expr`, pick edge 0 (exit) or 1 (continue); on exit, `leave_stage(stage)`
   pops the stage stack. (Edge indexing is inverted vs. `Condition` — see I-3.)
+  **Auto-end (2026-08-10, I-24):** the stage also exits when no player is in the game or no
+  player is in this stage — the game then runs out to the goal with an empty winner set.
   Emits `TraceEvent::EndCondition`.
 - `Payload::StageRoundCounter(stage)` → `ensure_stage_entered(stage)` (idempotent), increment
   counter, advance. Applied **once** (interpreter is the single mutator — see I-5).

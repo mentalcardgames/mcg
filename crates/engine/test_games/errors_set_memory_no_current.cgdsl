@@ -1,7 +1,7 @@
-// Repro: SetMemory with no current player must error, not panic (the memory
-// key is prefixed with the current player's name; `end turn` with nobody
-// eligible leaves `current_player = None`, and the bridge has nothing to key
-// to).
+// Repro (updated 2026-08-10): after the last player is eliminated, the
+// remaining instructions of the out-of-game current player are skipped -
+// Counter is 5 never runs and the stage auto-ends. (SetMemory still
+// errors without a current player when reached at top level.)
 player P1
 turnorder (P:P1)
 

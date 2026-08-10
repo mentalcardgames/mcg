@@ -45,6 +45,8 @@ pub struct TuiState {
     pub game_state_inner_height: u16,
     pub choose_cursor: usize,
     pub choose_selected: Vec<bool>,
+    /// Digits typed into a `Number` prompt (2026-08-10).
+    pub number_buffer: String,
     pub engine_status: EngineStatus,
 }
 
@@ -70,6 +72,7 @@ impl TuiState {
             game_state_inner_height: 0,
             choose_cursor: 0,
             choose_selected: Vec::new(),
+            number_buffer: String::new(),
             current_player_name: String::new(),
             prev_player_name: String::new(),
             engine_status: EngineStatus::Running,

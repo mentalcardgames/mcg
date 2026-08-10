@@ -83,6 +83,7 @@ impl InputPanel {
         choose_cursor: usize,
         choose_selected: &[bool],
         current_player_name: &str,
+        number_buffer: &str,
     ) {
         let block = Block::default()
             .title(format!(
@@ -135,6 +136,26 @@ impl InputPanel {
                     InputType::Optional(prompt) => {
                         let text = format!("{}: [y] Accept / [n] Decline", prompt);
                         f.render_widget(Paragraph::new(text), inner);
+                    }
+                    InputType::Number { min, max, prompt } => {
+                        let bounds = match (min, max) {
+                            (Some(m), Some(x)) => format!("{m}..={x}"),
+                            (Some(m), None) => format!("{m}.."),
+                            (None, Some(x)) => format!("..={x}"),
+                            (None, None) => "any".to_string(),
+                        };
+                        f.render_widget(
+                            Paragraph::new(format!(
+                                "{} ({bounds})\nType digits, Enter to confirm: {}",
+                                prompt,
+                                if number_buffer.is_empty() {
+                                    "|".to_string()
+                                } else {
+                                    format!("{}|", number_buffer)
+                                }
+                            )),
+                            inner,
+                        );
                     }
                     InputType::ChoosePlayer { candidates, prompt } => {
                         let list_area = render_hint(

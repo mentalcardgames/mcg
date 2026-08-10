@@ -15,7 +15,7 @@ This includes:
  - stage counters
 */
 
-use front_end::ast::{FilterExpr, MemoryType, Owner};
+use front_end::ast::{FilterExpr, MemoryType};
 use std::collections::HashMap;
 
 // while we don't need any auxiliary functions on Cards, we can just use a type rather than a struct.
@@ -58,6 +58,7 @@ pub enum MemoryValue {
     CardSet(Vec<usize>),
     PlayerCollection(Vec<usize>),
     Team(String),
+    TeamCollection(Vec<String>),
     IntCollection(Vec<i32>),
     StringCollection(Vec<String>),
     LocationCollection(Vec<usize>),
@@ -290,10 +291,16 @@ impl GameData {
     }
 
     /// The next *eligible* player index after `from` in `turn_order`,
-    /// wrapping. Eligible = `in_game && in_stage[stage]`. The player at
-    /// `from` itself is never considered (invariant I-13).
+    /// wrapping. Eligible = `in_game && in_stage[stage]`. If no *other*
+    /// player is eligible but `from` itself still is, `from` is returned
+    /// (the turn wraps onto the same player instead of erroring — I-13,
+    /// relaxed 2026-08-10 so elimination games no longer need a
+    /// `size(playersin) >= 2` guard on `cycle to next`).
     pub(crate) fn next_eligible_player(&self, from: usize, stage: &str) -> Option<usize> {
         let turn_len = self.turn_order.len();
+        if turn_len == 0 {
+            return None;
+        }
         for i in 1..turn_len {
             let player_idx = self.turn_order[(from + i) % turn_len];
             if let Some(player) = self.players.get(player_idx) {
@@ -302,7 +309,37 @@ impl GameData {
                 }
             }
         }
-        None
+        self.eligible_self(from, stage)
+    }
+
+    /// The previous *eligible* player index before `from` in `turn_order`,
+    /// wrapping (mirror of [`Self::next_eligible_player`]; D-12, fixed
+    /// 2026-08-10 — `previous` now skips ineligible players like `next`
+    /// does, and wraps onto `from` itself when it is the only eligible one).
+    pub(crate) fn previous_eligible_player(&self, from: usize, stage: &str) -> Option<usize> {
+        let turn_len = self.turn_order.len();
+        if turn_len == 0 {
+            return None;
+        }
+        for i in 1..turn_len {
+            let player_idx = self.turn_order[(from + turn_len - i) % turn_len];
+            if let Some(player) = self.players.get(player_idx) {
+                if player.in_game && *player.in_stage.get(stage).unwrap_or(&false) {
+                    return Some(player_idx);
+                }
+            }
+        }
+        self.eligible_self(from, stage)
+    }
+
+    fn eligible_self(&self, from: usize, stage: &str) -> Option<usize> {
+        let self_idx = *self.turn_order.get(from)?;
+        let player = self.players.get(self_idx)?;
+        if player.in_game && *player.in_stage.get(stage).unwrap_or(&false) {
+            Some(self_idx)
+        } else {
+            None
+        }
     }
 
     pub fn resolve_turn(&mut self) -> Option<usize> {
@@ -311,21 +348,50 @@ impl GameData {
         self.next_eligible_player(current_idx, &current_stage)
     }
 
-    pub fn add_memory(&mut self, key: String, _owner: Owner, memory_type: Option<MemoryType>) {
-        let value = match memory_type {
-            Some(MemoryType::Int { .. }) => MemoryValue::Int(0),
-            Some(MemoryType::String { .. }) => MemoryValue::String(String::new()),
-            Some(MemoryType::Player { .. }) => MemoryValue::Int(0),
-            Some(MemoryType::PlayerCollection { .. }) => MemoryValue::PlayerCollection(vec![]),
-            Some(MemoryType::CardSet { .. }) => MemoryValue::CardSet(vec![]),
-            Some(MemoryType::Team { .. }) => MemoryValue::Team(String::new()),
-            Some(MemoryType::IntCollection { .. }) => MemoryValue::IntCollection(vec![]),
-            Some(MemoryType::StringCollection { .. }) => MemoryValue::StringCollection(vec![]),
-            Some(MemoryType::TeamCollection { .. }) => MemoryValue::Int(0),
-            Some(MemoryType::LocationCollection { .. }) => MemoryValue::LocationCollection(vec![]),
-            None => MemoryValue::Int(0),
+    /// Adds a memory slot under `key`. `initial` is used verbatim when
+    /// provided (setup-time evaluation happens in `action.rs`); otherwise a
+    /// per-type default is inserted. Since 2026-08-10 the defaults for
+    /// `MemoryType::Player` and `MemoryType::TeamCollection` are *typed*
+    /// (I-10): a Player memory initialises to the owner's own name (as a
+    /// `String`, matching `SetMemory`'s storage convention) instead of
+    /// `Int(0)`, and a TeamCollection to an empty team list.
+    pub fn add_memory(
+        &mut self,
+        key: String,
+        owner_name: &str,
+        memory_type: Option<MemoryType>,
+        initial: Option<MemoryValue>,
+    ) {
+        let value = match initial {
+            Some(v) => v,
+            None => default_memory_value(memory_type, owner_name),
         };
         self.memories.insert(key, value);
+    }
+
+    /// Resolves the owner prefix a bare memory write/read (`M is 5`,
+    /// `reset M`, `&I:M` without `of <owner>`) should target. Since
+    /// 2026-08-10: if exactly one existing slot ends in `_{memory}`
+    /// (i.e. the memory was declared at setup, e.g. `memory pot on table`
+    /// → `Table_pot`), that owner wins — otherwise the current player's
+    /// name is returned as the bridge fallback (D-14).
+    pub fn memory_write_owner(&self, memory: &str, current_player: Option<&str>) -> Option<String> {
+        if memory == crate::quantifier::SYNTH_MEMORY_KEY {
+            return current_player.map(|p| p.to_string());
+        }
+        let suffix = format!("_{}", memory);
+        let mut owners: Vec<&str> = self
+            .memories
+            .keys()
+            .filter_map(|k| k.strip_suffix(&suffix))
+            .filter(|prefix| !prefix.is_empty())
+            .collect();
+        owners.sort_unstable();
+        owners.dedup();
+        match owners.as_slice() {
+            [single] => Some((*single).to_string()),
+            _ => current_player.map(|p| p.to_string()),
+        }
     }
 
     pub fn get_memory(&self, key: &str) -> Option<&MemoryValue> {
@@ -340,10 +406,42 @@ impl GameData {
         self.memories.insert(key, value);
     }
 
+    /// Resets the memory at `key` to its per-type zero value. Since
+    /// 2026-08-10 this works for every variant (previously only `Int`
+    /// memories were reset; everything else silently no-oped).
     pub fn reset_memory(&mut self, key: &str) {
-        if let Some(MemoryValue::Int(v)) = self.memories.get_mut(key) {
-            *v = 0;
-        }
+        let zero = match self.memories.get(key) {
+            Some(MemoryValue::Int(_)) => MemoryValue::Int(0),
+            Some(MemoryValue::String(_)) => MemoryValue::String(String::new()),
+            Some(MemoryValue::CardSet(_)) => MemoryValue::CardSet(vec![]),
+            Some(MemoryValue::PlayerCollection(_)) => MemoryValue::PlayerCollection(vec![]),
+            Some(MemoryValue::Team(_)) => MemoryValue::Team(String::new()),
+            Some(MemoryValue::TeamCollection(_)) => MemoryValue::TeamCollection(vec![]),
+            Some(MemoryValue::IntCollection(_)) => MemoryValue::IntCollection(vec![]),
+            Some(MemoryValue::StringCollection(_)) => MemoryValue::StringCollection(vec![]),
+            Some(MemoryValue::LocationCollection(_)) => MemoryValue::LocationCollection(vec![]),
+            None => return,
+        };
+        self.memories.insert(key.to_string(), zero);
+    }
+}
+
+/// Per-type default `MemoryValue` for a fresh memory slot.
+fn default_memory_value(memory_type: Option<MemoryType>, owner_name: &str) -> MemoryValue {
+    match memory_type {
+        Some(MemoryType::Int { .. }) => MemoryValue::Int(0),
+        Some(MemoryType::String { .. }) => MemoryValue::String(String::new()),
+        // I-10 fix: Player memories are stored as player *names* (String);
+        // a player-owned slot initialises to its own owner.
+        Some(MemoryType::Player { .. }) => MemoryValue::String(owner_name.to_string()),
+        Some(MemoryType::PlayerCollection { .. }) => MemoryValue::PlayerCollection(vec![]),
+        Some(MemoryType::CardSet { .. }) => MemoryValue::CardSet(vec![]),
+        Some(MemoryType::Team { .. }) => MemoryValue::Team(String::new()),
+        Some(MemoryType::TeamCollection { .. }) => MemoryValue::TeamCollection(vec![]),
+        Some(MemoryType::IntCollection { .. }) => MemoryValue::IntCollection(vec![]),
+        Some(MemoryType::StringCollection { .. }) => MemoryValue::StringCollection(vec![]),
+        Some(MemoryType::LocationCollection { .. }) => MemoryValue::LocationCollection(vec![]),
+        None => MemoryValue::Int(0),
     }
 }
 

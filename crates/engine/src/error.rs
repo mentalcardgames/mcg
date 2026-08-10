@@ -16,7 +16,7 @@
 //! For coarse programmatic handling without matching every variant, use
 //! [`EngineError::kind`] / [`ErrorKind`].
 
-use front_end::ast::{CardSet, IntExpr, IntRange, Owner, PlayerExpr};
+use front_end::ast::{CardSet, IntExpr, IntRange, MemoryType, Owner, PlayerExpr, Quantity};
 
 /// Coarse classification of an [`EngineError`], for hosts that want to group
 /// or handle errors without matching every variant.
@@ -331,6 +331,39 @@ pub enum EngineError {
     #[error("ResetMemory requires a current player")]
     ResetMemoryNoCurrentPlayer,
 
+    /// `SetMemory` — a collection value expression failed to evaluate
+    /// (2026-08-10: collection writes are evaluated, not stubbed).
+    #[error("SetMemory collection eval failed: {source}")]
+    SetMemoryCollectionEval { source: Box<EngineError> },
+
+    /// `CreateMemoryWithMemoryType` — the declared type-expression failed to
+    /// evaluate at setup time (2026-08-10: initial values are honored).
+    #[error("CreateMemoryWithMemoryType: failed to eval memory type {memory_type:?}: {source}")]
+    CreateMemoryTypeEval {
+        memory_type: Box<MemoryType>,
+        source: Box<EngineError>,
+    },
+
+    /// `BidAction` — a plain `bid <qty>` has no memory target to write to.
+    #[error("bid requires `on <memory> of <owner>` (a bare bid has no target)")]
+    BidWithoutMemoryTarget { quantity: Box<Quantity> },
+
+    /// `BidMemoryAction` — the quantity expression failed to evaluate.
+    #[error("bid: failed to eval quantity: {source}")]
+    BidQuantityEval { source: Box<EngineError> },
+
+    /// `BidMemoryAction` — a non-literal quantity reached the action arm
+    /// (the interpreter should have prompted for it first).
+    #[error("bid: quantity {quantity:?} must be resolved to a literal before dispatch")]
+    BidQuantityMustBeLiteral { quantity: Box<Quantity> },
+
+    /// `BidMemoryAction` — the target owner could not be resolved.
+    #[error("bid: failed to resolve owner {owner:?}: {source}")]
+    BidOwnerResolution {
+        owner: Box<Owner>,
+        source: Box<EngineError>,
+    },
+
     /// `CycleAction` — the player expression failed to evaluate.
     #[error("CycleAction: failed to eval player {player:?}: {source}")]
     CycleActionPlayerEval {
@@ -362,6 +395,11 @@ pub enum EngineError {
         int_expr: Box<IntExpr>,
         source: Box<EngineError>,
     },
+
+    /// `WinnerWith::Memory` — the memory exists but is not an `Int`
+    /// (2026-08-10: missing memories are skipped instead of treated as 0).
+    #[error("winner memory {memory} of player {player} is not an Int")]
+    WinnerMemoryNotInt { memory: String, player: String },
 
     /// A move's `from` cardset failed to evaluate.
     #[error("execute_cardset_move: failed to eval from cardset {cardset:?}: {source}")]
@@ -580,11 +618,18 @@ impl EngineError {
             | EngineError::SetMemoryTeamEval { .. }
             | EngineError::SetMemoryNoCurrentPlayer
             | EngineError::ResetMemoryNoCurrentPlayer
+            | EngineError::SetMemoryCollectionEval { .. }
+            | EngineError::CreateMemoryTypeEval { .. }
+            | EngineError::BidWithoutMemoryTarget { .. }
+            | EngineError::BidQuantityEval { .. }
+            | EngineError::BidQuantityMustBeLiteral { .. }
+            | EngineError::BidOwnerResolution { .. }
             | EngineError::CycleActionPlayerEval { .. }
             | EngineError::CycleActionPlayerNotFound { .. }
             | EngineError::CycleActionTurnOrderNotFound { .. }
             | EngineError::ScoreIntEval { .. }
             | EngineError::ScoreMemoryIntEval { .. }
+            | EngineError::WinnerMemoryNotInt { .. }
             | EngineError::MoveFromCardsetEval { .. }
             | EngineError::MoveDestCardsetEval { .. }
             | EngineError::MoveDestLocationOutOfRange { .. } => ErrorKind::Action,

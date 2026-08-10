@@ -164,7 +164,7 @@ impl Evaluator {
         }
     }
 
-    fn eval_int_collection(
+    pub(crate) fn eval_int_collection(
         col: &IntCollection,
         game_data: &GameData,
     ) -> Result<Vec<i32>, EngineError> {
@@ -232,7 +232,7 @@ impl Evaluator {
         }
     }
 
-    pub(super) fn eval_location_collection(
+    pub(crate) fn eval_location_collection(
         col: &LocationCollection,
         game_data: &GameData,
     ) -> Result<Vec<String>, EngineError> {
@@ -258,7 +258,7 @@ impl Evaluator {
         }
     }
 
-    pub(super) fn eval_team_collection(
+    pub(crate) fn eval_team_collection(
         col: &TeamCollection,
         game_data: &GameData,
     ) -> Result<Vec<String>, EngineError> {
@@ -301,6 +301,7 @@ impl Evaluator {
                 let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::Team(v)) => Ok(vec![v.clone()]),
+                    Some(MemoryValue::TeamCollection(v)) => Ok(v.clone()),
                     Some(_) => Err(EngineError::MemoryNotTeam),
                     None => Err(EngineError::MemoryNotFound { key }),
                 }

@@ -21,32 +21,43 @@ last_validated: 2026-08-09
   recoverable error too (currently silently sets `current_player = None`), and
   remove the two internal `GameData` panics (`add_location`, `next_player`) by
   making those methods fallible.
+  > **Update 2026-08-10:** `end turn`/`cycle to next` with nobody eligible is
+  > now a **no-op** + stage auto-end (F-16, I-24), so the strand is gone; the
+  > two internal `GameData` panics remain (unreachable from DSL).
 - **~~Collection-memory aggregation~~** — DONE 2026-08-09 (the four `todo!()` arms
   plus the silent-empty `PlayerCollection` memory reads). Follow-up: `SetMemory`
   still inserts typed empty defaults for collection types — evaluate the actual
   collections once the grammar supports them.
+  > **Update 2026-08-10:** collection `SetMemory` writes and setup-time
+  collection memory declarations are fully evaluated (F-19).
 - **~~Combo semantics~~** — DONE 2026-08-09 (group-wise evaluation). Follow-up:
   pin straight/flush detection patterns (combos + filters) with fixtures.
 - **Card status / tokens (D-6).** The `card_statuses` slot now exists in
   `GameData`; implement `FlipAction` (de/encrypt a card's face) and
   `Place`/tokens with card cryptography. Prerequisite for face-down mechanics
   and privacy-aware play.
-- **Bidding/demand (D-7).** Write the semantic spec first, then implement
-  `BidAction`/`DemandAction`. Good project for a thesis that starts from
-  game-theory requirements.
+- **Demand semantics (D-7).** `bid` gained the numeric-input semantics
+  (2026-08-10, F-26); `demand` still needs a written spec before it can be
+  implemented. Good project for a thesis that starts from game-theory
+  requirements.
 
 ## DSL / parser work (front_end)
 
 - **Close the grammar gaps.** Mandatory `of <owner>` on memory reads and
-  `SetMemory`/`ResetMemory` (P-4, P-5); `optional { ... } else { ... }`
-  (D-3); `end stage when <bool>` mid-body exit (D-2); remove the unused
-  `create` keyword or make it meaningful (P-6).
+  `SetMemory`/`ResetMemory` (P-4, P-5 — bridged engine-side 2026-08-10, F-21);
+  `optional { ... } else { ... }` (D-3); `end stage when <bool>` mid-body exit
+  (D-2); remove the unused `create` keyword or make it meaningful (P-6).
 - **Implement `for <players>` and SimStage.** Carry the stage participant
   collection into the IR (P-1) and build true parallel sub-FSMs for `sim`
   stages (P-2) — the largest DSL-semantics project.
 - **Parse-level ergonomics.** Fix the PEG parens quirks (P-8) and add a
   strict-mode validator that warns on constructs that are silently dropped
   (status keywords, `for` clause).
+- **Numeric prompts in pure int slots.** `InputType::Number` exists
+  (2026-08-10, F-26) behind `bid <qty> on <memory> of <owner>`; `any`/ranges
+  in arbitrary int expressions (`score any to …`, `M is any`) and an
+  "exactly one card" shorthand (`deal >= 1 and <= 1` today) need grammar
+  work.
 - **Parser stack scaling (found 2026-08-10).** `pest`'s recursion cost grows
   with the number of flow components — roughly a 0.8 MiB base plus
   ~10-20 KiB per component in debug builds — so games with many options
