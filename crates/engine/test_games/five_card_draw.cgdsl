@@ -1,19 +1,25 @@
-// Five-Card Draw (simplified "draw-1" poker) — 3 players.
+// Five-Card Draw ("draw-1" poker) — 3 players.
 //
 // Rules:
 //   - 52-card deck; each player is dealt 5 cards.
-//   - Each turn: discard any number of cards (pick them) and draw one
-//     replacement. Up to three rounds of draw.
+//   - Each turn: discard **exactly one** card (pick it) and draw one
+//     replacement, so hands stay at 5. Up to three rounds of draw.
 //   - Hand value is scored as the sum of card points, plus a pair bonus
 //     (+10) and a flush bonus (+20) — a deliberate simplification of
 //     real poker hand ranking (straights, full houses, ... are not
 //     detectable in the DSL).
 //   - The highest score wins.
 //
+// Remaining deviations (engine-gated, not authoring):
+//   - No betting/antes — the DSL has no numeric input prompt.
+//   - The discard count is fixed at exactly one (a "jackpot"-style draw-1);
+//     discarding N and drawing N would need the discarded count as a value.
+//
 // Engine notes:
 //   - Dealing to `Hand of all` fans out to one deal per player.
-//   - Discarding uses the `deal any ...` quantifier
-//     (InputType::ChooseCards).
+//   - Discarding uses `deal >= 1 and <= 1 from Hand of current …`, which
+//     prompts the player and range-validates the selection to exactly one
+//     card (InputType::ChooseCards).
 //   - `same Rank` / `same Suit` filters are used for the bonuses.
 
 player P1, P2, P3
@@ -37,11 +43,13 @@ stage Deal for current 1 times {
   deal 5 from Deck private to Hand of all
 }
 
-// Up to 3 full rounds: discard any cards, draw one replacement each round.
+// Up to 3 full rounds: discard exactly one card, draw one replacement.
 stage Draw for current 9 times {
-  optional {
-    deal any from Hand of current private to Discard
-    deal 1 from Deck private to Hand of current
+  if (not Hand of current empty) {
+    optional {
+      deal >= 1 and <= 1 from Hand of current private to Discard
+      deal 1 from Deck private to Hand of current
+    }
   }
   cycle to next
 }

@@ -127,8 +127,9 @@ fn blackjack_runs_to_completion() {
 #[test]
 fn crazy_eights_runs_to_completion() {
     let ir = load_game("crazy_eights.cgdsl");
-    // Every turn: play one card (accept the play-optional, pick the first
-    // card), decline the draw-optional. No player is ever chosen for a gift.
+    // Every turn: play one matching card (accept the play-optional, pick the
+    // first offered card), decline the draw-optional. No player is ever
+    // chosen for a gift.
     let tracker = CurrentTracker::new();
     let current_for_closure = tracker.0.clone();
     let gd = run_game_with(
@@ -139,7 +140,9 @@ fn crazy_eights_runs_to_completion() {
             let who = who.unwrap_or_else(|| "P1".into());
             match it {
                 InputType::Optional(prompt) => {
-                    let is_play = prompt.contains("deal any");
+                    // The play-optional's label names the match-constrained
+                    // source ("from Hand"); the draw-optional names "from Deck".
+                    let is_play = prompt.contains("from Hand");
                     Input {
                         player_id: who,
                         kind: if is_play {
@@ -175,8 +178,8 @@ fn crazy_eights_runs_to_completion() {
         .map(|l| l.cards.len())
         .unwrap_or(0);
     assert!(
-        discard >= 6,
-        "starter + at least one play per first round: got {}",
+        discard >= 4,
+        "starter + at least one play across the first rounds (match constraint may force draws): got {}",
         discard
     );
     // Someone must have won (possibly several on a tie).
@@ -315,7 +318,7 @@ fn crazy_eights_draw_every_turn() {
 #[test]
 fn go_fish_rotating_asks() {
     // Adversarial path: ask for a different rank every turn (0..12), so
-    // every choose-option is exercised.
+    // every choose-option is exercised; always ask P2 (ChoosePlayer idx 1).
     let ir = load_game("go_fish.cgdsl");
     let tracker = CurrentTracker::new();
     let current_for_closure = tracker.0.clone();
@@ -338,6 +341,10 @@ fn go_fish_rotating_asks() {
                         kind: InputKind::Choice { idx },
                     }
                 }
+                InputType::ChoosePlayer { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::ChoosePlayer { idx: 1 }, // P2
+                },
                 InputType::Optional(prompt) => {
                     // Decline the book-laydown optional ("Book" in the label).
                     let accept = !prompt.contains("Book");
@@ -353,10 +360,6 @@ fn go_fish_rotating_asks() {
                 InputType::ChooseCards { .. } => Input {
                     player_id: who,
                     kind: InputKind::ChooseCards { selected: vec![] }, // skip book
-                },
-                _ => Input {
-                    player_id: who,
-                    kind: InputKind::Choice { idx: 0 },
                 },
             }
         })),
@@ -370,7 +373,7 @@ fn go_fish_rotating_asks() {
 #[test]
 fn go_fish_runs_to_completion() {
     let ir = load_game("go_fish.cgdsl");
-    // Always ask for "Ace" (option 0).
+    // Always ask for "Ace" (option 0) from P2.
     let tracker = CurrentTracker::new();
     let current_for_closure = tracker.0.clone();
     let gd = run_game_with(
@@ -383,6 +386,10 @@ fn go_fish_runs_to_completion() {
                 InputType::Choice { .. } => Input {
                     player_id: who,
                     kind: InputKind::Choice { idx: 0 },
+                },
+                InputType::ChoosePlayer { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::ChoosePlayer { idx: 1 }, // P2
                 },
                 InputType::Optional(prompt) => {
                     // Decline the book-laydown optional ("Book" in the label).
@@ -399,10 +406,6 @@ fn go_fish_runs_to_completion() {
                 InputType::ChooseCards { .. } => Input {
                     player_id: who,
                     kind: InputKind::ChooseCards { selected: vec![] }, // skip book
-                },
-                _ => Input {
-                    player_id: who,
-                    kind: InputKind::Choice { idx: 0 },
                 },
             }
         })),

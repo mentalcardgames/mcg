@@ -47,6 +47,13 @@ last_validated: 2026-08-09
 - **Parse-level ergonomics.** Fix the PEG parens quirks (P-8) and add a
   strict-mode validator that warns on constructs that are silently dropped
   (status keywords, `for` clause).
+- **Parser stack scaling (found 2026-08-10).** `pest`'s recursion cost grows
+  with the number of flow components — roughly a 0.8 MiB base plus
+  ~10-20 KiB per component in debug builds — so games with many options
+  (Go Fish's 13-option asks) overflow the 1 MiB OS-default main-thread stack
+  during parsing. The engine binaries work around it by running the driver
+  on a 16 MiB thread (`cgdsl-play`/`engine-tui` `DRIVER_STACK_BYTES`); the
+  real fix is a parser-side stack reduction or an explicit stack policy.
 
 ## The P2P game (large projects, masters-level)
 

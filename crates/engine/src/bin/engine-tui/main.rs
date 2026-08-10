@@ -26,7 +26,25 @@ use ui::{
     TuiState,
 };
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// Driver stack size: the `front_end` parser's recursion cost grows with the
+/// number of flow components, and large games (e.g. Go Fish's 13-option asks)
+/// exceed the OS default 1 MiB main-thread stack. The whole driver (parse +
+/// TUI loop) runs on a dedicated thread with a generous stack. See
+/// `docs/NEXT_STEPS.md` (parser stack scaling).
+const DRIVER_STACK_BYTES: usize = 16 * 1024 * 1024;
+
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let handle = std::thread::Builder::new()
+        .stack_size(DRIVER_STACK_BYTES)
+        .spawn(driver)?;
+    handle
+        .join()
+        .map_err(|_| -> Box<dyn std::error::Error + Send + Sync> {
+            "engine-tui driver panicked".into()
+        })?
+}
+
+fn driver() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let game_path = std::env::args()
         .nth(1)
         .map(PathBuf::from)

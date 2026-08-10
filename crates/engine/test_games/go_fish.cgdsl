@@ -1,47 +1,49 @@
-// Go Fish — 3 players, ask the next player for a rank you hold, lay down
-// books (sets of four).
+// Go Fish — 3 players, ask any player for a rank you hold, lay down books
+// (sets of four).
 //
 // Rules:
 //   - 52-card deck; each player is dealt 7 cards.
-//   - On your turn, ask the next player for one rank **that you hold**: if
-//     they hold any cards of that rank, they must hand them over; otherwise
-//     you draw one card from the deck (go fish). Ranks you do not hold are
-//     not offered (standard rule).
+//   - On your turn, ask **any player** for one rank **that you hold**: if
+//     they hold any cards of that rank, they must hand them all over;
+//     otherwise you draw one card from the deck (go fish). Ranks you do not
+//     hold are not offered (standard rule).
 //   - After the ask, you may lay down a book: four cards of the same rank.
 //     The engine validates the chosen set against the `Book` combo (submit
 //     0 cards to skip). Books land on your Books pile and score 4 points.
 //   - The game ends when the deck runs out or a player empties their hand
 //     (or after 24 turns); the most books wins.
 //
-// Remaining deviations from standard Go Fish (engine-gated, not authoring):
-//   - You may only ask the *next* player (standard: any player) — the
-//     engine has no "choose a player as move source" prompt.
-//   - A successful ask does not grant another ask — the engine has no
-//     conditional re-ask loop inside a turn.
-//
-// Engine notes:
-//   - The ask is a 13-way `choose` (one option per rank); each option is
-//     guarded by `"<Rank>" in Hand of current` so unheld ranks are no-ops.
-//   - `Hand where Rank is "X" of next` combines a where-filter with an
-//     owner; the engine resolves the base location against the owner
-//     ("next"), not the current player.
-//   - Each ask option checks the emptiness *first* and deals *after*: on a
-//     hit the transfer happens and no draw occurs; on a miss the draw
-//     happens and the (empty) transfer is a no-op. (Order matters — caught
-//     by the behavioral fixtures.)
+// Engine notes (how the new capabilities are used):
+//   - The ask is a 13-way `choose` (one option per rank — the DSL has no
+//     "choose a value" expression yet); each option is guarded by
+//     `"<Rank>" in Hand of current` so unheld ranks are no-ops.
+//   - The transfer uses `deal Hand where Rank is "X" of any …` — the
+//     `SourcePlayerAny` quantifier (2026-08-10) prompts a `ChoosePlayer` and
+//     substitutes the choice, so you ask *any* player.
+//   - Draw-on-miss uses a scratch-pile pattern: the transfer moves the
+//     target's cards to the `Scratch` pile (empty set = no-op on a miss),
+//     then the turn takes them if the pile is non-empty, else draws one.
 //   - Laying down uses the combo-source move (`ComboSource`): the player
 //     picks cards from the whole hand and the engine validates them against
 //     the combo filter, re-prompting on mismatch. `same Rank` matches any
 //     duplicated rank, so a 2+2 split also passes the filter — a documented
-//     simplification of the combo semantics (engine-vs-design.md D-16). The
-//     guard only prompts when duplicated ranks exist; 0 cards skips.
+//     simplification of the combo semantics (engine-vs-design.md D-16).
 //   - Scoring is by books (4 points per book) instead of hand size.
+//
+// Remaining deviations (engine-gated, not authoring):
+//   - The player prompt includes yourself — asking yourself wastes the turn
+//     (the "any" candidates are all in-game players).
+//   - A successful ask does not grant another ask — the engine has no
+//     conditional re-ask loop inside a turn.
+//   - The `Scratch` pile is a visible table location (a scratch pile is the
+//     only way to reference a prompted player's cards in a condition).
 
 player P1, P2, P3
 turnorder (P:P1, P:P2, P:P3)
 location Hand on all
 location Books on all
 location Deck on table
+location Scratch on table
 
 combo Book where (same Rank and size >= 4)
 
@@ -57,70 +59,135 @@ stage Deal for current 1 times {
 
 stage Ask for current until (Deck empty or Hand of current empty) or 24 times {
   choose {
-    if (size(cards Hand where Rank is "Ace" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Ace" in Hand of current) {
+      deal Hand where Rank is "Ace" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Ace" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Two" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Two" in Hand of current) {
+      deal Hand where Rank is "Two" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Two" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Three" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Three" in Hand of current) {
+      deal Hand where Rank is "Three" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Three" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Four" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Four" in Hand of current) {
+      deal Hand where Rank is "Four" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Four" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Five" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Five" in Hand of current) {
+      deal Hand where Rank is "Five" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Five" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Six" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Six" in Hand of current) {
+      deal Hand where Rank is "Six" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Six" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Seven" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Seven" in Hand of current) {
+      deal Hand where Rank is "Seven" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Seven" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Eight" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Eight" in Hand of current) {
+      deal Hand where Rank is "Eight" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Eight" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Nine" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Nine" in Hand of current) {
+      deal Hand where Rank is "Nine" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Nine" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Ten" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Ten" in Hand of current) {
+      deal Hand where Rank is "Ten" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Ten" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Jack" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Jack" in Hand of current) {
+      deal Hand where Rank is "Jack" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Jack" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "Queen" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("Queen" in Hand of current) {
+      deal Hand where Rank is "Queen" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "Queen" of next private to Hand of current
     or
-    if (size(cards Hand where Rank is "King" of next) == 0) {
-      deal 1 from Deck private to Hand of current
+    if ("King" in Hand of current) {
+      deal Hand where Rank is "King" of any private to Scratch
+      if (not Scratch empty) {
+        deal Scratch private to Hand of current
+      }
+      if (Scratch empty) {
+        deal 1 from Deck private to Hand of current
+      }
     }
-    deal Hand where Rank is "King" of next private to Hand of current
   }
   if (not Book in Hand of current empty) {
     optional {

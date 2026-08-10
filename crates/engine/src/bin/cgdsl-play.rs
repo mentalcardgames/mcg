@@ -118,7 +118,23 @@ fn parse_args(args: &[String]) -> Result<Cli, String> {
     })
 }
 
+/// Driver stack size. The `front_end` parser's recursion cost grows with the
+/// number of flow components (roughly ~10-20 KiB per component on top of a
+/// ~0.8 MiB base), so large games (e.g. Go Fish's 13-option asks) exceed the
+/// OS default 1 MiB main-thread stack. The driver runs on a dedicated thread
+/// with a generous stack instead. See `docs/NEXT_STEPS.md` (parser stack
+/// scaling).
+const DRIVER_STACK_BYTES: usize = 16 * 1024 * 1024;
+
 fn main() {
+    let handle = std::thread::Builder::new()
+        .stack_size(DRIVER_STACK_BYTES)
+        .spawn(driver)
+        .expect("failed to spawn driver thread");
+    handle.join().expect("driver thread panicked");
+}
+
+fn driver() {
     let args: Vec<String> = env::args().collect();
     let prog = args
         .first()

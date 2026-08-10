@@ -1,23 +1,34 @@
-// Crazy Eights (simplified) — 3 players, shed all your cards.
+// Crazy Eights — 3 players, shed all your cards.
 //
 // Rules:
 //   - Each player is dealt 5 cards; one card starts the Discard pile.
-//   - On your turn, play any card from your hand (choose which) or
-//     decline to play.
-//   - After declining, you may draw a card from the deck — house rule:
-//     the drawn card may be given to *any* player (choose who).
-//   - No match constraint on plays (8s are wild on the honor system).
+//   - On your turn, play **exactly one card that matches** the top of the
+//     Discard pile — same rank or same suit — or any 8 (wild). The engine
+//     only offers matching cards (the play prompt lists them), so plays are
+//     always legal.
+//   - If you cannot play (no match, no 8), you **must** draw one card.
+//   - After playing (or being forced to draw), you may draw one card and
+//     give it to *any* player — a house rule.
 //   - The game ends when the deck runs out, a player empties their hand,
 //     or after 30 turns; the player with the fewest cards wins.
 //
+// Remaining house rules / deviations (documented, not hidden):
+//   - Declining both the play and the voluntary draw passes the turn
+//     entirely (the DSL's `optional` has no else-branch to force a draw on
+//     decline — D-3).
+//   - The "hand empty" end condition is only checked when the current
+//     player's turn starts, so a win is detected with up to one round of
+//     delay (the 30-turn cap guarantees termination).
+//
 // Engine notes:
-//   - Playing uses the `deal any ...` quantifier, which prompts the
-//     player to pick cards (InputType::ChooseCards).
+//   - Playing uses `deal >= 1 and <= 1 from Hand where (...) of current`,
+//     which prompts the player with the *matching* cards only
+//     (InputType::ChooseCards, range-validated to exactly one).
+//   - The match filter reads the top of the Discard pile live:
+//     `Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or
+//     Rank is "Eight")`.
 //   - Drawing uses `Hand of any`, which prompts for a player
 //     (InputType::ChoosePlayer).
-//   - The "hand empty" end condition is only checked when the current
-//     player's turn starts, so a win is detected with up to one round
-//     of delay (the 30-turn cap guarantees termination).
 
 player P1, P2, P3
 turnorder (P:P1, P:P2, P:P3)
@@ -37,9 +48,14 @@ stage Deal for current 1 times {
 }
 
 stage Play for current until (Deck empty or Hand of current empty) or 30 times {
-  if (not Hand of current empty) {
+  if (not Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current empty) {
     optional {
-      deal any from Hand of current private to Discard
+      deal >= 1 and <= 1 from Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current private to Discard
+    }
+  }
+  if (Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current empty) {
+    if (not Deck empty) {
+      deal 1 from Deck private to Hand of current
     }
   }
   if (not Deck empty) {
