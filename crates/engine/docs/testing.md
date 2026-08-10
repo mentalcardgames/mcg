@@ -364,6 +364,7 @@ authoring new ones):
 | `verb_move_exact_n.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | `move N` = pick exactly N; wrong count re-prompts |
 | `verb_move_exact_n_short_pile.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | Exact-N prompt clamps to the available cards |
 | `verb_positional_automatic.cgdsl` | `tests/verb_semantics_test.rs` | Positional sources (`top(X)`, `X[N]`) never prompt |
+| `cycle_skips_out_of_game.cgdsl` | `tests/ergonomics_test.rs` | Out-of-game-but-in-stage players are skipped by `cycle to next`/`previous` and the `next` expression (I-13 / F-24 regression) |
 | `location_resolution.cgdsl`, `test.cgdsl` | TUI fixtures | Interactive play (load via `just tui <name>`) |
 
 **Authoring conventions:**

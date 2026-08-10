@@ -183,6 +183,54 @@ fn bid_any_prompts_for_a_number_and_range_rejects_out_of_bounds() {
 }
 
 #[test]
+fn out_of_game_players_are_skipped_by_cycles_and_next_expressions() {
+    // Regression: a player out of the GAME but still in the current stage
+    // must never become current via `cycle to next` / `cycle to previous`,
+    // and must be skipped by the `next` expression. (The old `previous`
+    // ignored eligibility entirely — D-12, fixed 2026-08-10; the forward
+    // path always required `in_game && in_stage`.)
+    let ir = load_game("cycle_skips_out_of_game.cgdsl");
+    let current: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let current_clone = current.clone();
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
+        RunOptions::new().with_event_sender(Box::new(move |gd: &GameData| {
+            if let Some(p) = gd.get_current_player() {
+                current_clone.lock().unwrap().push(p.name.clone());
+            }
+        })),
+    )
+    .expect("game should complete");
+
+    assert_eq!(
+        gd.get_memory("Table_WhoNext"),
+        Some(&MemoryValue::String("P3".to_string())),
+        "`next` from P1 must skip the out-of-game P2 and resolve to P3"
+    );
+    let seen = current.lock().unwrap();
+    assert!(
+        !seen.iter().any(|n| n == "P2"),
+        "P2 (out of game, still in stage) must never become current; saw {:?}",
+        *seen
+    );
+    // Collapse consecutive snapshots (the event sender fires every step):
+    // Stage A: P1. Stage B (cycle to next): P1 -> P3 -> P1.
+    // Stage C (cycle to previous): P1 -> P3 -> P1.
+    let mut runs: Vec<String> = Vec::new();
+    for name in seen.iter() {
+        if runs.last().map(|l| l != name).unwrap_or(true) {
+            runs.push(name.clone());
+        }
+    }
+    assert_eq!(runs, vec!["P1", "P3", "P1", "P3", "P1"]);
+}
+
+#[test]
 fn team_owned_locations_and_memories_are_per_member() {
     let ir = load_game("team_locations.cgdsl");
     let gd = run_game_with(

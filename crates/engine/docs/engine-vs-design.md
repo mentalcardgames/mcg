@@ -293,7 +293,8 @@ prerequisites are noted so a later project can pick them up:
   positional sources automatic. The `>= 1 and <= 1` idiom is gone from the
   demo games (crazy_eights/five_card_draw use `move 1`), and the quantifier
   fixtures that tested card-picking with `deal any` now use `move any`.
-  **Total: 545 tests green (440 lib + 5 cgdsl-play + 9 engine-tui + 91
-  integration, +1 ignored)**; new `verb_semantics_test.rs` (6 tests);
-  `clippy --no-deps -D warnings` and `fmt --check` clean. Workspace caveat
-  unchanged.
+  **Total: 546 tests green (440 lib + 5 cgdsl-play + 9 engine-tui + 92
+  integration, +1 ignored)**; new `verb_semantics_test.rs` (6 tests) and the
+  `cycle_skips_out_of_game.cgdsl` out-of-game-eligibility regression (I-13 /
+  F-24 pin); `clippy --no-deps -D warnings` and `fmt --check` clean.
+  Workspace caveat unchanged.
