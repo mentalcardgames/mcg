@@ -18,17 +18,18 @@
 //! sequence* is reproducible; a seeded engine RNG would be needed for full
 //! replay determinism (see NEXT_STEPS.md).
 
-use std::path::PathBuf;
+mod common;
+
 use std::sync::{Arc, Mutex};
 
 use cgdsl_engine::{
     run_game_with, EngineError, GameData, Input, InputKind, InputSource, InputType, RunOptions,
 };
-use front_end::ir::{Ir, LoweredPayLoad};
-use front_end::validation::parse_document;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
+
+use common::{load_game, total_cards};
 
 /// Number of random games played per demo game, per test invocation.
 const RUNS_PER_GAME: usize = 40;
@@ -38,19 +39,6 @@ const INPUT_CALL_CAP: usize = 2000;
 /// Probability (0..1) that an answer is deliberately out of range, to
 /// exercise the controller's re-prompt validation loop (I-15).
 const INVALID_ANSWER_CHANCE: f64 = 0.1;
-
-fn load_game(name: &str) -> Ir<LoweredPayLoad> {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = manifest.join("test_games").join(name);
-    let src =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
-    let game = parse_document(&src).unwrap_or_else(|e| panic!("parse {}: {}", path.display(), e));
-    game.to_lowered_graph()
-}
-
-fn total_cards(gd: &GameData) -> usize {
-    gd.locations.iter().map(|l| l.cards.len()).sum()
-}
 
 /// A seeded random player. Answers every prompt with a uniformly random
 /// *valid* answer, except with `INVALID_ANSWER_CHANCE` probability, where the

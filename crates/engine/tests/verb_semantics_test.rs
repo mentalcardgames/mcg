@@ -2,28 +2,11 @@
 //! automatic from the top (with a count prompt for `any`/ranges), `move`/
 //! `exchange` = the player picks the cards, positional sources = automatic.
 
-use std::path::PathBuf;
+mod common;
 
 use cgdsl_engine::{run_game_with, GameData, InputSource, InputType, RunOptions};
-use front_end::ir::{Ir, LoweredPayLoad};
-use front_end::validation::parse_document;
 
-fn load_game(name: &str) -> Ir<LoweredPayLoad> {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = manifest.join("test_games").join(name);
-    let src =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
-    let game = parse_document(&src).unwrap_or_else(|e| panic!("parse {}: {}", path.display(), e));
-    game.to_lowered_graph()
-}
-
-fn test_file(name: &str) -> InputSource {
-    InputSource::TestFile(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("test_games")
-            .join(name),
-    )
-}
+use common::{load_game, player_location, table_location, test_file, total_cards};
 
 /// A closure that panics if the engine asks for *any* input — the fixture
 /// must run fully automatically.
@@ -31,32 +14,6 @@ fn no_prompts_allowed() -> InputSource {
     InputSource::Player(Box::new(|it: InputType| {
         panic!("unexpected prompt: {:?}", it);
     }))
-}
-
-fn player_location<'a>(
-    gd: &'a GameData,
-    idx: usize,
-    name: &str,
-) -> Option<&'a cgdsl_engine::Location> {
-    let player = gd.players.get(idx)?;
-    player
-        .owner
-        .locations
-        .iter()
-        .filter_map(|&l| gd.locations.get(l))
-        .find(|l| l.name == name)
-}
-
-fn table_location<'a>(gd: &'a GameData, name: &str) -> Option<&'a cgdsl_engine::Location> {
-    gd.table
-        .locations
-        .iter()
-        .filter_map(|&l| gd.locations.get(l))
-        .find(|l| l.name == name)
-}
-
-fn total_cards(gd: &GameData) -> usize {
-    gd.locations.iter().map(|l| l.cards.len()).sum()
 }
 
 #[test]

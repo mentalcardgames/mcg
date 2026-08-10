@@ -2,61 +2,16 @@
 //! skip + auto-end, honored memory initial values, the numeric `bid` prompt,
 //! and team-owned locations/memories.
 
-use std::path::PathBuf;
+mod common;
+
 use std::sync::{Arc, Mutex};
 
 use cgdsl_engine::game_data::MemoryValue;
 use cgdsl_engine::{
-    run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions, TraceEntry,
-    TraceEvent,
+    run_game_with, GameData, Input, InputKind, InputSource, RunOptions, TraceEntry, TraceEvent,
 };
-use front_end::ir::{Ir, LoweredPayLoad};
-use front_end::validation::parse_document;
 
-fn load_game(name: &str) -> Ir<LoweredPayLoad> {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = manifest.join("test_games").join(name);
-    let src =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
-    let game = parse_document(&src).unwrap_or_else(|e| panic!("parse {}: {}", path.display(), e));
-    game.to_lowered_graph()
-}
-
-fn total_cards(gd: &GameData) -> usize {
-    gd.locations.iter().map(|l| l.cards.len()).sum()
-}
-
-/// A player that always accepts optionals, with a prompt counter. Answers
-/// carry the current player's name (tracked via `event_sender`, I-23).
-#[allow(clippy::type_complexity)]
-fn accept_everything(prompts: Arc<Mutex<usize>>) -> (InputSource, Box<dyn Fn(&GameData) + Send>) {
-    let current: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-    let sender_current = current.clone();
-    let sender: Box<dyn Fn(&GameData) + Send> = Box::new(move |gd: &GameData| {
-        *sender_current.lock().unwrap() = gd.get_current_player().map(|p| p.name.clone());
-    });
-    let source = InputSource::Player(Box::new(move |it: InputType| {
-        let mut n = prompts.lock().unwrap();
-        *n += 1;
-        drop(n);
-        let who = current
-            .lock()
-            .unwrap()
-            .clone()
-            .unwrap_or_else(|| "P1".to_string());
-        match it {
-            InputType::Optional { .. } => Input {
-                player_id: who,
-                kind: InputKind::OptionalAccept,
-            },
-            _ => Input {
-                player_id: who,
-                kind: InputKind::Choice { idx: 0 },
-            },
-        }
-    }));
-    (source, sender)
-}
+use common::{accept_everything, load_game, test_file, total_cards};
 
 #[test]
 fn eliminated_players_are_never_prompted_and_game_auto_ends() {
@@ -165,11 +120,7 @@ fn bid_any_prompts_for_a_number_and_range_rejects_out_of_bounds() {
     let gd = run_game_with(
         ir,
         GameData::new(),
-        InputSource::TestFile(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("test_games")
-                .join("bid_prompt.txt"),
-        ),
+        test_file("bid_prompt.txt"),
         RunOptions::default(),
     )
     .expect("bid prompts should complete");

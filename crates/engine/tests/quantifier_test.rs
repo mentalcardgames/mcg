@@ -6,69 +6,16 @@
 //! cover the resulting `GameData`, the trace, and the cleanup invariants
 //! (synthetic memory removed; `self.ir` unchanged).
 
-use std::path::PathBuf;
+mod common;
+
 use std::sync::{Arc, Mutex};
 
 use cgdsl_engine::{
-    run_game_with, GameData, Input, InputKind, InputSource, InputType, Interpreter, Location,
-    RunOptions, StepResult, TraceEntry, TraceEvent,
+    run_game_with, GameData, Input, InputKind, InputSource, InputType, Interpreter, RunOptions,
+    StepResult, TraceEntry,
 };
-use front_end::ir::{Ir, LoweredPayLoad};
-use front_end::validation::parse_document;
 
-/// Load and lower a `test_games/<name>` fixture.
-fn load_game(name: &str) -> Ir<LoweredPayLoad> {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = manifest.join("test_games").join(name);
-    let src =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
-    let game = parse_document(&src).unwrap_or_else(|e| panic!("parse {}: {}", path.display(), e));
-    game.to_lowered_graph()
-}
-
-/// Borrow a location of the given name owned by `player_idx`, if present.
-fn player_location<'a>(
-    gd: &'a GameData,
-    player_idx: usize,
-    loc_name: &str,
-) -> Option<&'a Location> {
-    gd.players.get(player_idx).and_then(|p| {
-        p.owner
-            .locations
-            .iter()
-            .find_map(|&li| gd.locations.get(li).filter(|l| l.name == loc_name))
-    })
-}
-
-/// Borrow a table-owned location of the given name, if present.
-fn table_location<'a>(gd: &'a GameData, loc_name: &str) -> Option<&'a Location> {
-    gd.table
-        .locations
-        .iter()
-        .find_map(|&li| gd.locations.get(li).filter(|l| l.name == loc_name))
-}
-
-/// Count `Action:Move` trace entries (the per-player / per-card dispatches).
-fn move_traces(trace: &[TraceEntry]) -> usize {
-    use front_end::ast::{ActionRule, GameRule};
-    trace
-        .iter()
-        .filter(|e| {
-            matches!(
-                e,
-                TraceEntry::Step {
-                    event: TraceEvent::Action { rule },
-                    ..
-                } if matches!(
-                    rule,
-                    GameRule::Action {
-                        action: ActionRule::Move { .. }
-                    }
-                )
-            )
-        })
-        .count()
-}
+use common::{load_game, move_traces, player_location, table_location};
 
 const SYNTH_KEY: &str = cgdsl_engine::quantifier::SYNTH_MEMORY_KEY;
 

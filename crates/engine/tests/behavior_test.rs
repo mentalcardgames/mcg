@@ -6,25 +6,13 @@
 //! deck order (`expand_types` cartesian product), and `deal N` takes the top
 //! N cards. Every hand, draw, and score below is therefore fully predictable.
 
-use std::path::PathBuf;
+mod common;
+
 use std::sync::{Arc, Mutex};
 
 use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
-use front_end::ir::{Ir, LoweredPayLoad};
-use front_end::validation::parse_document;
 
-fn load_game(name: &str) -> Ir<LoweredPayLoad> {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = manifest.join("test_games").join(name);
-    let src =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
-    let game = parse_document(&src).unwrap_or_else(|e| panic!("parse {}: {}", path.display(), e));
-    game.to_lowered_graph()
-}
-
-fn total_cards(gd: &GameData) -> usize {
-    gd.locations.iter().map(|l| l.cards.len()).sum()
-}
+use common::{load_game, total_cards, CurrentTracker};
 
 /// The `Hand` location owned by `player_name`.
 fn hand_location<'a>(gd: &'a GameData, player_name: &str) -> &'a cgdsl_engine::Location {
@@ -50,27 +38,12 @@ fn count_rank(gd: &GameData, player_name: &str, rank: &str) -> usize {
         .count()
 }
 
-fn players_in_game(gd: &GameData) -> Vec<&str> {
+fn in_game_players(gd: &GameData) -> Vec<&str> {
     gd.players
         .iter()
         .filter(|p| p.in_game)
         .map(|p| p.name.as_str())
         .collect()
-}
-
-/// Current-player tracker fed by an event_sender (I-23).
-struct Tracker(Arc<Mutex<Option<String>>>);
-
-impl Tracker {
-    fn new() -> Self {
-        Self(Arc::new(Mutex::new(None)))
-    }
-    fn sender(&self) -> Box<dyn Fn(&GameData) + Send> {
-        let inner = self.0.clone();
-        Box::new(move |gd: &GameData| {
-            *inner.lock().unwrap() = gd.get_current_player().map(|p| p.name.clone());
-        })
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +52,7 @@ impl Tracker {
 
 fn play_go_fish_ask(option_idx: usize) -> GameData {
     let ir = load_game("behavior_go_fish_ask.cgdsl");
-    let tracker = Tracker::new();
+    let tracker = CurrentTracker::new();
     let who_for_closure = tracker.0.clone();
     run_game_with(
         ir,
@@ -169,7 +142,7 @@ fn war_battle_captures_and_declares_winner() {
 
     // Rounds: Ace-D beats Two-C (P1), Two-D loses to Three-C (P2),
     // Three-D loses to Ace-C (P2). P2 captures 4, P1 captures 2.
-    assert_eq!(players_in_game(&gd), vec!["P2"], "P2 wins");
+    assert_eq!(in_game_players(&gd), vec!["P2"], "P2 wins");
     let p1 = &gd.players[0];
     let p2 = &gd.players[1];
     assert_eq!(p1.score, 2);
@@ -192,7 +165,7 @@ fn war_battle_captures_and_declares_winner() {
 #[test]
 fn blackjack_stands_dealer_draws_and_best_hand_wins() {
     let ir = load_game("behavior_blackjack.cgdsl");
-    let tracker = Tracker::new();
+    let tracker = CurrentTracker::new();
     let who_for_closure = tracker.0.clone();
     let gd = run_game_with(
         ir,
@@ -219,7 +192,7 @@ fn blackjack_stands_dealer_draws_and_best_hand_wins() {
     .expect("blackjack must complete");
 
     assert_eq!(
-        players_in_game(&gd),
+        in_game_players(&gd),
         vec!["P1"],
         "P1's 21 beats the dealer's 18"
     );
@@ -248,7 +221,7 @@ fn blackjack_stands_dealer_draws_and_best_hand_wins() {
 #[test]
 fn five_card_draw_scores_hand_bonuses() {
     let ir = load_game("behavior_five_card_draw.cgdsl");
-    let tracker = Tracker::new();
+    let tracker = CurrentTracker::new();
     let who_for_closure = tracker.0.clone();
     let gd = run_game_with(
         ir,
@@ -278,7 +251,7 @@ fn five_card_draw_scores_hand_bonuses() {
     // P3: 48 + flush(20) = 68 -> winner.
     let scores: Vec<i32> = gd.players.iter().map(|p| p.score).collect();
     assert_eq!(scores, vec![59, 40, 68], "sum + pair + flush bonuses");
-    assert_eq!(players_in_game(&gd), vec!["P3"]);
+    assert_eq!(in_game_players(&gd), vec!["P3"]);
     assert_eq!(total_cards(&gd), 15);
 }
 
@@ -289,7 +262,7 @@ fn five_card_draw_scores_hand_bonuses() {
 #[test]
 fn combo_laydown_prompts_and_validates() {
     let ir = load_game("behavior_combo_laydown.cgdsl");
-    let tracker = Tracker::new();
+    let tracker = CurrentTracker::new();
     let who_for_closure = tracker.0.clone();
     let asks = Arc::new(Mutex::new(0usize));
     let asks_clone = asks.clone();
@@ -359,7 +332,7 @@ fn combo_laydown_prompts_and_validates() {
 #[test]
 fn combo_book_lays_down_four_of_a_kind() {
     let ir = load_game("behavior_combo_book.cgdsl");
-    let tracker = Tracker::new();
+    let tracker = CurrentTracker::new();
     let who_for_closure = tracker.0.clone();
     let gd = run_game_with(
         ir,
@@ -406,7 +379,7 @@ fn combo_until_stage_loops_until_hand_cleared() {
     // Proposal B: `until Set in Hand empty` drives repeated laydown prompts
     // until no combo-matching cards remain.
     let ir = load_game("behavior_combo_until.cgdsl");
-    let tracker = Tracker::new();
+    let tracker = CurrentTracker::new();
     let who_for_closure = tracker.0.clone();
     let gd = run_game_with(
         ir,
@@ -452,7 +425,7 @@ fn combo_until_stage_loops_until_hand_cleared() {
 #[test]
 fn crazy_eights_empty_hand_wins() {
     let ir = load_game("behavior_crazy_eights.cgdsl");
-    let tracker = Tracker::new();
+    let tracker = CurrentTracker::new();
     let who_for_closure = tracker.0.clone();
     let gd = run_game_with(
         ir,
@@ -492,7 +465,7 @@ fn crazy_eights_empty_hand_wins() {
     .expect("crazy eights must complete");
 
     // P1 sheds all 5 cards; P2/P3 keep theirs. Lowest hand wins.
-    assert_eq!(players_in_game(&gd), vec!["P1"], "empty hand wins");
+    assert_eq!(in_game_players(&gd), vec!["P1"], "empty hand wins");
     assert_eq!(gd.players[0].score, 0);
     assert_eq!(gd.players[1].score, 5);
     assert_eq!(gd.players[2].score, 5);

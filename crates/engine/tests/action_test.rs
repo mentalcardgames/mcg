@@ -1,43 +1,20 @@
 //! Integration tests for `action.rs` arms, driven through `run_game` against
 //! `.cgdsl` fixtures. See `crates/engine/docs/testing.md` §3.3.
 
-use std::path::PathBuf;
+mod common;
+
 use std::sync::{Arc, Mutex};
 
-use cgdsl_engine::{
-    run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions, TraceEntry,
-    TraceEvent,
-};
-use front_end::ir::{Ir, LoweredPayLoad};
-use front_end::validation::parse_document;
+use cgdsl_engine::{run_game_with, GameData, RunOptions, TraceEntry, TraceEvent};
 
-fn load_game(name: &str) -> Ir<LoweredPayLoad> {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = manifest.join("test_games").join(name);
-    let src =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
-    let game = parse_document(&src).unwrap_or_else(|e| panic!("parse {}: {}", path.display(), e));
-    game.to_lowered_graph()
-}
-
-fn always_choice_0() -> InputSource {
-    InputSource::Player(Box::new(|_it: InputType| Input {
-        player_id: "P1".into(),
-        kind: InputKind::Choice { idx: 0 },
-    }))
-}
+use common::{default_input, load_game};
 
 /// `move top(Stock) private to Hand` where Hand exists: card moves.
 #[test]
 fn move_top_card_to_hand_succeeds() {
     let ir = load_game("action_move_top_to_hand.cgdsl");
-    let gd = run_game_with(
-        ir,
-        GameData::new(),
-        always_choice_0(),
-        RunOptions::default(),
-    )
-    .expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
     let stock = gd
         .locations
         .iter()
@@ -65,7 +42,7 @@ fn stage_round_counter_incremented_exactly_once_per_traversal() {
     let gd = run_game_with(
         ir,
         GameData::new(),
-        always_choice_0(),
+        default_input(),
         RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
             trace_clone.lock().unwrap().push(e);
         })),
@@ -103,13 +80,8 @@ fn stage_round_counter_incremented_exactly_once_per_traversal() {
 #[test]
 fn cycle_to_next_with_no_eligible_player_auto_ends() {
     let ir = load_game("errors_cycle_no_next.cgdsl");
-    let gd = run_game_with(
-        ir,
-        GameData::new(),
-        always_choice_0(),
-        RunOptions::default(),
-    )
-    .expect("cycle to next with nobody eligible must no-op and auto-end");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("cycle to next with nobody eligible must no-op and auto-end");
     assert!(
         gd.players.iter().all(|p| !p.in_game),
         "all players out => empty winner set"
@@ -123,13 +95,8 @@ fn cycle_to_next_with_no_eligible_player_auto_ends() {
 #[test]
 fn set_memory_without_current_player_is_skipped_and_auto_ends() {
     let ir = load_game("errors_set_memory_no_current.cgdsl");
-    let gd = run_game_with(
-        ir,
-        GameData::new(),
-        always_choice_0(),
-        RunOptions::default(),
-    )
-    .expect("skipped SetMemory must not error");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("skipped SetMemory must not error");
     assert!(
         gd.players.iter().all(|p| !p.in_game),
         "empty winner set after auto-end"
@@ -141,13 +108,8 @@ fn set_memory_without_current_player_is_skipped_and_auto_ends() {
 #[test]
 fn empty_where_set_destination_uses_base_location() {
     let ir = load_game("fix_empty_where_dest.cgdsl");
-    let gd = run_game_with(
-        ir,
-        GameData::new(),
-        always_choice_0(),
-        RunOptions::default(),
-    )
-    .expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
     let first = gd.locations.iter().find(|l| l.name == "First").unwrap();
     let second = gd.locations.iter().find(|l| l.name == "Second").unwrap();
     assert_eq!(first.cards.len(), 0, "location 0 must NOT receive the card");
@@ -158,12 +120,7 @@ fn empty_where_set_destination_uses_base_location() {
 #[test]
 fn combo_same_rank_matches_only_pairs() {
     let ir = load_game("fix_combo_same_rank.cgdsl");
-    let gd = run_game_with(
-        ir,
-        GameData::new(),
-        always_choice_0(),
-        RunOptions::default(),
-    )
-    .expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
     assert_eq!(gd.players[0].score, 2, "pair = 2 cards, not 3");
 }

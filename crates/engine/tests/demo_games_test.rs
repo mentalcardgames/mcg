@@ -3,45 +3,13 @@
 // structural (card counts, completion, winner existence) rather than
 // value-based.
 
-use std::path::PathBuf;
+mod common;
+
 use std::sync::{Arc, Mutex};
 
 use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
-use front_end::ir::{Ir, LoweredPayLoad};
-use front_end::validation::parse_document;
 
-fn load_game(name: &str) -> Ir<LoweredPayLoad> {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = manifest.join("test_games").join(name);
-    let src =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
-    let game = parse_document(&src).unwrap_or_else(|e| panic!("parse {}: {}", path.display(), e));
-    game.to_lowered_graph()
-}
-
-/// Current-player tracker fed by an event_sender; answers carry the right
-/// player_id so the controller's player validation (I-23) never re-prompts.
-struct CurrentTracker(Arc<Mutex<Option<String>>>);
-
-impl CurrentTracker {
-    fn new() -> Self {
-        Self(Arc::new(Mutex::new(None)))
-    }
-    fn sender(&self) -> Box<dyn Fn(&GameData) + Send> {
-        let inner = self.0.clone();
-        Box::new(move |gd: &GameData| {
-            *inner.lock().unwrap() = gd.get_current_player().map(|p| p.name.clone());
-        })
-    }
-}
-
-fn total_cards(gd: &GameData) -> usize {
-    gd.locations.iter().map(|l| l.cards.len()).sum()
-}
-
-fn players_in_game(gd: &GameData) -> usize {
-    gd.players.iter().filter(|p| p.in_game).count()
-}
+use common::{load_game, players_in_game, total_cards, CurrentTracker};
 
 #[test]
 fn war_runs_to_completion() {
