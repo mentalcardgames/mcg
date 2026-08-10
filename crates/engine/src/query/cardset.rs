@@ -87,26 +87,32 @@ impl Evaluator {
                     .iter()
                     .position(|p| p.name == owner_name)
                     .unwrap_or(usize::MAX);
-                let filtered: Vec<usize> = card_ids
-                    .into_iter()
-                    .filter(|&card_id| {
-                        for (loc_i, loc) in game_data.locations.iter().enumerate() {
-                            if loc.cards.contains(&card_id) {
-                                if game_data.table.locations.contains(&loc_i) {
-                                    return owner_name == "Table";
-                                }
-                                if game_data.players[owner_idx]
-                                    .owner
-                                    .locations
-                                    .contains(&loc_i)
-                                {
-                                    return true;
+                let filtered: Vec<usize> = if owner_idx == usize::MAX {
+                    // The owner is a team (or unknown) — ownership cannot be
+                    // verified per player; keep the evaluated cards.
+                    card_ids.clone()
+                } else {
+                    card_ids
+                        .into_iter()
+                        .filter(|&card_id| {
+                            for (loc_i, loc) in game_data.locations.iter().enumerate() {
+                                if loc.cards.contains(&card_id) {
+                                    if game_data.table.locations.contains(&loc_i) {
+                                        return owner_name == "Table";
+                                    }
+                                    if game_data.players[owner_idx]
+                                        .owner
+                                        .locations
+                                        .contains(&loc_i)
+                                    {
+                                        return true;
+                                    }
                                 }
                             }
-                        }
-                        false
-                    })
-                    .collect();
+                            false
+                        })
+                        .collect()
+                };
                 let dest_loc_idx = match Self::group_location_name(group) {
                     Some(name) => {
                         Self::find_owned_location(&owner_name, name, game_data).unwrap_or(loc_idx)
@@ -147,9 +153,9 @@ impl Evaluator {
     }
 
     /// Find the index of the location named `loc_name` that is owned by
-    /// `owner_name` (a player name or `"Table"`). Used to resolve a
-    /// dest-qualified `GroupOwner` to the owner's own location rather than the
-    /// first name match.
+    /// `owner_name` (a player name, a team name, or `"Table"`). Used to
+    /// resolve a dest-qualified `GroupOwner` to the owner's own location
+    /// rather than the first name match.
     fn find_owned_location(
         owner_name: &str,
         loc_name: &str,
@@ -165,6 +171,9 @@ impl Evaluator {
                 }
                 if owner_name == "Table" {
                     return game_data.table.locations.contains(idx);
+                }
+                if let Some(team) = game_data.teams.iter().find(|t| t.name == owner_name) {
+                    return team.owner.locations.contains(idx);
                 }
                 game_data
                     .players
@@ -199,10 +208,25 @@ impl Evaluator {
         Some((loc_idx, game_data.locations[loc_idx].cards.clone()))
     }
 
+    /// Bare-name resolution: the current player's own location, then the
+    /// current player's **team** location, then the Table's, then the first
+    /// location with that name anywhere.
     fn resolve_location_by_name(name: &str, game_data: &GameData) -> Option<usize> {
         if let Some(current) = game_data.get_current_player() {
             if let Some(idx) = Self::find_owned_location(&current.name, name, game_data) {
                 return Some(idx);
+            }
+            if let Some(player_idx) = game_data
+                .current_player
+                .and_then(|pos| game_data.turn_order.get(pos).copied())
+            {
+                for team in &game_data.teams {
+                    if team.players.contains(&player_idx) {
+                        if let Some(idx) = Self::find_owned_location(&team.name, name, game_data) {
+                            return Some(idx);
+                        }
+                    }
+                }
             }
         }
         if let Some(idx) = Self::find_owned_location("Table", name, game_data) {

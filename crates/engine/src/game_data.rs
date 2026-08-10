@@ -64,7 +64,7 @@ pub enum MemoryValue {
     LocationCollection(Vec<usize>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct OwnerData {
     pub locations: Vec<usize>,
     // later: memories
@@ -89,6 +89,9 @@ pub struct Location {
 pub struct Team {
     pub name: String,
     pub players: Vec<usize>,
+    /// Team-owned locations (`location X on T:Red`): ONE shared pile per
+    /// team (mirroring `Table`'s ownership role for the team entity).
+    pub owner: OwnerData,
 }
 
 #[derive(Clone)]
@@ -144,6 +147,9 @@ impl GameData {
         // find owner and push location
         if owner_name == "Table" {
             self.table.locations.push(location_id);
+        } else if let Some(team) = self.teams.iter_mut().find(|t| t.name == owner_name) {
+            // Team-owned locations: one shared pile per team.
+            team.owner.locations.push(location_id);
         } else {
             let player_id = self
                 .players

@@ -197,17 +197,6 @@ pub enum EngineError {
     #[error("resolve_owner_to_name: TeamCollection cannot resolve to a single name")]
     OwnerNameFromTeamCollection,
 
-    /// `resolve_owner_to_names` on a team owner — team-owned locations and
-    /// memories are not in the data model.
-    #[error(
-        "resolve_owner_to_names: team '{name}' cannot own a location or memory (team-owned locations are not in the data model)"
-    )]
-    TeamCannotOwn { name: String },
-
-    /// `resolve_owner_to_names` on a multi-team owner.
-    #[error("resolve_owner_to_names: TeamCollection cannot resolve to owner names")]
-    OwnerNamesFromTeamCollection,
-
     /// `QueryString::KeyOf` — the card id does not exist.
     #[error("Card {card_id} not found")]
     CardNotFound { card_id: usize },
@@ -589,8 +578,6 @@ impl EngineError {
             | EngineError::ResolvePlayerCollectionPlayerNotFound { .. }
             | EngineError::OwnerNameFromPlayerCollection
             | EngineError::OwnerNameFromTeamCollection
-            | EngineError::TeamCannotOwn { .. }
-            | EngineError::OwnerNamesFromTeamCollection
             | EngineError::CardNotFound { .. }
             | EngineError::CardKeyNotFound { .. }
             | EngineError::LocationNotFoundForOwner { .. }

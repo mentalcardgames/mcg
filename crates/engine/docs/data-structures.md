@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/interpreter/ir_ext.rs
   - crates/engine/src/controller/mod.rs
   - crates/front_end/src/ir.rs
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # Data Structures & State Model
@@ -36,7 +36,7 @@ serialization is handled separately by `crates/engine/src/debug/mod.rs`).
 // crates/engine/src/game_data.rs:22
 pub type Card = HashMap<String, String>;
 
-// crates/engine/src/game_data.rs:30-35  (added 2026-08, reserved for card encryption)
+// crates/engine/src/game_data.rs:30-35  (reserved for card encryption)
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum CardStatus { FaceUp, FaceDown, Private }
 
@@ -66,18 +66,18 @@ attributes (e.g. `Rank → Ace`, `Suite → Hearts`). Cards are stored **only** 
 (a "card id"). Locations hold card ids, not cards.
 
 `crates::engine::game_data::CardStatus` (`game_data.rs:30-35`) is a per-card visibility slot,
-stored **parallel to `cards`** in `GameData::card_statuses` (same indexing). It was added 2026-08
+stored **parallel to `cards`** in `GameData::card_statuses` (same indexing)
 and is currently **unused by the engine**: every card is created `FaceUp`, and `card_status` /
 `set_card_status` (`game_data.rs:190-198`) are the only accessors. It is reserved for the card
 encryption work — `FlipAction` should become (de)encrypting a card's face (see
-`engine-vs-design.md` §1b).
+`dsl-semantics.md` §3.8).
 
 | Struct | Location | Fields | Role |
 |---|---|---|---|
 | `crates::engine::game_data::OwnerData` | `crates/engine/src/game_data.rs:67-71` | `locations: Vec<usize>` | Ownership of location indices; held by both `GameData::table` and each `Player`. |
 | `crates::engine::game_data::Player` | `crates/engine/src/game_data.rs:73-80` | `name, score: i32, owner: OwnerData, in_game: bool, in_stage: HashMap<String,bool>` | Per-player state; `in_stage` tracks participation per named stage. |
 | `crates::engine::game_data::Location` | `crates/engine/src/game_data.rs:82-86` | `name: String, cards: Vec<usize>` | A named pile; `cards` is an ordered list of card ids. |
-| `crates::engine::game_data::Team` | `crates/engine/src/game_data.rs:88-92` | `name, players: Vec<usize>` | Named group of player indices. |
+| `crates::engine::game_data::Team` | `crates/engine/src/game_data.rs:88-92` | `name, players: Vec<usize>, owner: OwnerData` | Named group of player indices; `owner` holds the team's shared locations (`location X on T:Red`) |
 | `crates::engine::game_data::Combo` | `crates/engine/src/game_data.rs:94-98` | `name: String, filter: front_end::ast::FilterExpr` | A named, reusable card filter (from `front_end::ast`). |
 | `crates::engine::game_data::Precedence` | `crates/engine/src/game_data.rs:101-107` | `name, key: String, values: Vec<String>` | Ordered values on one key, low→high. Used by `Adjacent`/`Higher`/`Lower`/`ExtremaPrecedence`. |
 | `crates::engine::game_data::PointMap` | `crates/engine/src/game_data.rs:109-114` | `name, map: HashMap<String,i32>` | Maps `"key:value"` → points. Used by `SumOfCardSet`, `ExtremaCardset`, `ExtremaPointMap`. |
@@ -98,12 +98,11 @@ pub enum MemoryValue {
 ```
 
 `crates::engine::game_data::MemoryValue` is the dynamically-typed storage for DSL "memory"
-variables. `MemoryValue::TeamCollection(Vec<String>)` (added 2026-08-10) holds a stored team
-collection — previously a stored team collection was represented as `MemoryValue::Team(String)`
-holding one team name (the read sites are `crates/engine/src/query/int.rs:271-295` and
+variables. `MemoryValue::TeamCollection(Vec<String>)` holds a stored team
+collection (team names; the read sites are `crates/engine/src/query/int.rs:271-295` and
 `crates/engine/src/query/player.rs:186-195`), and `front_end::ast::MemoryType::TeamCollection`
-initialized to `MemoryValue::Int(0)`, a known mismatch documented as invariant I-10 in
-[`invariants.md`](./invariants.md) (fixed 2026-08-10). The `MemoryValue::CardSet` variant is also
+initialises to an empty team list (invariant I-10 in
+[`invariants.md`](./invariants.md)). The `MemoryValue::CardSet` variant is also
 used by the quantifier subsystem to carry player-chosen card ids — see the `SYNTH_MEMORY_KEY`
 discussion in [`observability.md`](./observability.md) and invariant I-18 in
 [`invariants.md`](./invariants.md).
@@ -323,7 +322,7 @@ holds **no state**; every method takes `&GameData` (all reads are immutable). Po
 query module was split into submodules (`bool.rs`, `cardset.rs`, `int.rs`, `player.rs`,
 `string.rs`) all hanging methods off the shared `Evaluator` struct.
 
-**Fallibility (2026-08):** `resolve_players` and `resolve_player_collection` return
+**Fallibility:** `resolve_players` and `resolve_player_collection` return
 `Result<Vec<usize>, String>` — player-expressions that cannot be evaluated (e.g. `next` with no
 eligible player) or that reference unknown players yield `Err` instead of panicking.
 `resolve_quantity` takes `&GameData` and evaluates runtime int expressions against the live
@@ -332,4 +331,4 @@ state. `resolve_owner_to_names` (plural) routes `Owner::PlayerCollection` throug
 owner that the setup path produces. The former `todo!()`/silent-empty collection-memory arms
 (`PlayerCollection::Aggregate`/`AggregateMemory`/`Memory`, `IntCollection::AggregateMemory`,
 `TeamCollection::AggregateMemory`, `StringCollection::AggregateMemory`) are implemented; see
-`engine-vs-design.md` F-9/F-13.
+`engine-vs-design.md`.

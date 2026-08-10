@@ -8,7 +8,7 @@ associated_files:
   - crates/engine/src/bin/engine-tui/main.rs
   - crates/engine/src/controller/trace_logger.rs
   - crates/engine/src/controller/mod.rs
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # Quick Start
@@ -105,7 +105,7 @@ For the full host contract (event/trace callbacks, manual Mode-B driving, the
 ## 6. Tests & tooling
 
 ```sh
-cargo test -p cgdsl-engine                 # full suite (550 tests)
+cargo test -p cgdsl-engine                 # full suite (551 tests)
 cargo test -p cgdsl-engine --test flow_test  # one integration file
 cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings
 cargo fmt -p cgdsl-engine -- --check

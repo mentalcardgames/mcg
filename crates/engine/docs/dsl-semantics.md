@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all]
 topics: [dsl, semantics, specification, reference, interpretation]
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # DSL Semantics Reference
@@ -47,7 +47,8 @@ declaration order). After setup, `turnorder` can override the turn order.
 
 **Engine:** Resolves the player collection to player indices and pushes a
 `Team { name, players: indices }` onto `gd.teams`. An `all` quantifier resolves
-to all in-game players in declaration order.
+to all in-game players in declaration order; `any` prompts for one player
+during setup (the chosen player is substituted before the rule runs).
 
 ---
 
@@ -57,19 +58,24 @@ to all in-game players in declaration order.
 
 **Engine:** Resolves the player collection to a `Vec<usize>` and assigns it to
 `gd.turn_order`, replacing the default declaration-order list. The `random`
-variant shuffles the resolved list via `rand::thread_rng()`.
+variant shuffles the resolved list.
 
 ---
 
 ### 1.4 `location <name> on <owner>`
 
-**DSL:** `location Hand on all` / `location Stock on table`
+**DSL:** `location Hand on all` / `location Stock on table` /
+`location TeamPile on T:Red`
 
 **Engine:** `resolve_owner_to_names(&owner, gd)` produces a list of owner names
 (`"Table"`, `"P1"`, `"P2"`, ...). For each owner name, calls
 `gd.add_location(owner_name, Location { name, cards: vec![] })`. When the owner
 is `all`, one `Location` is created per resolved player, each owned by that
-player. Table-owned locations are globally visible.
+player. A **team owner** creates **one shared location for the whole team**,
+owned by the team entity (bare-name resolution finds the current player's
+team's pile; `X of T:Red` addresses it explicitly). Table-owned locations are
+globally visible. An `any` owner prompts for one player at setup, then
+behaves like that player.
 
 ---
 
@@ -128,22 +134,25 @@ supports the shorthand `key_value_int_list` form.
 
 **Engine:** Calls `gd.add_memory(key, owner_name, memory_type, initial)`
 where `key` is `format!("{}_{}", owner_name, name)`. Stores the entry in a
-global `HashMap` (`gd.memories`). Since 2026-08-10 the type-expression is
-**evaluated at setup time** and honoured as the initial value (previously the
-int value was silently dropped and every type defaulted to `Int(0)`):
+global `HashMap` (`gd.memories`). The type-expression is **evaluated at setup
+time** and honoured as the initial value:
 
-- `Int { int }` → `MemoryValue::Int(eval_int(int))` (e.g. `memory Pot 100 on
-  table` really initialises `Table_pot` to 100)
+- `Int { int }` → `MemoryValue::Int(eval_int(int))` — `memory Pot 100 on
+  table` really initialises `Table_pot` to 100
 - `String { string }` → the evaluated string
 - `Player { player }` → the evaluated player **name** (as a `String`,
   matching the `SetMemory` storage convention); a player-owned slot
   initialises to its **own owner** instead (so `&P:X of P:Pi` reads the
-  slot's own player) — I-10 fixed
+  slot's own player)
 - `Team { team }` → the evaluated team name
 - Collections (`PlayerCollection`, `StringCollection`, `IntCollection`,
   `TeamCollection`, `LocationCollection`, `CardSet`) → their evaluated
   contents (empty when the collection has no members)
 - `None` / other → `MemoryValue::Int(0)`
+
+A **team owner** (`memory M on T:Red`) creates **one slot per team**, keyed
+by the team name (`Red_M`) — matching the read/write addressing
+(`(&I:M of T:Red)`, `bid 5 on M of T:Red`).
 
 **NOTE:** The grammar has no `with I:` syntax; the type is just a bare
 expression: `memory M 42 on P:P1`.
@@ -183,8 +192,7 @@ The IR builder lowers a stage to:
 ```
 
 **NOTE:** the end condition is checked at stage *entry* — effects produced
-mid-body (e.g. "a player emptied their hand") are observed on the next entry
-(see `engine-vs-design.md` D-2).
+mid-body (e.g. "a player emptied their hand") are observed on the next entry.
 
 ---
 
@@ -195,7 +203,8 @@ mid-body (e.g. "a player emptied their hand") are observed on the next entry
 **Engine:** The stage body runs exactly `N` times (the loop-back
 `StageRoundCounter` is compared against `N`). **The `for <players>` clause is
 parsed but currently dropped during IR lowering** — all players are marked
-in-stage regardless (known bug B-1 / P-1).
+in-stage regardless (P-1); use `set … out of <stage>` and
+`cycle to next` to scope participation.
 
 ---
 
@@ -218,7 +227,21 @@ jump, not by condition evaluation.
 
 ---
 
-### 2.6 Ineligible-player skip & stage auto-end (2026-08-10)
+### 2.5 `end stage` / `end <stage_name>`
+
+**DSL:** `end stage` (current) / `end Play` (named)
+
+**Engine:** Dispatched via `ActionRule::EndAction`:
+- `EndType::Turn` → `gd.next_player()` (walks turn_order to next eligible)
+- `EndType::CurrentStage` → `gd.leave_stage(gd.get_current_stage())`
+- `EndType::Stage { stage }` → `gd.leave_stage(stage)`
+
+`leave_stage` pops `stage_stack` through and including the named stage. If the
+stage is not found on the stack, the entire stack is drained (invariant I-11).
+
+---
+
+### 2.6 Ineligible-player skip & stage auto-end
 
 A player who is **out of the game** or **out of the current stage** is never
 offered input, and none of their instructions run:
@@ -237,31 +260,16 @@ offered input, and none of their instructions run:
   (setup, top-level rules) nothing is skipped.
 
 **Auto-end:** at every stage end-condition evaluation the engine also exits
-the stage when (a) **no players remain in the game** — the game then runs
-out to the goal with an **empty winner set** — or (b) **no players remain in
-the stage** (everyone was set out of it). This replaces the former
-`cycle to next` error and the silent stuck-game paths.
+the stage when (a) **no players remain in the game** — the game then runs out
+to the goal with an **empty winner set** — or (b) **no players remain in the
+stage** (everyone was set out of it).
 
-**`next` / `previous` eligibility (I-13 / D-12, fixed 2026-08-10):**
-`next` and `previous` skip ineligible players in their scan direction and
-wrap onto the **current player itself** when it is the only eligible one
-(`cycle to next` in a 1-player endgame keeps the turn). `cycle to next` with
-**no** eligible player at all (not even the current one) is a **no-op** —
-the auto-end above terminates the stage. `end turn` behaves the same.
-
----
-
-### 2.5 `end stage` / `end <stage_name>`
-
-**DSL:** `end stage` (current) / `end Play` (named)
-
-**Engine:** Dispatched via `ActionRule::EndAction`:
-- `EndType::Turn` → `gd.next_player()` (walks turn_order to next eligible)
-- `EndType::CurrentStage` → `gd.leave_stage(gd.get_current_stage())`
-- `EndType::Stage { stage }` → `gd.leave_stage(stage)`
-
-`leave_stage` pops `stage_stack` through and including the named stage. If the
-stage is not found on the stack, the entire stack is drained (invariant I-11).
+**`next` / `previous` eligibility:** both skip ineligible players in their
+scan direction and wrap onto the **current player itself** when it is the only
+eligible one (`cycle to next` in a 1-player endgame keeps the turn).
+`cycle to next` with **no** eligible player at all (not even the current one)
+is a **no-op** — the auto-end above terminates the stage. `end turn` behaves
+the same.
 
 ---
 
@@ -270,7 +278,7 @@ stage is not found on the stack, the entire stack is drained (invariant I-11).
 **DSL:** (parsed but not distinguished from `SeqStage` at IR level)
 
 **Engine:** `build_sim_stage` lowers to the exact same sequential IR as
-`build_seq_stage`. There is no per-player sub-FSM fan-out (known bug B-3 / P-2).
+`build_seq_stage`. There is no per-player sub-FSM fan-out (P-2).
 
 ---
 
@@ -279,7 +287,7 @@ stage is not found on the stack, the entire stack is drained (invariant I-11).
 Action rules execute inside stage bodies or trigger rules. They mutate
 `GameData` directly.
 
-### 3.1 `move` / `deal` / `exchange`
+### 3.1 `move` / `deal` / `exchange` — verb semantics
 
 **DSL:**
 ```
@@ -291,46 +299,47 @@ exchange any from Stock face down to Discard
 **Engine:** All three route through `execute_cardset_move(from, quantity, status, to, gd)`.
 The `from` and `to` are evaluated via `eval_cardset`, returning
 `(location_idx, Vec<card_ids>)`. Cards are removed from the source location's
-`cards` vec and appended to the destination's. The `quantity` parameter limits
-how many cards to move (resolved via `resolve_quantity` against the live
-state). Card `status` is parsed but **ignored** — cards carry no status
-behaviour until the card-encryption work (`engine-vs-design.md` §1b).
+`cards` vec and appended to the destination's. Card `status` is parsed but
+**ignored** — cards carry no status behaviour until the card-encryption work
+(§3.8).
 
-**Verb semantics (2026-08-10):** the verb decides whether the player chooses
-the cards, and the quantity decides how many:
+**The verb decides whether the player chooses the cards:**
 
 | Quantity | `deal` (automatic, from the top) | `move` / `exchange` (player picks) |
 |---|---|---|
 | `N` (literal or runtime expr) | top N, automatic | `ChooseCards` prompt, **min=max=N** (clamped to available; `SrcCardsExactN`) |
 | `all` | all, automatic | all, automatic |
-| `any` | `Number` prompt "how many?" (1..pile size), then top-N | `ChooseCards` prompt, 1..N (unchanged) |
-| `>= M and <= N` | `Number` prompt bounded M..N, then top-N (`DealCount`) | `ChooseCards` prompt M..N (unchanged) |
+| `any` | `Number` prompt "how many?" (1..pile size), then top-N | `ChooseCards` prompt, 1..N (`SrcCardsAnyOrRange`) |
+| `>= M and <= N` | `Number` prompt bounded M..N, then top-N (`DealCount`) | `ChooseCards` prompt M..N |
 | `>= M and <= M` (degenerate) | top M, automatic | pick exactly M |
 | omitted | all, automatic | all, automatic |
 
 A **positional source** (`top(X)`, `bottom(X)`, `X[N]`, extrema) is always
 automatic for any verb and quantity — the position already chose the card(s);
 `where`-filtered sources are *not* positional and prompt. Empty sources and
-`0`/negative quantities are no-ops. `any`/range quantities on a `deal` are
-intercepted by the quantifier preprocessor as [`QuantSite::DealCount`] (the
-count round-trips as `InputType::Number`/`Input::Number`, bounded and
-re-validated); literal `N` on `move`/`exchange` becomes
-[`QuantSite::SrcCardsExactN`]. Both chain with dest-quantifier fan-outs
-(`deal any from Deck to Hand of all` asks the count once, then deals to every
-player).
+`0`/negative quantities are no-ops.
+
+The prompt round-trips are handled by the quantifier preprocessor: the
+`DealCount` count prompt uses `InputType::Number`/`Input::Number` (bounds
+re-validated on resume), and `SrcCardsExactN`/`SrcCardsAnyOrRange` use
+`ChooseCards` (the chosen ids travel through a synthetic memory slot). Both
+chain with player quantifiers and dest fan-outs (`deal any from Deck to Hand
+of all` asks the count once, then deals to every player; `move 1 from Hand of
+any …` prompts for the player first, then the card).
 
 **Combo-source moves** (`move <combo> in <pile> ...`, e.g. laying down a
 Rummy set): the preprocessor prompts the player to choose cards from the
 *whole* pile and then **validates the choice against the combo's filter**,
 re-prompting on mismatch — so `combo Set where (same Rank and size >= 3)`
-rejects a two-of-a-kind selection. Combine with a stage loop to lay down
-everything: `stage Laydown for current until Set in Hand empty { move Set in
+rejects a two-of-a-kind selection. An empty selection is a valid no-op
+("skip"). Combine with a stage loop to lay down everything:
+`stage Laydown for current until Set in Hand empty { move Set in
 Hand of current private to Table }` (`until <combo> in <pile> empty` is a
 valid end condition — a combo group is a cardset).
 
 **NOTE:** an empty source set is a no-op (nothing moves, the destination is
 not evaluated); a `where`-filtered destination with no matches resolves to the
-base location of the groupable (D-11, fixed 2026-08-09).
+base location of the groupable.
 
 ---
 
@@ -340,8 +349,8 @@ base location of the groupable (D-11, fixed 2026-08-09).
 
 **Engine:** Evaluates the `CardSet`, then shuffles **only the selected cards in
 place** within their location — unselected cards stay put (e.g.
-`shuffle top 3 of Deck` does not discard the rest of the pile). Uses
-`rand::thread_rng()`. Evaluation failures are recoverable errors.
+`shuffle top 3 of Deck` does not discard the rest of the pile). Evaluation
+failures are recoverable errors.
 
 ---
 
@@ -356,12 +365,11 @@ player not in `turn_order`) are **recoverable errors**.
 
 `next` resolves via `RuntimePlayer::Next` → the next eligible player's name
 (wrapping turn order, skipping players who are out of game or out of the
-current stage). Since 2026-08-10, with no eligible *other* player the turn
-**wraps onto the current player** when it is still eligible (I-13 relaxed —
-elimination games no longer need `if (size(playersin) >= 2)` guards), and
-`cycle to next` with **no eligible player at all** is a **no-op** (the stage's
-auto-end, §2.6, terminates the game). `previous` mirrors `next` with a reverse
-scan and the same self-wrap (D-12 fixed).
+current stage). With no eligible *other* player the turn **wraps onto the
+current player** when it is still eligible, and `cycle to next` with **no
+eligible player at all** is a **no-op** (the stage's auto-end, §2.6,
+terminates the game). `previous` mirrors `next` with a reverse scan and the
+same self-wrap.
 
 ---
 
@@ -389,10 +397,10 @@ success/fail outcome is tracked — see `engine-vs-design.md` D-9).
 
 | Sub-variant | Behavior |
 |-------------|----------|
-| `end turn` | `gd.next_player()` — advances to next eligible player in turn order |
+| `end turn` | `gd.next_player()` — advances to next eligible player in turn order (wrapping onto the current player when it is the only eligible one) |
 | `end stage` | `gd.leave_stage(gd.get_current_stage())` |
 | `end <name>` | `gd.leave_stage(name)` |
-| `end game with winner <players>` | **Since 2026-08-10** the declared winners eliminate everyone else (mirroring `winner is X`), then the IR jumps straight to the goal state (game ends) — the in-game survivors ARE the winner set (`GameData::winner_names`) |
+| `end game with winner <players>` | The declared winners eliminate everyone else (mirroring `winner is X`), then the IR jumps straight to the goal state (game ends) — the in-game survivors ARE the winner set |
 
 `next_player` calls `resolve_turn`, which scans `turn_order` for the next
 player with `in_game && in_stage[current_stage]`. If none found,
@@ -416,27 +424,25 @@ reset M
 
 **Engine:**
 - `SetMemory`: Evaluates the `MemoryType` expression (all variants —
-  collections are evaluated to their real contents since 2026-08-10;
-  previously they inserted typed empty defaults). Inserts the result into
+  collections are evaluated to their real contents). Inserts the result into
   `gd.memories` under the key `"<Owner>_<memory>"`.
-- **Write-owner resolution (D-14, fixed 2026-08-10):** the write rules have
-  no `of <owner>` clause in the grammar, so the target owner is resolved as:
+- **Write-owner resolution:** the write rules have no `of <owner>` clause in
+  the grammar, so the target owner is resolved as:
   1. the **declared owner** — if exactly one existing slot ends in
      `_{memory}` (e.g. `memory pot on table` → `Table_pot` exists), that
      owner wins (`pot is 5` writes `Table_pot`);
-  2. else the **current player** (the legacy bridge);
+  2. else the **current player** (the bridge);
   3. else a recoverable error (`SetMemoryNoCurrentPlayer` /
      `ResetMemoryNoCurrentPlayer`).
-- `ResetMemory`: resets the slot to its **typed zero** for every variant
-  (2026-08-10; previously only `Int` was reset and everything else silently
-  no-oped): `Int`→0, `String`→`""`, `Team`→`""`, collections→empty.
+- `ResetMemory`: resets the slot to its **typed zero** for every variant:
+  `Int`→0, `String`→`""`, `Team`→`""`, collections→empty.
 - Bare memory reads (`&I:M` without `of <owner>`) resolve through the same
-  owner resolution as writes (declared owner → current player → error) so
-  reads and writes agree (P-4, fixed 2026-08-10).
+  owner resolution as writes (declared owner → current player → error), so
+  reads and writes always agree.
 
 ---
 
-### 3.7 `bid <quantity> on <memory> of <owner>` — the numeric input prompt (2026-08-10)
+### 3.7 `bid <quantity> on <memory> of <owner>` — the numeric input prompt
 
 **DSL:**
 ```
@@ -451,15 +457,14 @@ for a number and store it in the owner's memory slot":
 - `Quantity::Int` (literal or runtime int expression) writes the evaluated
   value directly without prompting.
 - `any` / `>= M and <= N` issue `NeedsInput(InputType::Number { min, max,
-  prompt })` (new 2026-08-10); the answer is `Input::Number { value }`,
-  bounds are validated and out-of-range answers are rejected and re-asked
-  (both by the controller for `Player`-sourced input and by the
-  interpreter's resume path). The resumed edge carries the literal.
+  prompt })`; the answer is `Input::Number { value }`, bounds are validated
+  and out-of-range answers are rejected and re-asked (both by the controller
+  for `Player`-sourced input and by the interpreter's resume path). The
+  resumed edge carries the literal.
 - The write targets `{owner}_{memory}` via `resolve_owner_to_name` (Table,
   player, or team name).
 - A plain `bid <qty>` **without** a memory target is a recoverable error
-  (`BidWithoutMemoryTarget`) — previously a silent no-op (D-7, partially
-  fixed: the memory form now has semantics; `demand` remains undefined).
+  (`BidWithoutMemoryTarget`).
 
 ---
 
@@ -469,7 +474,7 @@ for a number and store it in the owner's memory slot":
 
 **Engine:** No-op by design until card encryption lands — flipping a card is
 (de)encrypting its face. The per-card status slot (`GameData::card_statuses`)
-exists but is unused (see `engine-vs-design.md` §1b).
+exists but is unused.
 
 ---
 
@@ -550,8 +555,8 @@ winner is highest m          ← memory-backed
 | WinnerType | Value per player `i` |
 |------------|---------------------|
 | `Score` | `gd.players[i].score` (as `usize`) |
-| `Position` | index of player `i` in `gd.turn_order` (0-based). Players **absent from `turn_order` are excluded** from the comparison (D-10, fixed 2026-08-10 — previously they scored `usize::MAX`, letting a non-participant win `lowest position`) |
-| `Memory { key }` | reads `gd.memories["<player_name>_<key>"]`. Players **without the slot are skipped** (D-13, fixed 2026-08-10 — previously treated as 0); a **non-Int** slot is a recoverable error (`WinnerMemoryNotInt`) |
+| `Position` | index of player `i` in `gd.turn_order` (0-based). Players **absent from `turn_order` are excluded** from the comparison |
+| `Memory { key }` | reads `gd.memories["<player_name>_<key>"]`. Players **without the slot are skipped**; a **non-Int** slot is a recoverable error (`WinnerMemoryNotInt`) |
 
 Then finds the target value: `Max` → highest across all in-game players, `Min`
 → lowest. Eliminates all players whose value ≠ target via `set_player_out`.
@@ -564,6 +569,19 @@ useful when the memory was written per player (e.g. via `score ... to memory`).
 
 ---
 
+### 4.5 The winner set at game end
+
+Every game terminates with a **winner set**: the players still `in_game` when
+the FSM reaches the goal, in declaration order (`GameData::winner_names()`);
+empty when nobody won. Both explicit winner declarations (`winner is X`,
+`end game with winner X`) and implicit endings reduce to this rule, because
+declarations eliminate everyone else. The tooling displays the winner set at
+game end (TUI trace log, trace-file footer, `cgdsl-play` summary), and hosts
+can read it from the terminal `GameData` or the `TraceEvent::GameOver`
+event.
+
+---
+
 ## 5. Control Flow
 
 ### 5.1 `choose { A B or C D }`
@@ -573,9 +591,7 @@ useful when the memory was written per player (e.g. via `score ... to memory`).
 **Engine:** Each `or`-separated option is a **sequence** of flow components
 (`choose { A B or C }` = two options: `[A, B]` and `[C]`). Lowers to a
 `Payload::Choice` state with one edge per option; the chosen option's whole
-sequence executes in order. `edge_labels` on the IR resolve human-readable
-labels from the target state's first payload (action descriptions, condition
-text, etc.). The interpreter issues
+sequence executes in order. The interpreter issues
 `NeedsInput(InputType::Choice { options, max_index })`. The player returns
 `InputKind::Choice { idx }` (0-based). Out-of-range indices silently stall
 (invariant I-8).
@@ -611,10 +627,7 @@ See invariant I-3 for the inverted edge-indexing relationship between
 
 **NOTE:** `unless` does **not** exist in the grammar. Use `if (not <expr>)` —
 parentheses around the inner bool do **not** parse (`not (X)` is rejected by
-the PEG grammar; write `not Hand empty`, `not current out of game`). A leading
-`not` before a combo group binds to the boolean, not the combo
-(`not Book in Hand of current empty` = "the Book cards are not empty" —
-fixed 2026-08-09, F-15).
+the PEG grammar; write `not Hand empty`, `not current out of game`).
 
 ---
 
@@ -628,11 +641,12 @@ trigger {
 ```
 
 Triggers are top-level `flow_component` rules that fire immediately when
-encountered.
+encountered: a top-level trigger fires once before any stage; a trigger inside
+a stage body fires on every iteration.
 
 **Engine:** The IR builder wraps trigger-rule bodies in `Payload::Trigger`
 edges; the interpreter advances through them without prompting and the body
-executes once.
+executes once per encounter.
 
 ---
 
@@ -701,7 +715,7 @@ edge is built that reads from that memory, and `current_state` advances.
 
 ---
 
-### 6.3b The `deal` count prompt (`DealCount`, 2026-08-10)
+### 6.3b The `deal` count prompt (`DealCount`)
 
 **DSL:** `deal any from Stock private to Hand` / `deal >= 2 and <= 4 from
 Stock private to Hand`
@@ -717,11 +731,11 @@ chains: one count prompt, then per-player top-N deals.
 
 ---
 
-### 6.4 `move N` — pick exactly N (`SrcCardsExactN`, 2026-08-10)
+### 6.4 `move N` — pick exactly N (`SrcCardsExactN`)
 
 **DSL:** `move 3 from Hand face down to Discard`
 
-**Engine:** The 2026-08-10 verb semantics make a literal quantity on
+**Engine:** The verb semantics make a literal quantity on
 `move`/`exchange` a **pick-exactly-N** `ChooseCards` prompt
 (`min=max=min(N, available)`; re-prompted on a wrong count). Positional
 sources (`top(X)`, `X[N]`, extrema) are automatic. The resume writes the
@@ -750,8 +764,7 @@ validates and can issue a new `NeedsInput` on failure.
 `Quantifier::Any`. If yes, `step()` issues a `ChoosePlayer` prompt
 (`step_setup_any`); on resume the chosen player is substituted into *every*
 any-site of the setup (`quantifier::substitute_setup_any`) before any
-`GameData` mutation occurs (invariant I-20 — relaxed 2026-08-10 from
-"rejected" to "prompted").
+`GameData` mutation occurs (invariant I-20).
 
 ---
 
@@ -781,8 +794,8 @@ here:
 
 - `unless` — not in the grammar at all; use `if (not <expr>)`.
 - `token` / `place` — tokens are not modeled in `GameData`.
-- `flip` — status behaviour deferred to card encryption (§1b).
-- `bid <qty>` without a memory target — errors since 2026-08-10 (see §3.7);
+- `flip` — status behaviour deferred to card encryption (§3.8).
+- `bid <qty>` without a memory target — errors (see §3.7);
   `demand` — semantics never specified.
 - `for <players>` stage clause — parsed, dropped during lowering (P-1).
 - `SimStage` — lowers identically to sequential stages (P-2).

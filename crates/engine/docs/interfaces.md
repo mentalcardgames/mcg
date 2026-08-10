@@ -10,7 +10,7 @@ associated_files:
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/interpreter/types.rs
   - crates/engine/src/game_data.rs
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # Public Interfaces — the External Host Contract
@@ -190,7 +190,7 @@ pub fn execute_edge(&mut self, edge: Edge<LoweredPayLoad>) -> Result<(), EngineE
 
 Intent: sets `current_state = edge.to` and calls
 `crate::action::execute(edge.payload, &mut self.game_data)`. Fallible since
-2026-08: action-evaluation failures (e.g. `cycle to next` with no eligible
+action-evaluation failures (e.g. `cycle to next` with no eligible
 *other* player) surface as `Err(EngineError)` instead of panicking. Exposed for
 quantifier-driver resume and tests; a UI host normally never calls this.
 
@@ -227,7 +227,7 @@ pub enum Input {
         selected: Vec<usize>,
     },
     /// A numeric answer (`InputType::Number`), e.g. from `bid any on
-    /// <memory> of <owner>` (2026-08-10).
+    /// <memory> of <owner>`).
     Number {
         value: i32,
     },
@@ -257,7 +257,7 @@ pub enum InputType {
         prompt: String,
     },
     /// Prompt the player to enter a number (`bid any on <memory> of
-    /// <owner>`; 2026-08-10). `min`/`max` are advisory bounds from the
+    /// <owner>`). `min`/`max` are advisory bounds from the
     /// quantity's `IntRange` when present (`None` = unbounded).
     Number {
         min: Option<i32>,
@@ -370,7 +370,7 @@ pub enum TraceEvent {
     Trigger,
     /// The current player is out of the game / out of the current stage:
     /// the instruction edge was advanced through without executing
-    /// (2026-08-10, ineligible-player skip, I-24).
+    /// (ineligible-player skip, I-24).
     Skipped { player: String, stage: String },
     /// The FSM reached the goal: the game is over. `winners` is the winner
     /// set — every player still `in_game` (empty when nobody won).
@@ -490,7 +490,7 @@ For test-suite writers. The on-disk replay format (`crates/engine/src/controller
 | `<N>` | `Input { player_id: "P1", kind: InputKind::Choice { idx: N-1 } }` (1-based) |
 | `p <N>` | `Input { player_id: "P1", kind: InputKind::ChoosePlayer { idx: N-1 } }` (1-based candidate index) |
 | `c <csv>` | `Input { player_id: "P1", kind: InputKind::ChooseCards { selected: <0-based> } }` — input is 1-based, internally converted; comma-separated |
-| `n <N>` | `Input { player_id: "P1", kind: InputKind::Number { value: N } }` (numeric prompt, 2026-08-10) |
+| `n <N>` | `Input { player_id: "P1", kind: InputKind::Number { value: N } }` (numeric prompt) |
 | `Name:y` / `Name:<N>` / etc. | Same as above, with `player_id: "Name"` (defaults to `"P1"` when no prefix) |
 
 Blank lines and `#…` comment lines are ignored (`controller/mod.rs:330-343`). On exhaustion the

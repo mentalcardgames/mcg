@@ -10,7 +10,7 @@ associated_files:
   - crates/engine/src/action.rs
   - crates/engine/src/game_data.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # Lifecycle & Runtime Sequencing
@@ -111,16 +111,15 @@ The IR's first edges carry
 
 - `front_end::ast::SetUpRule::CreateLocation` resolves an owner via
   `Evaluator::resolve_owner_to_names` (plural); a resolution failure surfaces as a **recoverable
-  error** (`Err("CreateLocation: failed to resolve owner …")`, since the 2026-08 fallibility pass —
-  previously a panic), so `CreatePlayer`/`CreateTeams` must precede it.
+  error** (`Err("CreateLocation: failed to resolve owner …")`), so `CreatePlayer`/`CreateTeams`
+  must precede it.
   `resolve_owner_to_names` now transparently routes
   `Owner::PlayerCollection { Aggregate { Quantifier::All } }` (the post-Stage-5 quantifier owner)
   through `Evaluator::resolve_player_collection` so a setup `CreateLocation` with `Owner =
   All` produces one location per in-game player — see invariant I-10 in
   [`invariants.md`](./invariants.md).
 - `front_end::ast::SetUpRule::CreateCardOnLocation` requires the location to already exist;
-  a missing location is a recoverable error (`Err("CreateCardOnLocation: location … not found")`,
-  previously a panic).
+  a missing location is a recoverable error (`Err("CreateCardOnLocation: location … not found")`).
 - `front_end::ast::SetUpRule::{CreateTeams, CreateTurnorder, CreateTurnorderRandom,
   CreateLocation, CreateMemory, CreateMemoryWithMemoryType}` whose element collection is a
   `Quantifier::Any` are *rejected before dispatch* by the interpreter's setup-`Any` guard — see
@@ -145,7 +144,7 @@ current `GameData` by `crates::engine::query::Evaluator`.
 
 ```
 (A) SYNTH_MEMORY_KEY cleanup      interpreter/mod.rs:71-85
-(S) ineligible-player skip        interpreter/mod.rs (2026-08-10, I-24)
+(S) ineligible-player skip        interpreter/mod.rs (I-24)
 (B) overlay dispatch                 interpreter/mod.rs:84-106
 (C0) quantifier resume              interpreter/mod.rs:109-112  (take_quant_resume)
       - resolve real IR edges for current_state            interpreter/mod.rs:114-131
@@ -166,7 +165,7 @@ The pre-dispatch arms, in order:
    `CreateMemory`s the same key by coincidence is unaffected (invariant I-18). See
    [`invariants.md`](./invariants.md) I-18.
 
-2. **(S) Ineligible-player skip** (2026-08-10, I-24). If the current player is out of the
+2. **(S) Ineligible-player skip** (I-24). If the current player is out of the
    game or out of the current stage (`current_player_ineligible`; no current stage → never
    ineligible) and the first outgoing edge's payload is *skippable*
    (`payload_is_skippable` — everything except `EndCondition`/`StageRoundCounter`/`EndStage`
@@ -230,7 +229,7 @@ The pre-dispatch arms, in order:
    substituted into every any-site of the setup (`substitute_setup_any`)
    *before* calling
    `execute_edge` — no `GameData` mutation occurs until the prompt is answered
-   (invariant I-20, relaxed 2026-08-10). `Quantifier::All` in setup is
+   (invariant I-20). `Quantifier::All` in setup is
    supported and expands to all in-game players.
 
 After the pre-dispatch arms, the per-`Payload` dispatch
@@ -248,7 +247,7 @@ After the pre-dispatch arms, the per-`Payload` dispatch
 - `Payload::EndCondition { expr, negated, stage }` → `ensure_stage_entered(stage)` (enters on first
   encounter), evaluate `expr`, pick edge 0 (exit) or 1 (continue); on exit, `leave_stage(stage)`
   pops the stage stack. (Edge indexing is inverted vs. `Condition` — see I-3.)
-  **Auto-end (2026-08-10, I-24):** the stage also exits when no player is in the game or no
+  **Auto-end (I-24):** the stage also exits when no player is in the game or no
   player is in this stage — the game then runs out to the goal with an empty winner set.
   Emits `TraceEvent::EndCondition`.
 - `Payload::StageRoundCounter(stage)` → `ensure_stage_entered(stage)` (idempotent), increment

@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all]
 topics: [design-decisions, notes]
-last_validated: 2026-08-09
+last_validated: 2026-08-11
 ---
 
 # Developer Notes
@@ -16,7 +16,7 @@ deliberately small** — status, bugs, and divergences have dedicated homes:
 | Per-construct implementation status | [`dsl-completeness.md`](./dsl-completeness.md) |
 | Known bugs & design divergences (with repros) | [`engine-vs-design.md`](./engine-vs-design.md) |
 | Panic sites / recoverable errors / silent no-ops | [`error-handling.md`](./error-handling.md) |
-| Guardrails (invariants I-1 … I-23) | [`invariants.md`](./invariants.md) |
+| Guardrails (invariants I-1 … I-25) | [`invariants.md`](./invariants.md) |
 
 ---
 
@@ -34,19 +34,19 @@ This ownership is encoded by **prefixing the key** in the flat HashMap:
 | Player `P2` | `"P2_"` | `"P2_score"` |
 | Table | `"Table_"` | `"Table_pot"` |
 
-**Setup time:** `CreateMemory` / `CreateMemoryWithMemoryType` resolve the `owner` to names and insert `"{owner}_{name}"`.
+**Setup time:** `CreateMemory` / `CreateMemoryWithMemoryType` resolve the `owner` to names and insert `"{owner}_{name}"`. The declared type-expression is evaluated and becomes the initial value; team owners create one team-keyed slot (`Red_M`).
 
-**Runtime reads:** All evaluator memory arms use `Evaluator::resolve_memory_key` / `resolve_collection_memory_key`. When the AST carries a `WithOwner` variant (`&I:M of P1`), the owner is used directly. The parser already supports `of <owner>` in all memory-reference grammar rules (`&I:M of ...`, `&P:M of ...`, etc.). The bare `Memory { memory }` variant (no owner) returns an error.
+**Runtime reads:** All evaluator memory arms use `Evaluator::resolve_memory_key` / `resolve_collection_memory_key`. When the AST carries a `WithOwner` variant (`&I:M of P1`), the owner is used directly. The grammar supports `of <owner>` in all memory-reference rules (`&I:M of ...`, `&P:M of ...`, etc.).
 
-**Runtime writes (bridge, refined 2026-08-10):** `SetMemory` (`M is 42`) and
-`ResetMemory` (`reset M`) lack an owner clause in the grammar. Since
-2026-08-10 the target owner resolves as: (1) the **declared owner** — when
-exactly one existing slot ends in `_{memory}` (e.g. `memory pot on table` →
-`Table_pot`), that owner wins; (2) else the **current player** (the legacy
-bridge); (3) else a recoverable error. Bare reads (`&I:M` without `of
-<owner>`) use the same resolution. When the grammar adds `of <owner>` to
-these rules, the bridge code is replaced with the explicit owner from the
-AST (see `engine-vs-design.md` D-14 / F-21).
+**Runtime writes (the owner bridge):** `SetMemory` (`M is 42`) and
+`ResetMemory` (`reset M`) lack an owner clause in the grammar, so the target
+owner resolves as: (1) the **declared owner** — when exactly one existing
+slot ends in `_{memory}` (e.g. `memory pot on table` → `Table_pot`), that
+owner wins; (2) else the **current player** (the bridge); (3) else a
+recoverable error. Bare reads (`&I:M` without `of <owner>`) use the same
+resolution, so reads and writes always agree. If the grammar ever adds
+`of <owner>` to the write rules, the bridge code is replaced with the
+explicit owner from the AST (see `engine-vs-design.md` P-4/P-5).
 
 **Why not a nested data structure?** `GameData` is `Clone` and the flat `HashMap` is serializable. Owner-prefixed keys need zero type-system changes — just string formatting at the access site, with guaranteed non-collision.
 
@@ -56,7 +56,7 @@ AST (see `engine-vs-design.md` D-14 / F-21).
 
 ### 1.3 Scoring: WinnerWith::Position Interpretation
 
-`winner is highest position` / `winner is lowest position` uses the player's index in `turn_order` (0-based). `turn_order [P2, P1, P3]` → P2=0, P1=1, P3=2. `highest position` → P3 wins. `lowest position` → P2 wins. Players **not in `turn_order` are excluded** from the comparison (since 2026-08-10, F-22 — previously they scored `usize::MAX`, letting a non-participant win `lowest position`). This interpretation is pinned by the scoring tests.
+`winner is highest position` / `winner is lowest position` uses the player's index in `turn_order` (0-based). `turn_order [P2, P1, P3]` → P2=0, P1=1, P3=2. `highest position` → P3 wins. `lowest position` → P2 wins. Players **not in `turn_order` are excluded** from the comparison (a non-participant can never win). This interpretation is pinned by the scoring tests.
 
 ### 1.4 CGDSL Identifiers Must Start With Capital Letter
 
@@ -68,4 +68,4 @@ Per the Pest grammar `ident = { &capital ~ ... }`, names must start with a capit
 
 ### 1.6 The TUI Treats All Prompt Lists the Same
 
-`Choice`, `ChoosePlayer`, and `ChooseCards` prompts share one interaction model in `engine-tui`: a cursor-highlighted list scrolled with ↑/↓ and confirmed with Enter, with digit shortcuts (1-9, 0 = option 10) for `Choice`. The windowing logic (`cursor_scroll_offset`) is unit-tested. The trace log has two rendering modes — simplified (DSL text) and raw (`Debug` output) — toggled with `r`; the four `TraceDetail` filter levels are unchanged.
+`Choice`, `ChoosePlayer`, and `ChooseCards` prompts share one interaction model in `engine-tui`: a cursor-highlighted list scrolled with ↑/↓ and confirmed with Enter, with digit shortcuts (1-9, 0 = option 10) for `Choice`. The `Number` prompt collects digits with Enter to confirm. The windowing logic (`cursor_scroll_offset`) is unit-tested. The trace log has two rendering modes — simplified (DSL text) and raw (`Debug` output) — toggled with `r`; the four `TraceDetail` filter levels exist, and the `GameOver` line is always visible regardless of the filter.

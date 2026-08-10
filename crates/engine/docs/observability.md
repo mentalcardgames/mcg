@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/controller/trace_logger.rs
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/action.rs
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # Observability & Diagnostics
@@ -86,7 +86,7 @@ ids the quantifier subsystem allocates from `u32::MAX - 1` downward (see invaria
 
 ### 2.2 `TraceEvent`
 
-Since 2026-08-10 the events carry **typed payloads** — the actual AST nodes — not pre-rendered
+The events carry **typed payloads** — the actual AST nodes — not pre-rendered
 strings. Hosts inspect `rule`/`expr` directly; the text views are derived at render time
 (§2.3).
 
@@ -104,11 +104,11 @@ pub enum TraceEvent {
     Trigger,
     /// The current player is out of the game / out of the current stage:
     /// the instruction edge was advanced through without executing
-    /// (2026-08-10, ineligible-player skip, I-24).
+    /// (ineligible-player skip, I-24).
     Skipped { player: String, stage: String },
     /// The FSM reached the goal: the game is over. `winners` is the winner
     /// set — every player still `in_game` (`GameData::winner_names`), empty
-    /// when nobody won (2026-08-10). Emitted once, on the transition into
+    /// when nobody won. Emitted once, on the transition into
     /// `StepResult::GameOver`.
     GameOver { winners: Vec<String> },
     Quantifier { kind: String, detail: String },
@@ -283,8 +283,8 @@ in `crates/engine/src/debug/tests.rs` (`from_marker` cases at lines 8-37, marker
 ## 5. Ad-hoc stderr
 
 There are **no** `eprintln!`/`println!`/`dbg!` calls left in the production library: the former
-`eprintln!("ShuffleAction failed: {}", e)` was converted to a recoverable `Err` on 2026-08-09
-(see `engine-vs-design.md` F-8). The `println!`s in `crates/engine/src/bin/cgdsl-play.rs` are
+`eprintln!("ShuffleAction failed: {}", e)` was converted to a recoverable `Err`
+(see `engine-vs-design.md`). The `println!`s in `crates/engine/src/bin/cgdsl-play.rs` are
 CLI output, not engine telemetry. One `eprintln!` remains in the `run_game` startup path: when
 `MCG_TRACE_LOG` resolves to a path but `TraceLogger::open` fails
 (`crates/engine/src/controller/mod.rs:139-146`), a `Warning: failed to open trace log ...` message

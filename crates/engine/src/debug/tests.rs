@@ -212,6 +212,7 @@ fn test_format_game_data_medium_teams() {
     data.teams.push(crate::game_data::Team {
         name: "T1".to_string(),
         players: vec![p1, p2],
+        owner: crate::game_data::OwnerData::default(),
     });
     data.turn_order = vec![p1, p2];
 

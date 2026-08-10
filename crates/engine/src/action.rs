@@ -77,6 +77,7 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
                 game_data.teams.push(Team {
                     name: team_name,
                     players: player_indices,
+                    owner: crate::game_data::OwnerData::default(),
                 });
             }
             Ok(())

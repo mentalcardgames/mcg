@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/debug/tests.rs
   - crates/engine/tests/quantifier_test.rs
   - crates/engine/test_games/
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # Testing Strategy
@@ -50,7 +50,7 @@ runs in microseconds.
    hand-built-IR tests for the interpreter's own dispatch logic (Choice/Optional prompt
    shapes, edge-count errors, etc.) — see `src/interpreter/tests.rs` for the pattern.
 
-4. **Pin invariants, not implementations.** Every guardrail I-1..I-20 in
+4. **Pin invariants, not implementations.** Every guardrail I-1..I-25 in
    [`invariants.md`](./invariants.md) must have at least one regression test. When
    refactoring, the test should fail loudly before the invariant is silently violated.
 
@@ -284,7 +284,7 @@ fn move_traces(trace: &[TraceEntry]) -> usize {
 }
 ```
 
-Since 2026-08-10 `TraceEvent` carries typed AST payloads (`rule`/`expr`), so variant filters match
+`TraceEvent` carries typed AST payloads (`rule`/`expr`), so variant filters match
 on the node shape rather than on a subtype string; `TraceEvent::summary()` renders a compact
 structured one-liner when you need a readable line.
 
@@ -355,18 +355,19 @@ authoring new ones):
 | `setup_turnorder_all.cgdsl` / `setup_teams_all.cgdsl` | `tests/quantifier_test.rs:412,431` | Setup `All` resolution |
 | `turn_switch.cgdsl` | `controller/tests.rs:210` | Stage entry + turn advance |
 | `skip_ineligible.cgdsl` | `tests/ergonomics_test.rs` | Ineligible-player skip + stage auto-end (I-24): eliminated players never prompted, post-elimination instructions skipped, empty winner set |
-| `memory_initial_value.cgdsl` | `tests/ergonomics_test.rs` | Memory declarations honour their initial value (F-18); typed init (I-10) |
-| `bid_prompt.cgdsl` + `.txt` | `tests/ergonomics_test.rs` | Numeric input prompt (`InputType::Number`): `bid any`/range, out-of-bounds re-ask (F-26) |
-| `team_locations.cgdsl` | `tests/ergonomics_test.rs` | Team-owned locations/memories = per-member instances (F-25) |
-| `verb_deal_count.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | `deal >= M and <= N` / `deal any` prompt for the **count** (F-28) |
+| `memory_initial_value.cgdsl` | `tests/ergonomics_test.rs` | Memory declarations honour their initial value; typed init (I-10) |
+| `bid_prompt.cgdsl` + `.txt` | `tests/ergonomics_test.rs` | Numeric input prompt (`InputType::Number`): `bid any`/range, out-of-bounds re-ask |
+| `team_locations.cgdsl` | `tests/ergonomics_test.rs` | Team-owned locations/memories = one shared instance per team |
+| `team_pile_reads.cgdsl` | `tests/ergonomics_test.rs` | Team pile addressing: bare name, `X of T:Red`, `owner of`, `&I:M of T:Red` |
+| `verb_deal_count.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | `deal >= M and <= N` / `deal any` prompt for the **count** |
 | `verb_deal_range_automatic.cgdsl` | `tests/verb_semantics_test.rs` | Degenerate `>= 2 and <= 2` range deals automatically |
 | `verb_deal_count_to_all.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | Deal-count prompt chains with the dest-`all` fan-out |
 | `verb_move_exact_n.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | `move N` = pick exactly N; wrong count re-prompts |
 | `verb_move_exact_n_short_pile.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | Exact-N prompt clamps to the available cards |
 | `verb_positional_automatic.cgdsl` | `tests/verb_semantics_test.rs` | Positional sources (`top(X)`, `X[N]`) never prompt |
-| `cycle_skips_out_of_game.cgdsl` | `tests/ergonomics_test.rs` | Out-of-game-but-in-stage players are skipped by `cycle to next`/`previous` and the `next` expression (I-13 / F-24 regression) |
-| `winner_set_remaining.cgdsl` | `tests/ergonomics_test.rs` | Winner set = players left in game when no winner statement exists (F-29) |
-| `winner_set_declared.cgdsl` | `tests/ergonomics_test.rs` | `end game with winner X` eliminates the rest; the survivor is the winner set (F-29) |
+| `cycle_skips_out_of_game.cgdsl` | `tests/ergonomics_test.rs` | Out-of-game-but-in-stage players are skipped by `cycle to next`/`previous` and the `next` expression (I-13 regression) |
+| `winner_set_remaining.cgdsl` | `tests/ergonomics_test.rs` | Winner set = players left in game when no winner statement exists |
+| `winner_set_declared.cgdsl` | `tests/ergonomics_test.rs` | `end game with winner X` eliminates the rest; the survivor is the winner set |
 | `location_resolution.cgdsl`, `test.cgdsl` | TUI fixtures | Interactive play (load via `just tui <name>`) |
 
 **Authoring conventions:**
@@ -398,7 +399,7 @@ Conventions the suite aims for (not yet fully met — see §10):
    `resolve_owner_to_name(s)`, `resolve_quantity`, `expand_types`,
    `check_attr_value_in_cardset`) has unit tests covering happy-path and each documented
    error string from [`error-handling.md`](./error-handling.md) §1.
-4. Every invariant I-1..I-20 in [`invariants.md`](./invariants.md) has a regression test
+4. Every invariant I-1..I-25 in [`invariants.md`](./invariants.md) has a regression test
    that fails if the invariant is silently violated.
 5. Every `.expect`/`panic!`/`unwrap`/`todo!` site listed in [`error-handling.md`](./error-handling.md)
    §2 has a `#[should_panic(expected = "…")]` test pinning the panic message — unless the
@@ -536,13 +537,7 @@ Per §8.1, these are bugs to fix before writing the regression tests:
 
 - **`optional` decline runs nothing (D-3)** and **stage-exit checks happen at
   entry only (D-2)** — both need parser/IR work and are deferred by design
-  (see `engine-vs-design.md` §5).
-
-(The former panic table — `cycle to next`, `SetMemory`, the `execute_cardset_move`
-guard, and the collection-memory `todo!()`s — was converted to recoverable errors
-on 2026-08-09; see `engine-vs-design.md` §1. The 2026-08-10 ergonomics pass
-fixed `cycle to next` entirely (self-wrap + no-op, F-16) and replaced its
-error paths with the stage auto-end (I-24).)
+  (see `engine-vs-design.md` §4).
 
 When fixing, file entries under [`engine-vs-design.md`](./engine-vs-design.md), land the corrected
 behavior and its regression test together.
@@ -601,7 +596,7 @@ and conserves all 52 cards**, regardless of what the player does.
 | Page | When relevant |
 |---|---|
 | [`README.md`](./README.md) | Hub of the engine wiki; module map |
-| [`invariants.md`](./invariants.md) | Read before authoring any engine test — I-1..I-20 are the most common regression targets |
+| [`invariants.md`](./invariants.md) | Read before authoring any engine test — I-1..I-25 are the most common regression targets |
 | [`error-handling.md`](./error-handling.md) | Source of `EngineError` variants and their stable `Display` messages to assert against |
 | [`lifecycle.md`](./lifecycle.md) | Step sequencing and quantifier pre-dispatch timing — explains *why* traces look the way they do |
 | [`observability.md`](./observability.md) | The `event_sender` / `trace_sender` seams tests capture through |

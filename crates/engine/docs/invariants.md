@@ -11,17 +11,15 @@ associated_files:
   - crates/engine/src/query/mod.rs
   - crates/engine/src/controller/mod.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # System Invariants & Guardrails
 
 > **Read this before modifying any engine code.** These rules are derived directly from the source.
 > Violating them will silently corrupt game state or hang the run loop. Each invariant is numbered
-> (I-1 … I-24) and cross-referenced from other pages (e.g. `I-5`, `I-8`, `I-18`) — preserve those
-> IDs when editing. I-1 … I-15 predate the Stage-5 quantifier work; I-16 … I-20 were added in
-> Stage 5 and govern the quantifier subsystem; I-21 … I-23 were added with the Stage-6 input
-> validation work; I-24 was added with the 2026-08-10 ineligible-player skip & auto-end work.
+> (I-1 … I-25) and cross-referenced from other pages (e.g. `I-5`, `I-8`, `I-18`) — preserve those
+> IDs when editing.
 
 For the panic conditions that enforce some of these, see [`error-handling.md`](./error-handling.md).
 
@@ -65,7 +63,7 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > Display `"No outgoing edges from state … and not at goal state"` — not `GameOver`. An agent
 > adding a terminal state must ensure it is registered as `front_end::ir::Ir::goal`.
 
-> **I-5 — `StageRoundCounter` is applied exactly once per traversal (was: twice).**
+> **I-5 — `StageRoundCounter` is applied exactly once per traversal.**
 > The interpreter's `step()` is the single mutator for `StageRoundCounter` and
 > `EndStage` payloads: it mutates `game_data` and then calls `execute_edge()`
 > (`crates/engine/src/interpreter/mod.rs:315-331` for `StageRoundCounter`,
@@ -101,8 +99,8 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > (`crates/engine/src/interpreter/quant_driver.rs:41,81`) so a misrouted answer is left in place
 > when the pending kind does not match — see I-19.
 
-> **I-8 — Out-of-range `Choice`/`Optional`/`ChoosePlayer`/`ChooseCards` input is a silent no-op
-> (interpreter) / re-prompt (controller) / fatal error (resume).**
+> **I-8 — Out-of-range `Choice`/`Optional`/`ChoosePlayer`/`ChooseCards`/`Number` input is a
+> silent no-op (interpreter) / re-prompt (controller) / fatal error (resume).**
 > For `Choice`/`Optional`: `step()` does
 > `if let Some(choice_edge) = edges.get(input.idx()) { self.execute_edge(...) }` then
 > unconditionally returns `Ok` (`crates/engine/src/interpreter/mod.rs:173-194` for `Choice`,
@@ -112,11 +110,11 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > `crates::engine::controller::InputSource::TestFile` this **consumes the next recorded line** as a
 > re-prompt; for `InputSource::Player` the controller's own validation loop
 > (`crates/engine/src/controller/mod.rs:439-457`, `validate_player_input`) re-invokes the closure.
-> For `ChoosePlayer`/`ChooseCards` (post-Stage-5), the controller's `validate_player_input`
-> (`controller/mod.rs:444-455`) checks **all three** conditions:
+> The controller's `validate_player_input` checks:
 > - `Choice`: `idx <= max_index`;
 > - `ChoosePlayer`: `idx < candidates.len()`;
-> - `ChooseCards`: no `i >= display.len()`, `selected.len() >= min`, `selected.len() <= max`.
+> - `ChooseCards`: no `i >= display.len()`, `selected.len() >= min`, `selected.len() <= max`;
+> - `Number`: `value` within `min..=max` when the bounds are present.
 > A `Player`-sourced answer that fails is dropped and the closure re-invoked (the loop can spin
 > forever — see I-15). The interpreter's *resume* path is stricter: a `ChoosePlayer` `idx` outside
 > `candidates` returns `StepResult::Error(EngineError::ChoosePlayerIdxOutOfRange)`
@@ -126,27 +124,24 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > request and **errors on exhaustion** (`controller/mod.rs:351`,
 > `EngineError::TestInputExhausted`).
 
-> **I-9 — `set_memory` assigns the caller-provided `MemoryValue` verbatim (was: increment-by-1).**
+> **I-9 — `set_memory` assigns the caller-provided `MemoryValue` verbatim.**
 > `crates::engine::game_data::GameData::set_memory` (`crates/engine/src/game_data.rs:339-341`)
 > inserts the `MemoryValue` it is given, overwriting any prior value. It is the write-side
 > primitive used by `ActionRule::SetMemory` *after* the `MemoryType` expression has been
-> evaluated by `action.rs` (eval failures surface as recoverable `Err`s since 2026-08 — they
-> previously panicked). Earlier engine revisions incremented an `Int` memory by 1 and ignored
-> the type argument; that behavior is gone — do not reintroduce it. `reset_memory`
-> (`crates/engine/src/game_data.rs:343-345`) still only resets `Int` memories (silent no-op on
-> other variants).
+> evaluated by `action.rs` (eval failures surface as recoverable `Err`s). `reset_memory`
+> (`crates/engine/src/game_data.rs:343-345`) resets every variant to its typed zero
+> (`Int`→0, `String`→`""`, `Team`→`""`, collections→empty).
 
-> **I-10 — `add_memory` initialises typed memories correctly (fixed 2026-08-10).**
+> **I-10 — `add_memory` initialises typed memories correctly.**
 > `crates/engine/src/game_data.rs` `add_memory(key, owner_name, memory_type,
 > initial)` inserts the caller-provided `initial` `MemoryValue` verbatim, or a
 > per-type default: `Int`→`Int(0)`, `String`→`""`, `Team`→`""`, collections →
 > empty. `MemoryType::Player` → `MemoryValue::String(owner_name)` (player
 > memories store *names*, matching `SetMemory`'s convention) and
-> `MemoryType::TeamCollection` → `MemoryValue::TeamCollection(vec![])` — the
-> former `Int(0)` mismatches (I-10) are gone. Setup-time evaluation of the
-> declared expression happens in `action.rs` (`evaluate_memory_type`). Agents
-> adding new memory writes must respect the read-side expected `MemoryValue`
-> variant.
+> `MemoryType::TeamCollection` → `MemoryValue::TeamCollection(vec![])`.
+> Setup-time evaluation of the declared expression happens in `action.rs`
+> (`evaluate_memory_type`). Agents adding new memory writes must respect the
+> read-side expected `MemoryValue` variant.
 
 > **I-11 — `leave_stage` pops the stage stack until (and including) the named stage.**
 > (`crates/engine/src/game_data.rs:252-259`). This permits multi-stage jumps (an end-condition that
@@ -166,8 +161,7 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > rely on `in_stage[current_stage]`; without `ensure_stage_entered` they find no
 > eligible player and `current_player` becomes `None`.
 
-> **I-13 — `resolve_turn` / `next_player` find the next *eligible* player, wrapping; self-wrap since
-> 2026-08-10.**
+> **I-13 — `resolve_turn` / `next_player` find the next *eligible* player, wrapping.**
 > (`crates/engine/src/game_data.rs` `next_eligible_player` / `previous_eligible_player`). Eligible =
 > `in_game && in_stage[current_stage]`. The scan skips ineligible players; with no eligible *other*
 > player the **current player itself** is returned when it is still eligible (the turn wraps onto
@@ -176,10 +170,10 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > `crates::engine::game_data::GameData::next_player` uses `unwrap_or_else(|| panic!(...))` on the
 > found position — safe only because `resolve_turn` returning `Some(idx)` guarantees the idx is in
 > `turn_order`.
-> **Note (2026-08-10):** `cycle to next` with **no** eligible player (not even the current one) is
-> a **no-op** (`Ok(()))` — it no longer errors. The stage's auto-end (I-24) terminates the stage
-> from the loop-back. `end turn` behaves identically (it no longer strands `current_player = None`
-> while the current player is still eligible).
+> **Note:** `cycle to next` with **no** eligible player (not even the current one) is a **no-op**
+> (`Ok(())`) — it never errors. The stage's auto-end (I-24) terminates the stage from the
+> loop-back. `end turn` behaves identically (it never strands `current_player = None` while the
+> current player is still eligible).
 
 > **I-14 — `eval_cardset` returns `(location_idx, card_ids)`; the location is best-effort.**
 > `crates::engine::query::Evaluator::eval_cardset` returns `(usize, Vec<usize>)`. For
@@ -192,8 +186,8 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > **I-15 — `InputSource::Player`'s validation loop can spin forever.**
 > `crates/engine/src/controller/mod.rs:291-297` re-calls `callback(input_type)` with `continue`
 > while `validate_player_input(&raw, &input_type)` (`controller/mod.rs:439-457`) returns `false`.
-> Post-Stage-5 this loop now spins on **any** of `Choice`/`ChoosePlayer`/`ChooseCards` out-of-range
-> answers (see I-8 for the per-variant checks). A buggy closure that always returns an out-of-range
+> The loop spins on **any** out-of-range answer (`Choice`/`ChoosePlayer`/`ChooseCards`/`Number` —
+> see I-8 for the per-variant checks). A buggy closure that always returns an out-of-range
 > answer will hang the run loop with no error. The `TestFile` path has no such loop (it consumes
 > one line per request and errors on exhaustion — `controller/mod.rs:351`).
 
@@ -255,7 +249,7 @@ pending-resume state match, and the setup-`Any` guard.
 > answer.
 
 > **I-20 — Setup rules containing `Quantifier::Any` are resolved by a player prompt
-> before dispatch (relaxed 2026-08-10; previously rejected).**
+> before dispatch.**
 > `step()`'s setup-`Any` guard (`crates/engine/src/interpreter/mod.rs:155-161`) checks
 > `crate::quantifier::setup_contains_any(setup)` for any `Payload::Action(GameRule::SetUp {
 > setup })` edge. If any element collection is `Aggregate { Quantifier::Any }`, `step()` issues a
@@ -291,7 +285,7 @@ pending-resume state match, and the setup-`Any` guard.
 > closure path re-prompts on rejection; the `TestFile` path parses `player_id` from an
 > optional `Name:` prefix (defaulting to `"P1"`).
 
-> **I-24 — Ineligible-player skip & stage auto-end (2026-08-10).**
+> **I-24 — Ineligible-player skip & stage auto-end.**
 > A player who is out of the game or out of the current stage is never asked for input and
 > none of their instructions execute:
 > - `Interpreter::step()` checks (before the quantifier preprocessor and per-payload dispatch)
@@ -311,3 +305,10 @@ pending-resume state match, and the setup-`Any` guard.
 > - The skip applies per edge while the condition holds; there is no persistent "skip mode"
 >   flag — each step re-evaluates eligibility, so skipping naturally stops once a cycle lands
 >   on an eligible player.
+>
+> **I-25 — The winner set is the set of in-game players.**
+> At game end (`GameOver`), the winner set is every player still `in_game`, in declaration
+> order (`GameData::winner_names()`); empty when nobody won. Explicit winner declarations
+> (`winner is X`, `end game with winner X`) reduce to the same rule because they eliminate
+> everyone else. The set is emitted as a `TraceEvent::GameOver { winners }` on the transition
+> into `GameOver`, written into the trace-file footer, and printed by `cgdsl-play`.

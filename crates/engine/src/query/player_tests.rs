@@ -163,6 +163,7 @@ fn eval_player_runtime_competitor_teammate() {
     gd.teams = vec![Team {
         name: "T1".to_string(),
         players: vec![p0, p1],
+        owner: crate::game_data::OwnerData::default(),
     }];
     gd.current_player = Some(0);
     let expr = PlayerExpr::Runtime {
@@ -564,6 +565,7 @@ fn eval_team_aggregate_team_of_present() {
     gd.teams = vec![Team {
         name: "Red".to_string(),
         players: vec![p0],
+        owner: crate::game_data::OwnerData::default(),
     }];
     let expr = TeamExpr::Aggregate {
         aggregate: front_end::ast::AggregateTeam::TeamOf {
@@ -1029,9 +1031,9 @@ fn resolve_owner_to_names_player_collection_all() {
 }
 
 #[test]
-fn resolve_owner_to_names_team_resolves_members() {
-    // P-7 fixed (2026-08-10): `location X on T:T1` creates one instance
-    // per team member (mirroring `on all`).
+fn resolve_owner_to_names_team_resolves_team_name() {
+    // `location X on T:Red` creates ONE shared instance for the team, keyed
+    // by the team name (matching `(&I:M of T:Red)` addressing).
     let mut gd = GameData::new();
     let p0 = gd.add_player("P1".to_string());
     let p1 = gd.add_player("P2".to_string());
@@ -1039,6 +1041,7 @@ fn resolve_owner_to_names_team_resolves_members() {
     gd.teams = vec![Team {
         name: "Red".to_string(),
         players: vec![p0, p1],
+        owner: crate::game_data::OwnerData::default(),
     }];
     let owner = Owner::Team {
         team: TeamExpr::Literal {
@@ -1046,11 +1049,11 @@ fn resolve_owner_to_names_team_resolves_members() {
         },
     };
     let names = Evaluator::resolve_owner_to_names(&owner, &gd).unwrap();
-    assert_eq!(names, vec!["P1".to_string(), "P2".to_string()]);
+    assert_eq!(names, vec!["Red".to_string()]);
 }
 
 #[test]
-fn resolve_owner_to_names_team_collection_resolves_union() {
+fn resolve_owner_to_names_team_collection_resolves_team_names() {
     let mut gd = GameData::new();
     let p0 = gd.add_player("P1".to_string());
     let p1 = gd.add_player("P2".to_string());
@@ -1059,10 +1062,12 @@ fn resolve_owner_to_names_team_collection_resolves_union() {
         Team {
             name: "Red".to_string(),
             players: vec![p0, p1],
+            owner: crate::game_data::OwnerData::default(),
         },
         Team {
             name: "Blue".to_string(),
             players: vec![p2],
+            owner: crate::game_data::OwnerData::default(),
         },
     ];
     let owner = Owner::TeamCollection {
@@ -1078,10 +1083,7 @@ fn resolve_owner_to_names_team_collection_resolves_union() {
         },
     };
     let names = Evaluator::resolve_owner_to_names(&owner, &gd).unwrap();
-    assert_eq!(
-        names,
-        vec!["P1".to_string(), "P2".to_string(), "P3".to_string()]
-    );
+    assert_eq!(names, vec!["Red".to_string(), "Blue".to_string()]);
 }
 
 #[test]

@@ -3,15 +3,16 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all]
 topics: [cgdsl, authoring, guide, tutorial, blackjack]
-last_validated: 2026-08-09
+last_validated: 2026-08-11
 ---
 
 # CGDSL Authoring Guide
 
 > **Purpose:** a practical guide for writing `.cgdsl` game definitions. Every
-> construct is described with its exact syntax (from `grammar.pest`) and runtime
-> behaviour (from the engine). This document is the **authoring reference**; for
-> a complete semantics specification see `docs/dsl-semantics.md`.
+> construct is described with its exact syntax (from `grammar.pest`) and its
+> runtime behaviour (from the engine). This document is the **authoring
+> reference**; for the full semantics specification see
+> `docs/dsl-semantics.md`.
 
 **Status key:**
 - ✅ **Implemented** — works as documented
@@ -61,14 +62,14 @@ This matters for boolean comparisons like `Rank of top(Hand) == "Ace"`.
 
 ### 1.4 No `create` prefix
 
-Unlike many card-game DSLs, setup rules **do not** use a `create` keyword:
+Setup rules **do not** use a `create` keyword:
 
 ```
 WRONG:  create players P1, P2
 RIGHT:  player P1, P2
 ```
 
-The `create` keyword exists in the grammar but is never used by any rule.
+(The `create` keyword exists in the grammar but is not used by any rule.)
 
 ### 1.5 The `table` keyword
 
@@ -126,7 +127,7 @@ turnorder all                       // all players in declaration order
 turnorder all random                // all players, shuffled
 ```
 
-Overrides the default turn order. `random` shuffles via `rand::thread_rng()`.
+Overrides the default turn order. `random` shuffles.
 
 ### 3.4 Locations
 
@@ -135,17 +136,19 @@ location Hand on all                // one Hand per player
 location Hand on P:P1               // Hand only for P1
 location Deck on table              // one global Deck
 location Discard, Stock on table    // comma-separated: multiple at once
-location TeamPile on T:Red          // one TeamPile per team member (since 2026-08-10)
+location TeamPile on T:Red          // one shared TeamPile for the team
 ```
 
 The `on` clause accepts any owner expression (`P:Name`, `table`, `all`,
-`any`, player collections, team owners, etc.). A **team owner** (`on T:Red`)
-creates one location per team member, exactly like `on (P:P1, P:P2)` — the
-data model has no shared team-entity pile (P-7).
+`any`, player collections, team owners, …).
 
-⚠️ `on any` prompts for one player at setup (I-20, relaxed 2026-08-10) — the
-chosen player is substituted before the rule runs. Use `on all` for a
-per-player location for everyone.
+- **Team owners** (`on T:Red`) create **one shared location for the whole
+  team**, owned by the team entity. The bare name resolves to it while a team
+  member is current (`move top(Hand) face up to TeamPile`); the explicit
+  `TeamPile of T:Red` addresses it unambiguously.
+- `on any` prompts for one player during setup; the chosen player is
+  substituted before the rule runs. Use `on all` for a per-player location
+  for everyone.
 
 ### 3.5 Cards
 
@@ -157,7 +160,9 @@ card on Deck:
 
 Creates the **cartesian product** of the key-value sets: here 3 ranks × 2
 suits = 6 cards. `for` chains create additional dimensions (multi-key
-combination). Cards are appended to the named location.
+combination). Cards are appended to the named location. **Without a
+`shuffle`, creation order IS the pile order** — deterministic tests and
+fixtures rely on this.
 
 You can also create multiple card types on the same location separated by
 commas:
@@ -170,7 +175,8 @@ card on Deck:
 
 ### 3.6 Precedences
 
-Define a total ordering for a card attribute (used by filter expressions):
+Define a total ordering for a card attribute (used by filter expressions and
+`min`/`max`):
 
 ```
 precedence RankOrd on Rank(A, 2, 3, 4, 5, 6, 7, 8, 9, T, J, Q, K)
@@ -181,6 +187,8 @@ Shorthand form:
 ```
 precedence RankOrd (Rank:A, Rank:2, Rank:3)
 ```
+
+Values are ordered low → high.
 
 ### 3.7 Point maps
 
@@ -200,13 +208,13 @@ Shorthand form:
 points Values (Rank:Ace:1, Rank:Two:2, Rank:Three:3)
 ```
 
-The int expressions for values **are evaluated** at setup time via
-`eval_int`. Runtime expressions like `&I:m of Current` work here.
+The value expressions **are evaluated at setup time**, so runtime
+expressions like `&I:M of current` work here.
 
 ### 3.8 Combos
 
-Define named card-filter combinations (stored for future use, not evaluated
-during play):
+Define named card-filter combinations (evaluated group-wise when used, like
+a `where` clause):
 
 ```
 combo Pair where size == 2 and Rank same
@@ -217,22 +225,28 @@ See §4.6 for filter syntax.
 ### 3.9 Memories
 
 ```
-memory M on table                          // no type → defaults to Int(0)
-memory InitialScore 42 on P:P1             // Int, initialised to 42 (value honoured since 2026-08-10)
+memory M on table                          // no type → Int(0)
+memory InitialScore 42 on P:P1             // Int, initialised to 42
 memory NameOfFirst "Ace" on P:P1           // String, initialised to "Ace"
-memory Winner P:P1 on table                // Player, initialised to the evaluated player's name
-memory Scores (1, 2, 3) on table           // IntCollection, initialised to the evaluated list
+memory Winner P:P1 on table                // Player, initialised to the player's name
+memory Scores (1, 2, 3) on table           // IntCollection, initialised to the list
 ```
 
-Memories are stored in a global `HashMap` keyed as `<Owner>_<MemoryName>`.
-The owner determines the initial key prefix, but set/read operations use
-whatever owner they specify (§5.6).
+Memories are stored in a global store keyed as `<Owner>_<MemoryName>` —
+`P1_M`, `Table_pot`, … (see §6.6 for how reads and writes pick the owner).
+
+The declared type-expression is **evaluated at setup time** and becomes the
+initial value: `memory Pot 100 on table` really starts `Table_pot` at 100.
+Typed memories initialise typed slots — a `Player`-typed memory holds the
+evaluated player's *name* (or a player-owned slot's own owner), `Team`
+holds the team name, collections hold their evaluated contents.
 
 ⚠️ Setup `with I: 0` syntax does **not** exist in the grammar. Use a bare
 expression: `memory Name 42 on P:P1`.
 
-⚠️ **Team owners** (`memory M on T:Red`) create one slot **per team member**
-(`P1_M`, `P2_M`, …) — mirroring `location X on T:Red` (§3.4).
+⚠️ **Team owners** (`memory M on T:Red`) create **one slot per team**, keyed
+by the team name (`Red_M`) — matching the read/write addressing
+(`(&I:M of T:Red)`, `bid 5 on M of T:Red`).
 
 ### 3.10 Tokens
 
@@ -260,15 +274,14 @@ effectively ignored.
 | `min/max of X using PM` | `max of Hand using BJ` | Extrema of card values |
 | `min/max(collection)` | `max((1,2,3))` | Extrema of int collection |
 | Runtime counter | `stageroundcounter` | Current counter; also `stageroundcounter(StageName)` |
-| Memory ref | `(&I:M of P:P1)` | Requires explicit owner |
+| Memory ref | `(&I:M of P:P1)` | Explicit owner, or bare `&I:M` (see §6.6) |
 
 The runtime counters increment once per stage-loop iteration:
 - `stageroundcounter` — counter of the currently-executing stage
 - `stageroundcounter(Play)` — counter of a named stage
 
 These are useful for limiting iterations within a stage body (e.g. "stop
-dealing after 5 draws").
-
+dealing after 5 draws"). The counter is `0` on the stage's first pass.
 
 ### 4.2 String expressions
 
@@ -277,13 +290,13 @@ dealing after 5 draws").
 | Literal | `"Ace"` | Capitalised ident only |
 | Key of card | `Rank of top(Hand)` | Attribute value of a card |
 | Collection index | `("A","B")[0]` | 0-based index |
-| Memory ref | `(&S:M of P:P1)` | Requires explicit owner |
+| Memory ref | `(&S:M of P:P1)` | Explicit owner, or bare `&S:M` (see §6.6) |
 
 ### 4.3 Boolean expressions
 
 | Form | Example | Notes |
 |------|---------|-------|
-| Comparison | `X == Y`, `X < Y` | Any two int/string/player/team/cardset exprs |
+| Comparison | `X == Y`, `X < Y` | Ints: `== != < > <= >=`; equality on strings/players/teams/cardsets |
 | Set empty | `Hand empty` | True if no cards |
 | Set not empty | `Hand not empty` | True if ≥1 card |
 | String in cardset | `"Hearts" in Hand` | Any card has attr=string |
@@ -293,6 +306,10 @@ dealing after 5 draws").
 | Out-of check | `P:P1 out of game` | Player eliminated? |
 | Out-of check | `current out of Play` | Player out of stage? |
 
+⚠️ Grammar quirks: `not (X)` does **not** parse — write `not X`; a single
+bool in parens `(X)` does not parse either; `case (A > B)`/`until (A > B)`
+fail when both operands are complex int expressions (use `if (A > B)` or
+split the condition).
 
 ### 4.4 Player expressions
 
@@ -300,18 +317,13 @@ dealing after 5 draws").
 |------|---------|-------|
 | Literal | `P:Alice` | Named player |
 | Runtime | `current` | Current turn player |
-| Runtime | `next` | Next eligible (in-game, in-stage) |
-| Runtime | `previous` | Previous in turn order |
+| Runtime | `next` | Next eligible player (in-game and in-stage); wraps onto `current` when it is the only eligible one |
+| Runtime | `previous` | Previous eligible player, same rules as `next` |
 | Runtime | `competitor` | Another player in same team |
 | Index | `turnorder[2]` | Nth in turn order |
 | Index | `(P:A,P:B)[0]` | Nth in collection |
 | Card owner | `owner of top(Hand)` | Who owns a card? |
 | Memory owner | `owner of highest M` | Player with max memory |
-
-⚠️ `owner of highest <memory>` has a known bug: the engine builds the
-lookup key as `<memory>_<player>` (e.g. `M_P1`), but `set_memory` and
-`score … to memory` write keys as `<player>_<memory>` (e.g. `P1_M`).
-These will never match — see §12.
 
 ### 4.5 Player collections
 
@@ -319,10 +331,10 @@ These will never match — see §12.
 |------|---------|-------|
 | Explicit | `(P:A, P:B, P:C)` | Comma-separated |
 | All | `all` | All in-game players |
-| Any | `any` | Prompt player to pick |
+| Any | `any` | Prompt player to pick one |
 | In-game | `playersin` | Players with `in_game=true` |
 | Out-of-game | `playersout` | Players with `in_game=false` (eliminated) |
-| Others | `others` | All players except `current` |
+| Others | `others` | All in-game players except `current` |
 | Memory | `(&PC:names of P:P1)` | Read from memory |
 
 ### 4.6 Card sets
@@ -332,7 +344,7 @@ boolean checks.
 
 | Form | Example | Notes |
 |------|---------|-------|
-| Location | `Hand` | Resolves: current player → Table → first match |
+| Location | `Hand` | Resolves: current player → their team → Table → first match |
 | Location of owner | `Hand of P:Alice` | Explicit owner |
 | Location of owner | `Hand of current` | Current player's location |
 | Card position | `top(Hand)` | First card |
@@ -345,8 +357,8 @@ boolean checks.
 #### Card position by value
 
 ```
-min of Hand using BJ    // card with lowest point-map value
-max of Hand using RankOrd   // card with highest precedence
+min of Hand using BJ          // card with lowest point-map value
+max of Hand using RankOrd     // card with highest precedence
 ```
 
 #### Filter expressions
@@ -379,13 +391,18 @@ stage <Name> for <player> <end-condition> {
 }
 ```
 
-The `for` clause is **mandatory**. Both forms produce the same IR (per-player
-fan-out is not yet implemented):
+The `for` clause is **mandatory**:
 
 ```
 stage Play for current 3 times { ... }     // seq (player_expr)
 stage Reveal for all 1 times { ... }       // sim (player_collection)
 ```
+
+⚠️ The `for` clause currently has **no effect** — every stage includes all
+players (`for current` ≡ `for all`), and both forms produce the same IR.
+The stage body runs as a loop for the *current* player; per-player
+participation (`set … out of <stage>`) and the turn loop (`cycle to next`)
+are the ways to scope who acts.
 
 ### 5.2 End conditions
 
@@ -405,6 +422,12 @@ stage Draw for current until Hand empty { ... }
 stage Draw for current until end { ... }
 ```
 
+**Auto-end (no players left):** at every end-condition evaluation the stage
+also exits when **no players remain in the game** (the game then runs out to
+the goal with an empty winner set) or **no players remain in this stage**
+(everyone was set out of it). `until end` stages therefore cannot loop
+forever after everyone is eliminated.
+
 ### 5.3 Stage lifecycle
 
 1. **Entry**: `ensure_stage_entered(name)` runs on first encounter. Marks
@@ -416,7 +439,29 @@ stage Draw for current until end { ... }
 3. **Exit**: On end-condition match or `end stage` action, the stage is
    popped from `stage_stack`.
 
-### 5.4 Trigger rules
+⚠️ The end condition is checked at stage *entry* — effects produced mid-body
+(e.g. "a player emptied their hand") are only observed on the next entry, up
+to one full rotation late. Bound such stages with `N times` to guarantee
+termination.
+
+### 5.4 Ineligible players are skipped (no prompts to eliminated players)
+
+A player who is **out of the game**, or **out of the current stage**, is
+never offered input and none of their instructions run:
+
+- Their instruction edges (moves, scores, conditions, choices, optionals,
+  triggers, quantifier prompts) are **skipped** — advanced through without
+  executing.
+- Only **cycle actions** (`cycle to …`), **end actions** (`end turn` /
+  `end stage` / `end <name>`), and the stage bookkeeping still execute — so
+  `cycle to next` keeps moving the turn to the next eligible player, and the
+  stage loops normally with the new player.
+
+The skip applies while the condition holds and stops as soon as a cycle
+lands on an eligible player. Outside a stage (setup, top-level rules)
+nothing is skipped.
+
+### 5.5 Trigger rules
 
 Trigger rules fire each time they are encountered in the flow:
 
@@ -426,22 +471,20 @@ trigger {
 }
 ```
 
-A `trigger` block inside a stage fires on every iteration (when the flow
-reaches it). A top-level `trigger` fires once before any stage. There is
-no dedicated `on enter` syntax: a `trigger` at the start of a stage body
-fires **every iteration**, so "entry-only" behaviour is expressed with a
-1-iteration stage (`stage X for current 1 times`) or a
-`if (stageroundcounter == 1)` guard (the counter starts at 0 and increments
-once per loop-back).
+A `trigger` block inside a stage fires on **every iteration** (when the flow
+reaches it). A top-level `trigger` fires once before any stage. There is no
+dedicated `on enter` syntax: entry-only behaviour is expressed with a
+1-iteration stage (`stage X for current 1 times`) or an
+`if (stageroundcounter == 0)` guard (the counter is 0 on the first pass).
 
-Triggers are lowered as `Payload::Trigger` edges and dispatched immediately.
+Triggers are lowered as marker edges and dispatched immediately.
 
 ---
 
 ## 6. Actions
 
 Actions mutate `GameData`. The three move verbs share one syntax and engine
-path, but since 2026-08-10 **the verb carries the choice semantics**:
+path, but **the verb carries the choice semantics**:
 
 - `deal` — **automatic**: the cards come off the **top** of the collection.
   `deal 3 from Deck` = "draw 3"; the player never chooses which cards.
@@ -456,7 +499,8 @@ deal <quantity> from <cardset> <status> to <cardset>
 exchange <quantity> from <cardset> <status> to <cardset>
 ```
 
-The **status** field is **mandatory** — even though the engine ignores it (for now!):
+The **status** field is **mandatory** — even though the engine ignores it
+(for now):
 
 ```
 move top(Hand) face up to Discard
@@ -474,7 +518,7 @@ Cards are removed from **all** locations (not just the source) before being
 added to the destination. This is a brute-force approach that works because
 each card is globally unique.
 
-**The `<quantity>` field (verb-aware since 2026-08-10):**
+**The `<quantity>` field (verb-aware):**
 
 | Quantity | `deal` (automatic, from the top) | `move` / `exchange` (player picks) |
 |----------|----------------------------------|-----------------------------------|
@@ -513,7 +557,9 @@ shuffle Deck
 shuffle Hand of current
 ```
 
-Randomises the card order in-place. Silently no-ops on error (stderr log).
+Randomises the selected cards in place within their location (unselected
+cards stay put — `shuffle top 3 of Deck` only shuffles the top three).
+Evaluation failures are recoverable errors.
 
 ### 6.3 Cycle (change current player)
 
@@ -524,11 +570,13 @@ cycle to current
 ```
 
 Sets `current_player` in `turn_order`. `next` walks turn order, skipping
-eliminated or out-of-stage players; with no eligible *other* player the turn
-wraps onto the current player (I-13, relaxed 2026-08-10), and with nobody
-eligible at all `cycle to next` is a **no-op** — games that eliminate players
-need no guards, and the stage auto-ends when no players remain (§2.6
-semantics).
+eliminated or out-of-stage players. With no eligible *other* player the turn
+**wraps onto the current player** when it is still eligible; with nobody
+eligible at all, `cycle to next` is a **no-op**. Elimination games need no
+guards — and the stage auto-ends when no players remain (§5.2).
+
+`previous` mirrors `next` (reverse scan, same eligibility rules), so
+`cycle to previous` works for turn-order reversal.
 
 ### 6.4 End scope
 
@@ -539,16 +587,14 @@ end Play              // leave named stage
 end game with winner P:P1   // declare the winner(s) and end the game
 ```
 
-`end turn` calls `next_player()` which scans `turn_order` for the next
-eligible player, wrapping onto the current player when it is the only
-eligible one (since 2026-08-10 it no longer strands the game).
+`end turn` advances to the next eligible player, wrapping onto the current
+player when it is the only eligible one (it never strands the game).
 
-`end game with winner <players>` eliminates everyone not named (2026-08-10)
-and ends the game. **Winner set:** every player still in the game at the end
-is a winner (`GameData::winner_names`) — whether declared via
-`winner is …` / `end game with winner …` (which eliminate the rest) or
-simply because the game ran out of stages with players left in. With nobody
-left in the game, the winner set is empty.
+`end game with winner <players>` eliminates everyone not named and ends the
+game. **Winner set:** every player still in the game at the end is a winner
+— whether declared via `winner is …` / `end game with winner …` (which
+eliminate the rest) or simply because the game ran out of stages with
+players left in. With nobody left in the game, the winner set is empty.
 
 ### 6.5 Set player out
 
@@ -560,7 +606,8 @@ set current out of stage      // exit current stage for this player
 ```
 
 `out of game` sets `in_game = false`. `out of stage` / `out of <name>` sets
-the player's `in_stage[<name>] = false`.
+the player's `in_stage[<name>] = false`. Once out, the player is skipped by
+the turn flow (§5.4) and never prompted.
 
 ### 6.6 Memory operations
 
@@ -570,44 +617,36 @@ M is 42                      // Int
 M is "Hello"                  // String
 M is P:Alice                  // Player (stored as String)
 M is T:Red                    // Team
-M is (1, 2, 3)                // IntCollection (evaluated since 2026-08-10)
+M is (1, 2, 3)                // IntCollection
 M is ("A", "B")               // StringCollection
 M is (P:Alice, P:Bob)        // PlayerCollection
 M is (top(Hand), bottom(Hand)) // CardSet
 
-// Read back (expression — requires explicit owner)
-(&I:M of P:P1)   // reads Int memory
+// Read back (expression)
+(&I:M of P:P1)   // reads Int memory, explicit owner
 score (&I:M of current) to current
 
-// Reset (resets every variant to its typed zero since 2026-08-10)
+// Reset (every variant to its typed zero)
 reset M
 ```
 
-⚠️ **Write/read owner resolution (D-14, since 2026-08-10):** the write rules
-have no `of <owner>` clause, so `M is 5` / `reset M` (and bare reads `&I:M`)
-target the **declared owner** when exactly one slot ends in `_M` exists —
-`memory pot on table` + `pot is 5` writes `Table_pot` — and otherwise the
-**current player's** slot. This replaced the old behaviour where a
-table-declared memory was silently written under the current player's name.
+**Owner resolution (reads and writes):** the write rules have no
+`of <owner>` clause, so `M is 5` / `reset M` (and bare reads like `&I:M`
+without `of <owner>`) target:
 
-⚠️ Collection memory variants are fully evaluated (literals, and
-`Memory`-form copies of existing collection slots).
+1. the **declared owner** — when exactly one existing slot ends in `_M`
+   (`memory pot on table` declares `Table_pot`, so `pot is 5` writes
+   `Table_pot`);
+2. otherwise the **current player's** slot;
+3. otherwise a recoverable error.
 
-⚠️ Bare `&I:M` (no `of <owner>`) resolves through the same owner resolution
-as writes; it errors only when neither a declared slot nor a current player
-exists.
+Reads with an explicit owner (`&I:M of P:P1`, `&I:M of table`) always use
+that owner.
 
-### 6.7 Stubs
+Collection memory variants are fully evaluated: literals (`M is (1, 2, 3)`)
+and `Memory`-form copies of existing collection slots.
 
-| Action | Status |
-|--------|--------|
-| `flip <cardset> to <status>` | ⏳ No-op by design — becomes (de)encryption with card crypto; the status slot exists |
-| `place <token> from ... to ...` | ❌ Tokens not modeled |
-| `bid <quantity>` (no memory target) | ❌ Recoverable error since 2026-08-10 — use the memory form |
-| `bid <quantity> on <memory> of <owner>` | ✅ **Numeric input prompt** (2026-08-10): `any`/range → `InputType::Number` prompt (bounds validated, re-asked); literal → writes `{owner}_{memory}` directly. See §6.8 |
-| `demand <type>` / `demand ... as <memory>` | ❌ Semantics undefined |
-
-### 6.8 Numeric input — `bid <quantity> on <memory> of <owner>` (2026-08-10)
+### 6.7 Numeric input — `bid <quantity> on <memory> of <owner>`
 
 ```
 bid any on Pot of table                  // prompt for any number
@@ -615,10 +654,20 @@ bid >= 1 and <= 10 on Bet of table       // prompt, bounded 1..=10
 bid 5 on Pot of table                    // literal: write 5, no prompt
 ```
 
-Asks the current player for a number and stores it in the owner's memory slot
-(`InputType::Number`). Out-of-range answers are rejected and re-asked. This is
-the DSL surface for betting/ante mechanics while the grammar has no `any` in
-pure int expressions (see `engine-vs-design.md` §5).
+Asks the current player for a number and stores it in the owner's memory
+slot. Out-of-range answers are rejected and re-asked. This is the DSL
+surface for betting/ante mechanics.
+
+⚠️ A plain `bid <quantity>` **without** a memory target is a recoverable
+error — always use the `on <memory> of <owner>` form.
+
+### 6.8 Stubs
+
+| Action | Status |
+|--------|--------|
+| `flip <cardset> to <status>` | ⏳ No-op by design — becomes (de)encryption with card crypto; the status slot exists |
+| `place <token> from ... to ...` | ❌ Tokens not modeled |
+| `demand <type>` / `demand ... as <memory>` | ❌ Semantics undefined |
 
 ---
 
@@ -645,6 +694,10 @@ optional {
 Presents an **accept/decline** prompt to the current player. Accept → runs
 the body. Decline → skips.
 
+⚠️ Decline runs **nothing** — "standing" or "refusing" is not recorded, so
+an optional re-asks the same player on the next round. Bound the stage with
+`N times` and let players re-decline, or model the choice with a memory.
+
 ### 7.3 `choose`
 
 ```
@@ -656,9 +709,8 @@ choose {
 ```
 
 Presents a **multi-choice** prompt. Each `or`-separated arm is a **sequence**
-of flow components executed in order when selected (fixed 2026-08-09 —
-previously every component became its own arm). The player selects one arm by
-index. There can be 1+ arms (though having only one is equivalent to an
+of flow components executed in order when selected. The player selects one
+arm by index. There can be 1+ arms (a single arm is equivalent to an
 `optional`).
 
 ```
@@ -687,9 +739,8 @@ conditional {
 ```
 
 Evaluates each `case` condition in order. The first matching case executes.
-`case else:` (no condition) acts as a catch-all. Once a `case:` without a
-condition is hit, all subsequent cases are marked **unreachable** with a
-diagnostic.
+`case else:` (no condition) acts as a catch-all; cases after it are
+unreachable (a diagnostic is emitted).
 
 ### 7.5 Trigger
 
@@ -699,7 +750,10 @@ trigger {
 }
 ```
 
-Fires immediately when encountered. Used for `on enter:` blocks in stages.
+Fires each time it is encountered in the flow — every stage iteration for a
+trigger inside a stage body, once for a top-level trigger (see §5.5).
+
+---
 
 ## 8. Scoring & Winners
 
@@ -719,6 +773,9 @@ score sum of Hand of current using BJ to current
 score 42 to ScoreSlot of P:P1
 ```
 
+`score N to M of <players>` writes the per-player slot `{player}_M` and does
+**not** touch `Player::score`.
+
 ### 8.2 Winner rules
 
 ```
@@ -735,13 +792,20 @@ winner is lowest M                // lowest memory value wins
 Explicit winners: all other players are set `in_game = false`.
 
 Extrema winners: all in-game players are compared; only those matching the
-target value remain.
+target value remain (ties are kept). `position` uses the 0-based turn-order
+index (players absent from the turn order are excluded). Memory extrema
+(`winner is highest M`) read the per-player slot `{player}_M`; players
+without the slot are skipped, and a non-Int slot is an error.
 
-⚠️ `winner is highest/lowest position` uses turn-order index (lower = earlier
-in turn). `winner is highest/lowest <memory>` reads the per-player memory slot
-`<player>_<memory>` — this is the correct key format, unlike the
-`owner of highest/lowest <memory>` player expression which has a key-order
-bug (see §12).
+### 8.3 The winner set at game end
+
+Every game ends with a **winner set**: the players still `in_game` when the
+FSM reaches the goal (in declaration order; empty when nobody won). Explicit
+winner declarations reduce to the same rule, because they eliminate everyone
+else. The winner set is displayed by all tooling at game end — the TUI trace
+log (`GameOver: winners: P1, P3`), the trace file footer
+(`=== GameOver after N steps — winners: P1, P3 ===`), and `cgdsl-play`'s
+summary — and is available programmatically via `GameData::winner_names()`.
 
 ---
 
@@ -756,7 +820,9 @@ deal 1 from Deck private to Hand of all
 ```
 
 Builds a **fan-out chain** of synthetic edges — one per player. The FSM
-automatically steps through each. No player prompt.
+automatically steps through each. No player prompt. Dealing is sequential:
+each player's edge sees the deck after the previous player's edge moved
+cards.
 
 ### 9.2 `any` in destination
 
@@ -767,9 +833,9 @@ deal 1 from Deck private to Hand of any
 Issues a **`ChoosePlayer` prompt** so the player picks a target from the
 candidate list.
 
-### 9.3 `any` / range in source
+### 9.3 Source quantities — the verb decides
 
-The quantity semantics depend on the verb (2026-08-10, see §6.1):
+The quantity semantics depend on the verb (§6.1):
 
 ```
 deal any from Deck face up to Discard          // NUMBER prompt: "how many?" (1..pile), then top-N
@@ -781,17 +847,20 @@ move 1 from Hand face up to Discard            // ChooseCards prompt: pick exact
 
 For `move`/`exchange` the chosen card IDs are written to a synthetic memory
 slot and consumed by the replacement edge; `deal` substitutes the chosen
-count as a literal quantity and deals from the top.
+count as a literal quantity and deals from the top. Both chain with player
+quantifiers (`move 1 from Hand of any …` prompts for the player first, then
+the card) and with dest fan-outs (`deal any from Deck to Hand of all` asks
+the count once, then deals to every player).
 
-### 9.4 `any` in setup — prompts (since 2026-08-10)
+### 9.4 `any` in setup
 
 ```
-location Hand on any       // prompts for one player (I-20)
+location Hand on any       // prompts for one player
 ```
 
 Any quantifier `any` in a setup rule issues a `ChoosePlayer` prompt before
 any mutation; the chosen player is substituted into every any-site of the
-rule. (Previously rejected with a runtime error.)
+rule.
 
 ---
 
@@ -809,9 +878,9 @@ stage Play for current 10 times {
 ```
 
 The `cycle to next` at the end of each iteration advances the turn. The
-`for current` + `cycle to next` pair is the standard turn-loop pattern.
-The `N times` clause provides a safety cap (e.g. 10 iterations for 5
-players × 2 actions each).
+`for current` + `cycle to next` pair is the standard turn-loop pattern. The
+`N times` clause provides a safety cap (e.g. 10 iterations for 5 players × 2
+actions each).
 
 ### 10.2 Hit or stand (Blackjack)
 
@@ -826,19 +895,13 @@ optional {
 
 `optional` gives the player a hit/stand choice. Accept = draw a card;
 decline = stand (skip). The `if` checks for bust (>21) and auto-eliminates.
-Since 2026-08-10 no guards are needed around this pattern:
+No guards are needed: a busted player is never prompted again (their
+remaining instructions are skipped, §5.4), `cycle to next` never errors
+(§6.3), and the stage auto-ends when nobody is left (§5.2).
 
-- a busted player is **never prompted again** — once `set current out of
-  game` fires, the rest of their turn is skipped (ineligible-player skip,
-  I-24);
-- `cycle to next` never errors — with no eligible *other* player the turn
-  wraps onto the current player (or no-ops when nobody at all is eligible),
-  and the stage auto-ends when no players remain in the game.
-
-> **Caveats (see `engine-vs-design.md` D-3):**
-> - Standing is **not recorded** — declining only skips this round, so the
->   optional re-asks the same player next round. Bound the stage with
->   `N times` and let players re-decline.
+> **Caveat:** standing is **not recorded** — declining only skips this
+> round, so the optional re-asks the same player next round. Bound the stage
+> with `N times` and let players re-decline.
 
 ### 10.3 Deal N cards per player
 
@@ -908,6 +971,17 @@ conditional {
 
 First exact-match wins. `case else:` catches all remaining branches.
 
+### 10.9 Ask the player for a number
+
+```
+bid any on Pot of table                  // "bid how much?" (any amount)
+bid >= 1 and <= 10 on Bet of table       // "bid how much?" (1..=10)
+```
+
+Store the answer in a table memory, then read it back with `&I:M of table`.
+A complete betting round: prompt each player in a turn loop, then compare the
+memories with `winner is highest Bet`.
+
 ---
 
 ## 11. Blackjack Walkthrough
@@ -954,7 +1028,7 @@ stage Deal for current 1 times {
 ```
 
 Manual per-player deals (could use `of all` with fan-out, but this is
-explicit). Dealer gets only one card up front — second card comes after all
+explicit). Dealer gets only one card up front — the second comes after all
 players finish (§11.4).
 
 ### 11.3 Player turns — hit or stand
@@ -973,9 +1047,8 @@ stage Play for current 12 times {
 
 12 iterations = 4 full rounds (4 × 3 players). `optional` prompts hit/stand.
 Accept = draw one card, then check bust. Bust → `set current out of game`.
-No guards are needed (2026-08-10): a busted player is skipped automatically
-(ineligible-player skip, I-24) and `cycle to next` wraps/no-ops instead of
-erroring (I-13 relaxed).
+No guards are needed: a busted player is skipped automatically (§5.4) and
+`cycle to next` wraps or no-ops instead of erroring (§6.3).
 
 ### 11.4 Dealer — auto-play
 
@@ -1006,10 +1079,9 @@ stage Score for current 1 times {
 }
 ```
 
-Each player is scored explicitly — no turn cycling here, because
-"one pass per player" cannot be expressed safely with `cycle to next` once
-players drop out (D-1). Players whose hand does not beat the dealer are
-simply never scored; they are out of game either way.
+Each player is scored explicitly — the dealer plays once, so there is
+nothing to cycle. Players whose hand does not beat the dealer are simply
+never scored; they are out of game either way.
 
 ### 11.6 Winner determination
 
@@ -1021,7 +1093,8 @@ stage End for current 1 times {
 
 Only in-game players (those who did not bust and beat the dealer) are
 compared by score. The highest survives; ties are retained (multiple winners
-possible). If every player busts, nobody is in game and nobody wins.
+possible). If every player busts, nobody is in game and nobody wins — the
+winner set is empty, and the tooling reports `no winners`.
 
 ### 11.7 Full file
 
@@ -1090,27 +1163,19 @@ stage End for current 1 times {
 
 | Construct | Status | Notes |
 |-----------|--------|-------|
-| `unless` | ❌ Not in grammar | Use `if (not <expr>)` — note `not (X)` with parens does **not** parse (P-8); write `not Hand empty`, `not current out of game` |
-| `for <players>` clause in stage | ⚠️ Dropped | All players always in-stage (B-1) |
-| SimStage (per-player FSM) | ❌ Not implemented | `build_sim_stage` = same IR as seq (B-3) |
+| `unless` | ❌ Not in grammar | Use `if (not <expr>)` — note `not (X)` with parens does **not** parse; write `not Hand empty`, `not current out of game` |
+| `for <players>` clause in stage | ⚠️ Dropped | All players always in-stage; the clause has no effect (P-1) |
+| SimStage (per-player FSM) | ❌ Not implemented | `stage X for all …` runs the same sequential IR as `for current` (P-2) |
 | `flip <cardset> to <status>` | ⏳ No-op by design | Becomes (de)encryption with card crypto; the status slot exists |
-| `place <token>` | ❌ Stub | Tokens not in data model |
-| `create token` | ❌ Stub | Tokens not in data model |
-| `bid <quantity>` (no target) | ❌ Error since 2026-08-10 | Use `bid <qty> on <memory> of <owner>` — the numeric input prompt (§6.8) |
+| `place <token>` / `create token` | ❌ Stub | Tokens not in the data model |
 | `demand <type>` | ❌ Stub | Semantics undefined |
-| `end game with winner <players>` | ✅ | Declares the winners (everyone else eliminated, 2026-08-10) and ends the game |
-| Collection memory writes | ✅ | Fully evaluated since 2026-08-10 |
-| `reset memory` on non-Int | ✅ | Resets every variant to its typed zero since 2026-08-10 |
-| Memory initial values | ✅ | `memory X 42 on P:P1` honours the value since 2026-08-10 |
-| `cycle to next` with one eligible player | ✅ | Self-wraps since 2026-08-10 — no `size(playersin) >= 2` guard needed |
-| Prompting eliminated players | ✅ | Never happens since 2026-08-10 (ineligible-player skip, I-24); stages auto-end with an empty winner set |
-| Team-owned locations/memories | ✅ | Per-member instances since 2026-08-10 (P-7) |
-| Aggregate memory (multi-owner) | ✅ | Implemented 2026-08-09 (`(&I:M of all)` aggregates per-owner slots) |
-| `owner of highest/lowest <mem>` | ✅ | Key-order bug fixed 2026-08-09 (`<player>_<mem>`) |
+| Card status / hidden information | ❌ | No per-player visibility; face-up/down/private is deferred to the crypto work |
+| Dice / arbitrary RNG | ❌ Not in grammar | Simulate with shuffled decks |
+| Numeric prompts in arbitrary int expressions | ⚠️ | `any`/ranges work in move/deal quantities and `bid … on <memory>`; `score any to …` does not parse |
 
-> Statuses above are a convenience excerpt — the authoritative status table is
-> [`dsl-completeness.md`](./dsl-completeness.md); divergences with repros live
-> in [`engine-vs-design.md`](./engine-vs-design.md).
+> The authoritative per-construct status table is
+> [`dsl-completeness.md`](./dsl-completeness.md); known divergences with
+> repros live in [`engine-vs-design.md`](./engine-vs-design.md).
 
 ---
 
@@ -1132,7 +1197,8 @@ just tui crates/engine/test_games/blackjack.cgdsl
 ```
 
 Launches a ratatui terminal UI where you can step through the game,
-inspect `GameData`, choose options, and see trace events.
+inspect `GameData`, choose options, and see trace events. The trace log
+shows every transition, including the final `GameOver: winners: …` line.
 
 ### 13.3 Run existing tests
 
@@ -1144,9 +1210,9 @@ Tests cover setup, actions, scoring, quantifiers, and query evaluation.
 
 ### 13.4 Trace logging
 
-The TUI writes a `mcg-trace.log` file with structured trace entries
-(actions, condition evaluations, stage counters, etc.) at
-`crates/engine/mcg-trace.log`.
+Set `MCG_TRACE_LOG=path` (or pass `--log <path>` to `cgdsl-play`) to write a
+structured trace file: one line per FSM transition, a stamped header, and a
+footer naming the winner set.
 
 ---
 
@@ -1165,6 +1231,7 @@ precedence Ord on Rank(A, K, Q, J)
 points Values on Rank(A:11, K:10, Q:10, J:10)
 combo Pair where size == 2 and Rank same
 memory MyVar on table
+memory Pot 100 on table
 ```
 
 ### Stage cheatsheet
@@ -1179,17 +1246,22 @@ stage Name for all N times { ... }
 ### Action cheatsheet
 
 ```
-move top(Hand) face up to Discard
-deal 3 from Deck private to Hand of all
-exchange any from Hand face down to Table
+deal 3 from Deck private to Hand of all     // draw 3, automatic
+deal any from Deck private to Hand          // "how many?" then draw
+move 1 from Hand private to Discard         // pick exactly one card
+move >= 2 and <= 5 from Hand private to Discard  // pick 2..5
+move top(Hand) face up to Table             // automatic (positional)
+exchange any from Hand face down to Table   // pick 1..N
 shuffle Deck
 cycle to next
 end turn
 end stage
+end game with winner P:P1
 set P:P1 out of game
 set current out of Play
 M is 42
 reset M
+bid any on Pot of table                     // numeric input prompt
 ```
 
 ### Scoring cheatsheet

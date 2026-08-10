@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all]
 topics: [contributing, development, workflow, cheatsheet]
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # Contributing — Development Cheatsheet
@@ -59,7 +59,7 @@ Where to touch when adding or modifying engine functionality.
 
 ## Guardrails
 
-- **Read `invariants.md` before modifying any engine code.** 23 documented invariants.
+- **Read `invariants.md` before modifying any engine code.** 25 documented invariants.
 - **Read `dsl-semantics.md` before changing DSL semantics.**
 - **Check `developer-notes.md`** for design decisions and known gaps.
 - **Memory ownership:** memory keys are prefixed with the owner name (`"P1_M"`, `"Table_pot"`). Use `Evaluator::resolve_memory_key()` in query code, never access `memories` directly.
@@ -71,7 +71,7 @@ Where to touch when adding or modifying engine functionality.
 ## Build commands
 
 ```
-cargo test -p cgdsl-engine                    # 550 tests
+cargo test -p cgdsl-engine                    # 551 tests
 cargo clippy -p cgdsl-engine --all-targets -- -D warnings
 cargo fmt -p cgdsl-engine -- --check
 just tui [GAME]                                # interactive TUI testing

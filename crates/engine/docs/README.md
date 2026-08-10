@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all — crate-level overview]
 topics: [overview, architecture, module-map, domain-concepts, entry-point]
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # CGDSL Engine — Overview
@@ -75,7 +75,7 @@ minutes (CLI flags, logging, debugging), then follow the path below.
 11. [`error-handling.md`](./error-handling.md) — panic sites, recoverable errors, silent no-ops
 12. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
 
-**Handoff set (2026-08):**
+**Handoff set:**
 13. [`mechanics-matrix.md`](./mechanics-matrix.md) — which card-game mechanics the system supports (capability matrix + gap summary)
 14. [`NEXT_STEPS.md`](./NEXT_STEPS.md) — future-work project seeds (bachelor/master)
 
@@ -123,7 +123,7 @@ crates/engine/src/
 │   │   ├── trace.rs               — trace relay types (detail filters)
 │   │   └── ui/                    — state, layout, game_state, trace_log, input, controls
 │   └── cgdsl-play.rs              — CLI game driver (interactive + file replay; `--log`, `--debug-level` flags)
-├── test_games/                    — 73 .cgdsl fixture files (incl. the five demo games)
+├── test_games/                    — 89 .cgdsl fixture files (incl. the five demo games)
 └── tests/                         — integration tests (one file per feature area)
     ├── quantifier_test.rs
     ├── action_test.rs
@@ -167,7 +167,7 @@ crates/engine/src/
 ## Build and Test
 
 ```
-cargo test -p cgdsl-engine              # 550 tests (442 lib + 5 cgdsl-play + 9 TUI + 94 integration, +1 ignored)
+cargo test -p cgdsl-engine              # 551 tests (442 lib + 5 cgdsl-play + 9 TUI + 95 integration, +1 ignored)
 cargo test -p cgdsl-engine --test <name> # single integration test file
 cargo clippy -p cgdsl-engine --all-targets -- -D warnings
 cargo fmt -p cgdsl-engine -- --check

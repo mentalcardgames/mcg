@@ -12,7 +12,7 @@ associated_files:
   - crates/engine/src/controller/mod.rs
   - crates/engine/src/game_data.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-08-10
+last_validated: 2026-08-11
 ---
 
 # Error Handling, Panic Conditions & Diagnostics
@@ -117,13 +117,13 @@ Design notes:
 all `crates::engine::query::Evaluator` `Result` returns; condition/end-condition edge-count
 violations; missing current state in the IR; dead-end non-goal states; test-file
 open/parse/exhaustion errors; the quantifier-resume / setup-guard errors listed in §1. **Since
-2026-08 every DSL-reachable `action.rs` failure is recoverable too** — `action::execute` and
+every DSL-reachable `action.rs` failure is recoverable too** — `action::execute` and
 `Interpreter::execute_edge` return `Result<(), EngineError>`, and the former panic sites (`cycle
 to next` with no eligible *other* player, `SetMemory`/`ResetMemory` without a current player,
 `CreateLocation`/`CreateCardOnLocation`/`CreatePointMap` setup failures,
 `Score`/`ScoreMemory`/`CycleAction` eval failures, `execute_cardset_move` source/dest failures)
 now terminate `run_game` with `Err(EngineError)` instead of aborting the process (see
-`engine-vs-design.md` F-8). These terminate `crates::engine::controller::run_game` with `Err` and
+`engine-vs-design.md`). These terminate `crates::engine::controller::run_game` with `Err` and
 leave `crates::engine::game_data::GameData` in whatever partially-mutated state it reached (the
 engine does **not** roll back applied mutations on error —
 `crates::engine::interpreter::Interpreter::execute_edge` has already written before a later
@@ -131,12 +131,12 @@ evaluator call can fail). The `validate_int_range` re-prompt path is a partial e
 returns `NeedsInput` (not `Error`) so the controller re-asks the player and the run continues.
 
 **Unrecoverable** (process-aborting `panic!` / `.expect()` / `.unwrap()` / `todo!`). Since the
-2026-08 fallibility pass these are **internal invariants only** — none are reachable from
+these are **internal invariants only** — none are reachable from
 well-formed DSL input:
 
 | Site | Condition | Failure mode |
 |---|---|---|
-| `crates/engine/src/game_data.rs:139-156` | `crates::engine::game_data::GameData::add_location` owner (non-Table) not in `players` | `panic!("add_location: owner {} not found in players", owner_name)` — unreachable via DSL since `CreateLocation` resolves the owner first (F-8) |
+| `crates/engine/src/game_data.rs:139-156` | `crates::engine::game_data::GameData::add_location` owner (non-Table) not in `players` | `panic!("add_location: owner {} not found in players", owner_name)` — unreachable via DSL since `CreateLocation` resolves the owner first |
 | `crates/engine/src/game_data.rs:228-246` | `crates::engine::game_data::GameData::next_player` found idx missing from `turn_order` | `panic!("next_player: next_player {} not found in turn_order {:?}", next_player, self.turn_order)` (see I-13 — safe given `resolve_turn`'s contract) |
 | `crates/engine/src/quantifier.rs:138` | `crates::engine::quantifier::alloc_synth` `serde_json::from_value` failure | `.expect("StateID deserialisation from a valid u32 cannot fail")` — the input is `Value::from(raw: u32)` and `StateID` derives `Deserialize` as a transparent newtype around `u32`, so this expect is unreachable by construction. Listed for completeness; it does not fire on any real input. |
 
@@ -162,22 +162,22 @@ setup-`Any` guard prompts for a player (`step_setup_any`), never `panic!` (`inte
 
 - `front_end::ast::ActionRule::FlipAction` (`crates/engine/src/action.rs:207-211`) — payload fields
   ignored entirely; the per-card status slot (`GameData::card_statuses`) exists but is unused.
-  Intended to become (de)encryption when card cryptography lands (see `engine-vs-design.md` §1b).
+  Intended to become (de)encryption when card cryptography lands (see `dsl-semantics.md` §3.8).
 - `front_end::ast::ActionRule::BidAction` (plain `bid <qty>` without a memory target) is
-  **no longer a silent no-op** — since 2026-08-10 it returns
+  **no longer a silent no-op** — it returns
   `EngineError::BidWithoutMemoryTarget` (see `dsl-semantics.md` §3.7).
 - `front_end::ast::ActionRule::BidMemoryAction`, `DemandAction`, `DemandMemoryAction`,
   `front_end::ast::SetUpRule::CreateTokenOnLocation`, `front_end::ast::MoveType::Place`
   (`crates/engine/src/action.rs`) — `// TODO` no-ops. (`BidMemoryAction` is **implemented**
-  since 2026-08-10: literal quantities write the owner's slot; `any`/ranges are prompted by
+  literal quantities write the owner's slot; `any`/ranges are prompted by
   the interpreter as `InputType::Number`. `EndType::GameWithWinner` is **implemented** since
-  2026-08-10: the declared winners eliminate everyone else before the IR jumps to the goal.)
+  the declared winners eliminate everyone else before the IR jumps to the goal.)
 - `front_end::ir::Payload::Trigger` traversal: `crates::engine::interpreter::Interpreter::step`
   advances the state (`execute_edge`) but `crates::engine::action::execute`'s catch-all
   `_ => {}` performs no mutation.
 - Out-of-range `Choice`/`Optional` input (I-8) — silent stall, no error.
 
-**Former silent no-ops now fixed (2026-08):** `ShuffleAction` eval failures (were
+**Former silent no-ops now fixed:** `ShuffleAction` eval failures (were
 `eprintln!` + continue — now `Err(EngineError::ShuffleActionEval)`), `PlayerCollection::AggregateMemory`/`Memory`
 (returned `vec![]` silently — now read/aggregate real slots or error), and the four
 collection-memory `todo!()` arms (now implemented).

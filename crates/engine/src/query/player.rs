@@ -81,6 +81,11 @@ impl Evaluator {
                             {
                                 return Ok("Table".to_string());
                             }
+                            for team in game_data.teams.iter() {
+                                if team.owner.locations.contains(&loc_idx) {
+                                    return Ok(team.name.clone());
+                                }
+                            }
                             for player in game_data.players.iter() {
                                 if player.owner.locations.contains(&loc_idx) {
                                     return Ok(player.name.clone());
@@ -375,10 +380,10 @@ impl Evaluator {
     }
 
     /// Resolves an `Owner` to the list of entity names that own the
-    /// locations/memories being created. Since 2026-08-10 team owners are
-    /// supported: `location X on T:T1` creates one instance **per team
-    /// member** (mirroring `on all`), because the data model has no
-    /// team-entity ownership slot (P-7, fixed).
+    /// locations/memories being created. Team owners resolve to the **team
+    /// name itself** — `location X on T:Red` creates ONE shared pile for the
+    /// team, and `memory M on T:Red` creates the single slot `Red_M`
+    /// (matching the read/write addressing, e.g. `(&I:M of T:Red)`).
     pub fn resolve_owner_to_names(
         owner: &Owner,
         game_data: &GameData,
@@ -388,7 +393,11 @@ impl Evaluator {
             Owner::Player { player } => Ok(vec![Self::eval_player(player, game_data)?]),
             Owner::Team { team } => {
                 let team_name = Self::eval_team(team, game_data)?;
-                Ok(Self::team_member_names(&team_name, game_data))
+                if game_data.teams.iter().any(|t| t.name == team_name) {
+                    Ok(vec![team_name])
+                } else {
+                    Ok(vec![])
+                }
             }
             Owner::PlayerCollection {
                 player_collection: pc,
@@ -401,32 +410,12 @@ impl Evaluator {
             }
             Owner::TeamCollection { team_collection } => {
                 let team_names = Self::eval_team_collection(team_collection, game_data)?;
-                let mut names: Vec<String> = Vec::new();
-                for team_name in team_names {
-                    for member in Self::team_member_names(&team_name, game_data) {
-                        if !names.contains(&member) {
-                            names.push(member);
-                        }
-                    }
-                }
-                Ok(names)
+                Ok(team_names
+                    .into_iter()
+                    .filter(|n| game_data.teams.iter().any(|t| &t.name == n))
+                    .collect())
             }
         }
-    }
-
-    /// The player names of a named team (empty when the team is unknown).
-    fn team_member_names(team_name: &str, game_data: &GameData) -> Vec<String> {
-        game_data
-            .teams
-            .iter()
-            .find(|t| t.name == team_name)
-            .map(|t| {
-                t.players
-                    .iter()
-                    .filter_map(|&i| game_data.players.get(i).map(|p| p.name.clone()))
-                    .collect()
-            })
-            .unwrap_or_default()
     }
 }
 
