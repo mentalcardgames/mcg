@@ -19,7 +19,7 @@ last_validated: 2026-08-11
 Every runtime value in `crates::engine` lives in or is referenced from the flat aggregate
 `crates::engine::game_data::GameData`. This page documents (1) the `GameData` family, (2) the
 `front_end::ir` types the engine consumes, and (3) the execution-time types (`Interpreter`,
-`Controller`, `Input`, `StepResult`, `InputType`, plus the post-Stage-5 trace subsystem
+`Controller`, `Input`, `StepResult`, `InputType`, plus the trace subsystem
 `TraceEntry`/`TraceEvent` and the `IrExt` trait). For *how* they are sequenced at runtime, see
 [`lifecycle.md`](./lifecycle.md); for *what must not be violated*, see
 [`invariants.md`](./invariants.md).
@@ -155,7 +155,7 @@ So at the engine boundary,
 plus `entry`/`goal`. The `front_end::ir::Edge::meta` field is **ignored** by the engine — it is read
 only by `front_end::fsm_to_dot`.
 
-> **Engine-supplied `Ir` extension trait** (post-Stage-5): the engine defines
+> **Engine-supplied `Ir` extension trait:** the engine defines
 > `crates::engine::interpreter::IrExt` (`crates/engine/src/interpreter/ir_ext.rs:3-26`), a `pub`
 > trait `impl`'d for `Ir<LoweredPayLoad>`:
 > ```rust
@@ -191,8 +191,8 @@ pub struct Interpreter {
 }
 ```
 
-Post-Stage-5 the `Interpreter` grew from 4 fields (`ir`, `game_data`, `input_buffer`,
-`current_state`) to 8 by adding the trace-sender seam and the quantifier bookkeeping. A canonical
+The `Interpreter` carries 8 fields (`ir`, `game_data`, `input_buffer`,
+`current_state`, plus the trace-sender seam and the quantifier bookkeeping). A canonical
 constructor now exists:
 
 ```rust
@@ -307,11 +307,11 @@ struct Controller {
     file_loaded: bool,
     loaded_line_count: usize,
     input_sequence: usize,
-    step_count: Arc<std::sync::Mutex<usize>>,           // post-Stage-5
+    step_count: Arc<std::sync::Mutex<usize>>,
 }
 ```
 
-`Controller` is the (still-private) run-loop owner. Post-Stage-5 it gained a `step_count:
+`Controller` is the (still-private) run-loop owner; it carries a `step_count:
 Arc<Mutex<usize>>` field shared with the composed trace-sender closure (see §6.1 of
 [`interfaces.md`](./interfaces.md) and [`observability.md`](./observability.md)).
 
@@ -323,7 +323,7 @@ struct` used purely as a namespace for associated functions (`eval_bool`, `eval_
 `eval_end_condition`, `eval_compare`, `eval_int_compare`, `resolve_players`,
 `resolve_player_collection`, `resolve_multi_owner_names`, `resolve_owner_to_name`,
 `resolve_owner_to_names`, `resolve_quantity`, `expand_types`, `check_attr_value_in_cardset`). It
-holds **no state**; every method takes `&GameData` (all reads are immutable). Post-Stage-5 the
+holds **no state**; every method takes `&GameData` (all reads are immutable). The
 query module was split into submodules (`bool.rs`, `cardset.rs`, `int.rs`, `player.rs`,
 `string.rs`) all hanging methods off the shared `Evaluator` struct.
 

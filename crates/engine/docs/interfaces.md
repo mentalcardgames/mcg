@@ -418,8 +418,11 @@ pub enum QuantSite {
     None,
     DestPlayerAll { pc: PlayerCollection },
     DestPlayerAny { pc: PlayerCollection },
+    SourcePlayerAny { pc: PlayerCollection },
     SrcCardsAnyOrRange { qty: Quantity, from: CardSet },
-    ComboSource { combo: String, from: CardSet },  // lay-down: prompt + validate
+    SrcCardsExactN { qty: Quantity, from: CardSet },   // move N: pick exactly N
+    DealCount { qty: Quantity, from: CardSet },        // deal any/range: count prompt
+    ComboSource { combo: String, from: CardSet },      // lay-down: prompt + validate
 }
 
 // crates/engine/src/quantifier.rs:69
@@ -431,7 +434,11 @@ pub struct PendingQuant {
 // crates/engine/src/quantifier.rs:78
 pub enum PendingKind {
     DestPlayerAny { candidates: Vec<String>, original: Edge<LoweredPayLoad> },
+    SourcePlayerAny { candidates: Vec<String>, original: Edge<LoweredPayLoad> },
+    SetupAny { candidates: Vec<String>, original: Edge<LoweredPayLoad> },
     CardsAnyOrRange { candidate_ids: Vec<usize>, original: Edge<LoweredPayLoad> },
+    CardsExactN { candidate_ids: Vec<usize>, expected: usize, original: Edge<LoweredPayLoad> },
+    DealCount { min: Option<i32>, max: Option<i32>, prompt: String, original: Edge<LoweredPayLoad> },
     DestAllThenCards { player_names: Vec<String>, candidate_ids: Vec<usize>, original: Edge<LoweredPayLoad> },
     Combo { candidate_ids: Vec<usize>, filter: FilterExpr, original: Edge<LoweredPayLoad> },
 }

@@ -195,8 +195,8 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 
 ## Quantifier Subsystem Invariants (I-16 … I-20)
 
-The Stage-5 quantifier preprocessor (`crates/engine/src/quantifier.rs` and
-`crates/engine/src/interpreter/quant_driver.rs`) introduces five invariants. They govern
+The quantifier preprocessor (`crates/engine/src/quantifier.rs` and
+`crates/engine/src/interpreter/quant_driver.rs`) is governed by these invariants. They
 synthetic-state allocation, the overlay's key discipline, the synthetic memory slot, the
 pending-resume state match, and the setup-`Any` guard.
 
@@ -214,11 +214,11 @@ pending-resume state match, and the setup-`Any` guard.
 > The overlay (`crates::engine::interpreter::Interpreter::pending_overlay`,
 > `crates/engine/src/interpreter/mod.rs:36`) is the bridge between the quantifier preprocessor and
 > the unchanged `action::execute` path. Every `insert` into it passes a synthetic id freshly
-> returned by `alloc_synth`:
-> - `step_dest_player_all` inserts chain ids at `quant_driver.rs:148`;
-> - `resume_dest_player_any` inserts the resume id at `quant_driver.rs:231`;
-> - `resume_cards_any_or_range` inserts the resume id at `quant_driver.rs:272`;
-> - `resume_dest_all_then_cards` inserts the fan-out ids at `quant_driver.rs:323`.
+> returned by `alloc_synth`: the dest fan-out chains (`build_dest_all_chain` /
+> `build_dest_all_chain_with_memory`), the per-player/choice resume edges
+> (`resume_dest_player_any`, `resume_source_player_any`, `resume_cards_any_or_range`,
+> `resume_cards_exact_n`), and `dispatch_concrete` (used by every concrete resume and by the
+> `DealCount` substitution).
 >
 > The overlay therefore never shadows `ir.states` — `step()`'s overlay-dispatch arm
 > (`interpreter/mod.rs:81-103`) only fires on a synthetic id, and the real-edge lookup
@@ -228,9 +228,9 @@ pending-resume state match, and the setup-`Any` guard.
 > owner-prefixed key `"Table___quantifier_overlay_cards"` in `game_data.memories` just before
 > dispatching a replacement edge and is removed at the top of `step()` once the FSM returns to
 > a real IR state.**
-> The slot is written by `resume_cards_any_or_range` (`quant_driver.rs:264-267`) and
-> `resume_dest_all_then_cards` (`quant_driver.rs:307-310`) immediately before substituting the
-> chosen card ids into the replacement edge's `from`; both sites prefix the key with `"Table_"`
+> The slot is written by `resume_cards_any_or_range`, `resume_cards_exact_n`, and
+> `resume_dest_all_then_cards` immediately before substituting the
+> chosen card ids into the replacement edge's `from`; each site prefixes the key with `"Table_"`
 > (the memory-ownership model, see `developer-notes.md` §1.1). It is removed by `step()`'s
 > cleanup block (`crates/engine/src/interpreter/mod.rs:69-79`), which removes
 > `"Table_{SYNTH_MEMORY_KEY}"` when (a) `current_state` is a real IR state, (b) the overlay has

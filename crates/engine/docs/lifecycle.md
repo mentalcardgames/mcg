@@ -214,6 +214,12 @@ The pre-dispatch arms, in order:
    - `QuantSite::SrcCardsAnyOrRange { qty, from }` → `step_src_cards_any_or_range`
      (`interpreter/quant_driver.rs:265-294`) — issues a `ChooseCards` prompt; the resume is
      `resume_cards_any_or_range` (`quant_driver.rs:456-495`).
+   - `QuantSite::SrcCardsExactN { qty, from }` → `step_src_cards_exact_n` — `move N` on a
+     non-positional source: `ChooseCards` with `min=max=N` (clamped); the resume
+     (`resume_cards_exact_n`) re-scans (chaining with dest fan-outs).
+   - `QuantSite::DealCount { qty, from }` → `step_deal_count` — `deal any`/`deal >= M and <= N`:
+     a `Number` prompt for the count; a degenerate range (`>= 2 and <= 2`) substitutes the
+     literal without prompting. The resume (`resume_deal_count`) re-scans.
    - `QuantSite::None` → fall through to the per-`Payload` dispatch below.
 
    **Chaining.** Every resume arm ends in `quantify_or_dispatch`

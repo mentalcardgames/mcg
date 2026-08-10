@@ -177,7 +177,7 @@ crates/engine/src/
 │   │   ├── trace.rs               — trace relay types (detail filters)
 │   │   └── ui/                    — state, layout, game_state, trace_log, input, controls
 │   └── cgdsl-play.rs              — CLI game driver (interactive + file replay; `--log`, `--debug-level` flags)
-├── test_games/                    — 89 .cgdsl fixture files (incl. the five demo games)
+├── test_games/                    — 90 .cgdsl fixture files (incl. the five demo games)
 └── tests/                         — integration tests (one file per feature area)
     ├── quantifier_test.rs
     ├── action_test.rs

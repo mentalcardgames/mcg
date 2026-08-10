@@ -188,7 +188,7 @@ The IR builder lowers a stage to:
 ```
 [entry] → [EndCondition edge]
             ├── false → [StageRoundCounter → body ... → loop back to entry]
-            └── true  → [post-stage state]
+            └── true  → [after the stage]
 ```
 
 **NOTE:** the end condition is checked at stage *entry* — effects produced
