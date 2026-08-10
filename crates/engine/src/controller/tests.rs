@@ -380,3 +380,57 @@ fn capture_panics_false_propagates_panic() {
         None,
     );
 }
+
+/// End-to-end: with `with_log_path`, the trace file gets the stamped header
+/// (engine version, ISO timestamp, game name) and a step-counted footer.
+#[test]
+fn trace_file_has_stamped_header_and_footer() {
+    use front_end::validation::parse_document;
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let game_path = manifest_dir.join("test_games/ordering_test.cgdsl");
+    let input_path = manifest_dir.join("test_games/ordering_test.txt");
+    let log_path = std::env::temp_dir().join(format!("mcg-trace-test-{}.log", std::process::id()));
+    let _ = std::fs::remove_file(&log_path);
+
+    let source = std::fs::read_to_string(&game_path).expect("read ordering_test.cgdsl");
+    let game = parse_document(&source).expect("parse ordering_test.cgdsl");
+    let ir = game.to_lowered_graph();
+
+    let result = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::TestFile(input_path),
+        RunOptions::new()
+            .with_log_path(log_path.clone())
+            .with_game_name("ordering_test"),
+    );
+    assert!(result.is_ok(), "game should complete: {:?}", result.err());
+
+    let content = std::fs::read_to_string(&log_path).expect("read trace file");
+    let _ = std::fs::remove_file(&log_path);
+
+    assert!(
+        content.starts_with("=== MCG Trace Log ==="),
+        "header first line"
+    );
+    assert!(
+        content.contains(&format!(
+            "Version: {} (cgdsl-engine)",
+            env!("CARGO_PKG_VERSION")
+        )),
+        "header must carry the engine version"
+    );
+    assert!(
+        content.contains("Started: 20") && content.contains(" UTC"),
+        "header must carry an ISO timestamp, got: {content}"
+    );
+    assert!(
+        content.contains("Game: ordering_test"),
+        "header must carry the game name"
+    );
+    assert!(
+        content.contains("GameOver after ") && content.ends_with(" steps ===\n"),
+        "footer must count steps: {content}"
+    );
+}

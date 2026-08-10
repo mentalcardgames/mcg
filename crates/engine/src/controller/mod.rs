@@ -35,6 +35,8 @@ pub struct RunOptions {
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
     trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
     capture_panics: bool,
+    log_path: Option<PathBuf>,
+    game_name: Option<String>,
 }
 
 impl RunOptions {
@@ -65,6 +67,25 @@ impl RunOptions {
         self.capture_panics = yes;
         self
     }
+
+    /// Force the `MCG_TRACE_LOG` trace file to `path`, overriding the
+    /// environment variable.
+    ///
+    /// Default (`None`): the `MCG_TRACE_LOG` env var is consulted; when it is
+    /// unset no trace file is written at all (the library never creates files
+    /// in the working directory on its own).
+    pub fn with_log_path(mut self, path: PathBuf) -> Self {
+        self.log_path = Some(path);
+        self
+    }
+
+    /// Tag the trace-file header with a human-readable game name.
+    ///
+    /// Purely cosmetic — the name only appears in the `Game:` header line.
+    pub fn with_game_name(mut self, name: impl Into<String>) -> Self {
+        self.game_name = Some(name.into());
+        self
+    }
 }
 
 /// Create an [`Interpreter`] from the lowered IR and drive it to completion.
@@ -87,6 +108,8 @@ pub fn run_game(
             event_sender,
             trace_sender,
             capture_panics: false,
+            log_path: None,
+            game_name: None,
         },
     )
 }
@@ -107,9 +130,11 @@ pub fn run_game_with(
         event_sender,
         trace_sender,
         capture_panics,
+        log_path,
+        game_name,
     } = options;
 
-    let log_path = trace_logger::resolve_log_path();
+    let log_path = trace_logger::resolve_log_path(log_path.as_deref());
     let logger = match &log_path {
         Some(path) => match trace_logger::TraceLogger::open(path) {
             Ok(logger) => Some(logger),
@@ -135,11 +160,13 @@ pub fn run_game_with(
             &format!("{:?}", ir.entry.raw()),
             &format!("{:?}", ir.goal.raw()),
             &input_source_kind,
+            game_name.as_deref(),
         );
     }
 
     let step_count = Arc::new(std::sync::Mutex::new(0usize));
     let step_count_for_closure = step_count.clone();
+    let steps_reporter = step_count.clone();
     let logger_for_closure = logger.clone();
     let caller_sender = trace_sender;
     let composed_sender: Option<Box<dyn Fn(TraceEntry) + Send>> =
@@ -178,7 +205,8 @@ pub fn run_game_with(
                 // vtable and every downcast fails.
                 let message = panic_message(payload.as_ref());
                 if let Some(ref logger) = logger {
-                    logger.log_panic(&message);
+                    let steps = *steps_reporter.lock().unwrap();
+                    logger.log_panic(&format!("{} (after {} steps)", message, steps));
                     logger.flush();
                 }
                 if capture_panics {
@@ -192,16 +220,17 @@ pub fn run_game_with(
         controller.run()
     };
 
+    let steps = *steps_reporter.lock().unwrap();
     match run_result {
         Ok(gd) => {
             if let Some(ref logger) = logger {
-                logger.log_footer("GameOver");
+                logger.log_footer(&format!("GameOver after {} steps", steps));
             }
             Ok(gd)
         }
         Err(e) => {
             if let Some(ref logger) = logger {
-                logger.log_footer(&format!("Error: {}", e));
+                logger.log_footer(&format!("Error: {} (after {} steps)", e, steps));
             }
             Err(e)
         }

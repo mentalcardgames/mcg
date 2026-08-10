@@ -240,18 +240,18 @@ For each trace mention, see `TraceEvent` variant definitions in
   `Ok(self.interpreter.game_data.clone())` (`crates/engine/src/controller/mod.rs:163-164`) — a
   **full deep clone** of the terminal state. `GameOver` itself only fires when the current state
   has **no outgoing edges AND `current_state == ir.goal`** (I-4). If a trace log is open,
-  `run_game` writes the `=== GameOver ===` footer (`controller/mod.rs:121-124`).
+  `run_game_with` writes the `=== GameOver after N steps ===` footer.
 - On `Error(EngineError)`: `run()` returns `Err(EngineError)`
   (`crates/engine/src/controller/mod.rs:167`). The engine does **not** roll back mutations already
   applied before the error — see [`error-handling.md`](./error-handling.md). If a trace log is
-  open, `run_game` writes `=== Error: <e> ===` (`controller/mod.rs:126-130`).
+  open, `run_game_with` writes `=== Error: <e> (after N steps) ===`.
 - On **panic** during `run()`: `run_game`/`run_game_with`'s `catch_unwind` wrapper
   (`controller/mod.rs`) extracts the panic message and either (a) with
-  `RunOptions::capture_panics(true)`: logs `=== Panic: <msg> ===` (if a trace log is open) and
-  returns `Err(EngineError::InternalPanic { message })` — the process does not abort; or (b) with
-  the legacy default: logs the panic (if a trace log is open) and `resume_unwind`s — the panic
-  surfaces to the caller, just logged. Without a trace log and without `capture_panics`, panics
-  propagate untouched.
+  `RunOptions::capture_panics(true)`: logs `=== Panic: <msg> (after N steps) ===` (if a trace log
+  is open) and returns `Err(EngineError::InternalPanic { message })` — the process does not abort;
+  or (b) with the legacy default: logs the panic (if a trace log is open) and `resume_unwind`s —
+  the panic surfaces to the caller, just logged. Without a trace log and without `capture_panics`,
+  panics propagate untouched.
 
 ### 5. Shutdown
 

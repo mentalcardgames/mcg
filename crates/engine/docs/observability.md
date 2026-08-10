@@ -23,7 +23,7 @@ The engine has **no `tracing`/`log` integration** (verified: zero imports of eit
 
 1. A reactive `event_sender` callback (per-loop-iteration `&GameData` snapshot) — §1.
 2. A new per-FSM-transition `trace_sender` callback emitting `TraceEntry` values — §2.
-3. The `MCG_TRACE_LOG` / `mcg-trace.log` file produced by `TraceLogger` — §3.
+3. The `MCG_TRACE_LOG` trace file produced by `TraceLogger` (opt-in — see §3).
 4. The structured `crates::engine::debug` formatter/dumps (`DebugLevel` Low/Medium/High) — §4.
 
 plus a single ad-hoc `eprintln!` (§5). For the error channels themselves, see
@@ -131,41 +131,47 @@ file logger (§3) writes per step.
 
 ---
 
-## 3. The Trace File: `MCG_TRACE_LOG` / `mcg-trace.log`
+## 3. The Trace File: `MCG_TRACE_LOG` / `with_log_path`
 
-`crates::engine::controller::run_game` resolves a log path at startup via the private
-`trace_logger::resolve_log_path` (`crates/engine/src/controller/trace_logger.rs:66-85`):
+`crates::engine::controller::run_game_with` resolves a log path at startup via the private
+`trace_logger::resolve_log_path` (`crates/engine/src/controller/trace_logger.rs`). Precedence:
 
 ```text
+RunOptions::with_log_path(p)  → p (wins over everything)
 MCG_TRACE_LOG env var:
-  unset            → "mcg-trace.log" (CWD) when NOT cfg!(test); disabled when cfg!(test)
-  "" / "off"/ "none" (case-insensitive) → disabled
-  any other string → used verbatim as the path
+  "" / "off" / "none" (case-insensitive) → disabled
+  any other string                      → used verbatim as the path
+neither set                           → disabled (no file is ever created
+                                         in the working directory by default)
 ```
 
-If a path was resolved and `TraceLogger::open` (`trace_logger.rs:14-20`) succeeds, `run_game` writes
-the following structured lines:
+If a path was resolved and `TraceLogger::open` succeeds, `run_game_with` writes the following
+structured lines:
 
-- **Header** (`trace_logger.rs:29-43`, written at `controller/mod.rs:59-65`):
+- **Header** (written before the run loop):
   ```
   === MCG Trace Log ===
-  Started: <unix seconds since epoch>
+  Version: <CARGO_PKG_VERSION> (cgdsl-engine)
+  Started: <YYYY-MM-DD HH:MM:SS UTC>
+  Game: <game_name>            ← only when RunOptions::with_game_name was set
   Entry: <{:?} of ir.entry.raw()>
   Goal: <{:?} of ir.goal.raw()>
   Input source: <"interactive" or the test file path>
   ====================
   ```
-- **Per-step lines** (`trace_logger.rs:22-27`, one per `TraceEntry`):
+  The timestamp is UTC and dependency-free (`trace_logger.rs::format_timestamp`, Hinnant's
+  `civil_from_days`); the version line is `env!("CARGO_PKG_VERSION")`.
+- **Per-step lines** (one per `TraceEntry`):
   ```
   [Step NNN] <TraceEntry Display>
   ```
-  where `NNN` is the controller's `step_count` (`controller/mod.rs:67,154`), shared with the
-  composed sender closure (`controller/mod.rs:71-84`).
-- **Footer** (`trace_logger.rs:45-50`): `=== GameOver ===` on success or `=== Error: <e> ===` on
-  `Err` (`controller/mod.rs:120-133`).
-- **Panic line** (`trace_logger.rs:52-57`): `=== Panic: <msg> ===` written before
-  `std::panic::resume_unwind` re-panics in the caller; see §4 of
-  [`interfaces.md`](./interfaces.md) �6 and the panic-capture note below.
+  where `NNN` is the controller's `step_count` (loop iterations), shared with the composed
+  sender closure.
+- **Footer**:
+  - `=== GameOver after N steps ===` on success, or `=== Error: <e> (after N steps) ===` on
+    `Err` — `N` is the total loop-iteration count.
+- **Panic line**: `=== Panic: <msg> (after N steps) ===` written before the panic is converted
+  (`capture_panics(true)`) or re-raised; see §3.2 and [`error-handling.md`](./error-handling.md) §2.
 
 `TraceLogger` itself stores `Arc<Mutex<BufWriter<File>>>` (`trace_logger.rs:10`) so both the
 composed sender closure (handed to `Interpreter`) and the post-run footer writes go through one

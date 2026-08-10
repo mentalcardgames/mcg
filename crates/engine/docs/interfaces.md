@@ -88,11 +88,13 @@ configuration. `run_game` is equivalent to `run_game_with(.., RunOptions::defaul
 legacy callback args:
 
 ```rust
-// crates/engine/src/controller/mod.rs:34-82
+// crates/engine/src/controller/mod.rs:34-104
 RunOptions::new()
     .with_event_sender(Box<dyn Fn(&GameData) + Send>)   // per-loop-iteration snapshot
     .with_trace_sender(Box<dyn Fn(TraceEntry) + Send>)  // per-FSM-transition trace
     .capture_panics(bool)                               // true: panics become Err(InternalPanic)
+    .with_log_path(PathBuf)                             // force the trace file (overrides MCG_TRACE_LOG)
+    .with_game_name("my-game")                          // tag the trace-file header
 ```
 
 `capture_panics(true)` is the guaranteed non-aborting mode: any panic inside the run loop is
@@ -100,6 +102,11 @@ caught and returned as `Err(EngineError::InternalPanic { message })` (logged to 
 first if one is open). The default (`false`) preserves the legacy behavior — panics are only
 caught for trace-logging and then re-raised, or propagate untouched when no trace log is open.
 See [`error-handling.md`](./error-handling.md) §2.
+
+**Trace logging is opt-in.** By default (`log_path: None`) only the `MCG_TRACE_LOG` env var is
+consulted, and when it is unset **no trace file is written** — the library never creates files in
+the working directory on its own. `with_log_path` overrides the env var; see
+[`observability.md`](./observability.md) §3 for the resolution order and file format.
 
 **`cgdsl_engine::InputSource`** — the single seam for external I/O supplied to `run_game`.
 
