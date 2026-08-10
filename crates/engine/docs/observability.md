@@ -145,6 +145,9 @@ neither set                           → disabled (no file is ever created
                                          in the working directory by default)
 ```
 
+The `cgdsl-play` binary exposes this as `cgdsl-play --log <path>` (its trace header is also
+tagged with the game-file name); interactive users can just set `MCG_TRACE_LOG=path`.
+
 If a path was resolved and `TraceLogger::open` succeeds, `run_game_with` writes the following
 structured lines:
 

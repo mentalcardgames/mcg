@@ -721,7 +721,9 @@ dedicated thread and communicate via channels.
 - **`engine-tui` binary:** `ratatui` + `crossterm` (terminal UI), `crossbeam-channel` (input
   loop).
 - **`cgdsl-play` binary:** no extra dependencies (auto-discovered; only `engine-tui` has an
-  explicit `[[bin]]` entry).
+  explicit `[[bin]]` entry). Hand-rolled CLI: `<game.cgdsl> [input.txt]` plus `--log <path>` and
+  `--debug-level <low|medium|high>`; distinct exit codes (0 ok / 1 usage / 2 read / 3 parse /
+  4 engine error) — see `cgdsl-play --help`.
 - Error handling is enum-typed (`Result<_, EngineError>`); no unused dependencies remain.
 
 ---

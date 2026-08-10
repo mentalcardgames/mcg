@@ -50,6 +50,9 @@ This crate is part of a larger workspace. Other crates you may need:
 
 ## Suggested Reading Path
 
+**New here?** Start with [`quickstart.md`](./quickstart.md) — run your first game in two
+minutes (CLI flags, logging, debugging), then follow the path below.
+
 **First time here:**
 1. [`dsl-semantics.md`](./dsl-semantics.md) — what every `.cgdsl` construct *means* to the engine
 2. [`dsl-completeness.md`](./dsl-completeness.md) — per-construct implementation status (the single status authority)
@@ -117,7 +120,7 @@ crates/engine/src/
 │   ├── engine-tui/                — ratatui terminal UI for interactive testing
 │   │   ├── main.rs, trace.rs
 │   │   └── ui/                    — state, layout, game_state, trace_log, input, controls
-│   └── cgdsl-play.rs              — CLI game driver (interactive + file replay)
+│   └── cgdsl-play.rs              — CLI game driver (interactive + file replay; `--log`, `--debug-level` flags)
 ├── test_games/                    — 70 .cgdsl fixture files (incl. the five demo games)
 └── tests/                         — integration tests (one file per feature area)
     ├── quantifier_test.rs

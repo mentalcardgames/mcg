@@ -3,32 +3,160 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
+use cgdsl_engine::{
+    format_game_data, run_game_with, DebugLevel, GameData, Input, InputKind, InputSource,
+    InputType, RunOptions,
+};
 use front_end::validation::parse_document;
+
+/// Process exit codes, distinct per failure stage so scripts can react.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExitCode {
+    Ok = 0,
+    /// Bad command-line usage (unknown flag, missing game file, bad value).
+    Usage = 1,
+    /// The game file could not be read.
+    ReadError = 2,
+    /// The `.cgdsl` source failed to parse.
+    ParseError = 3,
+    /// The engine terminated with an `EngineError` (or panicked).
+    EngineError = 4,
+}
+
+impl ExitCode {
+    fn exit(self) -> ! {
+        std::process::exit(self as i32);
+    }
+}
+
+/// Parsed command line.
+#[derive(Debug, PartialEq)]
+struct Cli {
+    game_file: PathBuf,
+    input_file: Option<PathBuf>,
+    log_path: Option<PathBuf>,
+    debug_level: Option<DebugLevel>,
+}
+
+fn usage(prog: &str) -> String {
+    format!(
+        "\
+Usage: {prog} [OPTIONS] <game.cgdsl> [input.txt]
+
+Drives a .cgdsl game to completion: interactive (or file-driven) play,
+then prints the final state summary.
+
+Options:
+  --log <path>          write the MCG trace log to <path> (overrides MCG_TRACE_LOG)
+  --debug-level <L>     after the run, print the full GameData dump at
+                        level `low`, `medium`, or `high`
+  -h, --help            show this help
+
+Exit codes:
+  0  game completed
+  1  usage error
+  2  could not read the game file
+  3  parse error in the .cgdsl source
+  4  the engine returned an error
+"
+    )
+}
+
+/// Hand-rolled argument parsing: two positionals plus `--flag value` options.
+fn parse_args(args: &[String]) -> Result<Cli, String> {
+    let mut game_file: Option<PathBuf> = None;
+    let mut input_file: Option<PathBuf> = None;
+    let mut log_path: Option<PathBuf> = None;
+    let mut debug_level: Option<DebugLevel> = None;
+
+    let mut it = args.iter().skip(1);
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "-h" | "--help" => return Err("help".to_string()),
+            "--log" => {
+                let value = it
+                    .next()
+                    .ok_or_else(|| "--log requires a path argument".to_string())?;
+                log_path = Some(PathBuf::from(value));
+            }
+            "--debug-level" => {
+                let value = it
+                    .next()
+                    .ok_or_else(|| "--debug-level requires an argument".to_string())?;
+                debug_level = Some(match value.to_ascii_lowercase().as_str() {
+                    "low" => DebugLevel::Low,
+                    "medium" => DebugLevel::Medium,
+                    "high" => DebugLevel::High,
+                    _ => {
+                        return Err(format!(
+                            "invalid --debug-level '{value}' (expected low|medium|high)"
+                        ))
+                    }
+                });
+            }
+            _ if arg.starts_with('-') => {
+                return Err(format!("unknown option '{arg}'"));
+            }
+            _ => {
+                if game_file.is_none() {
+                    game_file = Some(PathBuf::from(arg));
+                } else if input_file.is_none() {
+                    input_file = Some(PathBuf::from(arg));
+                } else {
+                    return Err(format!("unexpected extra argument '{arg}'"));
+                }
+            }
+        }
+    }
+
+    let game_file = game_file.ok_or_else(|| "missing <game.cgdsl> argument".to_string())?;
+    Ok(Cli {
+        game_file,
+        input_file,
+        log_path,
+        debug_level,
+    })
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    let prog = args
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "cgdsl-play".to_string());
 
-    let prog = &args[0];
-    let game_file = args.get(1).unwrap_or_else(|| {
-        eprintln!("Usage: {prog} <game.cgdsl> [input.txt]", prog = prog);
-        std::process::exit(1);
-    });
-    let input_file = args.get(2);
+    let cli = match parse_args(&args) {
+        Ok(cli) => cli,
+        Err(msg) if msg == "help" => {
+            print!("{}", usage(&prog));
+            ExitCode::Ok.exit();
+        }
+        Err(msg) => {
+            eprintln!("{prog}: {msg}");
+            eprintln!("Try '{prog} --help' for usage.");
+            ExitCode::Usage.exit();
+        }
+    };
 
-    let source = match std::fs::read_to_string(game_file) {
+    let game_name = cli
+        .game_file
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
+    let source = match std::fs::read_to_string(&cli.game_file) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Error reading `{game_file}`: {e}");
-            std::process::exit(1);
+            eprintln!("{prog}: error reading `{}`: {e}", cli.game_file.display());
+            ExitCode::ReadError.exit();
         }
     };
 
     let game = match parse_document(&source) {
         Ok(g) => g,
         Err(e) => {
-            eprintln!("Parse error in `{game_file}`:\n{e}");
-            std::process::exit(1);
+            eprintln!("{prog}: parse error in `{}`:\n{e}", cli.game_file.display());
+            ExitCode::ParseError.exit();
         }
     };
     let ir = game.to_lowered_graph();
@@ -41,8 +169,8 @@ fn main() {
     }) as Box<dyn Fn(&GameData) + Send>;
 
     let pn_reader = player_name.clone();
-    let input_source = match input_file {
-        Some(path) => InputSource::TestFile(PathBuf::from(path)),
+    let input_source = match &cli.input_file {
+        Some(path) => InputSource::TestFile(path.clone()),
         None => InputSource::Player(Box::new(move |it: InputType| {
             let name = pn_reader
                 .lock()
@@ -53,17 +181,25 @@ fn main() {
         })),
     };
 
+    let mut options = RunOptions::new().with_event_sender(state_sender);
+    if let Some(path) = &cli.log_path {
+        options = options.with_log_path(path.clone());
+    }
+    if !game_name.is_empty() {
+        options = options.with_game_name(game_name);
+    }
+
     let game_data = GameData::new();
-    match run_game_with(
-        ir,
-        game_data,
-        input_source,
-        RunOptions::new().with_event_sender(state_sender),
-    ) {
-        Ok(state) => print_summary(&state),
+    match run_game_with(ir, game_data, input_source, options) {
+        Ok(state) => {
+            print_summary(&state);
+            if let Some(level) = cli.debug_level {
+                println!("\n{}", format_game_data(&state, level));
+            }
+        }
         Err(e) => {
-            eprintln!("Game error: {e}");
-            std::process::exit(1);
+            eprintln!("{prog}: game error: {e}");
+            ExitCode::EngineError.exit();
         }
     }
 }
@@ -230,4 +366,60 @@ fn print_summary(state: &GameData) {
         );
     }
     println!("Cards in play: {}", state.cards.len());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(items: &[&str]) -> Vec<String> {
+        let mut v = vec!["cgdsl-play".to_string()];
+        v.extend(items.iter().map(|s| s.to_string()));
+        v
+    }
+
+    #[test]
+    fn parses_positional_game_and_input() {
+        let cli = parse_args(&args(&["game.cgdsl", "input.txt"])).unwrap();
+        assert_eq!(cli.game_file, PathBuf::from("game.cgdsl"));
+        assert_eq!(cli.input_file, Some(PathBuf::from("input.txt")));
+        assert!(cli.log_path.is_none());
+        assert!(cli.debug_level.is_none());
+    }
+
+    #[test]
+    fn parses_flags_in_any_order() {
+        let cli = parse_args(&args(&[
+            "--log",
+            "trace.log",
+            "game.cgdsl",
+            "--debug-level",
+            "HIGH",
+            "input.txt",
+        ]))
+        .unwrap();
+        assert_eq!(cli.log_path, Some(PathBuf::from("trace.log")));
+        assert_eq!(cli.debug_level, Some(DebugLevel::High));
+        assert_eq!(cli.input_file, Some(PathBuf::from("input.txt")));
+    }
+
+    #[test]
+    fn help_flag_is_reported() {
+        assert_eq!(parse_args(&args(&["--help"])), Err("help".to_string()));
+        assert_eq!(parse_args(&args(&["-h"])), Err("help".to_string()));
+    }
+
+    #[test]
+    fn missing_game_file_is_a_usage_error() {
+        assert!(parse_args(&args(&[])).is_err());
+        assert!(parse_args(&args(&["--log", "x.log"])).is_err());
+    }
+
+    #[test]
+    fn unknown_flag_and_bad_values_are_usage_errors() {
+        assert!(parse_args(&args(&["--bogus", "game.cgdsl"])).is_err());
+        assert!(parse_args(&args(&["--debug-level", "verbose", "game.cgdsl"])).is_err());
+        assert!(parse_args(&args(&["--log"])).is_err());
+        assert!(parse_args(&args(&["a.cgdsl", "b.txt", "c.txt"])).is_err());
+    }
 }
