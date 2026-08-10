@@ -11,6 +11,17 @@ pub enum PanelFocus {
     TraceLog,
 }
 
+/// The engine's life-cycle status as seen from the UI thread. Updated from
+/// the panic channel (a panic hook fired) and the run-outcome channel
+/// (`run_game_with` returned).
+#[derive(Clone, Debug, PartialEq)]
+pub enum EngineStatus {
+    Running,
+    Finished,
+    Errored(String),
+    Panicked(String),
+}
+
 pub struct TuiState {
     pub trace_entries: Vec<DisplayTraceEntry>,
     pub step_count: usize,
@@ -34,6 +45,7 @@ pub struct TuiState {
     pub game_state_inner_height: u16,
     pub choose_cursor: usize,
     pub choose_selected: Vec<bool>,
+    pub engine_status: EngineStatus,
 }
 
 impl TuiState {
@@ -60,6 +72,7 @@ impl TuiState {
             choose_selected: Vec::new(),
             current_player_name: String::new(),
             prev_player_name: String::new(),
+            engine_status: EngineStatus::Running,
         }
     }
 

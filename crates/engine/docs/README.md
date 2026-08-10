@@ -118,7 +118,9 @@ crates/engine/src/
 │   └── tests.rs
 ├── bin/
 │   ├── engine-tui/                — ratatui terminal UI for interactive testing
-│   │   ├── main.rs, trace.rs
+│   │   ├── main.rs                — thin driver: channel plumbing, render loop, shutdown
+│   │   ├── keys.rs                — key handling (quit, navigation, input answers)
+│   │   ├── trace.rs               — trace relay types (detail filters)
 │   │   └── ui/                    — state, layout, game_state, trace_log, input, controls
 │   └── cgdsl-play.rs              — CLI game driver (interactive + file replay; `--log`, `--debug-level` flags)
 ├── test_games/                    — 70 .cgdsl fixture files (incl. the five demo games)

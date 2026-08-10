@@ -11,5 +11,5 @@ pub use controls::ControlsPanel;
 pub use game_state::GameStatePanel;
 pub use input::InputPanel;
 pub use layout::AppLayout;
-pub use state::{PanelFocus, TuiState};
+pub use state::{EngineStatus, PanelFocus, TuiState};
 pub use trace_log::TraceLogPanel;

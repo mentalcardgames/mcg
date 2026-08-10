@@ -1,7 +1,11 @@
 //! Engine Test Harness TUI - Interactive engine testing interface
 //!
 //! Usage: cargo run --bin engine-tui -- <path-to-game.cgdsl>
+//!
+//! Structure: this file is the thin driver (setup, channel plumbing, render
+//! loop, shutdown). Key handling lives in `keys.rs`; panels live in `ui/`.
 
+mod keys;
 mod trace;
 mod ui;
 
@@ -10,107 +14,17 @@ use std::thread;
 use std::time::Duration;
 
 use cgdsl_engine::{
-    run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions, TraceEntry,
+    run_game_with, EngineError, GameData, Input, InputKind, InputSource, InputType, RunOptions,
+    TraceEntry,
 };
 use crossbeam_channel::{bounded, Receiver, Sender};
 use front_end::validation::parse_document;
 
+use keys::handle_key;
 use ui::{
-    AppLayout, ControlsPanel, GameStatePanel, InputPanel, PanelFocus, TraceLogPanel, TuiState,
+    AppLayout, ControlsPanel, EngineStatus, GameStatePanel, InputPanel, PanelFocus, TraceLogPanel,
+    TuiState,
 };
-
-use std::sync::atomic::{AtomicBool, Ordering};
-
-fn adjust_focused_scroll(state: &mut TuiState, delta: i32) {
-    match state.focus {
-        PanelFocus::GameState => {
-            if delta < 0 {
-                state.game_state_scroll = state.game_state_scroll.saturating_sub((-delta) as u16);
-            } else {
-                state.game_state_scroll = state.game_state_scroll.saturating_add(delta as u16);
-            }
-            state.game_state_auto_scroll = false;
-        }
-        PanelFocus::TraceLog => {
-            if delta < 0 {
-                state.trace_scroll = state.trace_scroll.saturating_sub((-delta) as u16);
-            } else {
-                state.trace_scroll = state.trace_scroll.saturating_add(delta as u16);
-            }
-            state.trace_auto_scroll = false;
-        }
-    }
-}
-
-fn page_focused_scroll(state: &mut TuiState, up: bool) {
-    match state.focus {
-        PanelFocus::GameState => {
-            if up {
-                state.game_state_scroll = state
-                    .game_state_scroll
-                    .saturating_sub(state.game_state_inner_height);
-            } else {
-                state.game_state_scroll = state
-                    .game_state_scroll
-                    .saturating_add(state.game_state_inner_height);
-            }
-            state.game_state_auto_scroll = false;
-        }
-        PanelFocus::TraceLog => {
-            if up {
-                state.trace_scroll = state.trace_scroll.saturating_sub(state.trace_inner_height);
-            } else {
-                state.trace_scroll = state.trace_scroll.saturating_add(state.trace_inner_height);
-            }
-            state.trace_auto_scroll = false;
-        }
-    }
-}
-
-fn home_focused_scroll(state: &mut TuiState) {
-    match state.focus {
-        PanelFocus::GameState => {
-            state.game_state_scroll = 0;
-            state.game_state_auto_scroll = false;
-        }
-        PanelFocus::TraceLog => {
-            state.trace_scroll = 0;
-            state.trace_auto_scroll = false;
-        }
-    }
-}
-
-fn end_focused_scroll(state: &mut TuiState) {
-    match state.focus {
-        PanelFocus::GameState => {
-            state.game_state_auto_scroll = true;
-        }
-        PanelFocus::TraceLog => {
-            state.trace_auto_scroll = true;
-        }
-    }
-}
-
-fn is_current_player(state: &TuiState) -> bool {
-    let perspective_name = state
-        .current_state
-        .as_ref()
-        .and_then(|gd| gd.players.get(state.perspective_idx))
-        .map(|p| p.name.as_str())
-        .unwrap_or("");
-    !state.waiting_for_input
-        || state.current_player_name.is_empty()
-        || perspective_name == state.current_player_name
-}
-
-/// Map a digit-key shortcut to a `Choice` option index.
-/// `1`..=`9` select options 1..=9; `0` selects option 10 (for long lists
-/// such as Go Fish's 13-rank ask). Returns `None` when the option does not
-/// exist (the digit is then simply ignored).
-fn choice_shortcut_idx(digit: u32, max_index: usize) -> Option<usize> {
-    let idx = if digit == 0 { 9 } else { digit as usize - 1 };
-    (idx <= max_index).then_some(idx)
-}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let game_path = std::env::args()
@@ -122,10 +36,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let game = parse_document(&source)?;
     let ir = game.to_lowered_graph();
 
+    // Engine <-> UI plumbing: all engine-side events travel over channels.
     let (input_tx, input_rx): (Sender<Input>, Receiver<Input>) = bounded(1);
     let (input_type_tx, input_type_rx): (Sender<InputType>, Receiver<InputType>) = bounded(1);
     let (trace_tx, trace_rx): (Sender<TraceEntry>, Receiver<TraceEntry>) = bounded(100);
     let (state_tx, state_rx): (Sender<GameData>, Receiver<GameData>) = bounded(100);
+    // Panics anywhere in the process (any thread) notify the UI via this
+    // channel instead of the old AtomicBool + Mutex<String> pair.
+    let (panic_tx, panic_rx): (Sender<String>, Receiver<String>) = bounded(1);
+    // `run_game_with`'s `Result` lands here when the run completes.
+    let (outcome_tx, outcome_rx): (Sender<Result<GameData, EngineError>>, Receiver<_>) = bounded(1);
 
     let trace_sender: Sender<TraceEntry> = trace_tx.clone();
     let trace_sender = Box::new(move |entry: TraceEntry| {
@@ -136,8 +56,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = state_tx.send(gd.clone());
     }) as Box<dyn Fn(&GameData) + Send>;
 
-    let input_rx = input_rx;
-    let input_type_tx = input_type_tx;
     let input_source = InputSource::Player(Box::new(move |it: cgdsl_engine::InputType| {
         let _ = input_type_tx.send(it);
         input_rx.recv().unwrap_or(Input {
@@ -146,27 +64,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     }));
 
-    let engine_panic = std::sync::Arc::new(AtomicBool::new(false));
-    let engine_panic_msg = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
-    let engine_panic_clone = engine_panic.clone();
-    let engine_panic_msg_clone = engine_panic_msg.clone();
-
     let engine_ir = ir;
-    let engine_handle = thread::spawn(move || {
+    thread::spawn(move || {
+        // Surface any panic (engine or otherwise) in the UI; `capture_panics`
+        // below turns engine-internal panics into a recoverable error, and the
+        // hook is the belt-and-suspenders for everything else.
         let prev_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |panic_info: &std::panic::PanicHookInfo| {
-            *engine_panic_msg_clone.lock().unwrap() = panic_info.to_string();
-            engine_panic_clone.store(true, Ordering::SeqCst);
+            let _ = panic_tx.send(panic_info.to_string());
             prev_hook(panic_info);
         }));
-        run_game_with(
+        let result = run_game_with(
             engine_ir,
             GameData::new(),
             input_source,
             RunOptions::new()
                 .with_event_sender(state_sender)
-                .with_trace_sender(trace_sender),
-        )
+                .with_trace_sender(trace_sender)
+                .capture_panics(true),
+        );
+        let _ = outcome_tx.send(result);
     });
 
     let mut tui_state = TuiState::new();
@@ -203,6 +120,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             tui_state.pending_input = Some(it);
             tui_state.waiting_for_input = true;
+        }
+
+        // Life-cycle status: a panic wins over the (possibly never-arriving)
+        // run outcome; the outcome only updates a still-running status.
+        if let Ok(msg) = panic_rx.try_recv() {
+            tui_state.engine_status = EngineStatus::Panicked(msg);
+        }
+        if let Ok(result) = outcome_rx.try_recv() {
+            if tui_state.engine_status == EngineStatus::Running {
+                tui_state.engine_status = match result {
+                    Ok(gd) => {
+                        tui_state.current_state = Some(gd);
+                        EngineStatus::Finished
+                    }
+                    Err(e) => EngineStatus::Errored(e.to_string()),
+                };
+            }
         }
 
         terminal.draw(|f| {
@@ -252,223 +186,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             tui_state.trace_inner_height = th;
 
             let controls_panel = ControlsPanel::new();
-            controls_panel.render(f, layout.controls_area);
+            controls_panel.render(f, layout.controls_area, &tui_state.engine_status);
         })?;
 
         if crossterm::event::poll(Duration::from_millis(50))? {
             match crossterm::event::read() {
                 Ok(crossterm::event::Event::Key(key)) => {
-                    let is_choosing = tui_state.waiting_for_input
-                        && matches!(
-                            &tui_state.pending_input,
-                            Some(InputType::ChooseCards { .. })
-                                | Some(InputType::ChoosePlayer { .. })
-                                | Some(InputType::Choice { .. })
-                        );
-                    match key.code {
-                        crossterm::event::KeyCode::Char('q') => break,
-                        crossterm::event::KeyCode::F(10) => break,
-                        crossterm::event::KeyCode::Char('l') => {
-                            tui_state.cycle_state_detail();
-                        }
-                        crossterm::event::KeyCode::Char('t') => {
-                            tui_state.cycle_trace_detail();
-                        }
-                        crossterm::event::KeyCode::Char('r') => {
-                            tui_state.toggle_trace_raw();
-                        }
-                        crossterm::event::KeyCode::Char('p') => {
-                            if let Some(ref gd) = tui_state.current_state {
-                                let player_count = gd.players.len();
-                                if player_count > 0 {
-                                    tui_state.perspective_idx =
-                                        (tui_state.perspective_idx + 1) % player_count;
-                                }
-                            }
-                        }
-                        crossterm::event::KeyCode::Tab => {
-                            tui_state.focus = match tui_state.focus {
-                                PanelFocus::GameState => PanelFocus::TraceLog,
-                                PanelFocus::TraceLog => PanelFocus::GameState,
-                            };
-                        }
-                        crossterm::event::KeyCode::Up => {
-                            if is_choosing && is_current_player(&tui_state) {
-                                if tui_state.choose_cursor > 0 {
-                                    tui_state.choose_cursor -= 1;
-                                }
-                            } else {
-                                adjust_focused_scroll(&mut tui_state, -1);
-                            }
-                        }
-                        crossterm::event::KeyCode::Down => {
-                            if is_choosing && is_current_player(&tui_state) {
-                                let max = match &tui_state.pending_input {
-                                    Some(InputType::ChooseCards { display, .. }) => display.len(),
-                                    Some(InputType::ChoosePlayer { candidates, .. }) => {
-                                        candidates.len()
-                                    }
-                                    Some(InputType::Choice { options, .. }) => options.len(),
-                                    _ => 1,
-                                };
-                                if tui_state.choose_cursor + 1 < max {
-                                    tui_state.choose_cursor += 1;
-                                }
-                            } else {
-                                adjust_focused_scroll(&mut tui_state, 1);
-                            }
-                        }
-                        crossterm::event::KeyCode::PageUp => {
-                            page_focused_scroll(&mut tui_state, true);
-                        }
-                        crossterm::event::KeyCode::PageDown => {
-                            page_focused_scroll(&mut tui_state, false);
-                        }
-                        crossterm::event::KeyCode::Home => {
-                            home_focused_scroll(&mut tui_state);
-                        }
-                        crossterm::event::KeyCode::End => {
-                            end_focused_scroll(&mut tui_state);
-                        }
-                        crossterm::event::KeyCode::Char(' ') => {
-                            if tui_state.waiting_for_input && is_current_player(&tui_state) {
-                                if let Some(InputType::ChooseCards { .. }) =
-                                    &tui_state.pending_input
-                                {
-                                    if tui_state.choose_cursor < tui_state.choose_selected.len() {
-                                        tui_state.choose_selected[tui_state.choose_cursor] ^= true;
-                                    }
-                                }
-                            }
-                        }
-                        crossterm::event::KeyCode::Char(n) => {
-                            if tui_state.waiting_for_input && is_current_player(&tui_state) {
-                                let player_name = tui_state
-                                    .current_state
-                                    .as_ref()
-                                    .and_then(|gd| gd.players.get(tui_state.perspective_idx))
-                                    .map(|p| p.name.clone())
-                                    .unwrap_or_else(|| {
-                                        format!("Player{}", tui_state.perspective_idx)
-                                    });
-                                match &tui_state.pending_input {
-                                    Some(InputType::ChooseCards { .. })
-                                    | Some(InputType::ChoosePlayer { .. }) => {
-                                        // ignored: use arrows/space/enter for these
-                                    }
-                                    Some(InputType::Choice { max_index, .. }) => {
-                                        if let Some(digit) = n.to_digit(10) {
-                                            if let Some(idx) =
-                                                choice_shortcut_idx(digit, *max_index)
-                                            {
-                                                if let Some(ref tx) = tui_state.input_tx {
-                                                    let _ = tx.send(Input {
-                                                        player_id: player_name,
-                                                        kind: InputKind::Choice { idx },
-                                                    });
-                                                    tui_state.waiting_for_input = false;
-                                                    tui_state.pending_input = None;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    Some(InputType::Optional(_)) => {
-                                        if n == 'y' || n == 'Y' {
-                                            if let Some(ref tx) = tui_state.input_tx {
-                                                let _ = tx.send(Input {
-                                                    player_id: player_name,
-                                                    kind: InputKind::OptionalAccept,
-                                                });
-                                                tui_state.waiting_for_input = false;
-                                                tui_state.pending_input = None;
-                                            }
-                                        } else if n == 'n' || n == 'N' {
-                                            if let Some(ref tx) = tui_state.input_tx {
-                                                let _ = tx.send(Input {
-                                                    player_id: player_name,
-                                                    kind: InputKind::OptionalDecline,
-                                                });
-                                                tui_state.waiting_for_input = false;
-                                                tui_state.pending_input = None;
-                                            }
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        crossterm::event::KeyCode::Enter => {
-                            if tui_state.waiting_for_input && is_current_player(&tui_state) {
-                                let player_name = tui_state
-                                    .current_state
-                                    .as_ref()
-                                    .and_then(|gd| gd.players.get(tui_state.perspective_idx))
-                                    .map(|p| p.name.clone())
-                                    .unwrap_or_else(|| {
-                                        format!("Player{}", tui_state.perspective_idx)
-                                    });
-                                match &tui_state.pending_input {
-                                    Some(InputType::ChooseCards { min, max, .. }) => {
-                                        let selected: Vec<usize> = tui_state
-                                            .choose_selected
-                                            .iter()
-                                            .enumerate()
-                                            .filter(|(_, &s)| s)
-                                            .map(|(i, _)| i)
-                                            .collect();
-                                        if selected.len() >= *min && selected.len() <= *max {
-                                            if let Some(ref tx) = tui_state.input_tx {
-                                                let _ = tx.send(Input {
-                                                    player_id: player_name,
-                                                    kind: InputKind::ChooseCards { selected },
-                                                });
-                                                tui_state.waiting_for_input = false;
-                                                tui_state.pending_input = None;
-                                            }
-                                        }
-                                    }
-                                    Some(InputType::ChoosePlayer { .. }) => {
-                                        if let Some(ref tx) = tui_state.input_tx {
-                                            let _ = tx.send(Input {
-                                                player_id: player_name,
-                                                kind: InputKind::ChoosePlayer {
-                                                    idx: tui_state.choose_cursor,
-                                                },
-                                            });
-                                            tui_state.waiting_for_input = false;
-                                            tui_state.pending_input = None;
-                                        }
-                                    }
-                                    Some(InputType::Choice { .. }) => {
-                                        if let Some(ref tx) = tui_state.input_tx {
-                                            let _ = tx.send(Input {
-                                                player_id: player_name,
-                                                kind: InputKind::Choice {
-                                                    idx: tui_state.choose_cursor,
-                                                },
-                                            });
-                                            tui_state.waiting_for_input = false;
-                                            tui_state.pending_input = None;
-                                        }
-                                    }
-                                    Some(InputType::Optional(_)) => {
-                                        // Enter = accept (y/n remain the explicit
-                                        // controls; sending a non-Optional Input
-                                        // here would error the engine).
-                                        if let Some(ref tx) = tui_state.input_tx {
-                                            let _ = tx.send(Input {
-                                                player_id: player_name,
-                                                kind: InputKind::OptionalAccept,
-                                            });
-                                            tui_state.waiting_for_input = false;
-                                            tui_state.pending_input = None;
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        _ => {}
+                    if handle_key(key.code, &mut tui_state) {
+                        break;
                     }
                 }
                 Err(_) => {}
@@ -481,45 +206,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     ratatui::restore();
 
-    if engine_panic.load(Ordering::SeqCst) {
-        eprintln!();
-        eprintln!("========================================");
-        eprintln!("ENGINE PANIC:");
-        eprintln!("{}", engine_panic_msg.lock().unwrap());
-        eprintln!("========================================");
-    } else {
-        match engine_handle.join() {
-            Ok(Ok(_)) => println!("Engine terminated."),
-            Ok(Err(e)) => eprintln!("Engine error: {e}"),
-            Err(_) => {} // thread already reported via engine_panic
+    // Report the final state on the plain terminal (the UI already showed it
+    // live via the CONTROLS panel status line).
+    match &tui_state.engine_status {
+        EngineStatus::Panicked(msg) => {
+            eprintln!();
+            eprintln!("========================================");
+            eprintln!("ENGINE PANIC:");
+            eprintln!("{msg}");
+            eprintln!("========================================");
+        }
+        EngineStatus::Errored(msg) => eprintln!("Engine error: {msg}"),
+        EngineStatus::Finished => println!("Engine terminated."),
+        EngineStatus::Running => {
+            // User quit mid-run; the engine thread (blocked on input) is
+            // dropped with the process.
         }
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::choice_shortcut_idx;
-
-    #[test]
-    fn choice_shortcuts_cover_1_to_9() {
-        assert_eq!(choice_shortcut_idx(1, 12), Some(0));
-        assert_eq!(choice_shortcut_idx(9, 12), Some(8));
-    }
-
-    #[test]
-    fn choice_shortcut_zero_selects_option_10() {
-        assert_eq!(choice_shortcut_idx(0, 12), Some(9), "0 = option 10");
-        assert_eq!(
-            choice_shortcut_idx(0, 8),
-            None,
-            "no option 10 in a 9-option list"
-        );
-    }
-
-    #[test]
-    fn choice_shortcut_out_of_range_is_ignored() {
-        assert_eq!(choice_shortcut_idx(7, 3), None, "option 7 does not exist");
-    }
 }
