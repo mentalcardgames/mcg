@@ -333,3 +333,45 @@ fn test_play_stage_advances_turn_and_runs_two_iterations() {
         "current_player must reach P2 (Some(1)) during Play — enter_stage must fire before the first cycle-to-next"
     );
 }
+
+/// `RunOptions::capture_panics(true)` converts a panic inside the run loop
+/// (here: a panicking `event_sender`) into `Err(EngineError::InternalPanic)`
+/// instead of aborting the process.
+#[test]
+fn capture_panics_true_returns_internal_panic_error() {
+    use crate::error::EngineError;
+
+    let ir = Ir::<LoweredPayLoad>::default();
+    let result = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::TestFile(PathBuf::from("/nonexistent-input")),
+        RunOptions::new()
+            .with_event_sender(Box::new(|_gd: &GameData| panic!("deliberate test panic")))
+            .capture_panics(true),
+    );
+    match result {
+        Err(EngineError::InternalPanic { message }) => {
+            assert!(
+                message.contains("deliberate test panic"),
+                "panic message must be preserved, got: {message}"
+            );
+        }
+        other => panic!("expected Err(InternalPanic), got {:?}", other.map(|_| ())),
+    }
+}
+
+/// Legacy behavior (default `capture_panics(false)`): without a trace log the
+/// panic propagates to the caller exactly as before.
+#[test]
+#[should_panic(expected = "deliberate test panic")]
+fn capture_panics_false_propagates_panic() {
+    let ir = Ir::<LoweredPayLoad>::default();
+    let _ = run_game(
+        ir,
+        GameData::new(),
+        InputSource::TestFile(PathBuf::from("/nonexistent-input")),
+        Some(Box::new(|_gd: &GameData| panic!("deliberate test panic"))),
+        None,
+    );
+}

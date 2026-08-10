@@ -90,7 +90,9 @@ against) are unchanged from the pre-enum string errors; representative examples:
 - **Controller / test input** (`controller/mod.rs`): `TestFileOpen { path, source }`,
   `TestFileRead { path, source }` (both wrap `std::io::Error`), `TestInputExhausted`,
   `InvalidTestInputP`, `InvalidTestInputPlayerZero`, `InvalidTestInputC`,
-  `InvalidTestInputCardZero`, `InvalidTestInputNumber`, `InvalidTestInputChoiceZero`.
+  `InvalidTestInputCardZero`, `InvalidTestInputNumber`, `InvalidTestInputChoiceZero`,
+  and `InternalPanic { message }` — an internal-invariant panic caught and converted by
+  `run_game_with` with `RunOptions::capture_panics(true)` (see §2).
 
 Design notes:
 
@@ -143,11 +145,15 @@ well-formed DSL input:
 return `StepResult::Error` on bad input (see the variant list in §1), never `panic!`. The
 setup-`Any` guard returns `StepResult::Error`, never `panic!` (`interpreter/mod.rs:157-159`).
 
-> **Panic capture:** when a trace log is open, `run_game` wraps `controller.run()` in
-> `std::panic::catch_unwind(AssertUnwindSafe(...))` (`crates/engine/src/controller/mod.rs:98-117`),
-> logs the panic message to the trace file as `=== Panic: <msg> ===`, then `resume_unwind`s so the
-> panic surfaces to the caller after being logged. Without a trace log, panics propagate untouched.
-> See [`observability.md`](./observability.md) §3.2.
+> **Panic capture:** `run_game`/`run_game_with` catch panics inside the run loop
+> (`crates/engine/src/controller/mod.rs`) in two situations: (1) **always**, when the caller set
+> `RunOptions::capture_panics(true)` — the panic message is logged to the trace file as
+> `=== Panic: <msg> ===` if a trace log is open, then returned as
+> `Err(EngineError::InternalPanic { message })` instead of aborting the process; (2) **only when a
+> trace log is open** and `capture_panics` is `false` (the legacy default) — the panic is logged
+> and then `resume_unwind`ed so it surfaces to the caller after being logged. Without a trace log
+> and without `capture_panics`, panics propagate untouched. See
+> [`observability.md`](./observability.md) §3.2.
 
 **Silent no-ops** (neither error nor panic — agents must know these exist and do nothing):
 

@@ -31,11 +31,11 @@ constructs it. Hosts integrate either by handing a closure to `run_game` (Mode A
 
 ## §1. Public API Inventory
 
-This section inventories every symbol re-exported by `crates/engine/src/lib.rs:9-16`:
+This section inventories every symbol re-exported by `crates/engine/src/lib.rs:10-17`:
 
 ```rust
-// crates/engine/src/lib.rs:9-16
-pub use controller::{run_game, InputSource};
+// crates/engine/src/lib.rs:10-17
+pub use controller::{run_game, run_game_with, InputSource, RunOptions};
 pub use debug::{format_game_data, save_game_data, DebugLevel};
 pub use error::EngineError;
 pub use game_data::{Card, Combo, GameData, Location, OwnerData, Player, PointMap, Precedence};
@@ -69,6 +69,37 @@ run-loop sequencing see [`lifecycle.md`](./lifecycle.md); for thread-safety boun
 condition), I-15 (validation-loop spin), I-16 (synthetic-id seed). The error type is
 `EngineError` (`crates/engine/src/error.rs`, re-exported from the crate root); the variant catalog
 and recoverability split: see [`error-handling.md`](./error-handling.md) §1.
+
+**`cgdsl_engine::run_game_with`** — `run_game` with explicit [`RunOptions`] (Mode A entry point,
+builder form).
+
+```rust
+// crates/engine/src/controller/mod.rs:96
+pub fn run_game_with(
+    ir: Ir<LoweredPayLoad>,
+    game_data: GameData,
+    input_source: InputSource,
+    options: RunOptions,
+) -> Result<GameData, EngineError>
+```
+
+**`cgdsl_engine::RunOptions`** — builder for run-tuning knobs; all optional, `default()` = no-op
+configuration. `run_game` is equivalent to `run_game_with(.., RunOptions::default())` plus the two
+legacy callback args:
+
+```rust
+// crates/engine/src/controller/mod.rs:34-82
+RunOptions::new()
+    .with_event_sender(Box<dyn Fn(&GameData) + Send>)   // per-loop-iteration snapshot
+    .with_trace_sender(Box<dyn Fn(TraceEntry) + Send>)  // per-FSM-transition trace
+    .capture_panics(bool)                               // true: panics become Err(InternalPanic)
+```
+
+`capture_panics(true)` is the guaranteed non-aborting mode: any panic inside the run loop is
+caught and returned as `Err(EngineError::InternalPanic { message })` (logged to the trace file
+first if one is open). The default (`false`) preserves the legacy behavior — panics are only
+caught for trace-logging and then re-raised, or propagate untouched when no trace log is open.
+See [`error-handling.md`](./error-handling.md) §2.
 
 **`cgdsl_engine::InputSource`** — the single seam for external I/O supplied to `run_game`.
 

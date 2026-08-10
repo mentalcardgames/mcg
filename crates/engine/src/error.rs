@@ -479,4 +479,12 @@ pub enum EngineError {
     /// `InputSource::TestFile` — a bare `0` (choice indices are 1-based).
     #[error("Invalid test input #{input_sequence}: choice indices start at 1, got 0")]
     InvalidTestInputChoiceZero { input_sequence: usize },
+
+    /// An internal-invariant panic was caught and converted to an error by
+    /// `run_game_with` with `RunOptions::capture_panics(true)`. The remaining
+    /// panic sites are unreachable from well-formed DSL input (see
+    /// `docs/error-handling.md` §2); this variant lets a host turn an engine
+    /// bug into a reportable `Err` instead of a process abort.
+    #[error("internal engine panic: {message}")]
+    InternalPanic { message: String },
 }

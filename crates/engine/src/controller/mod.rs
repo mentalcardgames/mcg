@@ -25,10 +25,52 @@ pub enum InputSource {
     TestFile(PathBuf),
 }
 
+/// Tunables for a [`run_game_with`] invocation.
+///
+/// Builder-style: `RunOptions::new().with_event_sender(..).with_trace_sender(..)…`.
+/// All fields are optional; `RunOptions::default()` is the no-op configuration.
+#[derive(Default)]
+#[allow(clippy::type_complexity)] // mirrors the run_game callback types
+pub struct RunOptions {
+    event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
+    trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
+    capture_panics: bool,
+}
+
+impl RunOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Per-loop-iteration `&GameData` snapshot callback (coarse-grained).
+    pub fn with_event_sender(mut self, sender: Box<dyn Fn(&GameData) + Send>) -> Self {
+        self.event_sender = Some(sender);
+        self
+    }
+
+    /// Per-FSM-transition `TraceEntry` callback (fine-grained).
+    pub fn with_trace_sender(mut self, sender: Box<dyn Fn(TraceEntry) + Send>) -> Self {
+        self.trace_sender = Some(sender);
+        self
+    }
+
+    /// Whether panics inside the run loop are caught and converted to
+    /// `Err(EngineError::InternalPanic)` instead of aborting the process.
+    ///
+    /// Default `false` preserves the legacy behavior: a panic is only caught
+    /// (for trace-logging, then re-raised via `resume_unwind`) when a trace
+    /// log is open; otherwise it propagates untouched. Hosts that want a
+    /// guaranteed non-aborting run set this to `true`.
+    pub fn capture_panics(mut self, yes: bool) -> Self {
+        self.capture_panics = yes;
+        self
+    }
+}
+
 /// Create an [`Interpreter`] from the lowered IR and drive it to completion.
 ///
-/// `entry` is saved *before* ownership of `ir` moves into the interpreter so the
-/// starting state handle can be supplied separately.
+/// Convenience wrapper over [`run_game_with`] with no event/trace callbacks and
+/// the legacy panic behavior (`capture_panics(false)`).
 #[allow(clippy::type_complexity)] // public API: two optional callback closures
 pub fn run_game(
     ir: Ir<LoweredPayLoad>,
@@ -37,6 +79,36 @@ pub fn run_game(
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
     trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
 ) -> Result<GameData, EngineError> {
+    run_game_with(
+        ir,
+        game_data,
+        input_source,
+        RunOptions {
+            event_sender,
+            trace_sender,
+            capture_panics: false,
+        },
+    )
+}
+
+/// Create an [`Interpreter`] from the lowered IR and drive it to completion,
+/// with explicit [`RunOptions`].
+///
+/// `entry` is saved *before* ownership of `ir` moves into the interpreter so the
+/// starting state handle can be supplied separately.
+#[allow(clippy::type_complexity)] // mirrors the run_game callback types
+pub fn run_game_with(
+    ir: Ir<LoweredPayLoad>,
+    game_data: GameData,
+    input_source: InputSource,
+    options: RunOptions,
+) -> Result<GameData, EngineError> {
+    let RunOptions {
+        event_sender,
+        trace_sender,
+        capture_panics,
+    } = options;
+
     let log_path = trace_logger::resolve_log_path();
     let logger = match &log_path {
         Some(path) => match trace_logger::TraceLogger::open(path) {
@@ -96,41 +168,54 @@ pub fn run_game(
         step_count,
     };
 
-    let result = if logger.is_some() {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| controller.run())).map_err(
-            |payload| {
-                let msg = if let Some(s) = payload.downcast_ref::<String>() {
-                    s.clone()
-                } else if let Some(s) = payload.downcast_ref::<&str>() {
-                    s.to_string()
-                } else {
-                    "<non-string panic>".to_string()
-                };
+    let should_catch = capture_panics || logger.is_some();
+    let run_result = if should_catch {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| controller.run())) {
+            Ok(result) => result,
+            Err(payload) => {
+                // NOTE: pass `payload.as_ref()` (not `&payload`) — the
+                // `&Box<dyn Any>` -> `&dyn Any` coercion yields the wrong
+                // vtable and every downcast fails.
+                let message = panic_message(payload.as_ref());
                 if let Some(ref logger) = logger {
-                    logger.log_panic(&msg);
+                    logger.log_panic(&message);
                     logger.flush();
                 }
-                std::panic::resume_unwind(payload);
-            },
-        )
+                if capture_panics {
+                    Err(EngineError::InternalPanic { message })
+                } else {
+                    std::panic::resume_unwind(payload)
+                }
+            }
+        }
     } else {
-        Ok(controller.run())
+        controller.run()
     };
 
-    match result {
-        Ok(Ok(gd)) => {
+    match run_result {
+        Ok(gd) => {
             if let Some(ref logger) = logger {
                 logger.log_footer("GameOver");
             }
             Ok(gd)
         }
-        Ok(Err(e)) => {
+        Err(e) => {
             if let Some(ref logger) = logger {
                 logger.log_footer(&format!("Error: {}", e));
             }
             Err(e)
         }
-        Err(_) => unreachable!(),
+    }
+}
+
+/// Best-effort extraction of the panic message from a `catch_unwind` payload.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else if let Some(s) = payload.downcast_ref::<&str>() {
+        s.to_string()
+    } else {
+        "<non-string panic>".to_string()
     }
 }
 

@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/controller/trace_logger.rs
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/action.rs
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # Observability & Diagnostics
@@ -184,13 +184,18 @@ combination.
 
 ### 3.2 Panic capture
 
-When a trace log is open, `run_game` wraps the run in
-`std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| controller.run()))`
-(`crates/engine/src/controller/mod.rs:98-117`). On panic, the closure logs `=== Panic: <msg> ===`
-to the trace file (`mod.rs:108-111`), then `std::panic::resume_unwind(payload)` re-panics in the
-caller's thread. Net effect: **the panic surfaces to the caller AFTER being logged**. If the trace
-log is not open, `run_game` calls `controller.run()` directly with no `catch_unwind`
-(`mod.rs:115-117`); the panic propagates exactly as before.
+Panic capture is governed by two conditions (`crates/engine/src/controller/mod.rs`):
+
+- **`RunOptions::capture_panics(true)`** — the run is always wrapped in
+  `std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| controller.run()))`. On panic, the
+  message is logged as `=== Panic: <msg> ===` to the trace file if one is open, and the panic is
+  **converted** to `Err(EngineError::InternalPanic { message })` — the host process does not
+  abort. This is the recommended setting for embedded hosts (Mode B, servers, the TUI).
+- **Legacy default (`capture_panics(false)`)** — the run is wrapped *only* when a trace log is
+  open, purely to log the panic before `std::panic::resume_unwind(payload)` re-panics in the
+  caller's thread. Net effect: **the panic surfaces to the caller AFTER being logged**. Without a
+  trace log, `run_game` calls `controller.run()` directly with no `catch_unwind`; the panic
+  propagates exactly as before.
 
 ---
 

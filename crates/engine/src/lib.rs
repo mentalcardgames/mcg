@@ -7,7 +7,7 @@ pub mod interpreter;
 pub mod quantifier;
 pub mod query;
 
-pub use controller::{run_game, InputSource};
+pub use controller::{run_game, run_game_with, InputSource, RunOptions};
 pub use debug::{format_game_data, save_game_data, DebugLevel};
 pub use error::EngineError;
 pub use game_data::{Card, Combo, GameData, Location, OwnerData, Player, PointMap, Precedence};

@@ -245,9 +245,12 @@ For each trace mention, see `TraceEvent` variant definitions in
   (`crates/engine/src/controller/mod.rs:167`). The engine does **not** roll back mutations already
   applied before the error — see [`error-handling.md`](./error-handling.md). If a trace log is
   open, `run_game` writes `=== Error: <e> ===` (`controller/mod.rs:126-130`).
-- On **panic** during `run()` and a trace log is open: `run_game`'s `catch_unwind` wrapper
-  (`controller/mod.rs:98-117`) extracts the panic message, writes `=== Panic: <msg> ===`, then
-  `resume_unwind`s — the panic surfaces to the caller, just logged. Without a trace log, panics
+- On **panic** during `run()`: `run_game`/`run_game_with`'s `catch_unwind` wrapper
+  (`controller/mod.rs`) extracts the panic message and either (a) with
+  `RunOptions::capture_panics(true)`: logs `=== Panic: <msg> ===` (if a trace log is open) and
+  returns `Err(EngineError::InternalPanic { message })` — the process does not abort; or (b) with
+  the legacy default: logs the panic (if a trace log is open) and `resume_unwind`s — the panic
+  surfaces to the caller, just logged. Without a trace log and without `capture_panics`, panics
   propagate untouched.
 
 ### 5. Shutdown
