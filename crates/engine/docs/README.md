@@ -2,7 +2,7 @@
 type: agent_wiki_node
 module: crates::engine
 scope: [all — crate-level overview]
-topics: [overview, architecture, module-map, domain-concepts, entry-point]
+topics: [overview, architecture, responsibilities, pipeline, module-map, entry-point]
 last_validated: 2026-08-11
 ---
 
@@ -18,68 +18,121 @@ last_validated: 2026-08-11
 > engine documentation. When in doubt: if it lives under `crates/engine/docs/`,
 > it describes this crate; otherwise it does not.
 
-The engine is a deterministic finite-state-machine interpreter that runs `.cgdsl`
-card-game definitions. It parses a game description, builds an IR graph, and steps
-through it — executing actions, evaluating conditions, and requesting player input
-when needed.
+The engine is the **referee** for card games written in the CGDSL language.
+You hand it a `.cgdsl` file — a complete description of a game — and it sets
+up the table, runs the rounds, asks the players for their decisions, scores
+the game, and reports who won.
 
-This crate is part of a larger workspace. Other crates you may need:
-- `front_end` — the `.cgdsl` parser, AST types, IR lowering, and graph visualizer (`fsm_to_dot` → `.dot`/`.svg`)
-- `cgdsl` — VS Code extension with syntax highlighting and LSP integration
-- `lsp_server` — language server (diagnostics, completions, semantic highlighting)
-- `mcg-cli` — CLI tool for WebSocket/HTTP/Iroh game interaction
-- `qr_comm` — research-phase QR communication protocol
+It is a deterministic, single-threaded interpreter: given the same game file
+and the same player answers, it always produces the same game. There is no
+network, no graphics, and no hidden randomness beyond what the game file
+asks for (`shuffle`, random turn order).
 
-## Quick Architecture
+---
+
+## Core responsibilities
+
+1. **Interpret game definitions.** Read a `.cgdsl` file and turn it into an
+   executable *game plan* — a graph of steps that says exactly what happens
+   in what order. (The parsing lives in the `front_end` crate; the engine
+   consumes its output.)
+
+2. **Keep the game state.** Maintain the live `GameData`: players, teams,
+   turn order, piles and their cards, memories, scores, stage counters and
+   the stage stack. All state changes flow through one place
+   (`action.rs`); all reads flow through another (`query/`).
+
+3. **Enforce the rules.** Walk the game plan step by step, executing actions
+   (deal, move, shuffle, score, eliminate…), evaluating conditions, and
+   running stages as loops with their end conditions. A game that eliminates
+   players keeps itself moving: out-of-game players are never asked for
+   input and their instructions are skipped, and a stage (or the whole game)
+   ends by itself when no players are left to act.
+
+4. **Ask the players.** Whenever the game needs a decision — a yes/no
+   prompt, a choice between options, picking a player, picking cards, or
+   entering a number — the engine pauses and returns a structured request
+   (`InputType`). The host (a terminal, a UI, a server) answers with an
+   `Input`; only the current player's answers are accepted.
+
+5. **Keep it honest.** Inputs are validated (ranges, counts, player
+   identity), and errors are recoverable: a failing rule stops the run with
+   a typed `EngineError` instead of crashing the process.
+
+6. **Report what happened.** Every step can be observed through trace
+   events, and at the end the engine reports the **winner set** — the
+   players still in the game (nobody, if all were eliminated).
+
+## How it happens — the pipeline
 
 ```
-  .cgdsl file ──→ [Parser] ──→ [IR Builder] ──→ [Interpreter]
-                                                     │
-  GameData ←── [Action] ←──────── step() ────────────┘
-     │            │
-     └── [Query/Evaluator] ──→ reads state for conditions/scoring
+ .cgdsl file          ──parser──▶   game plan (IR)   ──interpreter──▶   GameData
+ (your rules)         (front_end)   (a graph of steps)                  (live state)
 ```
 
-**Six layers:**
-1. **Controller** (`controller/`) — loops `step()` + `validate_player_input()`. Exposes `run_game()`.
-2. **Interpreter** (`interpreter/`) — FSM step with payload dispatch, quantifier preprocessor, trace emission.
-3. **Quantifier** (`quantifier.rs`) — rewrites `all`/`any`/range edges into synthetic edges or input prompts.
-4. **Action** (`action.rs`) — mutates `GameData` (setup rules, moves, scoring, etc.).
-5. **GameData** (`game_data.rs`) — the live game state (players, cards, locations, memories, turn order).
-6. **Query** (`query/`) — evaluates expressions (bool, int, string, player, cardset) against `GameData`.
+1. **Parse** — `front_end` reads the file and checks it against the
+   language grammar. A file that does not follow the syntax is rejected
+   here, before anything runs.
 
-## Suggested Reading Path
+2. **Lower** — `front_end` turns the rules into an *IR*: a directed graph
+   whose nodes are states and whose edges are the things that happen —
+   actions, conditions, choices, stage end-checks, round counters.
+
+3. **Run** — the interpreter (`interpreter/`) starts at the graph's entry
+   and takes one edge at a time: execute the action, evaluate the
+   condition, enter the stage, count the round. Quantifier sites (`all`,
+   `any`, ranges, exact counts) are expanded on the fly into per-player
+   fan-outs or player prompts. When a step needs a decision, the run stops
+   and returns `NeedsInput`; the host answers and the run resumes.
+
+4. **State** — every mutation lands in `GameData` (players, piles, cards,
+   memories, scores, turn order, stages). Cards are plain attribute bags
+   referenced by id; piles are ordered lists of card ids; memories are an
+   owner-prefixed key-value store.
+
+5. **Finish** — when the graph has no more steps, the run returns the final
+   `GameData`; the winner set is the players still in the game.
+
+Because the interpreter is a plain synchronous loop, hosts can drive it two
+ways: hand it an input closure and let it run to completion (Mode A), or own
+the interpreter and call `step()` yourself, rendering between steps (Mode B
+— recommended for UIs). See [`interfaces.md`](./interfaces.md).
+
+---
+
+## The wiki
+
+### Suggested Reading Path
 
 **New here?** Start with [`quickstart.md`](./quickstart.md) — run your first game in two
 minutes (CLI flags, logging, debugging), then follow the path below.
 
 **First time here:**
-1. [`dsl-semantics.md`](./dsl-semantics.md) — what every `.cgdsl` construct *means* to the engine
-2. [`dsl-completeness.md`](./dsl-completeness.md) — per-construct implementation status (the single status authority)
-3. [`lifecycle.md`](./lifecycle.md) — when things happen: setup → stage → play → terminate
+1. [`cgdsl-authoring-guide.md`](./cgdsl-authoring-guide.md) — how to write a game, from the ground up
+2. [`dsl-semantics.md`](./dsl-semantics.md) — what every `.cgdsl` construct *means* to the engine
+3. [`dsl-completeness.md`](./dsl-completeness.md) — per-construct implementation status (the single status authority)
+4. [`lifecycle.md`](./lifecycle.md) — when things happen: setup → stage → play → terminate
 
 **Modifying engine code:**
-4. [`invariants.md`](./invariants.md) — 25 guardrails. **Read before touching anything.**
-5. [`data-structures.md`](./data-structures.md) — field-level layout of every struct and enum
-6. [`contributing.md`](./contributing.md) — development cheatsheet: which files to touch when adding features
+5. [`invariants.md`](./invariants.md) — 25 guardrails. **Read before touching anything.**
+6. [`data-structures.md`](./data-structures.md) — field-level layout of every struct and enum
+7. [`contributing.md`](./contributing.md) — development cheatsheet: which files to touch when adding features
 
 **Writing tests:**
-7. [`testing.md`](./testing.md) — test layers, fixture conventions, commands
+8. [`testing.md`](./testing.md) — test layers, fixture conventions, commands
 
 **Integrating from outside:**
-8. [`interfaces.md`](./interfaces.md) — public API, data flow, threading, worked examples (the host contract hub)
+9. [`interfaces.md`](./interfaces.md) — public API, data flow, threading, worked examples (the host contract hub)
 
 **Reference:**
-9. [`developer-notes.md`](./developer-notes.md) — design decisions (memory ownership, scoring)
-10. [`engine-vs-design.md`](./engine-vs-design.md) — divergences from the intended DSL design, with repros
-11. [`error-handling.md`](./error-handling.md) — panic sites, recoverable errors, silent no-ops
-12. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
+10. [`developer-notes.md`](./developer-notes.md) — design decisions (memory ownership, scoring)
+11. [`engine-vs-design.md`](./engine-vs-design.md) — divergences from the intended DSL design, with repros
+12. [`error-handling.md`](./error-handling.md) — panic sites, recoverable errors, silent no-ops
+13. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
+14. [`mechanics-matrix.md`](./mechanics-matrix.md) — which card-game mechanics the system supports (capability matrix + gap summary)
+15. [`NEXT_STEPS.md`](./NEXT_STEPS.md) — future-work project seeds (bachelor/master)
 
-**Handoff set:**
-13. [`mechanics-matrix.md`](./mechanics-matrix.md) — which card-game mechanics the system supports (capability matrix + gap summary)
-14. [`NEXT_STEPS.md`](./NEXT_STEPS.md) — future-work project seeds (bachelor/master)
-
-## Module Map
+### Module Map
 
 ```
 crates/engine/src/
@@ -142,33 +195,6 @@ crates/engine/src/
     ├── verb_semantics_test.rs     — `deal`/`move` quantity semantics
     └── random_play_test.rs        — monkey tests: random inputs, 40 seeds per game
 ```
-
-## Key Concepts
-
-- **IR (Intermediate Representation):** The parser lowers `.cgdsl` into a graph of states and edges.
-  Each edge carries a `Payload` (Action, Choice, Optional, Condition, EndCondition, EndStage,
-  StageRoundCounter, Trigger). States are identified by `StateID` (u32). The interpreter advances
-  through the graph one edge at a time.
-
-- **GameData:** The live game state — players, teams, turn order, locations, cards, memories, scores,
-  stage counters, and the stage stack. All mutations go through `action.rs`. All reads go through `query/`.
-
-- **Input:** When the interpreter needs player input — a `Choice`/`Optional` prompt, a quantifier
-  `ChoosePlayer`/`ChooseCards` prompt, or a `Number` prompt (from `bid`/`deal` count) — it returns
-  `StepResult::NeedsInput(InputType)` and waits. The controller delivers player input as
-  `Input { player_id, kind: InputKind }`. Inputs from non-current players are rejected.
-
-- **Quantifier Preprocessor:** Edges carrying `all`/`any`/range quantities and dest quantifiers are
-  intercepted before dispatch. `all` fans out to one synthetic edge per player. `any` issues a
-  `ChoosePlayer`/`ChooseCards` prompt (or a count prompt on `deal`); literal quantities on
-  `move`/`exchange` prompt pick-exactly-N; ranges validate and re-prompt on failure.
-
-- **Memory:** Owner-prefixed key-value store (`HashMap<String, MemoryValue>`) with keys like
-  `"P1_M"`, `"Table_pot"`, `"Red_M"` (team slots). See [`developer-notes.md`](./developer-notes.md) §1.1 for the ownership model.
-
-- **Scoring:** `score N to P1` adds to `Player::score`. `winner is P1` eliminates all other players.
-  `winner is highest score` compares scores across all in-game players and eliminates non-matching.
-  See [`dsl-semantics.md`](./dsl-semantics.md) §4.
 
 ## Build and Test
 
