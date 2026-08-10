@@ -60,6 +60,19 @@ pub enum QuantSite {
         qty: Quantity,
         from: CardSet,
     },
+    /// `move N from <non-positional>` (Classic/Exchange): pick **exactly N**
+    /// cards (2026-08-10 verb semantics — `move` = choose, `deal` = top).
+    SrcCardsExactN {
+        qty: Quantity,
+        from: CardSet,
+    },
+    /// `deal any` / `deal >= M and <= N from X`: prompt for **how many**
+    /// cards to deal (an `InputType::Number` count), then deal that many
+    /// from the top automatically (2026-08-10 verb semantics).
+    DealCount {
+        qty: Quantity,
+        from: CardSet,
+    },
     /// The move's `from` is a combo group (`<combo> in <pile>`): prompt the
     /// player to choose cards from the pile, then validate the chosen set
     /// against the combo's filter ("laying down", see D-16).
@@ -116,6 +129,25 @@ pub enum PendingKind {
     /// rewritten to read it.
     CardsAnyOrRange {
         candidate_ids: Vec<usize>,
+        original: Edge<LoweredPayLoad>,
+    },
+    /// `SrcCardsExactN` (2026-08-10): pick exactly `expected` cards from
+    /// `candidate_ids` (`min=max=expected`; `expected` is clamped to the
+    /// candidate count). Resume writes the chosen ids into the synthetic
+    /// memory slot.
+    CardsExactN {
+        candidate_ids: Vec<usize>,
+        expected: usize,
+        original: Edge<LoweredPayLoad>,
+    },
+    /// `DealCount` (2026-08-10): the player chose a count for a `deal`;
+    /// on resume the original edge's quantity is substituted with the
+    /// literal `value`. `min`/`max` are the prompt bounds (re-validated on
+    /// resume; out-of-range answers re-prompt).
+    DealCount {
+        min: Option<i32>,
+        max: Option<i32>,
+        prompt: String,
         original: Edge<LoweredPayLoad>,
     },
     /// `All`-of-`Any`: the per-player fan-out targets are pre-decided
@@ -410,21 +442,123 @@ pub fn scan_edge(edge: &Edge<LoweredPayLoad>) -> QuantSite {
 
     // Card-amount quantifier (only MoveQuantity carries a quantity).
     if let front_end::ast::MoveCardSet::MoveQuantity { quantity, from, .. } = mcs {
-        match quantity {
-            Quantity::Quantifier {
-                quantifier: Quantifier::Any,
-            }
-            | Quantity::IntRange { .. } => {
-                return QuantSite::SrcCardsAnyOrRange {
-                    qty: quantity.clone(),
-                    from: from.clone(),
-                };
-            }
-            _ => {}
+        if let Some(site) = quantity_site(edge, quantity, from) {
+            return site;
         }
     }
 
     QuantSite::None
+}
+
+/// True if the edge's move verb is `deal`. Since 2026-08-10 the verb carries
+/// the quantity semantics: `deal` = automatic (from the top), `move`/
+/// `exchange` = the player picks the cards (2026-08-10 verb semantics).
+pub fn is_deal_move(edge: &Edge<LoweredPayLoad>) -> bool {
+    matches!(
+        &edge.payload,
+        Payload::Action(front_end::ast::GameRule::Action {
+            action: front_end::ast::ActionRule::Move {
+                move_type: front_end::ast::MoveType::Deal { .. },
+            },
+        })
+    )
+}
+
+/// True if a move `from` cardset is *positional* — a `CardPosition` group
+/// (`top(X)`, `bottom(X)`, `X[N]`, extrema). Positional sources are always
+/// automatic: the position already determined the cards, so no quantity
+/// prompt applies (2026-08-10 verb semantics).
+fn is_positional(from: &CardSet) -> bool {
+    matches!(
+        from,
+        CardSet::Group {
+            group: Group::CardPosition { .. },
+        } | CardSet::GroupOwner {
+            group: Group::CardPosition { .. },
+            ..
+        }
+    )
+}
+
+/// True if `from` is the quantifier's own synthetic-memory slot. After a
+/// card-choice resume substitutes `CardSet::Memory` for `from`, the re-scan
+/// must not re-issue a pick-exactly-N prompt for the already-chosen set.
+fn is_synth_memory(from: &CardSet) -> bool {
+    matches!(
+        from,
+        CardSet::Memory {
+            memory: UseMemory::WithOwner { memory, .. }
+        } if memory == SYNTH_MEMORY_KEY
+    )
+}
+
+/// Classify a `MoveQuantity`'s quantity into a source card-amount site,
+/// honouring the 2026-08-10 verb semantics:
+///
+/// - positional `from` → automatic (no site);
+/// - `deal` + `any`/`IntRange` → [`QuantSite::DealCount`] (prompt the count);
+/// - `deal` + `Int` → automatic (top N, unchanged);
+/// - `move`/`exchange` + `any`/`IntRange` → [`QuantSite::SrcCardsAnyOrRange`]
+///   (pick the cards, unchanged);
+/// - `move`/`exchange` + `Int` → [`QuantSite::SrcCardsExactN`] (pick exactly N);
+/// - `move`/`exchange` + `Int` over the synthetic memory slot → automatic
+///   (the cards were already chosen).
+fn quantity_site(
+    edge: &Edge<LoweredPayLoad>,
+    quantity: &Quantity,
+    from: &CardSet,
+) -> Option<QuantSite> {
+    if is_positional(from) {
+        return None;
+    }
+    match quantity {
+        Quantity::Quantifier {
+            quantifier: Quantifier::All,
+        } => None, // `move all from X` — automatic, all cards (unchanged)
+        Quantity::Quantifier {
+            quantifier: Quantifier::Any,
+        }
+        | Quantity::IntRange { .. } => {
+            if is_deal_move(edge) {
+                Some(QuantSite::DealCount {
+                    qty: quantity.clone(),
+                    from: from.clone(),
+                })
+            } else {
+                Some(QuantSite::SrcCardsAnyOrRange {
+                    qty: quantity.clone(),
+                    from: from.clone(),
+                })
+            }
+        }
+        Quantity::Int { .. } => {
+            if is_deal_move(edge) || is_synth_memory(from) {
+                None
+            } else {
+                Some(QuantSite::SrcCardsExactN {
+                    qty: quantity.clone(),
+                    from: from.clone(),
+                })
+            }
+        }
+    }
+}
+
+/// The `(quantity, from)` form of [`quantity_site`], for the `DestPlayerAll`
+/// arm: a source card-amount site chained with a dest fan-out (e.g.
+/// `move 1 from Hand of current to Table of all` prompts for the card(s)
+/// first, then fans out — 2026-08-10).
+pub fn src_card_choice_site(edge: &Edge<LoweredPayLoad>) -> Option<(Quantity, CardSet)> {
+    let mcs = move_cardset_ref(edge)?;
+    let front_end::ast::MoveCardSet::MoveQuantity { quantity, from, .. } = mcs else {
+        return None;
+    };
+    quantity_site(edge, quantity, from).map(|site| match site {
+        QuantSite::DealCount { qty, from }
+        | QuantSite::SrcCardsAnyOrRange { qty, from }
+        | QuantSite::SrcCardsExactN { qty, from } => (qty, from),
+        _ => unreachable!("quantity_site only yields card-amount sites"),
+    })
 }
 
 /// The `SourcePlayerAny` site of `edge`, if its `from` is owned by `any`.
@@ -608,6 +742,20 @@ pub fn substitute_cardset_memory(
     repl
 }
 
+/// Clone `edge` and replace the `MoveQuantity`'s quantity with the literal
+/// `value` (the `DealCount` resume: the player chose how many cards to deal).
+/// Non-`MoveQuantity` edges are returned unchanged (defensive).
+pub fn substitute_quantity(edge: &Edge<LoweredPayLoad>, value: i32) -> Edge<LoweredPayLoad> {
+    let mut repl = edge.clone();
+    if let Some(front_end::ast::MoveCardSet::MoveQuantity { quantity, .. }) =
+        move_cardset_mut(&mut repl)
+    {
+        *quantity = Quantity::Int {
+            int: IntExpr::Literal { int: value },
+        };
+    }
+    repl
+}
 /// Build the synthetic fan-out chain for a `DestPlayerAll` edge: one
 /// per-player replacement edge per name, threaded through freshly-allocated
 /// synthetic `StateID`s. The returned `Vec<(synth_id, edge)>` is keyed into

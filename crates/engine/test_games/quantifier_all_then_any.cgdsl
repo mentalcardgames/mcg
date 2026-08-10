@@ -8,5 +8,5 @@ card on Stock:
     for Suite(Hearts)
 
 stage Setup for current 1 times {
-  deal any from Stock private to Hand of all
+  move any from Stock private to Hand of all
 }

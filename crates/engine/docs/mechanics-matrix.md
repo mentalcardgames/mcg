@@ -91,13 +91,13 @@ last_validated: 2026-08-10
 
 | Mechanic | Example games | DSL | Parser | Engine | Notes / what's missing |
 |---|---|---|---|---|---|
-| Draw a fixed count | most | ✅ | ✅ | ✅ | `deal 2 from Deck …` |
+| Draw a fixed count | most | ✅ | ✅ | ✅ | `deal 2 from Deck …` (automatic, from the top — 2026-08-10 verb semantics) |
 | Draw a computed count | memory-driven games | ✅ | ✅ | ✅ | `deal (&I:M of current) from Deck …` (quantities live since D-8) |
 | Draw-until-condition | Blackjack dealer | ✅ | ✅ | ✅ | Bounded `if` loops |
-| Play a card to the table | most | ✅ | ✅ | ✅ | `move top(Hand) private to Discard` |
+| Play a card to the table | most | ✅ | ✅ | ✅ | `move top(Hand) private to Discard` (positional = automatic) |
 | Play to a specific player's pile | Go Fish | ✅ | ✅ | ✅ | `to Hand of P:P1` |
-| Play a *chosen* card | Crazy Eights | ✅ | ✅ | ✅ | `deal any from Hand of current …` |
-| Discard N with a size range | Poker | ✅ | ✅ | ✅ | `deal >= 1 and <= 3 from …` (validated, re-prompts) |
+| Play a *chosen* card | Crazy Eights | ✅ | ✅ | ✅ | `move 1 from Hand of current …` — pick exactly one (F-28) |
+| Discard N with a size range | Poker | ✅ | ✅ | ✅ | `move >= 1 and <= 3 from …` (validated, re-prompts) |
 | Move cards matching a rule | Rummy melds | ✅ | ✅ | ✅ | `where`-filters and combo groups |
 | Lay down sets / books | Rummy, Go Fish | ✅ | ✅ | ✅ | `combo Set where (same Rank and size >= 3)` + validated lay-down move (D-16 note: 2+2 splits pass) |
 | Draw from top / bottom / Nth | most | ✅ | ✅ | ✅ | `top(Loc)` / `bottom(Loc)` / `Loc[N]` |
@@ -154,9 +154,9 @@ last_validated: 2026-08-10
 | Yes/no prompt | most | ✅ | ✅ | ✅ | `optional` |
 | Choose among options | most | ✅ | ✅ | ✅ | `choose` — unlimited options; TUI list navigation |
 | Choose a player | target cards, gifts | ✅ | ✅ | ✅ | `Hand of any` → `ChoosePlayer` |
-| Choose one card | many | ✅ | ✅ | ✅ | `deal any from …` |
-| Choose a range-sized subset | Poker discard | ✅ | ✅ | ✅ | `deal >= 1 and <= 3 from …` (re-prompts) |
-| Chained choices on one move | Go Fish ask | ✅ | ✅ | ✅ | `deal any from Hand of any …` — sequential prompts (player, then cards) since 2026-08-10 |
+| Choose one card | many | ✅ | ✅ | ✅ | `move 1 from …` (pick exactly one — F-28) |
+| Choose a range-sized subset | Poker discard | ✅ | ✅ | ✅ | `move >= 1 and <= 3 from …` (re-prompts) |
+| Chained choices on one move | Go Fish ask | ✅ | ✅ | ✅ | `move any from Hand of any …` — sequential prompts (player, then cards) since 2026-08-10 |
 | Validated combo lay-down | Rummy, Go Fish books | ✅ | ✅ | ✅ | Combo-source move (0 = skip, re-prompt on mismatch) |
 | **Enter a number** (bid amount, ante) | Poker, Cribbage | ✅ | ✅ | ✅ | **`bid <qty> on <memory> of <owner>`** (2026-08-10): `any`/range → `InputType::Number` prompt; literal → direct write (F-26). Grammar-level `any` in *pure* int slots (`score any …`) remains front_end work (§9) |
 | Hidden simultaneous choices | Poker, RPS | ❌ | ❌ | ❌ | Needs SimStage (P-2) + per-player input routing |

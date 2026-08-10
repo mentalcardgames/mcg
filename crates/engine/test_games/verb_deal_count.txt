@@ -1,0 +1,5 @@
+# Answers for verb_deal_count.cgdsl:
+#   n 3 -> deal >= 2 and <= 4 : count 3
+#   n 2 -> deal any           : count 2 (1..3 remaining in the pile)
+n 3
+n 2

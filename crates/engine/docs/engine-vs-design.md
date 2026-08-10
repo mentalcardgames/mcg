@@ -58,6 +58,7 @@ last_validated: 2026-08-10
 | F-25 | **Team-owned locations/memories parsed but errored** (P-7): `location X on T:T1` → `TeamCannotOwn`. | `resolve_owner_to_names` maps a team owner to its **member names** — `location X on T:T1` creates one instance per team member (mirroring `on all`); team collections union their members. | `query/player_tests::resolve_owner_to_names_team_resolves_members`, `ergonomics_test::team_owned_locations_and_memories_are_per_member` |
 | F-26 | **Numeric input was impossible** — the mechanics matrix's "biggest single gap" for betting games (no `InputType::Number`, and `any` in pure int slots does not parse). | Engine-side: `InputType::Number { min, max, prompt }` / `Input::Number { value }`, controller validation, TestFile `n <N>` lines, TUI + `cgdsl-play` number entry. DSL surface (engine-only): `bid <qty> on <memory> of <owner>` — `any`/range prompt for a number (bounds validated, re-asked), literals write directly; plain `bid` without a target is an error (D-7 partially fixed; `demand` still undefined). | `ergonomics_test::bid_any_prompts_for_a_number_and_range_rejects_out_of_bounds`, `action_tests` bid pins |
 | F-27 | **Bare memory reads `&I:M` errored** ("memory access requires an explicit owner", P-4) while bare writes bridged to the current player — reads and writes disagreed. | Bare reads resolve through the same declared-owner → current-player resolution as writes. | `action_tests::cycle_action_eval_failure_errors` (updated), `memory_test` suite |
+| F-28 | **Quantity semantics did not match author intent** — `deal 3 from Hand` took the top 3 silently, so "play/discard exactly one card" had to be spelled `deal >= 1 and <= 1`, and `deal any` chose *cards* from the deck. | **Verb semantics (2026-08-10):** `deal` = automatic from the top (`deal N` = top N; `deal any`/`deal >= M and <= N` prompt for the **count** via `InputType::Number`, then deal that many; a degenerate `>= 2 and <= 2` deals automatically); `move`/`exchange` = the player picks (`move N` prompts pick-exactly-N, `SrcCardsExactN`; `any`/ranges unchanged). Positional sources (`top(X)`, `X[N]`, extrema) are automatic for any verb. The `>= 1 and <= 1` idiom is gone from the demo games. | `verb_semantics_test.rs` (6 tests: count prompts, degenerate range, count-to-all fan-out, exact-N + re-prompt, short-pile clamp, positional automatic); `quantifier_tests` scan_edge pins |
 
 ## 1b. Partially fixed
 
@@ -204,8 +205,8 @@ stage Laydown for current until Set in Hand empty
 |---|---|---|---|---|
 | Blackjack | `test_games/blackjack.cgdsl` | optionals per turn | optionals, points, `sum`, `size(playersin)`, `cycle to next` (unguarded — self-wrap + skip mode, F-16/F-17), `winner is highest score` | Ace = 11 only; standing re-asks each round (D-3); dealer is a tableau, not a player |
 | War | `test_games/war.cgdsl` | none (automatic) | `until (A or B)` exit, point-map comparison, `if` chains, moves, scoring | ties discard both cards (no war redeal) |
-| Crazy Eights | `test_games/crazy_eights.cgdsl` | choose-card + choose-player per turn | `deal any` (ChooseCards), `Hand of any` (ChoosePlayer), `until (A or B) or N times`, lowest-score winner | no match constraint on plays; draw may be gifted to any player (house rule) |
-| Five-Card Draw | `test_games/five_card_draw.cgdsl` | choose-card per draw round | `Hand of all` fan-out, `deal any` discard, `where same Rank/Suit` filters, score bonuses | draw-1 variant; additive scoring (no straights/full houses) |
+| Crazy Eights | `test_games/crazy_eights.cgdsl` | choose-card + choose-player per turn | `move 1` (pick-one play), `Hand of any` (ChoosePlayer), `deal N` draws, `until (A or B) or N times`, lowest-score winner | no match constraint on plays; draw may be gifted to any player (house rule) |
+| Five-Card Draw | `test_games/five_card_draw.cgdsl` | choose-card per draw round | `Hand of all` fan-out, `move 1` discard, `where same Rank/Suit` filters, score bonuses | draw-1 variant; additive scoring (no straights/full houses) |
 | Go Fish | `test_games/go_fish.cgdsl` | 13-way `choose` per turn | `choose` with 13 options, `where Rank is "X" of next` (owner-aware filter), draw-on-miss, memory-free scoring | ask the *next* player only; no books; hand-size scoring |
 
 All five run end-to-end under `tests/demo_games_test.rs` (structural assertions:
@@ -236,11 +237,12 @@ prerequisites are noted so a later project can pick them up:
   2. Engine: gate `ensure_stage_entered` on the participant collection (the `in_stage` map
      already models participation); SimStage additionally needs per-player sub-FSMs in the IR.
   3. Validation: reject `for` clauses referencing unknown players at parse time.
-- **`any` / ranges in pure int slots (`score any to …`, `M is any`), and a
-  dedicated "exactly one card" shorthand** (`deal >= 1 and <= 1 from …` is the
-  current spelling for *choose exactly one card*). Engine-side
-  `InputType::Number` exists (F-26); the grammar surface for prompting in
-  arbitrary int expressions does not (`quantity`-slot `any` means choose-*cards*).
+- **`any` / ranges in pure int slots (`score any to …`, `M is any`).**
+  Engine-side `InputType::Number` exists (F-26) and `deal`'s count prompt
+  (F-28) exercises it; the grammar surface for prompting in *arbitrary* int
+  expressions does not (`quantity`-slot `any` means choose-*cards* /
+  choose-*count*). The "exactly one card" spelling is solved by
+  `move 1 from …` (F-28).
 
 ## 6. Audit trail
 
@@ -283,5 +285,15 @@ prerequisites are noted so a later project can pick them up:
   `blackjack.cgdsl` lost both guards. **Total: 536 tests green (437 lib + 5
   cgdsl-play + 9 engine-tui + 85 integration, +1 ignored)**; new
   `ergonomics_test.rs` (5 tests) and the F-16…F-27 regression pins;
+  `clippy --no-deps -D warnings` and `fmt --check` clean. Workspace caveat
+  unchanged.
+- **Seventh pass (2026-08-10, verb semantics):** `deal` vs `move`/`exchange`
+  now carry the quantity semantics (F-28): `deal` = automatic from the top
+  with a count prompt for `any`/ranges; `move N` = pick exactly N cards;
+  positional sources automatic. The `>= 1 and <= 1` idiom is gone from the
+  demo games (crazy_eights/five_card_draw use `move 1`), and the quantifier
+  fixtures that tested card-picking with `deal any` now use `move any`.
+  **Total: 545 tests green (440 lib + 5 cgdsl-play + 9 engine-tui + 91
+  integration, +1 ignored)**; new `verb_semantics_test.rs` (6 tests);
   `clippy --no-deps -D warnings` and `fmt --check` clean. Workspace caveat
   unchanged.

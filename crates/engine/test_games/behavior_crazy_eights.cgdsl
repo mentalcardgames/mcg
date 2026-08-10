@@ -22,7 +22,7 @@ stage Deal for current 1 times {
 stage Play for current until (Deck empty or Hand of current empty) or 30 times {
   if (not Hand of current empty) {
     optional {
-      deal any from Hand of current private to Discard
+      move any from Hand of current private to Discard
     }
   }
   if (not Deck empty) {

@@ -17,9 +17,8 @@
 //
 // Engine notes:
 //   - Dealing to `Hand of all` fans out to one deal per player.
-//   - Discarding uses `deal >= 1 and <= 1 from Hand of current …`, which
-//     prompts the player and range-validates the selection to exactly one
-//     card (InputType::ChooseCards).
+//   - Discarding uses `move 1 from Hand of current …`, which prompts the
+//     player to pick exactly one card (2026-08-10 verb semantics).
 //   - `same Rank` / `same Suit` filters are used for the bonuses.
 
 player P1, P2, P3
@@ -43,11 +42,12 @@ stage Deal for current 1 times {
   deal 5 from Deck private to Hand of all
 }
 
-// Up to 3 full rounds: discard exactly one card, draw one replacement.
+// Up to 3 full rounds: discard exactly one card (the player picks it),
+// draw one replacement.
 stage Draw for current 9 times {
   if (not Hand of current empty) {
     optional {
-      deal >= 1 and <= 1 from Hand of current private to Discard
+      move 1 from Hand of current private to Discard
       deal 1 from Deck private to Hand of current
     }
   }

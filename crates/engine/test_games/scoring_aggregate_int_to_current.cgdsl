@@ -11,7 +11,7 @@ card on Deck:
 points TestValues on Rank(Ace: 11, King: 10)
 
 stage Play for current 1 times {
-  move 2 from Deck private to Hand
+  deal 2 from Deck private to Hand
   score sum of Hand using TestValues to current
   score sum of Hand using TestValues to P:P2
   end stage

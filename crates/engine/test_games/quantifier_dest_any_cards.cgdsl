@@ -8,5 +8,5 @@ stage Setup for current 1 times {
   deal 1 from top(Deck) private to Hand of P:P1
 }
 stage Ask for current 1 times {
-  deal any from Deck private to Hand of any
+  move any from Deck private to Hand of any
 }

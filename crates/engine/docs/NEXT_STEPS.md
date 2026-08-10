@@ -54,10 +54,10 @@ last_validated: 2026-08-09
   strict-mode validator that warns on constructs that are silently dropped
   (status keywords, `for` clause).
 - **Numeric prompts in pure int slots.** `InputType::Number` exists
-  (2026-08-10, F-26) behind `bid <qty> on <memory> of <owner>`; `any`/ranges
-  in arbitrary int expressions (`score any to …`, `M is any`) and an
-  "exactly one card" shorthand (`deal >= 1 and <= 1` today) need grammar
-  work.
+  (2026-08-10, F-26) behind `bid <qty> on <memory> of <owner>` and the
+  `deal any`/`deal >= M and <= N` count prompt (F-28); `any` in *arbitrary*
+  int expressions (`score any to …`, `M is any`) still needs grammar work.
+  "Pick exactly one card" is now simply `move 1 from …` (F-28).
 - **Parser stack scaling (found 2026-08-10).** `pest`'s recursion cost grows
   with the number of flow components — roughly a 0.8 MiB base plus
   ~10-20 KiB per component in debug builds — so games with many options

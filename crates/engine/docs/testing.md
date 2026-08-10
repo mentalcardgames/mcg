@@ -358,6 +358,12 @@ authoring new ones):
 | `memory_initial_value.cgdsl` | `tests/ergonomics_test.rs` | Memory declarations honour their initial value (F-18); typed init (I-10) |
 | `bid_prompt.cgdsl` + `.txt` | `tests/ergonomics_test.rs` | Numeric input prompt (`InputType::Number`): `bid any`/range, out-of-bounds re-ask (F-26) |
 | `team_locations.cgdsl` | `tests/ergonomics_test.rs` | Team-owned locations/memories = per-member instances (F-25) |
+| `verb_deal_count.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | `deal >= M and <= N` / `deal any` prompt for the **count** (F-28) |
+| `verb_deal_range_automatic.cgdsl` | `tests/verb_semantics_test.rs` | Degenerate `>= 2 and <= 2` range deals automatically |
+| `verb_deal_count_to_all.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | Deal-count prompt chains with the dest-`all` fan-out |
+| `verb_move_exact_n.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | `move N` = pick exactly N; wrong count re-prompts |
+| `verb_move_exact_n_short_pile.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | Exact-N prompt clamps to the available cards |
+| `verb_positional_automatic.cgdsl` | `tests/verb_semantics_test.rs` | Positional sources (`top(X)`, `X[N]`) never prompt |
 | `location_resolution.cgdsl`, `test.cgdsl` | TUI fixtures | Interactive play (load via `just tui <name>`) |
 
 **Authoring conventions:**

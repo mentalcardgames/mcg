@@ -284,7 +284,7 @@ Action rules execute inside stage bodies or trigger rules. They mutate
 **DSL:**
 ```
 move top(Hand) face up to Table
-deal 3 from top(Stock) private to Hand of all
+deal 3 from Stock private to Hand of all
 exchange any from Stock face down to Discard
 ```
 
@@ -296,9 +296,28 @@ how many cards to move (resolved via `resolve_quantity` against the live
 state). Card `status` is parsed but **ignored** — cards carry no status
 behaviour until the card-encryption work (`engine-vs-design.md` §1b).
 
-When quantifiers (`all`, `any`, `>= M and <= N`) appear on `from` or `to`,
-the quantifier preprocessor intercepts the edge before dispatch and issues
-`ChooseCards` / `ChoosePlayer` prompts or builds synthetic fan-out chains.
+**Verb semantics (2026-08-10):** the verb decides whether the player chooses
+the cards, and the quantity decides how many:
+
+| Quantity | `deal` (automatic, from the top) | `move` / `exchange` (player picks) |
+|---|---|---|
+| `N` (literal or runtime expr) | top N, automatic | `ChooseCards` prompt, **min=max=N** (clamped to available; `SrcCardsExactN`) |
+| `all` | all, automatic | all, automatic |
+| `any` | `Number` prompt "how many?" (1..pile size), then top-N | `ChooseCards` prompt, 1..N (unchanged) |
+| `>= M and <= N` | `Number` prompt bounded M..N, then top-N (`DealCount`) | `ChooseCards` prompt M..N (unchanged) |
+| `>= M and <= M` (degenerate) | top M, automatic | pick exactly M |
+| omitted | all, automatic | all, automatic |
+
+A **positional source** (`top(X)`, `bottom(X)`, `X[N]`, extrema) is always
+automatic for any verb and quantity — the position already chose the card(s);
+`where`-filtered sources are *not* positional and prompt. Empty sources and
+`0`/negative quantities are no-ops. `any`/range quantities on a `deal` are
+intercepted by the quantifier preprocessor as [`QuantSite::DealCount`] (the
+count round-trips as `InputType::Number`/`Input::Number`, bounded and
+re-validated); literal `N` on `move`/`exchange` becomes
+[`QuantSite::SrcCardsExactN`]. Both chain with dest-quantifier fan-outs
+(`deal any from Deck to Hand of all` asks the count once, then deals to every
+player).
 
 **Combo-source moves** (`move <combo> in <pile> ...`, e.g. laying down a
 Rummy set): the preprocessor prompts the player to choose cards from the
@@ -668,9 +687,10 @@ advances through it.
 
 ---
 
-### 6.3 `any` (SrcCardsAnyOrRange)
+### 6.3 `any` in a move source (`SrcCardsAnyOrRange`)
 
-**DSL:** `deal any from Stock private to Hand`
+**DSL:** `move any from Hand private to Discard` (for `deal`, `any` is a
+*count* prompt — see §6.3b)
 
 **Engine:** Evaluates the source `CardSet` to produce a list of candidate card
 IDs. Issues a `NeedsInput(InputType::ChooseCards { display, min, max, prompt })`
@@ -681,7 +701,36 @@ edge is built that reads from that memory, and `current_state` advances.
 
 ---
 
-### 6.4 `>= M and <= N` (IntRange)
+### 6.3b The `deal` count prompt (`DealCount`, 2026-08-10)
+
+**DSL:** `deal any from Stock private to Hand` / `deal >= 2 and <= 4 from
+Stock private to Hand`
+
+**Engine:** A `deal` never lets the player choose *which* cards — it prompts
+for **how many** (`InputType::Number`, bounds from the range, or 1..pile-size
+for `any`), then deals that many from the top automatically. Out-of-range
+counts are rejected and re-asked; a degenerate range (`>= 2 and <= 2`)
+short-circuits to an automatic top-2 without prompting. The count is
+substituted as a literal `Quantity::Int` before dispatch; the substituted
+edge is re-scanned, so a dest fan-out (`deal any from Deck to Hand of all`)
+chains: one count prompt, then per-player top-N deals.
+
+---
+
+### 6.4 `move N` — pick exactly N (`SrcCardsExactN`, 2026-08-10)
+
+**DSL:** `move 3 from Hand face down to Discard`
+
+**Engine:** The 2026-08-10 verb semantics make a literal quantity on
+`move`/`exchange` a **pick-exactly-N** `ChooseCards` prompt
+(`min=max=min(N, available)`; re-prompted on a wrong count). Positional
+sources (`top(X)`, `X[N]`, extrema) are automatic. The resume writes the
+chosen ids into the synthetic memory slot and re-scans (chaining with dest
+fan-outs).
+
+---
+
+### 6.5 `>= M and <= N` (IntRange) on `move`/`exchange`
 
 **DSL:** `move >= 1 and <= 3 from Stock face down to Discard`
 
@@ -692,7 +741,7 @@ validates and can issue a new `NeedsInput` on failure.
 
 ---
 
-### 6.5 `any` in Setup Rules (Prompted)
+### 6.6 `any` in Setup Rules (Prompted)
 
 **DSL:** `location Hand on any`
 
@@ -706,7 +755,7 @@ any-site of the setup (`quantifier::substitute_setup_any`) before any
 
 ---
 
-### 6.6 Synthetic State Lifecycle
+### 6.7 Synthetic State Lifecycle
 
 - **Allocation** (I-16): Synthetic `StateID`s are allocated from `u32::MAX - 1`
   decrementing via `wrapping_sub`. Never collide with real IR ids (allocated

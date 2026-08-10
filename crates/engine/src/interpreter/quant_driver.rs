@@ -34,6 +34,19 @@ impl Interpreter {
                 candidate_ids: Vec<usize>,
                 original: Edge<LoweredPayLoad>,
             },
+            ExactCards {
+                selected: Vec<usize>,
+                candidate_ids: Vec<usize>,
+                expected: usize,
+                original: Edge<LoweredPayLoad>,
+            },
+            DealCount {
+                value: i32,
+                min: Option<i32>,
+                max: Option<i32>,
+                prompt: String,
+                original: Edge<LoweredPayLoad>,
+            },
             Combo {
                 selected: Vec<usize>,
                 candidate_ids: Vec<usize>,
@@ -101,6 +114,34 @@ impl Interpreter {
                     original: original.clone(),
                 },
                 (
+                    crate::quantifier::PendingKind::CardsExactN {
+                        candidate_ids,
+                        expected,
+                        original,
+                    },
+                    InputKind::ChooseCards { selected },
+                ) => Resume::ExactCards {
+                    selected: selected.clone(),
+                    candidate_ids: candidate_ids.clone(),
+                    expected: *expected,
+                    original: original.clone(),
+                },
+                (
+                    crate::quantifier::PendingKind::DealCount {
+                        min,
+                        max,
+                        prompt,
+                        original,
+                    },
+                    InputKind::Number { value },
+                ) => Resume::DealCount {
+                    value: *value,
+                    min: *min,
+                    max: *max,
+                    prompt: prompt.clone(),
+                    original: original.clone(),
+                },
+                (
                     crate::quantifier::PendingKind::Combo {
                         candidate_ids,
                         filter,
@@ -155,6 +196,19 @@ impl Interpreter {
                 candidate_ids,
                 original,
             } => self.resume_cards_any_or_range(selected, candidate_ids, original),
+            Resume::ExactCards {
+                selected,
+                candidate_ids,
+                expected,
+                original,
+            } => self.resume_cards_exact_n(selected, candidate_ids, expected, original),
+            Resume::DealCount {
+                value,
+                min,
+                max,
+                prompt,
+                original,
+            } => self.resume_deal_count(value, min, max, prompt, original),
             Resume::Combo {
                 selected,
                 candidate_ids,
@@ -188,32 +242,46 @@ impl Interpreter {
             Ok(n) => n,
             Err(e) => return StepResult::Error(e),
         };
-        if let Some((qty, from)) = crate::quantifier::card_site(edge) {
-            let candidate_ids = match crate::query::Evaluator::eval_cardset(&from, &self.game_data)
-            {
-                Ok((_, ids)) => ids,
-                Err(e) => return StepResult::Error(e),
-            };
-            let (display, min, max) = self.build_choose_cards(&qty, &candidate_ids);
-            let n = names.len();
-            self.pending_quant = Some(crate::quantifier::PendingQuant {
-                state: self.current_state,
-                kind: crate::quantifier::PendingKind::DestAllThenCards {
-                    player_names: names,
-                    candidate_ids,
-                    original: edge.clone(),
-                },
-            });
-            self.emit_quant_trace(
-                "DestPlayerAll",
-                format!("{} players, awaiting card choice", n),
-            );
-            return StepResult::NeedsInput(InputType::ChooseCards {
-                display,
-                min,
-                max,
-                prompt: "Choose cards to deal to all players".to_string(),
-            });
+        if let Some((qty, from)) = crate::quantifier::src_card_choice_site(edge) {
+            match &qty {
+                // `move N from X to <all>`: pick exactly N cards first, then
+                // the resume re-scans and fans out (2026-08-10).
+                front_end::ast::Quantity::Int { .. } => {
+                    return self.step_src_cards_exact_n(edge, qty, from);
+                }
+                _ => {
+                    if crate::quantifier::is_deal_move(edge) {
+                        // `deal any/range from X to <all>`: choose the COUNT
+                        // first, then the resume re-scans and fans out.
+                        return self.step_deal_count(edge, qty, from);
+                    }
+                    let candidate_ids =
+                        match crate::query::Evaluator::eval_cardset(&from, &self.game_data) {
+                            Ok((_, ids)) => ids,
+                            Err(e) => return StepResult::Error(e),
+                        };
+                    let (display, min, max) = self.build_choose_cards(&qty, &candidate_ids);
+                    let n = names.len();
+                    self.pending_quant = Some(crate::quantifier::PendingQuant {
+                        state: self.current_state,
+                        kind: crate::quantifier::PendingKind::DestAllThenCards {
+                            player_names: names,
+                            candidate_ids,
+                            original: edge.clone(),
+                        },
+                    });
+                    self.emit_quant_trace(
+                        "DestPlayerAll",
+                        format!("{} players, awaiting card choice", n),
+                    );
+                    return StepResult::NeedsInput(InputType::ChooseCards {
+                        display,
+                        min,
+                        max,
+                        prompt: "Choose cards to deal to all players".to_string(),
+                    });
+                }
+            }
         }
         let n = names.len();
         match crate::quantifier::build_dest_all_chain(edge, names, &mut self.next_synth) {
@@ -402,6 +470,187 @@ impl Interpreter {
             max,
             prompt: format!("Choose cards that form a '{}' (0 to skip)", combo),
         })
+    }
+
+    /// `DealCount` arm (initial): `deal any` / `deal >= M and <= N from X`
+    /// prompt for **how many** cards to deal (2026-08-10 verb semantics —
+    /// `deal` = automatic from the top, the player only chooses the count).
+    /// A degenerate range (`>= 2 and <= 2`, or `any` over a 1-card pile)
+    /// short-circuits to the automatic top-N without prompting.
+    pub(super) fn step_deal_count(
+        &mut self,
+        edge: &Edge<LoweredPayLoad>,
+        qty: front_end::ast::Quantity,
+        from: front_end::ast::CardSet,
+    ) -> StepResult {
+        use front_end::ast::{Quantifier, Quantity};
+        let (min, max) = match &qty {
+            Quantity::Quantifier {
+                quantifier: Quantifier::Any,
+            } => {
+                let len = match crate::query::Evaluator::eval_cardset(&from, &self.game_data) {
+                    Ok((_, ids)) => ids.len(),
+                    Err(e) => return StepResult::Error(e),
+                };
+                if len == 0 {
+                    // Empty pile: nothing to deal — no-op.
+                    return self.dispatch(edge.clone());
+                }
+                (Some(1), Some(len as i32))
+            }
+            Quantity::IntRange { .. } => super::bid_bounds(&qty, &self.game_data),
+            _ => (None, None),
+        };
+        if let (Some(m), Some(x)) = (min, max) {
+            if m == x {
+                // Degenerate range: the count is fixed — deal it automatically.
+                let repl = crate::quantifier::substitute_quantity(edge, m);
+                self.emit_quant_trace("DealCount", format!("fixed count {}", m));
+                return self.quantify_or_dispatch(repl);
+            }
+        }
+        let prompt = format!("How many cards to deal from {}?", from);
+        self.pending_quant = Some(crate::quantifier::PendingQuant {
+            state: self.current_state,
+            kind: crate::quantifier::PendingKind::DealCount {
+                min,
+                max,
+                prompt: prompt.clone(),
+                original: edge.clone(),
+            },
+        });
+        self.emit_quant_trace(
+            "DealCount",
+            format!("awaiting count in {:?}..{:?}", min, max),
+        );
+        StepResult::NeedsInput(InputType::Number { min, max, prompt })
+    }
+
+    /// `SrcCardsExactN` arm (initial): `move N from <non-positional>` prompts
+    /// the player to pick **exactly N** cards (2026-08-10 verb semantics —
+    /// `move`/`exchange` = the player chooses; `min=max=min(N, available)`).
+    pub(super) fn step_src_cards_exact_n(
+        &mut self,
+        edge: &Edge<LoweredPayLoad>,
+        qty: front_end::ast::Quantity,
+        from: front_end::ast::CardSet,
+    ) -> StepResult {
+        use front_end::ast::Quantity;
+        let Quantity::Int { int } = &qty else {
+            // Defensive: the site gate guarantees an Int quantity.
+            return self.dispatch(edge.clone());
+        };
+        let n = match crate::query::Evaluator::eval_int(int, &self.game_data) {
+            Ok(v) => v,
+            Err(e) => return StepResult::Error(e),
+        };
+        if n <= 0 {
+            // `move 0 ...` is a no-op — no prompt.
+            return self.dispatch(edge.clone());
+        }
+        let candidate_ids = match crate::query::Evaluator::eval_cardset(&from, &self.game_data) {
+            Ok((_, ids)) => ids,
+            Err(e) => return StepResult::Error(e),
+        };
+        let len = candidate_ids.len();
+        if len == 0 {
+            // Empty source: nothing to pick — no-op.
+            return self.dispatch(edge.clone());
+        }
+        let expected = (n as usize).min(len);
+        let display: Vec<crate::game_data::Card> = candidate_ids
+            .iter()
+            .map(|&id| self.game_data.get_card(id).cloned().unwrap_or_default())
+            .collect();
+        self.pending_quant = Some(crate::quantifier::PendingQuant {
+            state: self.current_state,
+            kind: crate::quantifier::PendingKind::CardsExactN {
+                candidate_ids,
+                expected,
+                original: edge.clone(),
+            },
+        });
+        self.emit_quant_trace(
+            "SrcCardsExactN",
+            format!("{} candidates, awaiting {}", len, expected),
+        );
+        StepResult::NeedsInput(InputType::ChooseCards {
+            display,
+            min: expected,
+            max: expected,
+            prompt: format!("Choose exactly {} card(s)", expected),
+        })
+    }
+
+    /// Resume a `DealCount`: validate the count against the prompt bounds
+    /// (re-prompting on violation), substitute the literal quantity, and
+    /// re-scan (chaining — e.g. a dest fan-out follows).
+    fn resume_deal_count(
+        &mut self,
+        value: i32,
+        min: Option<i32>,
+        max: Option<i32>,
+        prompt: String,
+        original: Edge<LoweredPayLoad>,
+    ) -> StepResult {
+        if min.is_some_and(|m| value < m) || max.is_some_and(|m| value > m) {
+            self.pending_quant = Some(crate::quantifier::PendingQuant {
+                state: self.current_state,
+                kind: crate::quantifier::PendingKind::DealCount {
+                    min,
+                    max,
+                    prompt: prompt.clone(),
+                    original,
+                },
+            });
+            return StepResult::NeedsInput(InputType::Number { min, max, prompt });
+        }
+        let repl = crate::quantifier::substitute_quantity(&original, value);
+        self.emit_quant_trace("DealCount", format!("chose {}", value));
+        self.quantify_or_dispatch(repl)
+    }
+
+    /// Resume a `SrcCardsExactN`: validate the count (re-prompting on
+    /// mismatch), write the chosen ids into the synthetic memory, and
+    /// re-scan the replacement edge (chaining — e.g. a dest fan-out follows).
+    fn resume_cards_exact_n(
+        &mut self,
+        selected: Vec<usize>,
+        candidate_ids: Vec<usize>,
+        expected: usize,
+        original: Edge<LoweredPayLoad>,
+    ) -> StepResult {
+        if selected.iter().any(|&i| i >= candidate_ids.len()) {
+            return StepResult::Error(EngineError::ChooseCardsIndexOutOfRange);
+        }
+        let chosen: Vec<usize> = selected.iter().map(|&i| candidate_ids[i]).collect();
+        if chosen.len() != expected {
+            let display: Vec<crate::game_data::Card> = candidate_ids
+                .iter()
+                .map(|&id| self.game_data.get_card(id).cloned().unwrap_or_default())
+                .collect();
+            self.pending_quant = Some(crate::quantifier::PendingQuant {
+                state: self.current_state,
+                kind: crate::quantifier::PendingKind::CardsExactN {
+                    candidate_ids,
+                    expected,
+                    original,
+                },
+            });
+            return StepResult::NeedsInput(InputType::ChooseCards {
+                display,
+                min: expected,
+                max: expected,
+                prompt: format!("Choose exactly {} card(s). Please choose again.", expected),
+            });
+        }
+        self.game_data.memories.insert(
+            format!("Table_{}", crate::quantifier::SYNTH_MEMORY_KEY),
+            crate::game_data::MemoryValue::CardSet(chosen.clone()),
+        );
+        let repl = crate::quantifier::substitute_cardset_memory(&original, &chosen);
+        self.emit_quant_trace("SrcCardsExactN", format!("chose {}", chosen.len()));
+        self.quantify_or_dispatch(repl)
     }
 
     /// Resume a `ComboSource`: validate the chosen set against the combo's
@@ -638,6 +887,12 @@ impl Interpreter {
             }
             crate::quantifier::QuantSite::SrcCardsAnyOrRange { qty, from } => {
                 self.step_src_cards_any_or_range(&edge, qty, from)
+            }
+            crate::quantifier::QuantSite::SrcCardsExactN { qty, from } => {
+                self.step_src_cards_exact_n(&edge, qty, from)
+            }
+            crate::quantifier::QuantSite::DealCount { qty, from } => {
+                self.step_deal_count(&edge, qty, from)
             }
             crate::quantifier::QuantSite::ComboSource { combo, from } => {
                 self.step_combo_source(&edge, combo, from)

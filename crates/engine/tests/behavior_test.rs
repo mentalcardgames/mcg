@@ -465,7 +465,7 @@ fn crazy_eights_empty_hand_wins() {
                 .unwrap_or_else(|| "P1".into());
             match it {
                 InputType::Optional(prompt) => {
-                    let is_play = prompt.contains("deal any");
+                    let is_play = prompt.contains("move any");
                     // P1 plays every turn; P2/P3 always decline.
                     let accept = is_play && who == "P1";
                     Input {

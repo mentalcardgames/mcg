@@ -440,8 +440,13 @@ Triggers are lowered as `Payload::Trigger` edges and dispatched immediately.
 
 ## 6. Actions
 
-Actions mutate `GameData`. All three move verbs (`move`, `deal`, `exchange`)
-use the same syntax and engine path.
+Actions mutate `GameData`. The three move verbs share one syntax and engine
+path, but since 2026-08-10 **the verb carries the choice semantics**:
+
+- `deal` — **automatic**: the cards come off the **top** of the collection.
+  `deal 3 from Deck` = "draw 3"; the player never chooses which cards.
+- `move` / `exchange` — **the player picks the cards** from the collection
+  (prompted), unless a position is given.
 
 ### 6.1 Moving cards
 
@@ -469,15 +474,35 @@ Cards are removed from **all** locations (not just the source) before being
 added to the destination. This is a brute-force approach that works because
 each card is globally unique.
 
-The `<quantity>` field controls how many cards:
+**The `<quantity>` field (verb-aware since 2026-08-10):**
 
-| Quantity | Syntax | Behaviour |
-|----------|--------|-----------|
-| Exact | `3` | Move exactly 3 cards |
-| All | `all` | Move all cards in the source set |
-| Any | `any` | Prompt: player picks cards from source |
-| Range | `>= 1 and <= 3` | Prompt: player picks 1–3 cards from source |
-| Omitted | *(no quantity)* | Move all cards in the source set |
+| Quantity | `deal` (automatic, from the top) | `move` / `exchange` (player picks) |
+|----------|----------------------------------|-----------------------------------|
+| Literal `N` | Deal the top N cards | **Prompt: pick exactly N cards** (e.g. `move 1 from Hand` = "pick one") |
+| `all` | All cards | All cards |
+| `any` | **Prompt: how many?** (1..pile size), then deal that many | Prompt: pick 1..N cards |
+| `>= M and <= N` | **Prompt: how many?** (M..N), then deal that many | Prompt: pick M..N cards |
+| Degenerate range (`>= 2 and <= 2`) | Automatic: deal 2 (no prompt) | Prompt: pick exactly 2 |
+| Omitted *(no quantity)* | All cards | All cards |
+
+**A positional source makes the move automatic for any verb** — the position
+already chose the card(s): `move 1 from top(Stock)`, `move top(Hand)`,
+`move 1 from Hand[2]`, `deal 1 from top(Deck)`. A `where`-filtered source is
+*not* positional — `move 1 from Hand where Rank is "Ace"` prompts the player
+to pick one Ace.
+
+The exact-N prompt clamps to the available cards (`move 5` over a 2-card pile
+asks for exactly 2), and a 0/empty quantity or empty source is a no-op.
+
+**Examples:**
+
+```
+deal 3 from Deck private to Hand of current   // draw 3, automatic
+deal any from Deck private to Hand of current // "how many?" then draw
+move 1 from Hand private to Discard           // pick one card to discard
+move >= 2 and <= 5 from Hand private to Discard  // pick 2..5 to discard
+move top(Hand) face up to Table               // automatic (positional)
+```
 
 When `<quantity>` is omitted, all cards from the source set are moved.
 
@@ -738,14 +763,19 @@ candidate list.
 
 ### 9.3 `any` / range in source
 
+The quantity semantics depend on the verb (2026-08-10, see §6.1):
+
 ```
-deal any from Hand face up to Discard
-move >= 1 and <= 3 from Hand face up to Discard
+deal any from Deck face up to Discard          // NUMBER prompt: "how many?" (1..pile), then top-N
+deal >= 1 and <= 3 from Deck face up to Discard // NUMBER prompt bounded 1..3, then top-N
+move any from Hand face up to Discard          // ChooseCards prompt: pick 1..all
+move >= 1 and <= 3 from Hand face up to Discard // ChooseCards prompt: pick 1..3 (validated, re-prompted)
+move 1 from Hand face up to Discard            // ChooseCards prompt: pick exactly one
 ```
 
-Issues a **`ChooseCards` prompt** with the candidate card IDs. `any` allows
-1–all; ranges enforce min/max. The chosen card IDs are written to a
-synthetic memory slot and consumed by the replacement edge.
+For `move`/`exchange` the chosen card IDs are written to a synthetic memory
+slot and consumed by the replacement edge; `deal` substitutes the chosen
+count as a literal quantity and deals from the top.
 
 ### 9.4 `any` in setup — prompts (since 2026-08-10)
 

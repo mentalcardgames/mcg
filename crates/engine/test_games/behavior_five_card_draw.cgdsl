@@ -31,7 +31,7 @@ stage Deal for current 1 times {
 
 stage Draw for current 9 times {
   optional {
-    deal any from Hand of current private to Discard
+    move any from Hand of current private to Discard
     deal 1 from Deck private to Hand of current
   }
   cycle to next

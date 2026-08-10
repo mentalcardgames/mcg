@@ -1,0 +1,5 @@
+# Answers for verb_move_exact_n.cgdsl:
+#   c 1    -> 1 card: WRONG count for `move 2` -> re-prompted
+#   c 2,3  -> 2 cards: valid
+c 1
+c 2,3

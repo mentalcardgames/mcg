@@ -61,8 +61,8 @@ last_validated: 2026-08-09
 | `end stage` | ✅ | ✅ | ✅ | ✅ | `CurrentStage` — leaves the current stage; IR jumps to the stage's exit (unreachable-code check downstream). |
 | `end Play` (named stage) | ✅ | ✅ | ✅ | ✅ | `Stage { name }` — jumps to that stage's exit. |
 | `end game with winner <players>` | ✅ | ✅ | ⚠️ | ⚠️ | IR jumps straight to the goal state; the action arm is an empty TODO (harmless — the jump ends the game). |
-| `deal <qty> from X <status> to Y` | ✅ | ✅ | ✅ | ✅ | Status is parsed but **ignored**. Quantity: literal ints ✅; runtime int exprs evaluated against the **live** state (fixed 2026-08-09) and errors propagate; `any` → `ChooseCards` prompt; range → prompt + re-prompt. |
-| `exchange ...` / `move ...` (Classic) | ✅ | ✅ | ✅ | ✅ | Same code path as deal. |
+| `deal <qty> from X <status> to Y` | ✅ | ✅ | ✅ | ✅ | **Verb semantics (2026-08-10):** `deal` = automatic from the top. Literal quantities deal the top N; `any`/`>= M and <= N` prompt for the **count** (`InputType::Number`, bounds re-validated) then deal that many; a degenerate range (`>= 2 and <= 2`) deals automatically. Status is parsed but **ignored**. Quantity: literal ints ✅; runtime int exprs evaluated against the **live** state (fixed 2026-08-09) and errors propagate. |
+| `exchange ...` / `move ...` (Classic) | ✅ | ✅ | ✅ | ✅ | **Verb semantics (2026-08-10):** `move`/`exchange` = the player picks. Literal `N` on a non-positional source prompts pick-exactly-N (`min=max=N`, clamped; `SrcCardsExactN`); `any`/ranges prompt as before; positional sources (`top(X)`…) are automatic for any verb. |
 | `place ... token ...` | ✅ | ✅ | ❌ | ❌ | No-op. |
 
 ## 3. Flow components

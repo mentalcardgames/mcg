@@ -1,0 +1,2 @@
+# Answer for verb_deal_count_to_all.cgdsl: deal 2 to each player.
+n 2

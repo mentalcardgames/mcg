@@ -21,9 +21,9 @@
 //     delay (the 30-turn cap guarantees termination).
 //
 // Engine notes:
-//   - Playing uses `deal >= 1 and <= 1 from Hand where (...) of current`,
-//     which prompts the player with the *matching* cards only
-//     (InputType::ChooseCards, range-validated to exactly one).
+//   - Playing uses `move 1 from Hand where (...) of current`, which prompts
+//     the player to pick exactly ONE matching card (2026-08-10 verb
+//     semantics: `move N` = pick N cards; `deal N` = automatic top N).
 //   - The match filter reads the top of the Discard pile live:
 //     `Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or
 //     Rank is "Eight")`.
@@ -50,7 +50,7 @@ stage Deal for current 1 times {
 stage Play for current until (Deck empty or Hand of current empty) or 30 times {
   if (not Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current empty) {
     optional {
-      deal >= 1 and <= 1 from Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current private to Discard
+      move 1 from Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current private to Discard
     }
   }
   if (Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current empty) {

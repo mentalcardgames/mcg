@@ -1,0 +1,15 @@
+// Verb semantics (2026-08-10): `deal >= 1 and <= 2 from X to Hand of all`
+// prompts for the count ONCE, then fans out — each player receives that many
+// from the top.
+player P1, P2
+turnorder (P:P1, P:P2)
+location Hand on all
+location Deck on table
+
+card on Deck:
+  Rank(Ace, Two, Three, Four) for Suit(Hearts)
+
+stage Play for current 1 times {
+  deal >= 1 and <= 2 from Deck private to Hand of all
+  end stage
+}

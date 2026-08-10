@@ -197,6 +197,12 @@ impl Interpreter {
                     crate::quantifier::QuantSite::SrcCardsAnyOrRange { qty, from } => {
                         self.step_src_cards_any_or_range(&edge_owned, qty, from)
                     }
+                    crate::quantifier::QuantSite::SrcCardsExactN { qty, from } => {
+                        self.step_src_cards_exact_n(&edge_owned, qty, from)
+                    }
+                    crate::quantifier::QuantSite::DealCount { qty, from } => {
+                        self.step_deal_count(&edge_owned, qty, from)
+                    }
                     crate::quantifier::QuantSite::None => unreachable!(),
                 };
             }

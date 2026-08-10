@@ -73,6 +73,28 @@ fn move_qty_edge(quantity: Quantity, from: CardSet, to: CardSet) -> Edge<Lowered
     }
 }
 
+/// Build a `Deal`/`MoveQuantity` edge (the verb matters since 2026-08-10).
+fn deal_qty_edge(quantity: Quantity, from: CardSet, to: CardSet) -> Edge<LoweredPayLoad> {
+    Edge {
+        to: dest_state(),
+        payload: Payload::Action(GameRule::Action {
+            action: ActionRule::Move {
+                move_type: MoveType::Deal {
+                    deal: front_end::ast::DealMove::MoveCardSet {
+                        deal_cs: MoveCardSet::MoveQuantity {
+                            quantity,
+                            from,
+                            status: Status::Private,
+                            to,
+                        },
+                    },
+                },
+            },
+        }),
+        meta: None,
+    }
+}
+
 #[test]
 fn alloc_synth_yields_valid_decreasing_stateids() {
     let mut counter = u32::MAX - 1;
@@ -160,11 +182,64 @@ fn scan_edge_src_cards_int_range() {
 
 #[test]
 fn scan_edge_none_for_concrete_move() {
+    // A literal `1` on a *deal* is automatic; on a move/exchange it is now a
+    // pick-exactly-N site (2026-08-10 verb semantics). This helper builds a
+    // Classic move, so the literal quantity must scan as SrcCardsExactN.
     let edge = move_qty_edge(
         Quantity::Int {
             int: IntExpr::Literal { int: 1 },
         },
         loc_cardset("Stock"),
+        loc_cardset("Discard"),
+    );
+    assert!(matches!(scan_edge(&edge), QuantSite::SrcCardsExactN { .. }));
+}
+
+#[test]
+fn scan_edge_none_for_deal_with_literal_quantity() {
+    // `deal 1 from Stock ...` stays automatic (top 1) — the verb semantics
+    // only prompt on move/exchange.
+    let edge = deal_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        loc_cardset("Stock"),
+        loc_cardset("Hand"),
+    );
+    assert_eq!(scan_edge(&edge), QuantSite::None);
+}
+
+#[test]
+fn scan_edge_deal_any_is_deal_count() {
+    // `deal any from Stock ...` prompts for the *count* (a Number), not a
+    // card choice (2026-08-10).
+    let edge = deal_qty_edge(
+        Quantity::Quantifier {
+            quantifier: Quantifier::Any,
+        },
+        loc_cardset("Stock"),
+        loc_cardset("Hand"),
+    );
+    assert!(matches!(scan_edge(&edge), QuantSite::DealCount { .. }));
+}
+
+#[test]
+fn scan_edge_positional_source_is_automatic() {
+    // `move 1 from top(Stock) ...` — a positional source is automatic even on
+    // move (the position already chose the card).
+    let edge = move_qty_edge(
+        Quantity::Int {
+            int: IntExpr::Literal { int: 1 },
+        },
+        CardSet::Group {
+            group: Group::CardPosition {
+                card_position: front_end::ast::CardPosition::Query {
+                    query: front_end::ast::QueryCardPosition::Top {
+                        location: "Stock".to_string(),
+                    },
+                },
+            },
+        },
         loc_cardset("Discard"),
     );
     assert_eq!(scan_edge(&edge), QuantSite::None);
