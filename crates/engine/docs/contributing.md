@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all]
 topics: [contributing, development, workflow, cheatsheet]
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # Contributing — Development Cheatsheet
@@ -63,7 +63,10 @@ Where to touch when adding or modifying engine functionality.
 - **Read `dsl-semantics.md` before changing DSL semantics.**
 - **Check `developer-notes.md`** for design decisions and known gaps.
 - **Memory ownership:** memory keys are prefixed with the owner name (`"P1_M"`, `"Table_pot"`). Use `Evaluator::resolve_memory_key()` in query code, never access `memories` directly.
-- **Error model:** stringly-typed (`Result<_, String>`). No `thiserror`, no custom error enum.
+- **Error model:** enum-typed — every fallible path returns `Result<_, EngineError>` (see `error.rs`
+  and [`error-handling.md`](./error-handling.md)). The `Display` messages are stable strings that
+  tests assert via `to_string()`; add new variants to `crates/engine/src/error.rs` rather than
+  inventing ad-hoc string errors.
 
 ## Build commands
 

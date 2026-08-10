@@ -437,7 +437,7 @@ use std::sync::{Arc, Mutex};
 
 /// Add a real empty location named `name` to `gd`. Required so that
 /// `eval_cardset` on a `Groupable::Location { name }` succeeds (otherwise
-/// it returns `Err("Location {name} not found")`).
+/// it returns `Err(EngineError::LocationNotFound)`).
 fn add_empty_location(gd: &mut GameData, name: &str) {
     gd.add_location(
         "Table".to_string(),
@@ -526,7 +526,7 @@ fn step_returns_error_at_dead_end_non_goal_state() {
     let r = interp.step();
     match r {
         StepResult::Error(msg) => assert!(
-            msg.contains("not at goal state"),
+            msg.to_string().contains("not at goal state"),
             "expected 'not at goal state' error, got: {msg}"
         ),
         other => panic!("expected Error, got {:?}", other),
@@ -539,7 +539,7 @@ fn step_returns_error_when_current_state_not_in_ir() {
     let mut interp = make_interp!(ir, GameData::new(), state_id(424242));
     match interp.step() {
         StepResult::Error(msg) => assert!(
-            msg.contains("not found in IR"),
+            msg.to_string().contains("not found in IR"),
             "expected 'not found in IR' error, got: {msg}"
         ),
         other => panic!("expected Error, got {:?}", other),
@@ -894,7 +894,9 @@ fn condition_with_wrong_edge_count_returns_error() {
 
     let mut interp = make_interp!(ir, gd_for_bool(), s0);
     match interp.step() {
-        StepResult::Error(msg) => assert!(msg.contains("exactly 2 edges"), "got: {msg}"),
+        StepResult::Error(msg) => {
+            assert!(msg.to_string().contains("exactly 2 edges"), "got: {msg}")
+        }
         other => panic!("expected Error, got {:?}", other),
     }
 }
@@ -927,7 +929,9 @@ fn end_condition_with_wrong_edge_count_returns_error() {
 
     let mut interp = make_interp!(ir, gd_for_bool(), s0);
     match interp.step() {
-        StepResult::Error(msg) => assert!(msg.contains("exactly 2 edges"), "got: {msg}"),
+        StepResult::Error(msg) => {
+            assert!(msg.to_string().contains("exactly 2 edges"), "got: {msg}")
+        }
         other => panic!("expected Error, got {:?}", other),
     }
 }

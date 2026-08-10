@@ -1,4 +1,5 @@
 use super::Evaluator;
+use crate::error::EngineError;
 use crate::game_data::{GameData, MemoryValue};
 use front_end::ast::{
     AggregatePlayer, AggregateTeam, Extrema, MultiOwner, Owner, PlayerCollection, PlayerExpr,
@@ -6,42 +7,50 @@ use front_end::ast::{
 };
 
 impl Evaluator {
-    pub fn eval_player(expr: &PlayerExpr, game_data: &GameData) -> Result<String, String> {
+    pub fn eval_player(expr: &PlayerExpr, game_data: &GameData) -> Result<String, EngineError> {
         match expr {
             PlayerExpr::Literal { name } => Ok(name.clone()),
             PlayerExpr::Runtime { runtime } => match runtime {
                 RuntimePlayer::Current => game_data
                     .get_current_player()
                     .map(|p| p.name.clone())
-                    .ok_or("No current player".to_string()),
+                    .ok_or(EngineError::NoCurrentPlayer),
                 RuntimePlayer::Next => {
-                    let current_idx = game_data.current_player.ok_or("No current player")?;
-                    let current_stage = game_data.get_current_stage().ok_or("No current stage")?;
+                    let current_idx = game_data
+                        .current_player
+                        .ok_or(EngineError::NoCurrentPlayer)?;
+                    let current_stage = game_data
+                        .get_current_stage()
+                        .ok_or(EngineError::NoCurrentStage)?;
                     let player_idx = game_data
                         .next_eligible_player(current_idx, &current_stage)
-                        .ok_or_else(|| "No next player available".to_string())?;
+                        .ok_or(EngineError::NoNextPlayerAvailable)?;
                     game_data
                         .players
                         .get(player_idx)
                         .map(|p| p.name.clone())
-                        .ok_or_else(|| "No next player available".to_string())
+                        .ok_or(EngineError::NoNextPlayerAvailable)
                 }
                 RuntimePlayer::Previous => {
-                    let current_idx = game_data.current_player.ok_or("No current player")?;
+                    let current_idx = game_data
+                        .current_player
+                        .ok_or(EngineError::NoCurrentPlayer)?;
                     let turn_len = game_data.turn_order.len();
                     let prev_idx = (current_idx + turn_len - 1) % turn_len;
                     let player_idx = *game_data
                         .turn_order
                         .get(prev_idx)
-                        .ok_or("Previous player not found")?;
+                        .ok_or(EngineError::PreviousPlayerNotFound)?;
                     game_data
                         .players
                         .get(player_idx)
                         .map(|p| p.name.clone())
-                        .ok_or("Previous player not found".to_string())
+                        .ok_or(EngineError::PreviousPlayerNotFound)
                 }
                 RuntimePlayer::Competitor => {
-                    let current = game_data.get_current_player().ok_or("No current player")?;
+                    let current = game_data
+                        .get_current_player()
+                        .ok_or(EngineError::NoCurrentPlayer)?;
                     for team in &game_data.teams {
                         if team.players.iter().any(|&idx| {
                             game_data.players.get(idx).map(|p| p.name.clone())
@@ -56,7 +65,7 @@ impl Evaluator {
                             }
                         }
                     }
-                    Err("No competitor found".to_string())
+                    Err(EngineError::NoCompetitorFound)
                 }
             },
             PlayerExpr::Aggregate { aggregate } => match aggregate {
@@ -76,7 +85,7 @@ impl Evaluator {
                             }
                         }
                     }
-                    Err("Owner of card position not found".to_string())
+                    Err(EngineError::CardOwnerNotFound)
                 }
                 AggregatePlayer::OwnerOfMemory { extrema, memory } => {
                     let mem_key = memory;
@@ -114,7 +123,7 @@ impl Evaluator {
                     if !found {
                         best_player = game_data.get_current_player().map(|p| p.name.clone());
                     }
-                    best_player.ok_or("No player found for OwnerOfMemory".to_string())
+                    best_player.ok_or(EngineError::OwnerOfMemoryNoPlayer)
                 }
             },
             PlayerExpr::Query { query } => match query {
@@ -123,24 +132,24 @@ impl Evaluator {
                     let player_idx = *game_data
                         .turn_order
                         .get(idx)
-                        .ok_or(format!("No player at turn order index {}", idx))?;
+                        .ok_or(EngineError::TurnOrderIndexOutOfRange { idx })?;
                     game_data
                         .players
                         .get(player_idx)
                         .map(|p| p.name.clone())
-                        .ok_or(format!("Player at index {} not found", idx))
+                        .ok_or(EngineError::PlayerIndexNotFound { idx })
                 }
                 QueryPlayer::CollectionAt { players: pc, int } => {
                     let indices = Self::resolve_player_collection(pc, game_data)?;
                     let idx = Self::eval_int(int, game_data)? as usize;
                     let player_idx = *indices
                         .get(idx)
-                        .ok_or(format!("No player at index {} in player collection", idx))?;
+                        .ok_or(EngineError::PlayerCollectionAtOutOfRange { idx })?;
                     game_data
                         .players
                         .get(player_idx)
                         .map(|p| p.name.clone())
-                        .ok_or(format!("Player at collection index {} not found", idx))
+                        .ok_or(EngineError::PlayerCollectionIndexNotFound { idx })
                 }
             },
             PlayerExpr::Memory { memory } => {
@@ -152,20 +161,20 @@ impl Evaluator {
                                 .players
                                 .get(idx)
                                 .map(|p| p.name.clone())
-                                .ok_or(format!("Player at index {} not found", idx))
+                                .ok_or(EngineError::PlayerIndexNotFound { idx })
                         } else {
-                            Err("PlayerCollection memory is empty".to_string())
+                            Err(EngineError::EmptyPlayerCollectionMemory)
                         }
                     }
                     Some(MemoryValue::String(s)) => Ok(s.clone()),
-                    Some(_) => Err("Memory value is not a valid player".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotValidPlayer),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }
     }
 
-    pub fn eval_team(expr: &TeamExpr, game_data: &GameData) -> Result<String, String> {
+    pub fn eval_team(expr: &TeamExpr, game_data: &GameData) -> Result<String, EngineError> {
         match expr {
             TeamExpr::Literal { name } => Ok(name.clone()),
             TeamExpr::Aggregate { aggregate } => match aggregate {
@@ -180,15 +189,15 @@ impl Evaluator {
                             }
                         }
                     }
-                    Err(format!("Player {} not found in any team", player_name))
+                    Err(EngineError::PlayerNotInAnyTeam { name: player_name })
                 }
             },
             TeamExpr::Memory { memory } => {
                 let key = Self::resolve_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::Team(v)) => Ok(v.clone()),
-                    Some(_) => Err("Memory value is not a Team".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotTeam),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }
@@ -198,7 +207,10 @@ impl Evaluator {
     /// player-expressions that cannot be evaluated (e.g. `next` with no
     /// eligible player) or that reference unknown players yield `Err` instead
     /// of panicking (recoverable in the action/condition paths).
-    pub fn resolve_players(players: &Players, game_data: &GameData) -> Result<Vec<usize>, String> {
+    pub fn resolve_players(
+        players: &Players,
+        game_data: &GameData,
+    ) -> Result<Vec<usize>, EngineError> {
         match players {
             Players::Player { player } => {
                 let name = Self::eval_player(player, game_data)?;
@@ -206,9 +218,7 @@ impl Evaluator {
                     .players
                     .iter()
                     .position(|p| p.name == name)
-                    .ok_or_else(|| {
-                        format!("resolve_players: player {} not found in game_data", name)
-                    })?;
+                    .ok_or(EngineError::ResolvePlayersPlayerNotFound { name })?;
                 Ok(vec![idx])
             }
             Players::PlayerCollection { player_collection } => {
@@ -224,7 +234,7 @@ impl Evaluator {
     pub fn resolve_player_collection(
         pc: &PlayerCollection,
         game_data: &GameData,
-    ) -> Result<Vec<usize>, String> {
+    ) -> Result<Vec<usize>, EngineError> {
         match pc {
             PlayerCollection::Literal { players } => {
                 let mut indices = vec![];
@@ -234,12 +244,7 @@ impl Evaluator {
                         .players
                         .iter()
                         .position(|p| p.name == name)
-                        .ok_or_else(|| {
-                            format!(
-                                "resolve_player_collection: player {} not found in game_data",
-                                name
-                            )
-                        })?;
+                        .ok_or(EngineError::ResolvePlayerCollectionPlayerNotFound { name })?;
                     indices.push(idx);
                 }
                 Ok(indices)
@@ -297,10 +302,10 @@ impl Evaluator {
                             indices.extend(ids.iter().copied())
                         }
                         Some(_) => {
-                            return Err(format!("Memory value is not a PlayerCollection ({})", key))
+                            return Err(EngineError::MemoryNotPlayerCollectionFor { key });
                         }
                         None => {
-                            return Err(format!("Memory {} not found", key));
+                            return Err(EngineError::MemoryNotFound { key });
                         }
                     }
                 }
@@ -310,8 +315,8 @@ impl Evaluator {
                 let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::PlayerCollection(ids)) => Ok(ids.clone()),
-                    Some(_) => Err("Memory value is not a PlayerCollection".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotPlayerCollection),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }
@@ -323,7 +328,7 @@ impl Evaluator {
     pub(super) fn resolve_multi_owner_names(
         multi: &MultiOwner,
         game_data: &GameData,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<String>, EngineError> {
         match multi {
             MultiOwner::PlayerCollection { player_collection } => {
                 let indices = Self::resolve_player_collection(player_collection, game_data)?;
@@ -344,33 +349,29 @@ impl Evaluator {
         }
     }
 
-    pub fn resolve_owner_to_name(owner: &Owner, game_data: &GameData) -> Result<String, String> {
+    pub fn resolve_owner_to_name(
+        owner: &Owner,
+        game_data: &GameData,
+    ) -> Result<String, EngineError> {
         match owner {
             Owner::Table => Ok("Table".to_string()),
             Owner::Player { player } => Self::eval_player(player, game_data),
             Owner::Team { team } => Self::eval_team(team, game_data),
-            Owner::PlayerCollection { .. } => Err(
-                "resolve_owner_to_name: PlayerCollection cannot resolve to a single name"
-                    .to_string(),
-            ),
-            Owner::TeamCollection { .. } => Err(
-                "resolve_owner_to_name: TeamCollection cannot resolve to a single name".to_string(),
-            ),
+            Owner::PlayerCollection { .. } => Err(EngineError::OwnerNameFromPlayerCollection),
+            Owner::TeamCollection { .. } => Err(EngineError::OwnerNameFromTeamCollection),
         }
     }
 
     pub fn resolve_owner_to_names(
         owner: &Owner,
         game_data: &GameData,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<String>, EngineError> {
         match owner {
             Owner::Table => Ok(vec!["Table".to_string()]),
             Owner::Player { player } => Ok(vec![Self::eval_player(player, game_data)?]),
             Owner::Team { team } => {
                 let name = Self::eval_team(team, game_data)?;
-                Err(format!(
-                    "resolve_owner_to_names: team '{name}' cannot own a location or memory (team-owned locations are not in the data model)"
-                ))
+                Err(EngineError::TeamCannotOwn { name })
             }
             Owner::PlayerCollection {
                 player_collection: pc,
@@ -381,9 +382,7 @@ impl Evaluator {
                     .map(|i| game_data.players[i].name.clone())
                     .collect())
             }
-            Owner::TeamCollection { .. } => Err(
-                "resolve_owner_to_names: TeamCollection cannot resolve to owner names".to_string(),
-            ),
+            Owner::TeamCollection { .. } => Err(EngineError::OwnerNamesFromTeamCollection),
         }
     }
 }

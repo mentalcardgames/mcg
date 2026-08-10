@@ -1,4 +1,5 @@
 use super::Evaluator;
+use crate::error::EngineError;
 use crate::game_data::{GameData, MemoryValue};
 use front_end::ast::{
     AggregateInt, Collection, Extrema, IntCollection, IntExpr, IntOp, LocationCollection, Quantity,
@@ -6,7 +7,7 @@ use front_end::ast::{
 };
 
 impl Evaluator {
-    pub fn eval_int(expr: &IntExpr, game_data: &GameData) -> Result<i32, String> {
+    pub fn eval_int(expr: &IntExpr, game_data: &GameData) -> Result<i32, EngineError> {
         match expr {
             IntExpr::Literal { int } => Ok(*int),
             IntExpr::Binary { int, op, int1 } => {
@@ -18,7 +19,7 @@ impl Evaluator {
                     IntOp::Mul => Ok(left * right),
                     IntOp::Div => {
                         if right == 0 {
-                            Err("Division by zero".to_string())
+                            Err(EngineError::DivisionByZero)
                         } else {
                             Ok(left / right)
                         }
@@ -35,7 +36,7 @@ impl Evaluator {
                     let idx = Self::eval_int(int_expr, game_data)? as usize;
                     ints.get(idx)
                         .copied()
-                        .ok_or(format!("No int at index {}", idx))
+                        .ok_or(EngineError::IntCollectionAtOutOfRange { idx })
                 }
             },
             IntExpr::Aggregate { aggregate } => match aggregate {
@@ -52,7 +53,9 @@ impl Evaluator {
                         .point_maps
                         .iter()
                         .find(|pm| pm.name == *pointmap)
-                        .ok_or(format!("PointMap {} not found", pointmap))?;
+                        .ok_or(EngineError::PointMapNotFound {
+                            name: pointmap.clone(),
+                        })?;
                     let mut sum = 0;
                     for card_id in &card_ids {
                         if let Some(card) = game_data.get_card(*card_id) {
@@ -77,7 +80,9 @@ impl Evaluator {
                         .point_maps
                         .iter()
                         .find(|pm| pm.name == *pointmap)
-                        .ok_or(format!("PointMap {} not found", pointmap))?;
+                        .ok_or(EngineError::PointMapNotFound {
+                            name: pointmap.clone(),
+                        })?;
                     let mut best_card_id = None;
                     let mut best_value = None;
                     for card_id in &card_ids {
@@ -112,7 +117,7 @@ impl Evaluator {
                     }
                     best_card_id
                         .map(|id| id as i32)
-                        .ok_or("No card found for extrema".to_string())
+                        .ok_or(EngineError::NoCardForExtrema)
                 }
                 AggregateInt::ExtremaIntCollection {
                     extrema,
@@ -134,12 +139,14 @@ impl Evaluator {
                             }
                         }
                     }
-                    best_value.ok_or("No value found in IntCollection".to_string())
+                    best_value.ok_or(EngineError::NoValueInIntCollection)
                 }
             },
             IntExpr::Runtime { runtime } => match runtime {
                 RuntimeInt::CurrentStageRoundCounter => {
-                    let stage = game_data.get_current_stage().ok_or("No current stage")?;
+                    let stage = game_data
+                        .get_current_stage()
+                        .ok_or(EngineError::NoCurrentStage)?;
                     Ok(game_data.get_stage_counter(stage) as i32)
                 }
                 RuntimeInt::StageRoundCounter { stage } => {
@@ -150,14 +157,17 @@ impl Evaluator {
                 let key = Self::resolve_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::Int(v)) => Ok(*v),
-                    Some(_) => Err("Memory value is not an Int".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotInt),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }
     }
 
-    fn eval_int_collection(col: &IntCollection, game_data: &GameData) -> Result<Vec<i32>, String> {
+    fn eval_int_collection(
+        col: &IntCollection,
+        game_data: &GameData,
+    ) -> Result<Vec<i32>, EngineError> {
         match col {
             IntCollection::Literal { ints } => {
                 let mut result = vec![];
@@ -176,10 +186,10 @@ impl Evaluator {
                     match game_data.get_memory(&key) {
                         Some(MemoryValue::Int(v)) => result.push(*v),
                         Some(_) => {
-                            return Err(format!("Memory value is not an Int ({})", key));
+                            return Err(EngineError::MemoryNotIntFor { key });
                         }
                         None => {
-                            return Err(format!("Memory {} not found", key));
+                            return Err(EngineError::MemoryNotFound { key });
                         }
                     }
                 }
@@ -189,14 +199,17 @@ impl Evaluator {
                 let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::IntCollection(v)) => Ok(v.clone()),
-                    Some(_) => Err("Memory value is not an IntCollection".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotIntCollection),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }
     }
 
-    fn eval_collection_size(collection: &Collection, game_data: &GameData) -> Result<i32, String> {
+    fn eval_collection_size(
+        collection: &Collection,
+        game_data: &GameData,
+    ) -> Result<i32, EngineError> {
         match collection {
             Collection::IntCollection { int: col } => {
                 Self::eval_int_collection(col, game_data).map(|v| v.len() as i32)
@@ -222,7 +235,7 @@ impl Evaluator {
     pub(super) fn eval_location_collection(
         col: &LocationCollection,
         game_data: &GameData,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<String>, EngineError> {
         match col {
             LocationCollection::Literal { locations } => Ok(locations.clone()),
             LocationCollection::Memory { memory } => {
@@ -238,8 +251,8 @@ impl Evaluator {
                                 .unwrap_or_default()
                         })
                         .collect()),
-                    Some(_) => Err("Memory value is not a LocationCollection".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotLocationCollection),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }
@@ -248,7 +261,7 @@ impl Evaluator {
     pub(super) fn eval_team_collection(
         col: &TeamCollection,
         game_data: &GameData,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<String>, EngineError> {
         match col {
             TeamCollection::Literal { teams } => {
                 let mut result = vec![];
@@ -275,10 +288,10 @@ impl Evaluator {
                     match game_data.get_memory(&key) {
                         Some(MemoryValue::Team(v)) => result.push(v.clone()),
                         Some(_) => {
-                            return Err(format!("Memory value is not a Team ({})", key));
+                            return Err(EngineError::MemoryNotTeamFor { key });
                         }
                         None => {
-                            return Err(format!("Memory {} not found", key));
+                            return Err(EngineError::MemoryNotFound { key });
                         }
                     }
                 }
@@ -288,8 +301,8 @@ impl Evaluator {
                 let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::Team(v)) => Ok(vec![v.clone()]),
-                    Some(_) => Err("Memory value is not a Team".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotTeam),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }
@@ -302,7 +315,7 @@ impl Evaluator {
         qty: &Quantity,
         available: usize,
         game_data: &GameData,
-    ) -> Result<usize, String> {
+    ) -> Result<usize, EngineError> {
         match qty {
             Quantity::Int { int } => {
                 let val = Self::eval_int(int, game_data)?;

@@ -123,7 +123,7 @@ fn eval_bool_binary_and_short_circuits_false_left() {
         op: BoolOp::And,
         bool_expr1: Box::new(div_by_zero_bool()),
     };
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 }
 
 // --- B-2: OR short-circuits on true left ---
@@ -134,7 +134,7 @@ fn eval_bool_binary_or_short_circuits_true_left() {
         op: BoolOp::Or,
         bool_expr1: Box::new(div_by_zero_bool()),
     };
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 }
 
 // --- B-3: AND both true / false right ---
@@ -145,7 +145,7 @@ fn eval_bool_binary_and_both_true() {
         op: BoolOp::And,
         bool_expr1: Box::new(true_expr()),
     };
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn eval_bool_binary_and_false_right() {
         op: BoolOp::And,
         bool_expr1: Box::new(false_expr()),
     };
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 }
 
 // --- B-4: Unary NOT ---
@@ -165,7 +165,7 @@ fn eval_bool_unary_not_true() {
         op: UnaryOp::Not,
         bool_expr: Box::new(true_expr()),
     };
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn eval_bool_unary_not_false() {
         op: UnaryOp::Not,
         bool_expr: Box::new(false_expr()),
     };
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 }
 
 // --- B-5: AND with true left DOES evaluate right (div-by-zero) ---
@@ -186,8 +186,10 @@ fn eval_bool_binary_forwards_div_by_zero() {
         bool_expr1: Box::new(div_by_zero_bool()),
     };
     assert_eq!(
-        Evaluator::eval_bool(&expr, &gd_empty()),
-        Err("Division by zero".to_string())
+        Evaluator::eval_bool(&expr, &gd_empty())
+            .unwrap_err()
+            .to_string(),
+        "Division by zero".to_string()
     );
 }
 
@@ -195,61 +197,61 @@ fn eval_bool_binary_forwards_div_by_zero() {
 #[test]
 fn eval_aggregate_compare_int_eq() {
     let expr = int_compare_expr(2, IntCompare::Eq, 3);
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 
     let expr2 = int_compare_expr(3, IntCompare::Eq, 3);
-    assert_eq!(Evaluator::eval_bool(&expr2, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr2, &gd_empty()).unwrap());
 }
 
 #[test]
 fn eval_aggregate_compare_int_neq() {
     let expr = int_compare_expr(2, IntCompare::Neq, 3);
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 
     let expr2 = int_compare_expr(3, IntCompare::Neq, 3);
-    assert_eq!(Evaluator::eval_bool(&expr2, &gd_empty()), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr2, &gd_empty()).unwrap());
 }
 
 #[test]
 fn eval_aggregate_compare_int_gt() {
     let expr = int_compare_expr(3, IntCompare::Gt, 2);
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 
     let expr2 = int_compare_expr(2, IntCompare::Gt, 3);
-    assert_eq!(Evaluator::eval_bool(&expr2, &gd_empty()), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr2, &gd_empty()).unwrap());
 }
 
 #[test]
 fn eval_aggregate_compare_int_lt() {
     let expr = int_compare_expr(2, IntCompare::Lt, 3);
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 
     let expr2 = int_compare_expr(3, IntCompare::Lt, 2);
-    assert_eq!(Evaluator::eval_bool(&expr2, &gd_empty()), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr2, &gd_empty()).unwrap());
 }
 
 #[test]
 fn eval_aggregate_compare_int_ge() {
     let expr = int_compare_expr(3, IntCompare::Ge, 2);
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 
     let expr2 = int_compare_expr(3, IntCompare::Ge, 3);
-    assert_eq!(Evaluator::eval_bool(&expr2, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr2, &gd_empty()).unwrap());
 
     let expr3 = int_compare_expr(2, IntCompare::Ge, 3);
-    assert_eq!(Evaluator::eval_bool(&expr3, &gd_empty()), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr3, &gd_empty()).unwrap());
 }
 
 #[test]
 fn eval_aggregate_compare_int_le() {
     let expr = int_compare_expr(2, IntCompare::Le, 3);
-    assert_eq!(Evaluator::eval_bool(&expr, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr, &gd_empty()).unwrap());
 
     let expr2 = int_compare_expr(3, IntCompare::Le, 3);
-    assert_eq!(Evaluator::eval_bool(&expr2, &gd_empty()), Ok(true));
+    assert!(Evaluator::eval_bool(&expr2, &gd_empty()).unwrap());
 
     let expr3 = int_compare_expr(3, IntCompare::Le, 2);
-    assert_eq!(Evaluator::eval_bool(&expr3, &gd_empty()), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr3, &gd_empty()).unwrap());
 }
 
 #[test]
@@ -264,8 +266,10 @@ fn eval_aggregate_compare_int_div_by_zero() {
         },
     };
     assert_eq!(
-        Evaluator::eval_bool(&expr, &gd_empty()),
-        Err("Division by zero".to_string())
+        Evaluator::eval_bool(&expr, &gd_empty())
+            .unwrap_err()
+            .to_string(),
+        "Division by zero".to_string()
     );
 }
 
@@ -286,7 +290,7 @@ fn eval_aggregate_compare_cardset_eq_and_neq() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_eq, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_eq, &gd).unwrap());
 
     let expr_neq = BoolExpr::Aggregate {
         aggregate: AggregateBool::Compare {
@@ -297,7 +301,7 @@ fn eval_aggregate_compare_cardset_eq_and_neq() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_neq, &gd), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr_neq, &gd).unwrap());
 }
 
 #[test]
@@ -323,7 +327,7 @@ fn eval_aggregate_compare_cardset_neq_different() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_neq, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_neq, &gd).unwrap());
 }
 
 // --- B-8: String comparison ---
@@ -350,7 +354,7 @@ fn eval_aggregate_compare_string_eq_and_neq() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_eq, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_eq, &gd).unwrap());
 
     let expr_neq = BoolExpr::Aggregate {
         aggregate: AggregateBool::Compare {
@@ -361,7 +365,7 @@ fn eval_aggregate_compare_string_eq_and_neq() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_neq, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_neq, &gd).unwrap());
 }
 
 #[test]
@@ -385,8 +389,8 @@ fn eval_aggregate_compare_string_missing_memory() {
         },
     };
     assert_eq!(
-        Evaluator::eval_bool(&expr, &gd),
-        Err("Memory Table_nonexistent not found".to_string())
+        Evaluator::eval_bool(&expr, &gd).unwrap_err().to_string(),
+        "Memory Table_nonexistent not found".to_string()
     );
 }
 
@@ -410,8 +414,8 @@ fn eval_aggregate_compare_string_no_owner_error() {
         },
     };
     assert_eq!(
-        Evaluator::eval_bool(&expr, &gd),
-        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
+        Evaluator::eval_bool(&expr, &gd).unwrap_err().to_string(),
+        "memory access requires an explicit owner; use &M:M of <owner>".to_string()
     );
 }
 
@@ -440,7 +444,7 @@ fn eval_aggregate_compare_player_eq_and_neq() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_eq, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_eq, &gd).unwrap());
 
     let expr_neq = BoolExpr::Aggregate {
         aggregate: AggregateBool::Compare {
@@ -451,7 +455,7 @@ fn eval_aggregate_compare_player_eq_and_neq() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_neq, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_neq, &gd).unwrap());
 }
 
 // --- B-10: Team comparison ---
@@ -478,7 +482,7 @@ fn eval_aggregate_compare_team_eq_and_neq() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_eq, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_eq, &gd).unwrap());
 
     let expr_neq = BoolExpr::Aggregate {
         aggregate: AggregateBool::Compare {
@@ -489,7 +493,7 @@ fn eval_aggregate_compare_team_eq_and_neq() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_neq, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_neq, &gd).unwrap());
 }
 
 // --- B-11: StringInCardSet ---
@@ -507,7 +511,7 @@ fn eval_aggregate_string_in_cardset_present_and_absent() {
             card_set: hand.clone(),
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_ace, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_ace, &gd).unwrap());
 
     let expr_king = BoolExpr::Aggregate {
         aggregate: AggregateBool::StringInCardSet {
@@ -517,7 +521,7 @@ fn eval_aggregate_string_in_cardset_present_and_absent() {
             card_set: hand.clone(),
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_king, &gd), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr_king, &gd).unwrap());
 }
 
 #[test]
@@ -534,7 +538,7 @@ fn eval_aggregate_string_in_cardset_empty() {
             card_set: empty,
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr, &gd), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr, &gd).unwrap());
 }
 
 // --- B-12: StringNotInCardSet ---
@@ -552,7 +556,7 @@ fn eval_aggregate_string_not_in_cardset() {
             card_set: hand,
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr, &gd).unwrap());
 }
 
 // --- B-13: CardSetEmpty / CardSetNotEmpty ---
@@ -567,14 +571,14 @@ fn eval_aggregate_cardset_empty_and_not_empty() {
             card_set: empty.clone(),
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_empty, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_empty, &gd).unwrap());
 
     let expr_not = BoolExpr::Aggregate {
         aggregate: AggregateBool::CardSetNotEmpty {
             card_set: empty.clone(),
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_not, &gd), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr_not, &gd).unwrap());
 }
 
 // --- B-14: OutOfPlayer::Game ---
@@ -597,7 +601,7 @@ fn eval_aggregate_out_of_player_game_true_and_false() {
             out_of: OutOf::Game,
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_out, &gd), Ok(true));
+    assert!(Evaluator::eval_bool(&expr_out, &gd).unwrap());
 
     let expr_in = BoolExpr::Aggregate {
         aggregate: AggregateBool::OutOfPlayer {
@@ -605,7 +609,7 @@ fn eval_aggregate_out_of_player_game_true_and_false() {
             out_of: OutOf::Game,
         },
     };
-    assert_eq!(Evaluator::eval_bool(&expr_in, &gd), Ok(false));
+    assert!(!Evaluator::eval_bool(&expr_in, &gd).unwrap());
 }
 
 // --- B-15: IntCompare table-driven ---
@@ -652,10 +656,7 @@ fn eval_end_condition_until_end_reached_and_not_reached() {
     let gd = gd_empty();
     let stage_name = "Play".to_string();
 
-    assert_eq!(
-        Evaluator::eval_end_condition(&EndCondition::UntilEnd, &gd, &stage_name),
-        Ok(false)
-    );
+    assert!(!Evaluator::eval_end_condition(&EndCondition::UntilEnd, &gd, &stage_name).unwrap());
 }
 
 // --- B-17: EndCondition variants ---
@@ -664,114 +665,99 @@ fn eval_end_condition_variants() {
     let stage_name = "Play".to_string();
 
     // UntilEnd: always false
-    assert_eq!(
-        Evaluator::eval_end_condition(&EndCondition::UntilEnd, &gd_empty(), &stage_name),
-        Ok(false)
+    assert!(
+        !Evaluator::eval_end_condition(&EndCondition::UntilEnd, &gd_empty(), &stage_name).unwrap()
     );
 
     // UntilBool with true condition
-    assert_eq!(
-        Evaluator::eval_end_condition(
-            &EndCondition::UntilBool {
-                bool_expr: true_expr()
-            },
-            &gd_empty(),
-            &stage_name,
-        ),
-        Ok(true)
-    );
+    assert!(Evaluator::eval_end_condition(
+        &EndCondition::UntilBool {
+            bool_expr: true_expr()
+        },
+        &gd_empty(),
+        &stage_name,
+    )
+    .unwrap());
 
     // UntilBool with false condition
-    assert_eq!(
-        Evaluator::eval_end_condition(
-            &EndCondition::UntilBool {
-                bool_expr: false_expr()
-            },
-            &gd_empty(),
-            &stage_name,
-        ),
-        Ok(false)
-    );
+    assert!(!Evaluator::eval_end_condition(
+        &EndCondition::UntilBool {
+            bool_expr: false_expr()
+        },
+        &gd_empty(),
+        &stage_name,
+    )
+    .unwrap());
 
     // UntilRep: counter not reached
     let mut gd = gd_empty();
-    assert_eq!(
-        Evaluator::eval_end_condition(
-            &EndCondition::UntilRep {
-                reps: Repititions {
-                    times: IntExpr::Literal { int: 5 },
-                },
+    assert!(!Evaluator::eval_end_condition(
+        &EndCondition::UntilRep {
+            reps: Repititions {
+                times: IntExpr::Literal { int: 5 },
             },
-            &gd,
-            &stage_name,
-        ),
-        Ok(false)
-    );
+        },
+        &gd,
+        &stage_name,
+    )
+    .unwrap());
 
     // UntilRep: counter reached
     gd.stage_counters.insert("Play".to_string(), 10);
-    assert_eq!(
-        Evaluator::eval_end_condition(
-            &EndCondition::UntilRep {
-                reps: Repititions {
-                    times: IntExpr::Literal { int: 5 },
-                },
+    assert!(Evaluator::eval_end_condition(
+        &EndCondition::UntilRep {
+            reps: Repititions {
+                times: IntExpr::Literal { int: 5 },
             },
-            &gd,
-            &stage_name,
-        ),
-        Ok(true)
-    );
+        },
+        &gd,
+        &stage_name,
+    )
+    .unwrap());
 
     // UntilBoolRep: both not met
     let mut gd2 = gd_empty();
-    assert_eq!(
-        Evaluator::eval_end_condition(
-            &EndCondition::UntilBoolRep {
-                bool_expr: false_expr(),
-                logic: BoolOp::And,
-                reps: Repititions {
-                    times: IntExpr::Literal { int: 5 },
-                },
+    assert!(!Evaluator::eval_end_condition(
+        &EndCondition::UntilBoolRep {
+            bool_expr: false_expr(),
+            logic: BoolOp::And,
+            reps: Repititions {
+                times: IntExpr::Literal { int: 5 },
             },
-            &gd2,
-            &stage_name,
-        ),
-        Ok(false)
-    );
+        },
+        &gd2,
+        &stage_name,
+    )
+    .unwrap());
 
     // UntilBoolRep: bool met, rep not (And)
     gd2.stage_counters.insert("Play".to_string(), 0);
-    assert_eq!(
-        Evaluator::eval_end_condition(
-            &EndCondition::UntilBoolRep {
-                bool_expr: true_expr(),
-                logic: BoolOp::And,
-                reps: Repititions {
-                    times: IntExpr::Literal { int: 5 },
-                },
+    assert!(!Evaluator::eval_end_condition(
+        &EndCondition::UntilBoolRep {
+            bool_expr: true_expr(),
+            logic: BoolOp::And,
+            reps: Repititions {
+                times: IntExpr::Literal { int: 5 },
             },
-            &gd2,
-            &stage_name,
-        ),
-        Ok(false)
-    );
+        },
+        &gd2,
+        &stage_name,
+    )
+    .unwrap());
 
     // UntilBoolRep: bool met, rep not (Or)
-    assert_eq!(
-        Evaluator::eval_end_condition(
-            &EndCondition::UntilBoolRep {
-                bool_expr: true_expr(),
-                logic: BoolOp::Or,
-                reps: Repititions {
-                    times: IntExpr::Literal { int: 5 },
-                },
+    assert!(Evaluator::eval_end_condition(
+        &EndCondition::UntilBoolRep {
+            bool_expr: true_expr(),
+            logic: BoolOp::Or,
+            reps: Repititions {
+                times: IntExpr::Literal { int: 5 },
             },
-            &gd2,
-            &stage_name,
-        ),
-        Ok(true)
-    );
+        },
+        &gd2,
+        &stage_name,
+    )
+    .unwrap());
 }
 
 // --- B-18: EndCondition with no current stage (error propagation) ---
@@ -797,5 +783,8 @@ fn eval_end_condition_no_current_stage() {
         &gd,
         &stage_name,
     );
-    assert_eq!(result, Err("No current stage".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "No current stage".to_string()
+    );
 }

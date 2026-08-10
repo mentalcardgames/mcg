@@ -72,7 +72,7 @@ pub enum StepResult {
     Ok,
     NeedsInput(InputType),
     GameOver,
-    Error(String),
+    Error(crate::error::EngineError),
 }
 
 #[derive(Clone, Debug)]

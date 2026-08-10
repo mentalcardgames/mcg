@@ -1,6 +1,7 @@
 use front_end::ir::{Edge, LoweredPayLoad};
 
 use super::Interpreter;
+use crate::error::EngineError;
 use crate::interpreter::trace::{TraceEntry, TraceEvent};
 use crate::interpreter::types::{InputKind, InputType, StepResult};
 impl Interpreter {
@@ -271,7 +272,7 @@ impl Interpreter {
         {
             Some(f) => f,
             None => {
-                return StepResult::Error(format!("Combo {} not found", combo));
+                return StepResult::Error(EngineError::ComboNotFound { name: combo });
             }
         };
         let (display, _, max) = self.build_choose_cards(
@@ -362,11 +363,10 @@ impl Interpreter {
         original: Edge<LoweredPayLoad>,
     ) -> StepResult {
         let Some(name) = candidates.get(idx) else {
-            return StepResult::Error(format!(
-                "ChoosePlayer idx {} out of range ({})",
+            return StepResult::Error(EngineError::ChoosePlayerIdxOutOfRange {
                 idx,
-                candidates.len()
-            ));
+                len: candidates.len(),
+            });
         };
         let name = name.clone();
         let mut repl = crate::quantifier::substitute_dest_player(&original, name.clone());
@@ -483,7 +483,7 @@ impl Interpreter {
     fn resolve_player_names(
         &self,
         pc: &front_end::ast::PlayerCollection,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<String>, EngineError> {
         let idxs = crate::query::Evaluator::resolve_player_collection(pc, &self.game_data)?;
         Ok(idxs
             .iter()
@@ -535,7 +535,7 @@ impl Interpreter {
     ) -> CardValidation {
         if selected.iter().any(|&i| i >= candidate_ids.len()) {
             return CardValidation::Fatal(StepResult::Error(
-                "ChooseCards index out of range".to_string(),
+                EngineError::ChooseCardsIndexOutOfRange,
             ));
         }
         let chosen: Vec<usize> = selected.iter().map(|&i| candidate_ids[i]).collect();

@@ -16,6 +16,7 @@
 //! `Interpreter::pending_overlay`, keyed only by synthetic `StateID`s (never by
 //! real IR ids). See `crates/engine/docs/invariants.md` (I-5, I-7, I-10).
 
+use crate::error::EngineError;
 use crate::game_data::GameData;
 use front_end::ast::{
     AggregatePlayerCollection, CardSet, FilterExpr, Group, IntExpr, IntRange, IntRangeOperator,
@@ -451,13 +452,10 @@ pub fn build_dest_all_chain(
     edge: &Edge<LoweredPayLoad>,
     player_names: Vec<String>,
     next_synth: &mut u32,
-) -> Result<Vec<(StateID, Edge<LoweredPayLoad>)>, String> {
+) -> Result<Vec<(StateID, Edge<LoweredPayLoad>)>, EngineError> {
     let n = player_names.len();
     if n > FANOUT_CAP {
-        return Err(format!(
-            "dest-player fan-out {} exceeds cap {}",
-            n, FANOUT_CAP
-        ));
+        return Err(EngineError::DestPlayerFanoutExceedsCap { n, cap: FANOUT_CAP });
     }
     if n == 0 {
         return Ok(vec![]);
@@ -483,12 +481,16 @@ pub fn build_dest_all_chain(
 /// The range is folded left-to-right (the grammar declares no operator
 /// precedence): `start` is the first atom, each `op_int` entry combines the
 /// running result with its atom via `And`/`Or`. Returns `Ok(())` if the final
-/// result holds, `Err(message)` otherwise.
+/// result holds, `Err(EngineError)` otherwise.
 ///
 /// Non-literal `IntExpr`s (memory/runtime-backed) cannot be evaluated without
 /// live `GameData`; per the plan's edge-case note, we fall back to "accept any
 /// count in `[0, available]`" in that case.
-pub fn validate_int_range(range: &IntRange, count: usize, available: usize) -> Result<(), String> {
+pub fn validate_int_range(
+    range: &IntRange,
+    count: usize,
+    available: usize,
+) -> Result<(), EngineError> {
     let gd = GameData::new();
 
     let (start_cmp, start_expr) = &range.start;
@@ -514,23 +516,20 @@ pub fn validate_int_range(range: &IntRange, count: usize, available: usize) -> R
     if result {
         Ok(())
     } else {
-        Err(format!(
-            "selected {} does not satisfy range {:?}",
-            count, range
-        ))
+        Err(EngineError::SelectionDoesNotSatisfyRange {
+            count,
+            range: Box::new(range.clone()),
+        })
     }
 }
 
 /// Fallback when an `IntRange` constraint uses a non-literal `IntExpr`: accept
 /// any count that does not exceed `available`.
-fn validate_fallback(count: usize, available: usize) -> Result<(), String> {
+fn validate_fallback(count: usize, available: usize) -> Result<(), EngineError> {
     if count <= available {
         Ok(())
     } else {
-        Err(format!(
-            "selected {} exceeds available {}",
-            count, available
-        ))
+        Err(EngineError::SelectionExceedsAvailable { count, available })
     }
 }
 
@@ -544,13 +543,10 @@ pub fn build_dest_all_chain_with_memory(
     player_names: Vec<String>,
     chosen: &[usize],
     next_synth: &mut u32,
-) -> Result<Vec<(StateID, Edge<LoweredPayLoad>)>, String> {
+) -> Result<Vec<(StateID, Edge<LoweredPayLoad>)>, EngineError> {
     let n = player_names.len();
     if n > FANOUT_CAP {
-        return Err(format!(
-            "dest-player fan-out {} exceeds cap {}",
-            n, FANOUT_CAP
-        ));
+        return Err(EngineError::DestPlayerFanoutExceedsCap { n, cap: FANOUT_CAP });
     }
     if n == 0 {
         return Ok(vec![]);

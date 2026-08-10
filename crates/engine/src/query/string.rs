@@ -1,9 +1,10 @@
 use super::Evaluator;
+use crate::error::EngineError;
 use crate::game_data::{Card, GameData, MemoryValue};
 use front_end::ast::{QueryString, StringCollection, StringExpr, Types};
 
 impl Evaluator {
-    pub fn eval_string(expr: &StringExpr, game_data: &GameData) -> Result<String, String> {
+    pub fn eval_string(expr: &StringExpr, game_data: &GameData) -> Result<String, EngineError> {
         match expr {
             StringExpr::Literal { value } => Ok(value.clone()),
             StringExpr::Query { query } => match query {
@@ -11,10 +12,11 @@ impl Evaluator {
                     let card_id = Self::eval_card_position(card_position, game_data)?;
                     let card = game_data
                         .get_card(card_id)
-                        .ok_or(format!("Card {} not found", card_id))?;
-                    card.get(key)
-                        .cloned()
-                        .ok_or(format!("Key {} not found in card {}", key, card_id))
+                        .ok_or(EngineError::CardNotFound { card_id })?;
+                    card.get(key).cloned().ok_or(EngineError::CardKeyNotFound {
+                        key: key.clone(),
+                        card_id,
+                    })
                 }
                 QueryString::StringCollectionAt {
                     string_collection,
@@ -25,15 +27,15 @@ impl Evaluator {
                     strings
                         .get(idx)
                         .cloned()
-                        .ok_or(format!("No string at index {}", idx))
+                        .ok_or(EngineError::StringCollectionAtOutOfRange { idx })
                 }
             },
             StringExpr::Memory { memory } => {
                 let key = Self::resolve_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::String(v)) => Ok(v.clone()),
-                    Some(_) => Err("Memory value is not a String".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotString),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }
@@ -42,7 +44,7 @@ impl Evaluator {
     pub(super) fn eval_string_collection(
         col: &StringCollection,
         game_data: &GameData,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<String>, EngineError> {
         match col {
             StringCollection::Literal { strings } => {
                 let mut result = vec![];
@@ -60,10 +62,10 @@ impl Evaluator {
                     match game_data.get_memory(&key) {
                         Some(MemoryValue::String(v)) => result.push(v.clone()),
                         Some(_) => {
-                            return Err(format!("Memory value is not a String ({})", key));
+                            return Err(EngineError::MemoryNotStringFor { key });
                         }
                         None => {
-                            return Err(format!("Memory {} not found", key));
+                            return Err(EngineError::MemoryNotFound { key });
                         }
                     }
                 }
@@ -73,8 +75,8 @@ impl Evaluator {
                 let key = Self::resolve_collection_memory_key(memory, game_data)?;
                 match game_data.get_memory(&key) {
                     Some(MemoryValue::StringCollection(v)) => Ok(v.clone()),
-                    Some(_) => Err("Memory value is not a StringCollection".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotStringCollection),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }

@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use front_end::ir::{Ir, LoweredPayLoad};
 
+use crate::error::EngineError;
 use crate::game_data::GameData;
 use crate::interpreter::{Input, InputKind, InputType, Interpreter, StepResult, TraceEntry};
 
@@ -35,7 +36,7 @@ pub fn run_game(
     input_source: InputSource,
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
     trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
-) -> Result<GameData, String> {
+) -> Result<GameData, EngineError> {
     let log_path = trace_logger::resolve_log_path();
     let logger = match &log_path {
         Some(path) => match trace_logger::TraceLogger::open(path) {
@@ -148,7 +149,7 @@ struct Controller {
 impl Controller {
     /// Main event loop: emit the current state, advance the interpreter, and
     /// either continue, supply input, return on game-over, or propagate an error.
-    fn run(&mut self) -> Result<GameData, String> {
+    fn run(&mut self) -> Result<GameData, EngineError> {
         loop {
             self.emit_event();
             *self.step_count.lock().unwrap() += 1;
@@ -169,7 +170,7 @@ impl Controller {
     }
 
     /// Route an input request to the active [`InputSource`].
-    fn get_input(&mut self, input_type: InputType) -> Result<Input, String> {
+    fn get_input(&mut self, input_type: InputType) -> Result<Input, EngineError> {
         let current_name = self
             .interpreter
             .game_data
@@ -210,14 +211,18 @@ impl Controller {
     ///
     /// Each line may optionally start with a `Name:` prefix (e.g. `P2:y`, `P3:c 1,3`).
     /// Lines without a prefix default to player `"P1"`.
-    fn read_test_file(&mut self, path: &PathBuf) -> Result<Input, String> {
+    fn read_test_file(&mut self, path: &PathBuf) -> Result<Input, EngineError> {
         if self.line_buffer.is_empty() && !self.file_loaded {
-            let file = File::open(path)
-                .map_err(|e| format!("Failed to open test file {}: {}", path.display(), e))?;
+            let file = File::open(path).map_err(|source| EngineError::TestFileOpen {
+                path: path.display().to_string(),
+                source,
+            })?;
             let reader = BufReader::new(file);
             for line in reader.lines() {
-                let line = line
-                    .map_err(|e| format!("Failed to read test file {}: {}", path.display(), e))?;
+                let line = line.map_err(|source| EngineError::TestFileRead {
+                    path: path.display().to_string(),
+                    source,
+                })?;
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('#') {
                     self.line_buffer.push_back(trimmed.to_string());
@@ -229,7 +234,9 @@ impl Controller {
         let line = self
             .line_buffer
             .pop_front()
-            .ok_or_else(|| format!("Test input file exhausted (input #{})", self.input_sequence))?;
+            .ok_or(EngineError::TestInputExhausted {
+                input_sequence: self.input_sequence,
+            })?;
 
         let (player_id, body) = if let Some(colon) = line.find(':') {
             if colon > 0 && colon + 1 < line.len() {
@@ -247,17 +254,14 @@ impl Controller {
         let lower = body.to_lowercase();
         let kind = if let Some(rest) = lower.strip_prefix("p ") {
             let rest = rest.trim();
-            let n: usize = rest.parse().map_err(|_| {
-                format!(
-                    "Invalid test input #{}: expected 'p <N>', got '{}'",
-                    self.input_sequence, line
-                )
+            let n: usize = rest.parse().map_err(|_| EngineError::InvalidTestInputP {
+                input_sequence: self.input_sequence,
+                line: line.clone(),
             })?;
             if n == 0 {
-                return Err(format!(
-                    "Invalid test input #{}: player indices start at 1, got 0",
-                    self.input_sequence
-                ));
+                return Err(EngineError::InvalidTestInputPlayerZero {
+                    input_sequence: self.input_sequence,
+                });
             }
             InputKind::ChoosePlayer { idx: n - 1 }
         } else if let Some(rest) = lower.strip_prefix("c ") {
@@ -266,17 +270,14 @@ impl Controller {
                 .split(',')
                 .map(|s| s.trim().parse::<usize>())
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|_| {
-                    format!(
-                        "Invalid test input #{}: expected 'c <csv>', got '{}'",
-                        self.input_sequence, line
-                    )
+                .map_err(|_| EngineError::InvalidTestInputC {
+                    input_sequence: self.input_sequence,
+                    line: line.clone(),
                 })?;
             if selected.contains(&0) {
-                return Err(format!(
-                    "Invalid test input #{}: card indices start at 1, got 0",
-                    self.input_sequence
-                ));
+                return Err(EngineError::InvalidTestInputCardZero {
+                    input_sequence: self.input_sequence,
+                });
             }
             InputKind::ChooseCards {
                 selected: selected.into_iter().map(|n| n - 1).collect(),
@@ -286,17 +287,16 @@ impl Controller {
                 "y" | "yes" => InputKind::OptionalAccept,
                 "n" | "no" => InputKind::OptionalDecline,
                 _ => {
-                    let idx: usize = line.parse().map_err(|_| {
-                        format!(
-                            "Invalid test input #{}: expected number, 'y', 'n', 'p <N>', or 'c <csv>', got '{}'",
-                            self.input_sequence, line
-                        )
-                    })?;
+                    let idx: usize =
+                        line.parse()
+                            .map_err(|_| EngineError::InvalidTestInputNumber {
+                                input_sequence: self.input_sequence,
+                                line: line.clone(),
+                            })?;
                     if idx == 0 {
-                        return Err(format!(
-                            "Invalid test input #{}: choice indices start at 1, got 0",
-                            self.input_sequence
-                        ));
+                        return Err(EngineError::InvalidTestInputChoiceZero {
+                            input_sequence: self.input_sequence,
+                        });
                     }
                     InputKind::Choice { idx: idx - 1 }
                 }

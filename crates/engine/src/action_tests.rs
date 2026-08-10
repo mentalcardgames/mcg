@@ -78,7 +78,7 @@ fn execute_cardset_move_rejects_dest_index_equal_to_len() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 2 — TODO no-op pins
+// Task 2 â€” TODO no-op pins
 // ---------------------------------------------------------------------------
 
 /// Comparable snapshot of `locations` (which doesn't `derive(PartialEq/Debug)`).
@@ -358,7 +358,7 @@ fn scoring_rule_winner_with_eliminates_lowest_score() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 3 — OutAction (all 5 OutOf variants)
+// Task 3 â€” OutAction (all 5 OutOf variants)
 // ---------------------------------------------------------------------------
 
 fn two_players_in_play_stage() -> GameData {
@@ -486,7 +486,7 @@ fn out_action_game_fail_sets_in_game_false() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 4 — EndAction variants
+// Task 4 â€” EndAction variants
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -545,7 +545,7 @@ fn end_action_named_stage_leaves_named_stage() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 5 — CycleAction + panic sites
+// Task 5 â€” CycleAction + panic sites
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -579,13 +579,10 @@ fn cycle_action_eval_failure_errors() {
         },
     };
     let result = execute_action_rule(ActionRule::CycleAction { player: expr }, &mut gd);
-    assert_eq!(
-        result,
-        Err(
+    assert_eq!(result.unwrap_err().to_string(),
             "CycleAction: failed to eval player Memory { memory: Memory { memory: \"nonexistent\" } }: memory access requires an explicit owner; use &M:nonexistent of <owner>"
                 .to_string()
-        )
-    );
+        );
 }
 
 #[test]
@@ -600,8 +597,8 @@ fn cycle_action_unknown_player_errors() {
         &mut gd,
     );
     assert_eq!(
-        result,
-        Err("CycleAction: player Ghost not found in game_data.players".to_string())
+        result.unwrap_err().to_string(),
+        "CycleAction: player Ghost not found in game_data.players".to_string()
     );
 }
 
@@ -620,13 +617,13 @@ fn cycle_action_player_not_in_turn_order_errors() {
         &mut gd,
     );
     assert_eq!(
-        result,
-        Err("CycleAction: player_idx 1 not in turn_order [0]".to_string())
+        result.unwrap_err().to_string(),
+        "CycleAction: player_idx 1 not in turn_order [0]".to_string()
     );
 }
 
 // ---------------------------------------------------------------------------
-// Task 6 — ShuffleAction success & failure paths
+// Task 6 â€” ShuffleAction success & failure paths
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -686,7 +683,7 @@ fn shuffle_action_on_missing_location_errors() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 7 — SetMemory / ResetMemory
+// Task 7 â€” SetMemory / ResetMemory
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -726,7 +723,7 @@ fn reset_memory_action_zeros_int() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 8 — MoveType Deal / Exchange / Classic, Move vs MoveQuantity
+// Task 8 â€” MoveType Deal / Exchange / Classic, Move vs MoveQuantity
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -813,7 +810,7 @@ fn move_exchange_routes_to_execute_cardset_move() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 9 — execute_cardset_move panic sites
+// Task 9 â€” execute_cardset_move panic sites
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -834,10 +831,7 @@ fn execute_cardset_move_from_eval_failure_errors() {
     };
     let to = loc_cardset("Hand");
     let result = execute_cardset_move(from, None, Status::Private, to, &mut gd);
-    assert_eq!(
-        result,
-        Err("execute_cardset_move: failed to eval from cardset Memory { memory: Memory { memory: \"ghost\" } }: memory access requires an explicit owner; use &M:ghost of <owner>".to_string())
-    );
+    assert_eq!(result.unwrap_err().to_string(), "execute_cardset_move: failed to eval from cardset Memory { memory: Memory { memory: \"ghost\" } }: memory access requires an explicit owner; use &M:ghost of <owner>".to_string());
 }
 
 #[test]
@@ -860,10 +854,7 @@ fn execute_cardset_move_to_eval_failure_errors() {
         },
     };
     let result = execute_cardset_move(from, None, Status::Private, to, &mut gd);
-    assert_eq!(
-        result,
-        Err("execute_cardset_move: failed to eval dest cardset Memory { memory: Memory { memory: \"ghost\" } }: memory access requires an explicit owner; use &M:ghost of <owner>".to_string())
-    );
+    assert_eq!(result.unwrap_err().to_string(), "execute_cardset_move: failed to eval dest cardset Memory { memory: Memory { memory: \"ghost\" } }: memory access requires an explicit owner; use &M:ghost of <owner>".to_string());
 }
 
 /// Pin for the corrected `>=` guard introduced in plan-2 Task 1. The guard
@@ -892,7 +883,7 @@ fn execute_cardset_move_errors_when_dest_index_at_len() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 10 — SetUpRule panic sites
+// Task 10 â€” SetUpRule panic sites
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -911,10 +902,7 @@ fn create_location_owner_resolve_failure_errors() {
         },
         &mut gd,
     );
-    assert_eq!(
-        result,
-        Err("CreateLocation: failed to resolve owner Player { player: Runtime { runtime: Next } }: No current stage".to_string())
-    );
+    assert_eq!(result.unwrap_err().to_string(), "CreateLocation: failed to resolve owner Player { player: Runtime { runtime: Next } }: No current stage".to_string());
 }
 
 #[test]
@@ -928,7 +916,7 @@ fn create_card_on_location_missing_location_errors() {
         &mut gd,
     );
     assert_eq!(
-        result,
-        Err("CreateCardOnLocation: location \"Ghost\" not found".to_string())
+        result.unwrap_err().to_string(),
+        "CreateCardOnLocation: location \"Ghost\" not found".to_string()
     );
 }

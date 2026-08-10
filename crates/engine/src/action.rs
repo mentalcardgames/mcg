@@ -36,6 +36,7 @@ Payload
 Each of the leaves of this payload tree should be accounted for in the execute_edge function, which takes a Payload and modifies the game state accordingly.
 */
 
+use crate::error::EngineError;
 use crate::game_data::{Combo, GameData, Location, PointMap, Precedence, Team};
 use front_end::ast::{
     ActionRule, GameRule, MoveType, OutOf, Quantity, ScoringRule, SetUpRule, Status,
@@ -43,7 +44,7 @@ use front_end::ast::{
 use front_end::ir::LoweredPayLoad;
 
 #[allow(clippy::single_match)]
-pub fn execute(payload: LoweredPayLoad, game_data: &mut GameData) -> Result<(), String> {
+pub fn execute(payload: LoweredPayLoad, game_data: &mut GameData) -> Result<(), EngineError> {
     match payload {
         LoweredPayLoad::Action(gr) => match gr {
             GameRule::SetUp { setup } => execute_setup_rule(setup, game_data),
@@ -58,7 +59,7 @@ pub fn execute(payload: LoweredPayLoad, game_data: &mut GameData) -> Result<(), 
     }
 }
 
-pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Result<(), String> {
+pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Result<(), EngineError> {
     match payload {
         SetUpRule::CreatePlayer { players } => {
             for name in players {
@@ -96,8 +97,9 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
         }
         SetUpRule::CreateLocation { locations, owner } => {
             let owner_names = crate::query::Evaluator::resolve_owner_to_names(&owner, game_data)
-                .map_err(|e| {
-                    format!("CreateLocation: failed to resolve owner {:?}: {}", owner, e)
+                .map_err(|source| EngineError::CreateLocationOwnerResolution {
+                    owner: Box::new(owner.clone()),
+                    source: Box::new(source),
                 })?;
             for owner_name in &owner_names {
                 for loc_name in &locations {
@@ -117,8 +119,8 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
                 .locations
                 .iter()
                 .position(|l| l.name == location)
-                .ok_or_else(|| {
-                    format!("CreateCardOnLocation: location {:?} not found", location)
+                .ok_or(EngineError::CreateCardOnLocationLocationNotFound {
+                    location: location.clone(),
                 })?;
             for type_expr in cards {
                 let expanded_cards = crate::query::Evaluator::expand_types(&type_expr);
@@ -139,7 +141,10 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
         }
         SetUpRule::CreateMemory { memory, owner } => {
             let names = crate::query::Evaluator::resolve_owner_to_names(&owner, game_data)
-                .map_err(|e| format!("CreateMemory: failed to resolve owner {:?}: {}", owner, e))?;
+                .map_err(|source| EngineError::CreateMemoryOwnerResolution {
+                    owner: Box::new(owner.clone()),
+                    source: Box::new(source),
+                })?;
             for name in names {
                 let key = format!("{}_{}", name, memory);
                 game_data.add_memory(key, owner.clone(), None);
@@ -152,11 +157,9 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
             memory_type,
         } => {
             let names = crate::query::Evaluator::resolve_owner_to_names(&owner, game_data)
-                .map_err(|e| {
-                    format!(
-                        "CreateMemoryWithMemoryType: failed to resolve owner {:?}: {}",
-                        owner, e
-                    )
+                .map_err(|source| EngineError::CreateMemoryWithTypeOwnerResolution {
+                    owner: Box::new(owner.clone()),
+                    source: Box::new(source),
                 })?;
             for name in names {
                 let key = format!("{}_{}", name, memory);
@@ -177,11 +180,13 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
             for (key, value, int_expr) in kvis {
                 let card_key = format!("{}:{}", key, value);
                 let points =
-                    crate::query::Evaluator::eval_int(&int_expr, game_data).map_err(|e| {
-                        format!(
-                            "CreatePointMap: failed to eval int {:?} for key {}:{}: {}",
-                            int_expr, key, value, e
-                        )
+                    crate::query::Evaluator::eval_int(&int_expr, game_data).map_err(|source| {
+                        EngineError::CreatePointMapIntEval {
+                            int_expr: Box::new(int_expr.clone()),
+                            key: key.clone(),
+                            value: value.clone(),
+                            source: Box::new(source),
+                        }
                     })?;
                 map.insert(card_key, points);
             }
@@ -197,7 +202,7 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
 pub(crate) fn execute_action_rule(
     action: ActionRule,
     game_data: &mut GameData,
-) -> Result<(), String> {
+) -> Result<(), EngineError> {
     match action {
         ActionRule::FlipAction {
             card_set: _,
@@ -241,7 +246,9 @@ pub(crate) fn execute_action_rule(
                     }
                     Ok(())
                 }
-                Err(e) => Err(format!("ShuffleAction failed: {}", e)),
+                Err(source) => Err(EngineError::ShuffleActionEval {
+                    source: Box::new(source),
+                }),
             }
         }
         ActionRule::OutAction { players, out_of } => {
@@ -270,26 +277,40 @@ pub(crate) fn execute_action_rule(
             use front_end::ast::MemoryType;
             let value: MemoryValue = match memory_type {
                 MemoryType::Int { int } => {
-                    let n = crate::query::Evaluator::eval_int(&int, game_data)
-                        .map_err(|e| format!("SetMemory Int eval failed: {e}"))?;
+                    let n =
+                        crate::query::Evaluator::eval_int(&int, game_data).map_err(|source| {
+                            EngineError::SetMemoryIntEval {
+                                source: Box::new(source),
+                            }
+                        })?;
                     MemoryValue::Int(n)
                 }
                 MemoryType::String { string } => {
-                    let s = crate::query::Evaluator::eval_string(&string, game_data)
-                        .map_err(|e| format!("SetMemory String eval failed: {e}"))?;
+                    let s = crate::query::Evaluator::eval_string(&string, game_data).map_err(
+                        |source| EngineError::SetMemoryStringEval {
+                            source: Box::new(source),
+                        },
+                    )?;
                     MemoryValue::String(s)
                 }
                 MemoryType::Player { player } => {
                     // Evaluator::eval_player returns a name; we store the name as
                     // a String memory so later reads as String succeed. (Storing
                     // a player index would require a new MemoryValue variant.)
-                    let name = crate::query::Evaluator::eval_player(&player, game_data)
-                        .map_err(|e| format!("SetMemory Player eval failed: {e}"))?;
+                    let name = crate::query::Evaluator::eval_player(&player, game_data).map_err(
+                        |source| EngineError::SetMemoryPlayerEval {
+                            source: Box::new(source),
+                        },
+                    )?;
                     MemoryValue::String(name)
                 }
                 MemoryType::Team { team } => {
-                    let name = crate::query::Evaluator::eval_team(&team, game_data)
-                        .map_err(|e| format!("SetMemory Team eval failed: {e}"))?;
+                    let name =
+                        crate::query::Evaluator::eval_team(&team, game_data).map_err(|source| {
+                            EngineError::SetMemoryTeamEval {
+                                source: Box::new(source),
+                            }
+                        })?;
                     MemoryValue::Team(name)
                 }
                 // TODO: evaluate the remaining variants when Evaluator gains
@@ -308,7 +329,7 @@ pub(crate) fn execute_action_rule(
             let key = match game_data.get_current_player() {
                 Some(p) => format!("{}_{}", p.name, memory),
                 None => {
-                    return Err("SetMemory requires a current player".to_string());
+                    return Err(EngineError::SetMemoryNoCurrentPlayer);
                 }
             };
             game_data.set_memory(key, value);
@@ -319,34 +340,34 @@ pub(crate) fn execute_action_rule(
             let key = match game_data.get_current_player() {
                 Some(p) => format!("{}_{}", p.name, memory),
                 None => {
-                    return Err("ResetMemory requires a current player".to_string());
+                    return Err(EngineError::ResetMemoryNoCurrentPlayer);
                 }
             };
             game_data.reset_memory(&key);
             Ok(())
         }
         ActionRule::CycleAction { player } => {
-            let player_name = crate::query::Evaluator::eval_player(&player, game_data)
-                .map_err(|e| format!("CycleAction: failed to eval player {:?}: {}", player, e))?;
+            let player_name =
+                crate::query::Evaluator::eval_player(&player, game_data).map_err(|source| {
+                    EngineError::CycleActionPlayerEval {
+                        player: Box::new(player.clone()),
+                        source: Box::new(source),
+                    }
+                })?;
             let player_idx = game_data
                 .players
                 .iter()
                 .position(|p| p.name == player_name)
-                .ok_or_else(|| {
-                    format!(
-                        "CycleAction: player {} not found in game_data.players",
-                        player_name
-                    )
+                .ok_or(EngineError::CycleActionPlayerNotFound {
+                    name: player_name.clone(),
                 })?;
             let turn_idx = game_data
                 .turn_order
                 .iter()
                 .position(|&idx| idx == player_idx)
-                .ok_or_else(|| {
-                    format!(
-                        "CycleAction: player_idx {} not in turn_order {:?}",
-                        player_idx, game_data.turn_order
-                    )
+                .ok_or(EngineError::CycleActionTurnOrderNotFound {
+                    player_idx,
+                    turn_order: game_data.turn_order.clone(),
                 })?;
             game_data.current_player = Some(turn_idx);
             Ok(())
@@ -397,12 +418,17 @@ pub(crate) fn execute_action_rule(
 pub(crate) fn execute_scoring_rule(
     scoring: ScoringRule,
     game_data: &mut GameData,
-) -> Result<(), String> {
+) -> Result<(), EngineError> {
     match scoring {
         ScoringRule::ScoreRule { score_rule } => match score_rule {
             front_end::ast::ScoreRule::Score { int, players } => {
-                let value = crate::query::Evaluator::eval_int(&int, game_data)
-                    .map_err(|e| format!("Score: failed to eval int {:?}: {}", int, e))?;
+                let value =
+                    crate::query::Evaluator::eval_int(&int, game_data).map_err(|source| {
+                        EngineError::ScoreIntEval {
+                            int_expr: Box::new(int.clone()),
+                            source: Box::new(source),
+                        }
+                    })?;
                 let indices = crate::query::Evaluator::resolve_players(&players, game_data)?;
                 for idx in indices {
                     game_data.players[idx].score += value;
@@ -414,8 +440,13 @@ pub(crate) fn execute_scoring_rule(
                 memory,
                 players,
             } => {
-                let value = crate::query::Evaluator::eval_int(&int, game_data)
-                    .map_err(|e| format!("ScoreMemory: failed to eval int {:?}: {}", int, e))?;
+                let value =
+                    crate::query::Evaluator::eval_int(&int, game_data).map_err(|source| {
+                        EngineError::ScoreMemoryIntEval {
+                            int_expr: Box::new(int.clone()),
+                            source: Box::new(source),
+                        }
+                    })?;
                 let indices = crate::query::Evaluator::resolve_players(&players, game_data)?;
                 for idx in indices {
                     let name = &game_data.players[idx].name;
@@ -493,7 +524,10 @@ pub(crate) fn execute_scoring_rule(
     }
 }
 
-pub(crate) fn execute_move(move_type: MoveType, game_data: &mut GameData) -> Result<(), String> {
+pub(crate) fn execute_move(
+    move_type: MoveType,
+    game_data: &mut GameData,
+) -> Result<(), EngineError> {
     match move_type {
         MoveType::Deal { deal } => {
             let front_end::ast::DealMove::MoveCardSet { deal_cs } = deal;
@@ -544,13 +578,11 @@ pub(crate) fn execute_cardset_move(
     _status: Status,
     to: front_end::ast::CardSet,
     game_data: &mut GameData,
-) -> Result<(), String> {
+) -> Result<(), EngineError> {
     let card_indices = crate::query::Evaluator::eval_cardset(&from, game_data)
-        .map_err(|e| {
-            format!(
-                "execute_cardset_move: failed to eval from cardset {:?}: {}",
-                from, e
-            )
+        .map_err(|source| EngineError::MoveFromCardsetEval {
+            cardset: Box::new(from.clone()),
+            source: Box::new(source),
         })?
         .1; // get only the indices, we don't care about the location for from
 
@@ -569,21 +601,18 @@ pub(crate) fn execute_cardset_move(
     };
 
     let dest_loc_idx = crate::query::Evaluator::eval_cardset(&to, game_data)
-        .map_err(|e| {
-            format!(
-                "execute_cardset_move: failed to eval dest cardset {:?}: {}",
-                to, e
-            )
+        .map_err(|source| EngineError::MoveDestCardsetEval {
+            cardset: Box::new(to.clone()),
+            source: Box::new(source),
         })?
         .0;
 
     if dest_loc_idx >= game_data.locations.len() {
-        return Err(format!(
-            "execute_cardset_move: dest_loc_idx {} >= locations.len() {} (cardset expr: {:?})",
+        return Err(EngineError::MoveDestLocationOutOfRange {
             dest_loc_idx,
-            game_data.locations.len(),
-            to
-        ));
+            locations_len: game_data.locations.len(),
+            cardset: Box::new(to),
+        });
     }
 
     // for each card to move (count is always <= the source size: quantities

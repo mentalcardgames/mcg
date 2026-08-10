@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/query/mod.rs
   - crates/engine/src/controller/mod.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # System Invariants & Guardrails
@@ -61,9 +61,9 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 
 > **I-4 — `GameOver` requires *both* no outgoing edges AND `current_state == ir.goal`.**
 > (`crates/engine/src/interpreter/mod.rs:120-128`). A dead-end state that is not the goal yields
-> `crates::engine::interpreter::StepResult::Error("No outgoing edges from state … and not at goal state")`,
-> not `GameOver`. An agent adding a terminal state must ensure it is registered as
-> `front_end::ir::Ir::goal`.
+> `crates::engine::interpreter::StepResult::Error(EngineError::NoOutgoingEdges)` —
+> Display `"No outgoing edges from state … and not at goal state"` — not `GameOver`. An agent
+> adding a terminal state must ensure it is registered as `front_end::ir::Ir::goal`.
 
 > **I-5 — `StageRoundCounter` is applied exactly once per traversal (was: twice).**
 > The interpreter's `step()` is the single mutator for `StageRoundCounter` and
@@ -119,12 +119,12 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > - `ChooseCards`: no `i >= display.len()`, `selected.len() >= min`, `selected.len() <= max`.
 > A `Player`-sourced answer that fails is dropped and the closure re-invoked (the loop can spin
 > forever — see I-15). The interpreter's *resume* path is stricter: a `ChoosePlayer` `idx` outside
-> `candidates` returns `StepResult::Error("ChoosePlayer idx {} out of range ({})")`
+> `candidates` returns `StepResult::Error(EngineError::ChoosePlayerIdxOutOfRange)`
 > (`crates/engine/src/interpreter/quant_driver.rs:219-225`), and a `ChooseCards` index outside
-> `candidate_ids` returns `StepResult::Error("ChooseCards index out of range")`
+> `candidate_ids` returns `StepResult::Error(EngineError::ChooseCardsIndexOutOfRange)`
 > (`quant_driver.rs:387-391`). The `TestFile` path has no validation loop: it consumes one line per
 > request and **errors on exhaustion** (`controller/mod.rs:220-223`,
-> `"Test input file exhausted (input #{})"`).
+> `EngineError::TestInputExhausted`).
 
 > **I-9 — `set_memory` assigns the caller-provided `MemoryValue` verbatim (was: increment-by-1).**
 > `crates::engine::game_data::GameData::set_memory` (`crates/engine/src/game_data.rs:329-331`)
@@ -172,7 +172,7 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > found position (`crates/engine/src/game_data.rs:204-209`) — safe only because `resolve_turn`
 > returning `Some(idx)` guarantees the idx is in `turn_order`.
 > **Note (2026-08-09):** `cycle to next` resolving to no eligible *other* player is now a
-> **recoverable** `StepResult::Error` ("No next player available"), not a panic — see
+> **recoverable** `StepResult::Error` (`EngineError::NoNextPlayerAvailable`), not a panic — see
 > `error-handling.md` §2 / `engine-vs-design.md` F-8. `end turn` still silently leaves
 > `current_player = None`.
 
@@ -253,11 +253,11 @@ pending-resume state match, and the setup-`Any` guard.
 > `step()`'s setup-`Any` guard (`crates/engine/src/interpreter/mod.rs:155-161`) checks
 > `crate::quantifier::setup_contains_any(setup)` for any `Payload::Action(GameRule::SetUp {
 > setup })` edge. If any element collection is `Aggregate { Quantifier::Any }`, `step()` returns
-> `StepResult::Error("quantifier 'any' is not supported in setup rules")` *before* calling
+> `StepResult::Error(EngineError::AnyInSetupRule)` *before* calling
 > `execute_edge` — no `GameData` mutation occurs. `Quantifier::All` in setup is supported
 > (it expands to all in-game players via `resolve_owner_to_names` →
 > `Evaluator::resolve_player_collection`, see I-10's setup note in
-> [`lifecycle.md`](./lifecycle.md) §2). See also the corresponding error-string entry in
+> [`lifecycle.md`](./lifecycle.md) §2). See also the corresponding error-variant entry in
 > [`error-handling.md`](./error-handling.md).
 
 > **I-21 — Stale input on quantifier prompt mismatch is discarded.**

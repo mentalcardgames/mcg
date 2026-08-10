@@ -1,4 +1,5 @@
 use super::Evaluator;
+use crate::error::EngineError;
 use crate::game_data::{GameData, MemoryValue};
 use front_end::ast::{
     AggregateFilter, CardPosition, CardSet, Extrema, FilterExpr, Group, Groupable,
@@ -9,7 +10,7 @@ impl Evaluator {
     pub fn eval_cardset(
         expr: &CardSet,
         game_data: &GameData,
-    ) -> Result<(usize, Vec<usize>), String> {
+    ) -> Result<(usize, Vec<usize>), EngineError> {
         match expr {
             CardSet::Group { group } => Self::eval_group(group, game_data),
             CardSet::GroupOwner { group, owner } => {
@@ -20,10 +21,12 @@ impl Evaluator {
                 // multiple players own locations with the same name (e.g.
                 // P1:Hand, P2:Hand, P3:Hand).
                 if let Some(name) = Self::group_location_name(group) {
-                    let owned_loc = Self::find_owned_location(&owner_name, name, game_data)
-                        .ok_or_else(|| {
-                            format!("Location {} not found for owner {}", name, owner_name)
-                        })?;
+                    let owned_loc = Self::find_owned_location(&owner_name, name, game_data).ok_or(
+                        EngineError::LocationNotFoundForOwner {
+                            name: name.to_string(),
+                            owner: owner_name.clone(),
+                        },
+                    )?;
                     return Ok((owned_loc, game_data.locations[owned_loc].cards.clone()));
                 }
                 // For filtered groups (where/combo/not-combo) whose base
@@ -47,7 +50,9 @@ impl Evaluator {
                                 .iter()
                                 .find(|c| c.name == *combo)
                                 .map(|c| c.filter.clone())
-                                .ok_or(format!("Combo {} not found", combo))?;
+                                .ok_or(EngineError::ComboNotFound {
+                                    name: combo.clone(),
+                                })?;
                             (
                                 base_idx,
                                 Self::apply_filter(&combo_filter, &base_cards, game_data)?,
@@ -59,7 +64,9 @@ impl Evaluator {
                                 .iter()
                                 .find(|c| c.name == *combo)
                                 .map(|c| c.filter.clone())
-                                .ok_or(format!("Combo {} not found", combo))?;
+                                .ok_or(EngineError::ComboNotFound {
+                                    name: combo.clone(),
+                                })?;
                             let matched =
                                 Self::apply_filter(&combo_filter, &base_cards, game_data)?;
                             let filtered: Vec<usize> = base_cards
@@ -119,8 +126,8 @@ impl Evaluator {
                         }
                         Ok((0, card_ids.clone()))
                     }
-                    Some(_) => Err("Memory value is not a CardSet".to_string()),
-                    None => Err(format!("Memory {} not found", key)),
+                    Some(_) => Err(EngineError::MemoryNotCardSet),
+                    None => Err(EngineError::MemoryNotFound { key }),
                 }
             }
         }
@@ -204,7 +211,7 @@ impl Evaluator {
         game_data.locations.iter().position(|l| l.name == name)
     }
 
-    fn eval_group(group: &Group, game_data: &GameData) -> Result<(usize, Vec<usize>), String> {
+    fn eval_group(group: &Group, game_data: &GameData) -> Result<(usize, Vec<usize>), EngineError> {
         match group {
             Group::Groupable { groupable } => Self::eval_groupable(groupable, game_data),
             Group::Where { groupable, filter } => {
@@ -228,7 +235,9 @@ impl Evaluator {
                     .iter()
                     .find(|c| c.name == *combo)
                     .map(|c| c.filter.clone())
-                    .ok_or(format!("Combo {} not found", combo))?;
+                    .ok_or(EngineError::ComboNotFound {
+                        name: combo.clone(),
+                    })?;
                 let matched = Self::apply_filter(&combo_filter, &card_ids, game_data)?;
                 let filtered: Vec<usize> = card_ids
                     .into_iter()
@@ -243,7 +252,9 @@ impl Evaluator {
                     .iter()
                     .find(|c| c.name == *combo)
                     .map(|c| c.filter.clone())
-                    .ok_or(format!("Combo {} not found", combo))?;
+                    .ok_or(EngineError::ComboNotFound {
+                        name: combo.clone(),
+                    })?;
                 // Combo filters are evaluated group-wise (like `where`), not
                 // per-card: `same Rank`/`distinct Suit`/`size` all need the
                 // group context (engine-vs-design.md D-5).
@@ -267,13 +278,15 @@ impl Evaluator {
                             Err(_) => Ok((loc_idx, vec![])),
                         }
                     } else {
-                        Err(format!("Location '{}' not found for card position", name))
+                        Err(EngineError::LocationNotFoundForCardPosition {
+                            name: name.to_string(),
+                        })
                     }
                 } else {
                     let card_id = Self::eval_card_position(card_position, game_data)?;
                     match game_data.find_location_of_card(card_id) {
                         Some(loc_idx) => Ok((loc_idx, vec![card_id])),
-                        None => Err("Card position not found in any location".to_string()),
+                        None => Err(EngineError::CardPositionNotFound),
                     }
                 }
             }
@@ -283,11 +296,11 @@ impl Evaluator {
     fn eval_groupable(
         groupable: &Groupable,
         game_data: &GameData,
-    ) -> Result<(usize, Vec<usize>), String> {
+    ) -> Result<(usize, Vec<usize>), EngineError> {
         match groupable {
             Groupable::Location { name } => {
                 let loc_idx = Self::resolve_location_by_name(name, game_data)
-                    .ok_or_else(|| format!("Location {} not found", name))?;
+                    .ok_or(EngineError::LocationNotFound { name: name.clone() })?;
                 let card_ids = game_data
                     .locations
                     .get(loc_idx)
@@ -327,7 +340,7 @@ impl Evaluator {
         filter: &FilterExpr,
         card_ids: &[usize],
         game_data: &GameData,
-    ) -> Result<Vec<usize>, String> {
+    ) -> Result<Vec<usize>, EngineError> {
         Self::apply_filter(filter, card_ids, game_data)
     }
 
@@ -335,7 +348,7 @@ impl Evaluator {
         filter: &FilterExpr,
         card_ids: &[usize],
         game_data: &GameData,
-    ) -> Result<Vec<usize>, String> {
+    ) -> Result<Vec<usize>, EngineError> {
         match filter {
             FilterExpr::Aggregate { aggregate } => match aggregate {
                 AggregateFilter::Size { cmp, int_expr } => {
@@ -388,7 +401,9 @@ impl Evaluator {
                         .precedences
                         .iter()
                         .find(|p| p.name == *precedence)
-                        .ok_or(format!("Precedence {} not found", precedence))?;
+                        .ok_or(EngineError::PrecedenceNotFound {
+                            name: precedence.clone(),
+                        })?;
                     let mut cards_with_values: Vec<(usize, i32, String)> = vec![];
                     for &card_id in card_ids {
                         if let Some(card) = game_data.get_card(card_id) {
@@ -424,16 +439,16 @@ impl Evaluator {
                         .precedences
                         .iter()
                         .find(|p| p.name == *precedence)
-                        .ok_or(format!("Precedence {} not found", precedence))?;
+                        .ok_or(EngineError::PrecedenceNotFound {
+                            name: precedence.clone(),
+                        })?;
                     let target_value = Self::eval_string(value, game_data)?;
-                    let target_idx =
-                        prec.values
-                            .iter()
-                            .position(|v| v == &target_value)
-                            .ok_or(format!(
-                                "Value {} not found in precedence {}",
-                                target_value, precedence
-                            ))?;
+                    let target_idx = prec.values.iter().position(|v| v == &target_value).ok_or(
+                        EngineError::ValueNotFoundInPrecedence {
+                            value: target_value,
+                            precedence: precedence.clone(),
+                        },
+                    )?;
                     let mut result = vec![];
                     for &card_id in card_ids {
                         if let Some(card) = game_data.get_card(card_id) {
@@ -458,16 +473,16 @@ impl Evaluator {
                         .precedences
                         .iter()
                         .find(|p| p.name == *precedence)
-                        .ok_or(format!("Precedence {} not found", precedence))?;
+                        .ok_or(EngineError::PrecedenceNotFound {
+                            name: precedence.clone(),
+                        })?;
                     let target_value = Self::eval_string(value, game_data)?;
-                    let target_idx =
-                        prec.values
-                            .iter()
-                            .position(|v| v == &target_value)
-                            .ok_or(format!(
-                                "Value {} not found in precedence {}",
-                                target_value, precedence
-                            ))?;
+                    let target_idx = prec.values.iter().position(|v| v == &target_value).ok_or(
+                        EngineError::ValueNotFoundInPrecedence {
+                            value: target_value,
+                            precedence: precedence.clone(),
+                        },
+                    )?;
                     let mut result = vec![];
                     for &card_id in card_ids {
                         if let Some(card) = game_data.get_card(card_id) {
@@ -519,7 +534,9 @@ impl Evaluator {
                         .iter()
                         .find(|c| c.name == *combo)
                         .map(|c| c.filter.clone())
-                        .ok_or(format!("Combo {} not found", combo))?;
+                        .ok_or(EngineError::ComboNotFound {
+                            name: combo.clone(),
+                        })?;
                     // Group-wise, like `where` (D-5): the combo's filter is
                     // applied to the current set, not per card.
                     Self::apply_filter(&combo_filter, card_ids, game_data)
@@ -530,7 +547,9 @@ impl Evaluator {
                         .iter()
                         .find(|c| c.name == *combo)
                         .map(|c| c.filter.clone())
-                        .ok_or(format!("Combo {} not found", combo))?;
+                        .ok_or(EngineError::ComboNotFound {
+                            name: combo.clone(),
+                        })?;
                     let matched = Self::apply_filter(&combo_filter, card_ids, game_data)?;
                     let result: Vec<usize> = card_ids
                         .iter()
@@ -576,7 +595,7 @@ impl Evaluator {
     fn infer_location_from_cards(
         card_ids: &[usize],
         game_data: &GameData,
-    ) -> Result<usize, String> {
+    ) -> Result<usize, EngineError> {
         for (loc_idx, loc) in game_data.locations.iter().enumerate() {
             if card_ids.iter().all(|&id| loc.cards.contains(&id)) {
                 return Ok(loc_idx);
@@ -592,38 +611,57 @@ impl Evaluator {
         Ok(0)
     }
 
-    pub fn eval_card_position(expr: &CardPosition, game_data: &GameData) -> Result<usize, String> {
+    pub fn eval_card_position(
+        expr: &CardPosition,
+        game_data: &GameData,
+    ) -> Result<usize, EngineError> {
         match expr {
             CardPosition::Query { query } => match query {
                 QueryCardPosition::At { location, int_expr } => {
-                    let loc_idx = Self::resolve_location_by_name(location, game_data)
-                        .ok_or_else(|| format!("Location {} not found", location))?;
+                    let loc_idx = Self::resolve_location_by_name(location, game_data).ok_or(
+                        EngineError::LocationNotFound {
+                            name: location.clone(),
+                        },
+                    )?;
                     let idx = Self::eval_int(int_expr, game_data)? as usize;
                     let card_id = *game_data
                         .locations
                         .get(loc_idx)
                         .and_then(|l| l.cards.get(idx))
-                        .ok_or(format!("No card at index {} in location {}", idx, location))?;
+                        .ok_or(EngineError::CardAtIndexNotFound {
+                            idx,
+                            location: location.clone(),
+                        })?;
                     Ok(card_id)
                 }
                 QueryCardPosition::Top { location } => {
-                    let loc_idx = Self::resolve_location_by_name(location, game_data)
-                        .ok_or_else(|| format!("Location {} not found", location))?;
+                    let loc_idx = Self::resolve_location_by_name(location, game_data).ok_or(
+                        EngineError::LocationNotFound {
+                            name: location.clone(),
+                        },
+                    )?;
                     let card_id = *game_data
                         .locations
                         .get(loc_idx)
                         .and_then(|l| l.cards.first())
-                        .ok_or(format!("No card at top of location {}", location))?;
+                        .ok_or(EngineError::CardAtTopNotFound {
+                            location: location.clone(),
+                        })?;
                     Ok(card_id)
                 }
                 QueryCardPosition::Bottom { location } => {
-                    let loc_idx = Self::resolve_location_by_name(location, game_data)
-                        .ok_or_else(|| format!("Location {} not found", location))?;
+                    let loc_idx = Self::resolve_location_by_name(location, game_data).ok_or(
+                        EngineError::LocationNotFound {
+                            name: location.clone(),
+                        },
+                    )?;
                     let card_id = *game_data
                         .locations
                         .get(loc_idx)
                         .and_then(|l| l.cards.last())
-                        .ok_or(format!("No card at bottom of location {}", location))?;
+                        .ok_or(EngineError::CardAtBottomNotFound {
+                            location: location.clone(),
+                        })?;
                     Ok(card_id)
                 }
             },
@@ -638,7 +676,9 @@ impl Evaluator {
                         .point_maps
                         .iter()
                         .find(|pm| pm.name == *pointmap)
-                        .ok_or(format!("PointMap {} not found", pointmap))?;
+                        .ok_or(EngineError::PointMapNotFound {
+                            name: pointmap.clone(),
+                        })?;
                     let mut best_card_id = None;
                     let mut best_value = None;
                     for &card_id in &card_ids {
@@ -671,7 +711,7 @@ impl Evaluator {
                             }
                         }
                     }
-                    best_card_id.ok_or("No card found for ExtremaPointMap".to_string())
+                    best_card_id.ok_or(EngineError::NoCardForExtremaPointMap)
                 }
                 front_end::ast::AggregateCardPosition::ExtremaPrecedence {
                     extrema,
@@ -683,7 +723,9 @@ impl Evaluator {
                         .precedences
                         .iter()
                         .find(|p| p.name == *precedence)
-                        .ok_or(format!("Precedence {} not found", precedence))?;
+                        .ok_or(EngineError::PrecedenceNotFound {
+                            name: precedence.clone(),
+                        })?;
                     let mut best_card_id = None;
                     let mut best_idx = None;
                     for &card_id in &card_ids {
@@ -712,7 +754,7 @@ impl Evaluator {
                             }
                         }
                     }
-                    best_card_id.ok_or("No card found for ExtremaPrecedence".to_string())
+                    best_card_id.ok_or(EngineError::NoCardForExtremaPrecedence)
                 }
             },
         }

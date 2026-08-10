@@ -446,7 +446,7 @@ fn setup_location_any_returns_error() {
     match result {
         Err(e) => {
             assert!(
-                e.contains("not supported in setup rules"),
+                e.to_string().contains("not supported in setup rules"),
                 "error message should mention 'not supported in setup rules', got: {e}"
             );
         }

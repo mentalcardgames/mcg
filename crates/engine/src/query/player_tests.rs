@@ -7,7 +7,7 @@ use front_end::ast::{
 };
 use std::collections::HashMap;
 
-// ── P-1 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_literal() {
@@ -15,10 +15,13 @@ fn eval_player_literal() {
     let expr = PlayerExpr::Literal {
         name: "P1".to_string(),
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P1".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P1".to_string()
+    );
 }
 
-// ── P-2 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_runtime_current_set() {
@@ -29,7 +32,10 @@ fn eval_player_runtime_current_set() {
     let expr = PlayerExpr::Runtime {
         runtime: RuntimePlayer::Current,
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P1".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P1".to_string()
+    );
 }
 
 #[test]
@@ -39,12 +45,12 @@ fn eval_player_runtime_current_unset() {
         runtime: RuntimePlayer::Current,
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("No current player".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "No current player".to_string()
     );
 }
 
-// ── P-3 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-3 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_runtime_next_eligible() {
@@ -57,7 +63,10 @@ fn eval_player_runtime_next_eligible() {
     let expr = PlayerExpr::Runtime {
         runtime: RuntimePlayer::Next,
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P2".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P2".to_string()
+    );
 }
 
 #[test]
@@ -72,12 +81,12 @@ fn eval_player_runtime_next_none() {
         runtime: RuntimePlayer::Next,
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("No next player available".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "No next player available".to_string()
     );
 }
 
-// ── P-4 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-4 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_runtime_previous_wraps() {
@@ -89,7 +98,10 @@ fn eval_player_runtime_previous_wraps() {
     let expr = PlayerExpr::Runtime {
         runtime: RuntimePlayer::Previous,
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P2".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P2".to_string()
+    );
 }
 
 #[test]
@@ -103,12 +115,12 @@ fn eval_player_runtime_previous_missing() {
         runtime: RuntimePlayer::Previous,
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("Previous player not found".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "Previous player not found".to_string()
     );
 }
 
-// ── P-5 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-5 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_runtime_competitor_teammate() {
@@ -124,7 +136,10 @@ fn eval_player_runtime_competitor_teammate() {
     let expr = PlayerExpr::Runtime {
         runtime: RuntimePlayer::Competitor,
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P2".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P2".to_string()
+    );
 }
 
 #[test]
@@ -137,12 +152,12 @@ fn eval_player_runtime_competitor_lone() {
         runtime: RuntimePlayer::Competitor,
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("No competitor found".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "No competitor found".to_string()
     );
 }
 
-// ── P-6 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-6 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_aggregate_owner_of_card_position() {
@@ -167,7 +182,10 @@ fn eval_player_aggregate_owner_of_card_position() {
             }),
         },
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P1".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P1".to_string()
+    );
 }
 
 #[test]
@@ -184,12 +202,12 @@ fn eval_player_aggregate_owner_of_card_position_not_found() {
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("Location Hand not found".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "Location Hand not found".to_string()
     );
 }
 
-// ── P-7 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-7 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_aggregate_owner_of_memory_max() {
@@ -207,7 +225,10 @@ fn eval_player_aggregate_owner_of_memory_max() {
             memory: "score".to_string(),
         },
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P1".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P1".to_string()
+    );
 }
 
 #[test]
@@ -226,7 +247,10 @@ fn eval_player_aggregate_owner_of_memory_min() {
             memory: "score".to_string(),
         },
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P2".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P2".to_string()
+    );
 }
 
 #[test]
@@ -242,12 +266,12 @@ fn eval_player_aggregate_owner_of_memory_none() {
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("No player found for OwnerOfMemory".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "No player found for OwnerOfMemory".to_string()
     );
 }
 
-// ── P-8 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-8 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_query_turnorder_at_in_range() {
@@ -260,7 +284,10 @@ fn eval_player_query_turnorder_at_in_range() {
             int: IntExpr::Literal { int: 0 },
         },
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P1".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P1".to_string()
+    );
 }
 
 #[test]
@@ -274,12 +301,12 @@ fn eval_player_query_turnorder_at_out_of_range() {
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("No player at turn order index 99".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "No player at turn order index 99".to_string()
     );
 }
 
-// ── P-9 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-9 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_query_collection_at_in_range() {
@@ -302,7 +329,10 @@ fn eval_player_query_collection_at_in_range() {
             int: IntExpr::Literal { int: 0 },
         },
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P1".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P1".to_string()
+    );
 }
 
 #[test]
@@ -321,12 +351,12 @@ fn eval_player_query_collection_at_out_of_range() {
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("No player at index 99 in player collection".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "No player at index 99 in player collection".to_string()
     );
 }
 
-// ── P-10 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-10 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_memory_string() {
@@ -341,7 +371,10 @@ fn eval_player_memory_string() {
             owner: Box::new(SingleOwner::Table),
         },
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("Alice".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "Alice".to_string()
+    );
 }
 
 #[test]
@@ -358,7 +391,10 @@ fn eval_player_memory_player_collection() {
             owner: Box::new(SingleOwner::Table),
         },
     };
-    assert_eq!(Evaluator::eval_player(&expr, &gd), Ok("P1".to_string()));
+    assert_eq!(
+        Evaluator::eval_player(&expr, &gd).unwrap(),
+        "P1".to_string()
+    );
 }
 
 #[test]
@@ -375,8 +411,8 @@ fn eval_player_memory_empty() {
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("PlayerCollection memory is empty".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "PlayerCollection memory is empty".to_string()
     );
 }
 
@@ -392,8 +428,8 @@ fn eval_player_memory_wrong_type() {
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("Memory value is not a valid player".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "Memory value is not a valid player".to_string()
     );
 }
 
@@ -407,8 +443,8 @@ fn eval_player_memory_missing() {
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("Memory Table_ghost not found".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "Memory Table_ghost not found".to_string()
     );
 }
 
@@ -421,12 +457,12 @@ fn eval_player_memory_no_owner_error() {
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "memory access requires an explicit owner; use &M:M of <owner>".to_string()
     );
 }
 
-// ── P-11 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-11 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_i2_empty_turn_order_safe() {
@@ -435,12 +471,12 @@ fn eval_player_i2_empty_turn_order_safe() {
         runtime: RuntimePlayer::Current,
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("No current player".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "No current player".to_string()
     );
 }
 
-// ── P-12 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-12 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_player_i10_player_memory_mismatched_init() {
@@ -461,12 +497,12 @@ fn eval_player_i10_player_memory_mismatched_init() {
         },
     };
     assert_eq!(
-        Evaluator::eval_player(&expr, &gd),
-        Err("Memory value is not a valid player".to_string())
+        Evaluator::eval_player(&expr, &gd).unwrap_err().to_string(),
+        "Memory value is not a valid player".to_string()
     );
 }
 
-// ── P-13 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-13 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_team_literal() {
@@ -474,10 +510,10 @@ fn eval_team_literal() {
     let expr = TeamExpr::Literal {
         name: "T1".to_string(),
     };
-    assert_eq!(Evaluator::eval_team(&expr, &gd), Ok("T1".to_string()));
+    assert_eq!(Evaluator::eval_team(&expr, &gd).unwrap(), "T1".to_string());
 }
 
-// ── P-14 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-14 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_team_aggregate_team_of_present() {
@@ -495,7 +531,7 @@ fn eval_team_aggregate_team_of_present() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_team(&expr, &gd), Ok("Red".to_string()));
+    assert_eq!(Evaluator::eval_team(&expr, &gd).unwrap(), "Red".to_string());
 }
 
 #[test]
@@ -509,12 +545,12 @@ fn eval_team_aggregate_team_of_absent() {
         },
     };
     assert_eq!(
-        Evaluator::eval_team(&expr, &gd),
-        Err("Player P1 not found in any team".to_string())
+        Evaluator::eval_team(&expr, &gd).unwrap_err().to_string(),
+        "Player P1 not found in any team".to_string()
     );
 }
 
-// ── P-15 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-15 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn eval_team_memory_team() {
@@ -527,7 +563,7 @@ fn eval_team_memory_team() {
             owner: Box::new(SingleOwner::Table),
         },
     };
-    assert_eq!(Evaluator::eval_team(&expr, &gd), Ok("Red".to_string()));
+    assert_eq!(Evaluator::eval_team(&expr, &gd).unwrap(), "Red".to_string());
 }
 
 #[test]
@@ -542,8 +578,8 @@ fn eval_team_memory_wrong_type() {
         },
     };
     assert_eq!(
-        Evaluator::eval_team(&expr, &gd),
-        Err("Memory value is not a Team".to_string())
+        Evaluator::eval_team(&expr, &gd).unwrap_err().to_string(),
+        "Memory value is not a Team".to_string()
     );
 }
 
@@ -557,8 +593,8 @@ fn eval_team_memory_missing() {
         },
     };
     assert_eq!(
-        Evaluator::eval_team(&expr, &gd),
-        Err("Memory Table_ghost not found".to_string())
+        Evaluator::eval_team(&expr, &gd).unwrap_err().to_string(),
+        "Memory Table_ghost not found".to_string()
     );
 }
 
@@ -571,12 +607,12 @@ fn eval_team_memory_no_owner_error() {
         },
     };
     assert_eq!(
-        Evaluator::eval_team(&expr, &gd),
-        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
+        Evaluator::eval_team(&expr, &gd).unwrap_err().to_string(),
+        "memory access requires an explicit owner; use &M:M of <owner>".to_string()
     );
 }
 
-// ── P-16 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-16 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_players_single_player() {
@@ -589,7 +625,7 @@ fn resolve_players_single_player() {
             name: "P1".to_string(),
         },
     };
-    assert_eq!(Evaluator::resolve_players(&players, &gd), Ok(vec![p0]));
+    assert_eq!(Evaluator::resolve_players(&players, &gd).unwrap(), vec![p0]);
 }
 
 #[test]
@@ -611,10 +647,13 @@ fn resolve_players_player_collection_literal() {
     let players = Players::PlayerCollection {
         player_collection: pc,
     };
-    assert_eq!(Evaluator::resolve_players(&players, &gd), Ok(vec![p0, p1]));
+    assert_eq!(
+        Evaluator::resolve_players(&players, &gd).unwrap(),
+        vec![p0, p1]
+    );
 }
 
-// ── P-17 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-17 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_players_eval_failure_errors() {
@@ -626,12 +665,14 @@ fn resolve_players_eval_failure_errors() {
         },
     };
     assert_eq!(
-        Evaluator::resolve_players(&players, &gd),
-        Err("No current player".to_string())
+        Evaluator::resolve_players(&players, &gd)
+            .unwrap_err()
+            .to_string(),
+        "No current player".to_string()
     );
 }
 
-// ── P-18 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-18 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_players_player_not_in_gamedata_errors() {
@@ -644,12 +685,14 @@ fn resolve_players_player_not_in_gamedata_errors() {
         },
     };
     assert_eq!(
-        Evaluator::resolve_players(&players, &gd),
-        Err("resolve_players: player Ghost not found in game_data".to_string())
+        Evaluator::resolve_players(&players, &gd)
+            .unwrap_err()
+            .to_string(),
+        "resolve_players: player Ghost not found in game_data".to_string()
     );
 }
 
-// ── P-19 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-19 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_player_collection_literal_happy() {
@@ -668,12 +711,12 @@ fn resolve_player_collection_literal_happy() {
         ],
     };
     assert_eq!(
-        Evaluator::resolve_player_collection(&pc, &gd),
-        Ok(vec![p0, p1])
+        Evaluator::resolve_player_collection(&pc, &gd).unwrap(),
+        vec![p0, p1]
     );
 }
 
-// ── P-20 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-20 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_player_collection_literal_eval_failure_errors() {
@@ -684,8 +727,10 @@ fn resolve_player_collection_literal_eval_failure_errors() {
         }],
     };
     assert_eq!(
-        Evaluator::resolve_player_collection(&pc, &gd),
-        Err("No current player".to_string())
+        Evaluator::resolve_player_collection(&pc, &gd)
+            .unwrap_err()
+            .to_string(),
+        "No current player".to_string()
     );
 }
 
@@ -700,12 +745,14 @@ fn resolve_player_collection_literal_unknown_name_errors() {
         }],
     };
     assert_eq!(
-        Evaluator::resolve_player_collection(&pc, &gd),
-        Err("resolve_player_collection: player Ghost not found in game_data".to_string())
+        Evaluator::resolve_player_collection(&pc, &gd)
+            .unwrap_err()
+            .to_string(),
+        "resolve_player_collection: player Ghost not found in game_data".to_string()
     );
 }
 
-// ── P-21 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-21 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_player_collection_runtime_players_out() {
@@ -717,7 +764,10 @@ fn resolve_player_collection_runtime_players_out() {
     let pc = PlayerCollection::Runtime {
         runtime: RuntimePlayerCollection::PlayersOut,
     };
-    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p0]));
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd).unwrap(),
+        vec![p0]
+    );
 }
 
 #[test]
@@ -730,7 +780,10 @@ fn resolve_player_collection_runtime_players_in() {
     let pc = PlayerCollection::Runtime {
         runtime: RuntimePlayerCollection::PlayersIn,
     };
-    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p1]));
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd).unwrap(),
+        vec![p1]
+    );
 }
 
 #[test]
@@ -745,10 +798,13 @@ fn resolve_player_collection_runtime_others() {
     let pc = PlayerCollection::Runtime {
         runtime: RuntimePlayerCollection::Others,
     };
-    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p1]));
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd).unwrap(),
+        vec![p1]
+    );
 }
 
-// ── P-22 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-22 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_player_collection_aggregate_memory() {
@@ -770,8 +826,8 @@ fn resolve_player_collection_aggregate_memory() {
     };
     // Implemented 2026-08: aggregates the slot across every owner.
     assert_eq!(
-        Evaluator::resolve_player_collection(&pc, &gd),
-        Ok(vec![p1, p0])
+        Evaluator::resolve_player_collection(&pc, &gd).unwrap(),
+        vec![p1, p0]
     );
 }
 
@@ -790,7 +846,10 @@ fn resolve_player_collection_memory_reads_slot() {
             owner: Box::new(front_end::ast::Owner::Table),
         },
     };
-    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p0]));
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd).unwrap(),
+        vec![p0]
+    );
 }
 
 #[test]
@@ -803,12 +862,14 @@ fn resolve_player_collection_memory_missing_errors() {
         },
     };
     assert_eq!(
-        Evaluator::resolve_player_collection(&pc, &gd),
-        Err("Memory Table_m not found".to_string())
+        Evaluator::resolve_player_collection(&pc, &gd)
+            .unwrap_err()
+            .to_string(),
+        "Memory Table_m not found".to_string()
     );
 }
 
-// ── P-23 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-23 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_player_collection_aggregate_returns_in_game() {
@@ -823,10 +884,13 @@ fn resolve_player_collection_aggregate_returns_in_game() {
         },
     };
     // Implemented 2026-08: `all`/`any` resolve to in-game players.
-    assert_eq!(Evaluator::resolve_player_collection(&pc, &gd), Ok(vec![p0]));
+    assert_eq!(
+        Evaluator::resolve_player_collection(&pc, &gd).unwrap(),
+        vec![p0]
+    );
 }
 
-// ── P-24 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-24 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_owner_to_name_player() {
@@ -839,8 +903,8 @@ fn resolve_owner_to_name_player() {
         },
     };
     assert_eq!(
-        Evaluator::resolve_owner_to_name(&owner, &gd),
-        Ok("P1".to_string())
+        Evaluator::resolve_owner_to_name(&owner, &gd).unwrap(),
+        "P1".to_string()
     );
 }
 
@@ -853,8 +917,8 @@ fn resolve_owner_to_name_team() {
         },
     };
     assert_eq!(
-        Evaluator::resolve_owner_to_name(&owner, &gd),
-        Ok("Red".to_string())
+        Evaluator::resolve_owner_to_name(&owner, &gd).unwrap(),
+        "Red".to_string()
     );
 }
 
@@ -863,8 +927,8 @@ fn resolve_owner_to_name_table() {
     let gd = GameData::new();
     let owner = Owner::Table;
     assert_eq!(
-        Evaluator::resolve_owner_to_name(&owner, &gd),
-        Ok("Table".to_string())
+        Evaluator::resolve_owner_to_name(&owner, &gd).unwrap(),
+        "Table".to_string()
     );
 }
 
@@ -879,8 +943,10 @@ fn resolve_owner_to_name_player_collection_err() {
         },
     };
     assert_eq!(
-        Evaluator::resolve_owner_to_name(&owner, &gd),
-        Err("resolve_owner_to_name: PlayerCollection cannot resolve to a single name".to_string())
+        Evaluator::resolve_owner_to_name(&owner, &gd)
+            .unwrap_err()
+            .to_string(),
+        "resolve_owner_to_name: PlayerCollection cannot resolve to a single name".to_string()
     );
 }
 
@@ -891,12 +957,14 @@ fn resolve_owner_to_name_team_collection_err() {
         team_collection: TeamCollection::Literal { teams: vec![] },
     };
     assert_eq!(
-        Evaluator::resolve_owner_to_name(&owner, &gd),
-        Err("resolve_owner_to_name: TeamCollection cannot resolve to a single name".to_string())
+        Evaluator::resolve_owner_to_name(&owner, &gd)
+            .unwrap_err()
+            .to_string(),
+        "resolve_owner_to_name: TeamCollection cannot resolve to a single name".to_string()
     );
 }
 
-// ── P-25 ────────────────────────────────────────────────────────────────
+// â”€â”€ P-25 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 #[test]
 fn resolve_owner_to_names_player_collection_all() {
@@ -927,10 +995,7 @@ fn resolve_owner_to_names_team_err() {
             name: "Red".to_string(),
         },
     };
-    assert_eq!(
-        Evaluator::resolve_owner_to_names(&owner, &gd),
-        Err("resolve_owner_to_names: team 'Red' cannot own a location or memory (team-owned locations are not in the data model)".to_string())
-    );
+    assert_eq!(Evaluator::resolve_owner_to_names(&owner, &gd).unwrap_err().to_string(), "resolve_owner_to_names: team 'Red' cannot own a location or memory (team-owned locations are not in the data model)".to_string());
 }
 
 #[test]
@@ -940,7 +1005,9 @@ fn resolve_owner_to_names_team_collection_err() {
         team_collection: TeamCollection::Literal { teams: vec![] },
     };
     assert_eq!(
-        Evaluator::resolve_owner_to_names(&owner, &gd),
-        Err("resolve_owner_to_names: TeamCollection cannot resolve to owner names".to_string())
+        Evaluator::resolve_owner_to_names(&owner, &gd)
+            .unwrap_err()
+            .to_string(),
+        "resolve_owner_to_names: TeamCollection cannot resolve to owner names".to_string()
     );
 }

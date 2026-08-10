@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all — crate-level overview]
 topics: [overview, architecture, module-map, domain-concepts, entry-point]
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # CGDSL Engine — Overview
@@ -80,14 +80,15 @@ This crate is part of a larger workspace. Other crates you may need:
 
 ```
 crates/engine/src/
-├── lib.rs                         — crate root; re-exports public API
-├── action.rs                      — execute() dispatch; all game state mutations
+├── lib.rs                     — crate root; re-exports public API
+├── action.rs                  — execute() dispatch; all game state mutations
 ├── action_tests.rs
 ├── controller/
-│   ├── mod.rs                     — run_game(), Controller, InputSource, validation
-│   ├── tests.rs                   — input parsing, integration tests
-│   └── trace_logger.rs            — MCG_TRACE_LOG file logger
-├── game_data.rs                   — GameData, Player, Location, MemoryValue, etc.
+│   ├── mod.rs                 — run_game(), Controller, InputSource, validation
+│   ├── tests.rs               — input parsing, integration tests
+│   └── trace_logger.rs        — MCG_TRACE_LOG file logger
+├── error.rs                   — EngineError enum (thiserror); single error type for the crate
+├── game_data.rs               — GameData, Player, Location, MemoryValue, etc.
 ├── game_data_tests.rs
 ├── interpreter/
 │   ├── mod.rs                     — Interpreter::step(), provide_input()

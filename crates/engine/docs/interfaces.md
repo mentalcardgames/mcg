@@ -10,7 +10,7 @@ associated_files:
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/interpreter/types.rs
   - crates/engine/src/game_data.rs
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # Public Interfaces — the External Host Contract
@@ -31,12 +31,13 @@ constructs it. Hosts integrate either by handing a closure to `run_game` (Mode A
 
 ## §1. Public API Inventory
 
-This section inventories every symbol re-exported by `crates/engine/src/lib.rs:9-13`:
+This section inventories every symbol re-exported by `crates/engine/src/lib.rs:9-16`:
 
 ```rust
-// crates/engine/src/lib.rs:9-13
+// crates/engine/src/lib.rs:9-16
 pub use controller::{run_game, InputSource};
 pub use debug::{format_game_data, save_game_data, DebugLevel};
+pub use error::EngineError;
 pub use game_data::{Card, Combo, GameData, Location, OwnerData, Player, PointMap, Precedence};
 pub use interpreter::{Input, InputType, Interpreter, IrExt, StepResult, TraceEntry, TraceEvent};
 pub use quantifier::{PendingKind, PendingQuant, QuantSite};
@@ -50,23 +51,24 @@ field-level layouts live in [`data-structures.md`](./data-structures.md) §1–�
 **`cgdsl_engine::run_game`** — drives the FSM to completion (Mode A entry point).
 
 ```rust
-// crates/engine/src/controller/mod.rs:31
+// crates/engine/src/controller/mod.rs:32
 pub fn run_game(
     ir: Ir<LoweredPayLoad>,
     game_data: GameData,
     input_source: InputSource,
     event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
     trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
-) -> Result<GameData, String>
+) -> Result<GameData, EngineError>
 ```
 
 Intent: blocks the calling thread, drives the FSM to `GameOver`/`Error`, returns a deep clone of
 the terminal state. The two `Option<Box<dyn Fn + Send>>` args compose with the optional
 `MCG_TRACE_LOG` file logger internally — see [`observability.md`](./observability.md) §3.1. For the
 run-loop sequencing see [`lifecycle.md`](./lifecycle.md); for thread-safety bounds see
-�6 §2. Invariants: I-2 (empty-state sentinel), I-4 (GameOver
-condition), I-15 (validation-loop spin), I-16 (synthetic-id seed). Error strings: see
-[`error-handling.md`](./error-handling.md) §2.
+§6 §2. Invariants: I-2 (empty-state sentinel), I-4 (GameOver
+condition), I-15 (validation-loop spin), I-16 (synthetic-id seed). The error type is
+`EngineError` (`crates/engine/src/error.rs`, re-exported from the crate root); the variant catalog
+and recoverability split: see [`error-handling.md`](./error-handling.md) §1.
 
 **`cgdsl_engine::InputSource`** — the single seam for external I/O supplied to `run_game`.
 
@@ -144,13 +146,13 @@ not a queue; the `validate_int_range` re-prompt path can re-push (see I-19).
 
 ```rust
 // crates/engine/src/interpreter/mod.rs
-pub fn execute_edge(&mut self, edge: Edge<LoweredPayLoad>) -> Result<(), String>
+pub fn execute_edge(&mut self, edge: Edge<LoweredPayLoad>) -> Result<(), EngineError>
 ```
 
 Intent: sets `current_state = edge.to` and calls
 `crate::action::execute(edge.payload, &mut self.game_data)`. Fallible since
 2026-08: action-evaluation failures (e.g. `cycle to next` with no eligible
-*other* player) surface as `Err(String)` instead of panicking. Exposed for
+*other* player) surface as `Err(EngineError)` instead of panicking. Exposed for
 quantifier-driver resume and tests; a UI host normally never calls this.
 
 **`cgdsl_engine::IrExt`** — the single `pub` trait (consumed, not implemented, by hosts).
@@ -267,7 +269,7 @@ read-only associated functions). It is included here because the plan groups re-
 by concern, but hosts wanting on-demand derived stats outside a running game reach for these
 methods (cross-reference: full method list in [`data-structures.md`](./data-structures.md) §3.5).
 
-All `eval_*`/`resolve_*` methods take `&GameData` and return `Result<_, String>` (or `Vec<usize>`
+All `eval_*`/`resolve_*` methods take `&GameData` and return `Result<_, EngineError>` (or `Vec<usize>`
 for the resolvers). The `pub` fns (verbatim from source):
 
 ```text
@@ -441,7 +443,7 @@ What a host receives:
 
 - **`Ok(GameData)`** — a deep clone of the terminal state. The clone is O(total state); see
   �6 §3 and the Mode B note in §6.
-- **`Err(String)`** — engine-level error; the engine does **not** roll back mutations already
+- **`Err(EngineError)`** — engine-level error; the engine does **not** roll back mutations already
   applied (see [`error-handling.md`](./error-handling.md) §2).
 - **During run: per-iteration `&GameData` snapshots** — via `event_sender` (see §5).
 - **During run: per-step `TraceEntry` events** — via `trace_sender` (see §5).
@@ -534,7 +536,7 @@ than re-prompting.
 ### §4.3 Closing the loop: how the UI knows when to stop
 
 - **`StepResult::GameOver`** — terminal; `interp.game_data` is the final state (no clone in Mode B).
-- **`StepResult::Error(String)`** — surface to the UI; the engine may be in a partially-mutated
+- **`StepResult::Error(EngineError)`** — surface to the UI; the engine may be in a partially-mutated
   state (no rollback — see [`error-handling.md`](./error-handling.md) §2). The host should not keep
   stepping after `Error`.
 
@@ -677,12 +679,12 @@ dedicated thread and communicate via channels.
 
 - **Library target:** `front_end` (IR/AST/lowering); `serde_json` (`alloc_synth`'s `StateID`
   construction — `serde` is not a direct dependency); `rand` (`ShuffleAction`,
-  `CreateTurnorderRandom`).
+  `CreateTurnorderRandom`); `thiserror` (the `EngineError` enum in `crates/engine/src/error.rs`).
 - **`engine-tui` binary:** `ratatui` + `crossterm` (terminal UI), `crossbeam-channel` (input
   loop).
 - **`cgdsl-play` binary:** no extra dependencies (auto-discovered; only `engine-tui` has an
   explicit `[[bin]]` entry).
-- Error handling is stringly-typed (`Result<_, String>`); no unused dependencies remain.
+- Error handling is enum-typed (`Result<_, EngineError>`); no unused dependencies remain.
 
 ---
 
@@ -806,7 +808,7 @@ let result = run_game(ir, GameData::new(), InputSource::TestFile(path), None, No
 assert!(result.is_ok());
 ```
 
-> **Signature:** `pub fn run_game(ir, game_data, input_source, event_sender, trace_sender) -> Result<GameData, String>`.
+> **Signature:** `pub fn run_game(ir, game_data, input_source, event_sender, trace_sender) -> Result<GameData, EngineError>`.
 > The two `Option<Box<dyn Fn + Send>>` arguments may be mixed freely; `run_game` composes them
 > with the optional `MCG_TRACE_LOG` file logger internally (see [`observability.md`](./observability.md) §3.1).
 

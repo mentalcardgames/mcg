@@ -3,7 +3,10 @@ use crate::game_data::GameData;
 use front_end::ast::{AggregateBool, BoolExpr, BoolOp, CompareBool, EndCondition, UnaryOp};
 
 impl Evaluator {
-    pub fn eval_bool(expr: &BoolExpr, game_data: &GameData) -> Result<bool, String> {
+    pub fn eval_bool(
+        expr: &BoolExpr,
+        game_data: &GameData,
+    ) -> Result<bool, crate::error::EngineError> {
         match expr {
             BoolExpr::Binary {
                 bool_expr,
@@ -35,7 +38,10 @@ impl Evaluator {
         }
     }
 
-    pub fn eval_aggregate(aggregate: &AggregateBool, game_data: &GameData) -> Result<bool, String> {
+    pub fn eval_aggregate(
+        aggregate: &AggregateBool,
+        game_data: &GameData,
+    ) -> Result<bool, crate::error::EngineError> {
         match aggregate {
             AggregateBool::Compare { cmp_bool } => Self::eval_compare(cmp_bool, game_data),
             AggregateBool::StringInCardSet { string, card_set } => {
@@ -105,7 +111,10 @@ impl Evaluator {
         }
     }
 
-    pub fn eval_compare(cmp_bool: &CompareBool, game_data: &GameData) -> Result<bool, String> {
+    pub fn eval_compare(
+        cmp_bool: &CompareBool,
+        game_data: &GameData,
+    ) -> Result<bool, crate::error::EngineError> {
         match cmp_bool {
             CompareBool::Int { int, cmp, int1 } => {
                 let left = Self::eval_int(int, game_data)?;
@@ -174,7 +183,7 @@ impl Evaluator {
         end_condition: &EndCondition,
         game_data: &GameData,
         stage_name: &str,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, crate::error::EngineError> {
         match end_condition {
             EndCondition::UntilEnd => Ok(false),
             EndCondition::UntilRep { reps } => {

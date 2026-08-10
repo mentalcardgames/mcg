@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all — design divergences and known bugs]
 topics: [divergences, known-bugs, design-gaps, demo-games, audit]
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # Engine vs. DSL Design — Divergence Report
@@ -34,7 +34,7 @@ last_validated: 2026-08-09
 | F-5 | `ShuffleAction` replaced the whole location with the evaluated set — `shuffle top 3 of Deck` discarded the rest of the pile | Selected cards shuffled in place; unselected untouched (`action.rs:192`) | `shuffle_test` |
 | F-6 | Three `debug` tests hard-coded Unix `/tmp/` paths — failed on Windows | `std::env::temp_dir()` (`debug/tests.rs`) | suite is green on Windows |
 | F-7 | `blackjack_runs_end_to_end` hung forever (input closure returned a wrong `player_id`; the controller's validation re-prompted infinitely, I-15/I-23) | Closure tracks the current player via `event_sender` | `flow_test` |
-| F-8 | **Panic table removed — `action::execute` is fallible.** `cycle to next` with no eligible *other* player (D-1), `SetMemory`/`ResetMemory` without a current player, `CycleAction` eval/player/turn-order failures, `CreateLocation`/`CreateMemory` owner resolution, `CreateCardOnLocation`, `CreatePointMap`, `Score`/`ScoreMemory` int eval, and all `execute_cardset_move` failure modes now return `StepResult::Error` instead of panicking. `Interpreter::execute_edge` returns `Result<(), String>`; `ShuffleAction` eval failures are errors (were `eprintln!` + continue). | `action.rs` (all arms), `interpreter/mod.rs` | `action_tests` (7 former `#[should_panic]` pins converted) + `errors_cycle_no_next.cgdsl` + `errors_set_memory_no_current.cgdsl` |
+| F-8 | **Panic table removed — `action::execute` is fallible.** `cycle to next` with no eligible *other* player (D-1), `SetMemory`/`ResetMemory` without a current player, `CycleAction` eval/player/turn-order failures, `CreateLocation`/`CreateMemory` owner resolution, `CreateCardOnLocation`, `CreatePointMap`, `Score`/`ScoreMemory` int eval, and all `execute_cardset_move` failure modes now return `StepResult::Error` instead of panicking. `Interpreter::execute_edge` returns `Result<(), EngineError>`; `ShuffleAction` eval failures are errors (were `eprintln!` + continue). | `action.rs` (all arms), `interpreter/mod.rs` | `action_tests` (7 former `#[should_panic]` pins converted) + `errors_cycle_no_next.cgdsl` + `errors_set_memory_no_current.cgdsl` |
 | F-9 | **`resolve_players` / `resolve_player_collection` are fallible.** Eval failures and unknown literal player names return `Err`; the `Aggregate` arm (previously `todo!()`) and the `AggregateMemory`/`Memory` arms (previously silent `vec![]`) are implemented. | `query/player.rs` | `player_tests` (converted panic pins, new aggregation tests) |
 | F-10 | **Combo per-card matching of `same`/`distinct`/`size` was wrong** (D-5): `Same` matched every card with the key, `Distinct` was inverted, `Size` always compared 1. Combos are now evaluated group-wise (like `where`); the broken per-card matcher is deleted. | `query/cardset.rs` | `fix_combo_same_rank.cgdsl` (pair = 2, not 3) |
 | F-11 | **Empty `where`-filtered sets resolved to location 0** (D-11): a move destination like `Second where Rank is "Ghost"` with no matches sent cards to the first location. `eval_group` now reports the base location of the groupable; `execute_cardset_move` no-ops on an empty source. | `query/cardset.rs`, `action.rs` | `fix_empty_where_dest.cgdsl` |

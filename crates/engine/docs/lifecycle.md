@@ -10,7 +10,7 @@ associated_files:
   - crates/engine/src/action.rs
   - crates/engine/src/game_data.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # Lifecycle & Runtime Sequencing
@@ -28,8 +28,8 @@ see [`invariants.md`](./invariants.md).
 the single entry point and the entire main loop. It is a plain synchronous `loop { … }`:
 
 ```rust
-// crates/engine/src/controller/mod.rs:151-169  (paraphrased for clarity; see source for exact lines)
-fn run(&mut self) -> Result<GameData, String> {
+// crates/engine/src/controller/mod.rs:152-170  (paraphrased for clarity; see source for exact lines)
+fn run(&mut self) -> Result<GameData, EngineError> {
     loop {
         self.emit_event();                                   // optional event_sender callback
         *self.step_count.lock().unwrap() += 1;               // shared with the trace file
@@ -43,7 +43,7 @@ fn run(&mut self) -> Result<GameData, String> {
                 self.emit_event();                             //   one final event
                 return Ok(self.interpreter.game_data.clone()); //   deep-clone terminal state
             }
-            StepResult::Error(e) => return Err(e),             // propagate error string
+            StepResult::Error(e) => return Err(e),             // propagate EngineError
         }
     }
 }
@@ -203,7 +203,7 @@ The pre-dispatch arms, in order:
 6. **Setup-`Any` guard** (`interpreter/mod.rs:155-161`). For a `Payload::Action` whose `GameRule`
    is `SetUp { setup }`, `step()` checks `crate::quantifier::setup_contains_any(setup)`. If any
    element collection of the setup uses `Quantifier::Any`, it returns
-   `StepResult::Error("quantifier 'any' is not supported in setup rules")` *before* calling
+   `StepResult::Error(EngineError::AnyInSetupRule)` *before* calling
    `execute_edge` — no `GameData` mutation occurs (invariant I-20). `Quantifier::All` in setup is
    supported and expands to all in-game players.
 
@@ -241,8 +241,8 @@ For each trace mention, see `TraceEvent` variant definitions in
   **full deep clone** of the terminal state. `GameOver` itself only fires when the current state
   has **no outgoing edges AND `current_state == ir.goal`** (I-4). If a trace log is open,
   `run_game` writes the `=== GameOver ===` footer (`controller/mod.rs:121-124`).
-- On `Error(String)`: `run()` returns `Err(String)`
-  (`crates/engine/src/controller/mod.rs:166`). The engine does **not** roll back mutations already
+- On `Error(EngineError)`: `run()` returns `Err(EngineError)`
+  (`crates/engine/src/controller/mod.rs:167`). The engine does **not** roll back mutations already
   applied before the error — see [`error-handling.md`](./error-handling.md). If a trace log is
   open, `run_game` writes `=== Error: <e> ===` (`controller/mod.rs:126-130`).
 - On **panic** during `run()` and a trace log is open: `run_game`'s `catch_unwind` wrapper

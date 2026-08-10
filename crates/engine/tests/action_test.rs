@@ -101,7 +101,10 @@ fn cycle_to_next_with_no_eligible_player_errors() {
         Err(e) => e,
         Ok(_) => panic!("cycle to next must error, not panic"),
     };
-    assert!(err.contains("No next player available"), "got: {err}");
+    assert!(
+        err.to_string().contains("No next player available"),
+        "got: {err}"
+    );
 }
 
 /// SetMemory with no current player returns `Err` instead of panicking.
@@ -113,7 +116,8 @@ fn set_memory_without_current_player_errors() {
         Ok(_) => panic!("SetMemory must error, not panic"),
     };
     assert!(
-        err.contains("SetMemory requires a current player"),
+        err.to_string()
+            .contains("SetMemory requires a current player"),
         "got: {err}"
     );
 }

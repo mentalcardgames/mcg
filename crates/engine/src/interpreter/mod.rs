@@ -10,6 +10,7 @@ The StepResult enum has the following variants:
 
 use front_end::ir::{Edge, Ir, LoweredPayLoad, Payload, StateID};
 
+use crate::error::EngineError;
 use crate::game_data::GameData;
 
 mod ir_ext;
@@ -113,10 +114,9 @@ impl Interpreter {
         let edges: &Vec<Edge<LoweredPayLoad>> = match self.ir.states.get(&self.current_state) {
             Some(e) => e,
             None => {
-                return StepResult::Error(format!(
-                    "Current state {:?} not found in IR",
-                    self.current_state.raw()
-                ))
+                return StepResult::Error(EngineError::CurrentStateNotFoundInIr {
+                    state: self.current_state.raw(),
+                })
             }
         };
 
@@ -124,10 +124,9 @@ impl Interpreter {
             if self.current_state == self.ir.goal {
                 return StepResult::GameOver;
             }
-            return StepResult::Error(format!(
-                "No outgoing edges from state {:?} and not at goal state",
-                self.current_state.raw()
-            ));
+            return StepResult::Error(EngineError::NoOutgoingEdges {
+                state: self.current_state.raw(),
+            });
         }
 
         if let Some(edge) = edges.first() {
@@ -160,9 +159,7 @@ impl Interpreter {
                 Payload::Action(gr) => {
                     if let front_end::ast::GameRule::SetUp { setup } = gr {
                         if crate::quantifier::setup_contains_any(setup) {
-                            return StepResult::Error(
-                                "quantifier 'any' is not supported in setup rules".to_string(),
-                            );
+                            return StepResult::Error(EngineError::AnyInSetupRule);
                         }
                     }
                     let (subtype, detail, raw_detail) = rule_signature(gr);
@@ -211,7 +208,7 @@ impl Interpreter {
                                 | InputKind::ChoosePlayer { .. }
                                 | InputKind::ChooseCards { .. } => {
                                     return StepResult::Error(
-                                        "Unexpected input for Optional".to_string(),
+                                        EngineError::UnexpectedInputForOptional,
                                     )
                                 }
                             };
@@ -237,11 +234,10 @@ impl Interpreter {
                 }
                 Payload::Condition { expr, negated } => {
                     if edges.len() != 2 {
-                        return StepResult::Error(format!(
-                            "Condition state {:?} must have exactly 2 edges, found {}",
-                            self.current_state.raw(),
-                            edges.len()
-                        ));
+                        return StepResult::Error(EngineError::ConditionEdgeCount {
+                            state: self.current_state.raw(),
+                            found: edges.len(),
+                        });
                     }
                     let result = match crate::query::Evaluator::eval_bool(expr, &self.game_data) {
                         Ok(r) => r,
@@ -269,7 +265,7 @@ impl Interpreter {
                     if let Some(e) = edge {
                         self.dispatch(e.clone())
                     } else {
-                        StepResult::Error("Failed to get condition edge".to_string())
+                        StepResult::Error(EngineError::ConditionEdgeMissing)
                     }
                 }
                 Payload::EndCondition {
@@ -278,11 +274,10 @@ impl Interpreter {
                     stage,
                 } => {
                     if edges.len() != 2 {
-                        return StepResult::Error(format!(
-                            "EndCondition state {:?} must have exactly 2 edges, found {}",
-                            self.current_state.raw(),
-                            edges.len()
-                        ));
+                        return StepResult::Error(EngineError::EndConditionEdgeCount {
+                            state: self.current_state.raw(),
+                            found: edges.len(),
+                        });
                     }
                     self.game_data.ensure_stage_entered(stage);
                     let result = match crate::query::Evaluator::eval_end_condition(
@@ -318,7 +313,7 @@ impl Interpreter {
                     if let Some(e) = edge {
                         self.dispatch(e.clone())
                     } else {
-                        StepResult::Error("Failed to get end condition edge".to_string())
+                        StepResult::Error(EngineError::EndConditionEdgeMissing)
                     }
                 }
                 Payload::StageRoundCounter(stage) => {
@@ -362,17 +357,16 @@ impl Interpreter {
                 }
             }
         } else {
-            StepResult::Error(format!(
-                "No edges found in state {:?}",
-                self.current_state.raw()
-            ))
+            StepResult::Error(EngineError::NoEdgesFound {
+                state: self.current_state.raw(),
+            })
         }
     }
 
     /// Advances `current_state` to `edge.to` and executes the edge's payload.
     /// Fallible since 2026-08: action-evaluation failures surface as
-    /// `Err(String)` instead of panicking.
-    pub fn execute_edge(&mut self, edge: Edge<LoweredPayLoad>) -> Result<(), String> {
+    /// `Err(EngineError)` instead of panicking.
+    pub fn execute_edge(&mut self, edge: Edge<LoweredPayLoad>) -> Result<(), EngineError> {
         self.current_state = edge.to;
         crate::action::execute(edge.payload, &mut self.game_data)
     }

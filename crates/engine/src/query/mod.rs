@@ -182,7 +182,7 @@ impl Evaluator {
     pub fn resolve_memory_key(
         use_single: &UseSingleMemory,
         game_data: &GameData,
-    ) -> Result<String, String> {
+    ) -> Result<String, crate::error::EngineError> {
         match use_single {
             UseSingleMemory::WithOwner { memory, owner } => {
                 let name = match owner.as_ref() {
@@ -198,10 +198,9 @@ impl Evaluator {
                 // NOTE(grammar-gap): memory references without an
                 // explicit owner should not be reachable once the
                 // grammar enforces `of <owner>` everywhere.
-                Err(format!(
-                    "memory access requires an explicit owner; use &M:{} of <owner>",
-                    memory
-                ))
+                Err(crate::error::EngineError::MemoryRequiresExplicitOwner {
+                    key: memory.clone(),
+                })
             }
         }
     }
@@ -211,16 +210,17 @@ impl Evaluator {
     pub fn resolve_collection_memory_key(
         use_mem: &UseMemory,
         game_data: &GameData,
-    ) -> Result<String, String> {
+    ) -> Result<String, crate::error::EngineError> {
         match use_mem {
             UseMemory::WithOwner { memory, owner } => {
                 let name = Self::resolve_owner_to_name(owner.as_ref(), game_data)?;
                 Ok(format!("{}_{}", name, memory))
             }
-            UseMemory::Memory { memory } => Err(format!(
-                "memory access requires an explicit owner; use &M:{} of <owner>",
-                memory
-            )),
+            UseMemory::Memory { memory } => {
+                Err(crate::error::EngineError::MemoryRequiresExplicitOwner {
+                    key: memory.clone(),
+                })
+            }
         }
     }
 }

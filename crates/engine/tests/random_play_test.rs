@@ -21,7 +21,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game, EngineError, GameData, Input, InputKind, InputSource, InputType};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 use rand::rngs::StdRng;
@@ -173,7 +173,7 @@ impl RandomPlayer {
 
 /// Play one full game with random inputs derived from `seed`. Returns the
 /// terminal state, or the engine's recoverable error.
-fn play_random_game(name: &str, seed: u64) -> Result<GameData, String> {
+fn play_random_game(name: &str, seed: u64) -> Result<GameData, EngineError> {
     let ir = load_game(name);
     let player = RandomPlayer::new(seed);
     run_game(

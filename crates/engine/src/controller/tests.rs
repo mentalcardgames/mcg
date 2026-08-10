@@ -114,7 +114,10 @@ fn test_input_exhausted_error() {
     assert!(controller.read_test_file(&path).is_ok());
     let result = controller.read_test_file(&path);
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err(), "Test input file exhausted (input #0)");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Test input file exhausted (input #0)"
+    );
 }
 
 /// Verify that [`read_test_file`] correctly parses a `Name:` prefix on
@@ -184,7 +187,7 @@ fn test_input_file_ordering_and_validation() {
 /// assertions. See Stage 6 / sub-task B5.
 fn run_ordering_game_snapshots() -> (
     std::sync::Arc<std::sync::RwLock<Vec<GameData>>>,
-    Result<GameData, String>,
+    Result<GameData, crate::error::EngineError>,
 ) {
     use front_end::validation::parse_document;
 

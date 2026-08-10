@@ -34,7 +34,10 @@ fn eval_string_literal_returns_value() {
     let expr = StringExpr::Literal {
         value: "hello".to_string(),
     };
-    assert_eq!(Evaluator::eval_string(&expr, &gd), Ok("hello".to_string()));
+    assert_eq!(
+        Evaluator::eval_string(&expr, &gd).unwrap(),
+        "hello".to_string()
+    );
 }
 
 #[test]
@@ -50,7 +53,10 @@ fn eval_string_query_key_of_present() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_string(&expr, &gd), Ok("Ace".to_string()));
+    assert_eq!(
+        Evaluator::eval_string(&expr, &gd).unwrap(),
+        "Ace".to_string()
+    );
 }
 
 #[test]
@@ -67,8 +73,8 @@ fn eval_string_query_key_of_missing_key() {
         },
     };
     assert_eq!(
-        Evaluator::eval_string(&expr, &gd),
-        Err(format!("Key Color not found in card {}", card))
+        Evaluator::eval_string(&expr, &gd).unwrap_err().to_string(),
+        format!("Key Color not found in card {}", card)
     );
 }
 
@@ -87,8 +93,8 @@ fn eval_string_query_key_of_missing_card() {
         },
     };
     assert_eq!(
-        Evaluator::eval_string(&expr, &gd),
-        Err("Card 0 not found".to_string())
+        Evaluator::eval_string(&expr, &gd).unwrap_err().to_string(),
+        "Card 0 not found".to_string()
     );
 }
 
@@ -113,7 +119,7 @@ fn eval_string_query_string_collection_at_in_range() {
             int_expr: IntExpr::Literal { int: 1 },
         },
     };
-    assert_eq!(Evaluator::eval_string(&expr, &gd), Ok("b".to_string()));
+    assert_eq!(Evaluator::eval_string(&expr, &gd).unwrap(), "b".to_string());
 }
 
 #[test]
@@ -138,8 +144,8 @@ fn eval_string_query_string_collection_at_out_of_range() {
         },
     };
     assert_eq!(
-        Evaluator::eval_string(&expr, &gd),
-        Err("No string at index 5".to_string())
+        Evaluator::eval_string(&expr, &gd).unwrap_err().to_string(),
+        "No string at index 5".to_string()
     );
 }
 
@@ -156,7 +162,10 @@ fn eval_string_memory_string() {
             owner: Box::new(SingleOwner::Table),
         },
     };
-    assert_eq!(Evaluator::eval_string(&expr, &gd), Ok("hello".to_string()));
+    assert_eq!(
+        Evaluator::eval_string(&expr, &gd).unwrap(),
+        "hello".to_string()
+    );
 }
 
 #[test]
@@ -171,8 +180,8 @@ fn eval_string_memory_wrong_type() {
         },
     };
     assert_eq!(
-        Evaluator::eval_string(&expr, &gd),
-        Err("Memory value is not a String".to_string())
+        Evaluator::eval_string(&expr, &gd).unwrap_err().to_string(),
+        "Memory value is not a String".to_string()
     );
 }
 
@@ -186,8 +195,8 @@ fn eval_string_memory_missing() {
         },
     };
     assert_eq!(
-        Evaluator::eval_string(&expr, &gd),
-        Err("Memory Table_m not found".to_string())
+        Evaluator::eval_string(&expr, &gd).unwrap_err().to_string(),
+        "Memory Table_m not found".to_string()
     );
 }
 
@@ -200,8 +209,8 @@ fn eval_string_memory_no_owner_error() {
         },
     };
     assert_eq!(
-        Evaluator::eval_string(&expr, &gd),
-        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
+        Evaluator::eval_string(&expr, &gd).unwrap_err().to_string(),
+        "memory access requires an explicit owner; use &M:M of <owner>".to_string()
     );
 }
 
@@ -227,7 +236,10 @@ fn eval_string_collection_at_aggregate_memory() {
             int_expr: IntExpr::Literal { int: 0 },
         },
     };
-    assert_eq!(Evaluator::eval_string(&expr, &gd), Ok("ace".to_string()));
+    assert_eq!(
+        Evaluator::eval_string(&expr, &gd).unwrap(),
+        "ace".to_string()
+    );
 }
 
 #[test]
@@ -250,8 +262,8 @@ fn eval_string_collection_at_aggregate_memory_missing_errors() {
         },
     };
     assert_eq!(
-        Evaluator::eval_string(&expr, &gd),
-        Err("Memory P1_m not found".to_string())
+        Evaluator::eval_string(&expr, &gd).unwrap_err().to_string(),
+        "Memory P1_m not found".to_string()
     );
 }
 

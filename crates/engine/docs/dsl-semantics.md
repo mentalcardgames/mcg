@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all]
 topics: [dsl, semantics, specification, reference, interpretation]
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # DSL Semantics Reference
@@ -635,7 +635,8 @@ validates and can issue a new `NeedsInput` on failure.
 **Engine:** Before dispatching a setup rule edge, the quantifier guard
 (`setup_contains_any`) checks whether any element collection uses
 `Quantifier::Any`. If yes, returns
-`StepResult::Error("quantifier 'any' is not supported in setup rules")`
+`StepResult::Error(EngineError::AnyInSetupRule)` —
+Display `"quantifier 'any' is not supported in setup rules"` —
 before any `GameData` mutation occurs (invariant I-20).
 
 ---

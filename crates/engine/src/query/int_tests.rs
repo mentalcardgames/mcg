@@ -30,71 +30,73 @@ fn int_collection_mem(key: &str) -> IntCollection {
     }
 }
 
-// ── I‑1 ──────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_literal() {
-    assert_eq!(Evaluator::eval_int(&lit(42), &GameData::new()), Ok(42));
+    assert_eq!(Evaluator::eval_int(&lit(42), &GameData::new()).unwrap(), 42);
 }
 
-// ── I‑2 ──────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_binary_plus() {
     assert_eq!(
-        Evaluator::eval_int(&binexpr(lit(2), IntOp::Plus, lit(3)), &GameData::new()),
-        Ok(5)
+        Evaluator::eval_int(&binexpr(lit(2), IntOp::Plus, lit(3)), &GameData::new()).unwrap(),
+        5
     );
 }
 
 #[test]
 fn eval_int_binary_minus() {
     assert_eq!(
-        Evaluator::eval_int(&binexpr(lit(2), IntOp::Minus, lit(3)), &GameData::new()),
-        Ok(-1)
+        Evaluator::eval_int(&binexpr(lit(2), IntOp::Minus, lit(3)), &GameData::new()).unwrap(),
+        -1
     );
 }
 
 #[test]
 fn eval_int_binary_mul() {
     assert_eq!(
-        Evaluator::eval_int(&binexpr(lit(2), IntOp::Mul, lit(3)), &GameData::new()),
-        Ok(6)
+        Evaluator::eval_int(&binexpr(lit(2), IntOp::Mul, lit(3)), &GameData::new()).unwrap(),
+        6
     );
 }
 
-// ── I‑3 ──────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘3 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_binary_div_by_zero() {
     assert_eq!(
-        Evaluator::eval_int(&binexpr(lit(1), IntOp::Div, lit(0)), &GameData::new()),
-        Err("Division by zero".to_string())
+        Evaluator::eval_int(&binexpr(lit(1), IntOp::Div, lit(0)), &GameData::new())
+            .unwrap_err()
+            .to_string(),
+        "Division by zero".to_string()
     );
 }
 
-// ── I‑4 ──────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘4 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_binary_div_nonzero() {
     assert_eq!(
-        Evaluator::eval_int(&binexpr(lit(7), IntOp::Div, lit(2)), &GameData::new()),
-        Ok(3)
+        Evaluator::eval_int(&binexpr(lit(7), IntOp::Div, lit(2)), &GameData::new()).unwrap(),
+        3
     );
 }
 
 #[test]
 fn eval_int_binary_mod_nonzero() {
     assert_eq!(
-        Evaluator::eval_int(&binexpr(lit(7), IntOp::Mod, lit(3)), &GameData::new()),
-        Ok(1)
+        Evaluator::eval_int(&binexpr(lit(7), IntOp::Mod, lit(3)), &GameData::new()).unwrap(),
+        1
     );
 }
 
-// ── I‑5 ──────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘5 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 #[should_panic]
 fn eval_int_binary_mod_by_zero() {
     let _ = Evaluator::eval_int(&binexpr(lit(1), IntOp::Mod, lit(0)), &GameData::new());
 }
 
-// ── I‑6 ──────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘6 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_query_int_collection_at_in_range() {
     let ic = IntCollection::Literal {
@@ -106,7 +108,7 @@ fn eval_int_query_int_collection_at_in_range() {
             int_expr: Box::new(lit(1)),
         },
     };
-    assert_eq!(Evaluator::eval_int(&expr, &GameData::new()), Ok(20));
+    assert_eq!(Evaluator::eval_int(&expr, &GameData::new()).unwrap(), 20);
 }
 
 #[test]
@@ -121,12 +123,14 @@ fn eval_int_query_int_collection_at_out_of_range() {
         },
     };
     assert_eq!(
-        Evaluator::eval_int(&expr, &GameData::new()),
-        Err("No int at index 5".to_string())
+        Evaluator::eval_int(&expr, &GameData::new())
+            .unwrap_err()
+            .to_string(),
+        "No int at index 5".to_string()
     );
 }
 
-// ── I‑7 ──────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘7 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_size_of_int_collection_memory_present() {
     let mut gd = GameData::new();
@@ -137,7 +141,7 @@ fn eval_int_size_of_int_collection_memory_present() {
     let expr = size_of(Collection::IntCollection {
         int: int_collection_mem("ic"),
     });
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(3));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 3);
 }
 
 #[test]
@@ -147,12 +151,12 @@ fn eval_int_size_of_int_collection_memory_missing() {
         int: int_collection_mem("nope"),
     });
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("Memory Table_nope not found".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "Memory Table_nope not found".to_string()
     );
 }
 
-// ── I‑8 ──────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘8 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_size_of_player_collection_memory() {
     let mut gd = GameData::new();
@@ -169,10 +173,10 @@ fn eval_int_size_of_player_collection_memory() {
         },
     });
     // Implemented 2026-08: the PlayerCollection memory slot is read.
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(2));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 2);
 }
 
-// ── I‑9 ──────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘9 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_aggregate_sum_of_int_collection() {
     let ic = IntCollection::Literal {
@@ -181,7 +185,7 @@ fn eval_int_aggregate_sum_of_int_collection() {
     let expr = IntExpr::Aggregate {
         aggregate: AggregateInt::SumOfIntCollection { int_collection: ic },
     };
-    assert_eq!(Evaluator::eval_int(&expr, &GameData::new()), Ok(6));
+    assert_eq!(Evaluator::eval_int(&expr, &GameData::new()).unwrap(), 6);
 }
 
 #[test]
@@ -190,10 +194,10 @@ fn eval_int_aggregate_sum_of_int_collection_empty() {
     let expr = IntExpr::Aggregate {
         aggregate: AggregateInt::SumOfIntCollection { int_collection: ic },
     };
-    assert_eq!(Evaluator::eval_int(&expr, &GameData::new()), Ok(0));
+    assert_eq!(Evaluator::eval_int(&expr, &GameData::new()).unwrap(), 0);
 }
 
-// ── I‑10 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘10 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fn card_with(map: &[(&str, &str)]) -> crate::game_data::Card {
     let mut c = HashMap::new();
     for (k, v) in map {
@@ -225,7 +229,7 @@ fn eval_int_aggregate_sum_of_card_set_present() {
             pointmap: "Pm".to_string(),
         },
     };
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(10));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 10);
 }
 
 #[test]
@@ -246,12 +250,12 @@ fn eval_int_aggregate_sum_of_card_set_missing_pointmap() {
         },
     };
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("PointMap Ghost not found".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "PointMap Ghost not found".to_string()
     );
 }
 
-// ── I‑11 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘11 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fn extrema_cardset(extrema: Extrema, cs_key: &str, pointmap: &str) -> IntExpr {
     IntExpr::Aggregate {
         aggregate: AggregateInt::ExtremaCardset {
@@ -285,8 +289,8 @@ fn eval_int_aggregate_extrema_cardset_max() {
     gd.point_maps.push(pm);
 
     assert_eq!(
-        Evaluator::eval_int(&extrema_cardset(Extrema::Max, "cs", "Pm"), &gd),
-        Ok(ace as i32)
+        Evaluator::eval_int(&extrema_cardset(Extrema::Max, "cs", "Pm"), &gd).unwrap(),
+        ace as i32
     );
 }
 
@@ -308,8 +312,8 @@ fn eval_int_aggregate_extrema_cardset_min() {
     gd.point_maps.push(pm);
 
     assert_eq!(
-        Evaluator::eval_int(&extrema_cardset(Extrema::Min, "cs", "Pm"), &gd),
-        Ok(king as i32)
+        Evaluator::eval_int(&extrema_cardset(Extrema::Min, "cs", "Pm"), &gd).unwrap(),
+        king as i32
     );
 }
 
@@ -324,12 +328,14 @@ fn eval_int_aggregate_extrema_cardset_empty() {
     gd.point_maps.push(pm);
 
     assert_eq!(
-        Evaluator::eval_int(&extrema_cardset(Extrema::Max, "cs", "Pm"), &gd),
-        Err("No card found for extrema".to_string())
+        Evaluator::eval_int(&extrema_cardset(Extrema::Max, "cs", "Pm"), &gd)
+            .unwrap_err()
+            .to_string(),
+        "No card found for extrema".to_string()
     );
 }
 
-// ── I‑12 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘12 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fn extrema_int_collection(extrema: Extrema, ints: Vec<IntExpr>) -> IntExpr {
     IntExpr::Aggregate {
         aggregate: AggregateInt::ExtremaIntCollection {
@@ -345,8 +351,9 @@ fn eval_int_aggregate_extrema_int_collection_max() {
         Evaluator::eval_int(
             &extrema_int_collection(Extrema::Max, vec![lit(5), lit(1), lit(3)]),
             &GameData::new()
-        ),
-        Ok(5)
+        )
+        .unwrap(),
+        5
     );
 }
 
@@ -356,8 +363,9 @@ fn eval_int_aggregate_extrema_int_collection_min() {
         Evaluator::eval_int(
             &extrema_int_collection(Extrema::Min, vec![lit(5), lit(1), lit(3)]),
             &GameData::new()
-        ),
-        Ok(1)
+        )
+        .unwrap(),
+        1
     );
 }
 
@@ -367,12 +375,14 @@ fn eval_int_aggregate_extrema_int_collection_empty() {
         Evaluator::eval_int(
             &extrema_int_collection(Extrema::Max, vec![]),
             &GameData::new()
-        ),
-        Err("No value found in IntCollection".to_string())
+        )
+        .unwrap_err()
+        .to_string(),
+        "No value found in IntCollection".to_string()
     );
 }
 
-// ── I‑13 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘13 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_runtime_current_stage_round_counter() {
     let mut gd = GameData::new();
@@ -382,7 +392,7 @@ fn eval_int_runtime_current_stage_round_counter() {
     let expr = IntExpr::Runtime {
         runtime: RuntimeInt::CurrentStageRoundCounter,
     };
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(2));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 2);
 }
 
 #[test]
@@ -392,12 +402,12 @@ fn eval_int_runtime_current_stage_round_counter_no_stage() {
         runtime: RuntimeInt::CurrentStageRoundCounter,
     };
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("No current stage".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "No current stage".to_string()
     );
 }
 
-// ── I‑14 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘14 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_runtime_stage_round_counter_named() {
     let mut gd = GameData::new();
@@ -407,7 +417,7 @@ fn eval_int_runtime_stage_round_counter_named() {
             stage: "MyStage".to_string(),
         },
     };
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(7));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 7);
 }
 
 #[test]
@@ -418,10 +428,10 @@ fn eval_int_runtime_stage_round_counter_absent() {
             stage: "Ghost".to_string(),
         },
     };
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(0));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 0);
 }
 
-// ── I‑15 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘15 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 fn memory_int(key: &str) -> IntExpr {
     IntExpr::Memory {
         memory: UseSingleMemory::WithOwner {
@@ -435,7 +445,7 @@ fn memory_int(key: &str) -> IntExpr {
 fn eval_int_memory_int_present() {
     let mut gd = GameData::new();
     gd.set_memory("Table_k".to_string(), MemoryValue::Int(7));
-    assert_eq!(Evaluator::eval_int(&memory_int("k"), &gd), Ok(7));
+    assert_eq!(Evaluator::eval_int(&memory_int("k"), &gd).unwrap(), 7);
 }
 
 #[test]
@@ -443,8 +453,10 @@ fn eval_int_memory_int_wrong_type() {
     let mut gd = GameData::new();
     gd.set_memory("Table_k".to_string(), MemoryValue::String("x".to_string()));
     assert_eq!(
-        Evaluator::eval_int(&memory_int("k"), &gd),
-        Err("Memory value is not an Int".to_string())
+        Evaluator::eval_int(&memory_int("k"), &gd)
+            .unwrap_err()
+            .to_string(),
+        "Memory value is not an Int".to_string()
     );
 }
 
@@ -452,8 +464,10 @@ fn eval_int_memory_int_wrong_type() {
 fn eval_int_memory_int_missing() {
     let gd = GameData::new();
     assert_eq!(
-        Evaluator::eval_int(&memory_int("ghost"), &gd),
-        Err("Memory Table_ghost not found".to_string())
+        Evaluator::eval_int(&memory_int("ghost"), &gd)
+            .unwrap_err()
+            .to_string(),
+        "Memory Table_ghost not found".to_string()
     );
 }
 
@@ -466,12 +480,12 @@ fn eval_int_memory_no_owner_error() {
         },
     };
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "memory access requires an explicit owner; use &M:M of <owner>".to_string()
     );
 }
 
-// ── I‑16 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘16 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_size_of_location_collection_memory_wrong_type() {
     let mut gd = GameData::new();
@@ -485,8 +499,8 @@ fn eval_int_size_of_location_collection_memory_wrong_type() {
         },
     });
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("Memory value is not a LocationCollection".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "Memory value is not a LocationCollection".to_string()
     );
 }
 
@@ -502,12 +516,12 @@ fn eval_int_size_of_location_collection_memory_missing() {
         },
     });
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("Memory Table_ghost not found".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "Memory Table_ghost not found".to_string()
     );
 }
 
-// ── I‑17 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘17 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_size_of_team_collection_memory_wrong_type() {
     let mut gd = GameData::new();
@@ -521,8 +535,8 @@ fn eval_int_size_of_team_collection_memory_wrong_type() {
         },
     });
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("Memory value is not a Team".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "Memory value is not a Team".to_string()
     );
 }
 
@@ -538,8 +552,8 @@ fn eval_int_size_of_team_collection_memory_missing() {
         },
     });
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("Memory Table_ghost not found".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "Memory Table_ghost not found".to_string()
     );
 }
 
@@ -554,12 +568,12 @@ fn eval_int_collection_memory_no_owner_error() {
         },
     });
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "memory access requires an explicit owner; use &M:M of <owner>".to_string()
     );
 }
 
-// ── I‑18 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘18 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_size_of_int_collection_aggregate_memory() {
     // Implemented 2026-08: aggregates the slot across every owner.
@@ -578,7 +592,7 @@ fn eval_int_size_of_int_collection_aggregate_memory() {
             },
         },
     });
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(2));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 2);
 }
 
 #[test]
@@ -600,7 +614,7 @@ fn eval_int_sum_of_int_collection_aggregate_memory() {
             },
         },
     };
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(12));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 12);
 }
 
 #[test]
@@ -618,12 +632,12 @@ fn eval_int_size_of_int_collection_aggregate_memory_missing_errors() {
         },
     });
     assert_eq!(
-        Evaluator::eval_int(&expr, &gd),
-        Err("Memory P1_x not found".to_string())
+        Evaluator::eval_int(&expr, &gd).unwrap_err().to_string(),
+        "Memory P1_x not found".to_string()
     );
 }
 
-// ── I‑19 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘19 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_size_of_team_collection_aggregate_memory() {
     // Implemented 2026-08: aggregates the slot across every owner.
@@ -644,10 +658,10 @@ fn eval_int_size_of_team_collection_aggregate_memory() {
             },
         },
     });
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(2));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 2);
 }
 
-// ── I‑20 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘20 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn eval_int_size_of_string_collection_aggregate_memory() {
     // Implemented 2026-08: aggregates the slot across every owner.
@@ -668,20 +682,26 @@ fn eval_int_size_of_string_collection_aggregate_memory() {
             },
         },
     });
-    assert_eq!(Evaluator::eval_int(&expr, &gd), Ok(2));
+    assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 2);
 }
 
-// ── I‑21 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘21 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn resolve_quantity_int() {
     let q = Quantity::Int { int: lit(3) };
-    assert_eq!(Evaluator::resolve_quantity(&q, 10, &GameData::new()), Ok(3));
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 10, &GameData::new()).unwrap(),
+        3
+    );
 }
 
 #[test]
 fn resolve_quantity_int_clamps_to_available() {
     let q = Quantity::Int { int: lit(20) };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
+        5
+    );
 }
 
 #[test]
@@ -689,7 +709,10 @@ fn resolve_quantity_quantifier_all() {
     let q = Quantity::Quantifier {
         quantifier: Quantifier::All,
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
+        5
+    );
 }
 
 #[test]
@@ -697,10 +720,13 @@ fn resolve_quantity_quantifier_any() {
     let q = Quantity::Quantifier {
         quantifier: Quantifier::Any,
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(1));
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
+        1
+    );
 }
 
-// ── I‑22 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘22 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn resolve_quantity_int_range_start_satisfied() {
     let q = Quantity::IntRange {
@@ -709,7 +735,10 @@ fn resolve_quantity_int_range_start_satisfied() {
             op_int: vec![],
         },
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
+        5
+    );
 }
 
 #[test]
@@ -720,7 +749,10 @@ fn resolve_quantity_int_range_start_not_satisfied() {
             op_int: vec![],
         },
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(0));
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
+        0
+    );
 }
 
 #[test]
@@ -731,7 +763,10 @@ fn resolve_quantity_int_range_and_chain() {
             op_int: vec![(IntRangeOperator::And, IntCompare::Le, lit(10))],
         },
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
+        5
+    );
 }
 
 #[test]
@@ -742,8 +777,11 @@ fn resolve_quantity_int_range_and_fails() {
             op_int: vec![(IntRangeOperator::And, IntCompare::Le, lit(4))],
         },
     };
-    // available=5, 5 <= 4 is false → returns Ok(0)
-    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(0));
+    // available=5, 5 <= 4 is false â†’ returns Ok(0)
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
+        0
+    );
 }
 
 #[test]
@@ -754,8 +792,11 @@ fn resolve_quantity_int_range_or_chain() {
             op_int: vec![(IntRangeOperator::Or, IntCompare::Eq, lit(7))],
         },
     };
-    // available=5, 5 == 7 false → falls through to Ok(available)
-    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
+    // available=5, 5 == 7 false â†’ falls through to Ok(available)
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
+        5
+    );
 }
 
 #[test]
@@ -766,11 +807,14 @@ fn resolve_quantity_int_range_or_satisfied() {
             op_int: vec![(IntRangeOperator::Or, IntCompare::Eq, lit(5))],
         },
     };
-    // available=5, 5 == 5 true → returns Ok(available)
-    assert_eq!(Evaluator::resolve_quantity(&q, 5, &GameData::new()), Ok(5));
+    // available=5, 5 == 5 true â†’ returns Ok(available)
+    assert_eq!(
+        Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
+        5
+    );
 }
 
-// ── I‑23 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘23 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn resolve_quantity_runtime_memory_evaluated_live() {
     // Runtime-backed quantities are evaluated against the live GameData
@@ -786,7 +830,7 @@ fn resolve_quantity_runtime_memory_evaluated_live() {
             },
         },
     };
-    assert_eq!(Evaluator::resolve_quantity(&q, 100, &gd), Ok(3));
+    assert_eq!(Evaluator::resolve_quantity(&q, 100, &gd).unwrap(), 3);
 }
 
 #[test]
@@ -801,12 +845,14 @@ fn resolve_quantity_runtime_memory_missing_errors() {
     };
     // Missing memory now surfaces as an error instead of silently moving 1.
     assert_eq!(
-        Evaluator::resolve_quantity(&q, 100, &GameData::new()),
-        Err("Memory Table_secret not found".to_string())
+        Evaluator::resolve_quantity(&q, 100, &GameData::new())
+            .unwrap_err()
+            .to_string(),
+        "Memory Table_secret not found".to_string()
     );
 }
 
-// ── I‑24 ─────────────────────────────────────────────────────────
+// â”€â”€ Iâ€‘24 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #[test]
 fn resolve_quantity_int_range_evaluated_live() {
     let mut gd = GameData::new();
@@ -826,9 +872,9 @@ fn resolve_quantity_int_range_evaluated_live() {
             op_int: vec![],
         },
     };
-    // available=100 >= 2 → satisfied → Ok(100) (previously eval failed against
+    // available=100 >= 2 â†’ satisfied â†’ Ok(100) (previously eval failed against
     // an empty GameData and fell back to Ok(0)).
-    assert_eq!(Evaluator::resolve_quantity(&q, 100, &gd), Ok(100));
+    assert_eq!(Evaluator::resolve_quantity(&q, 100, &gd).unwrap(), 100);
 }
 
 #[test]
@@ -848,7 +894,9 @@ fn resolve_quantity_int_range_missing_memory_errors() {
         },
     };
     assert_eq!(
-        Evaluator::resolve_quantity(&q, 100, &GameData::new()),
-        Err("Memory Table_ghost not found".to_string())
+        Evaluator::resolve_quantity(&q, 100, &GameData::new())
+            .unwrap_err()
+            .to_string(),
+        "Memory Table_ghost not found".to_string()
     );
 }

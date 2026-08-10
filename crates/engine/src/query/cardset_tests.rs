@@ -57,7 +57,7 @@ fn eval_cardset_group_location() {
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Ok((0, vec![0, 1])));
+    assert_eq!(result.unwrap(), (0, vec![0, 1]));
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn eval_cardset_group_where_filter_size() {
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Ok((0, vec![0, 1])));
+    assert_eq!(result.unwrap(), (0, vec![0, 1]));
 }
 
 #[test]
@@ -220,8 +220,8 @@ fn eval_cardset_group_where_filter_adjacent_missing_precedence() {
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
     assert_eq!(
-        result,
-        Err("Precedence NoSuchPrecedence not found".to_string())
+        result.unwrap_err().to_string(),
+        "Precedence NoSuchPrecedence not found".to_string()
     );
 }
 
@@ -246,8 +246,8 @@ fn eval_cardset_group_where_filter_higher_missing_precedence() {
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
     assert_eq!(
-        result,
-        Err("Precedence NoSuchPrecedence not found".to_string())
+        result.unwrap_err().to_string(),
+        "Precedence NoSuchPrecedence not found".to_string()
     );
 }
 
@@ -272,8 +272,8 @@ fn eval_cardset_group_where_filter_lower_missing_precedence() {
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
     assert_eq!(
-        result,
-        Err("Precedence NoSuchPrecedence not found".to_string())
+        result.unwrap_err().to_string(),
+        "Precedence NoSuchPrecedence not found".to_string()
     );
 }
 
@@ -350,7 +350,10 @@ fn eval_cardset_group_missing_combo() {
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Err("Combo NoSuchCombo not found".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Combo NoSuchCombo not found".to_string()
+    );
 }
 
 #[test]
@@ -379,7 +382,7 @@ fn eval_cardset_group_owner() {
         owner: Owner::Table,
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Ok((stock, vec![c0, c1])));
+    assert_eq!(result.unwrap(), (stock, vec![c0, c1]));
 }
 
 #[test]
@@ -412,7 +415,10 @@ fn eval_cardset_memory_wrong_type() {
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Err("Memory value is not a CardSet".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Memory value is not a CardSet".to_string()
+    );
 }
 
 #[test]
@@ -425,7 +431,10 @@ fn eval_cardset_memory_missing() {
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Err("Memory Table_ghost not found".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Memory Table_ghost not found".to_string()
+    );
 }
 
 #[test]
@@ -438,8 +447,8 @@ fn eval_cardset_memory_no_owner_error() {
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
     assert_eq!(
-        result,
-        Err("memory access requires an explicit owner; use &M:M of <owner>".to_string())
+        result.unwrap_err().to_string(),
+        "memory access requires an explicit owner; use &M:M of <owner>".to_string()
     );
 }
 
@@ -467,7 +476,7 @@ fn eval_cardset_memory_orphaned_cards_sentinel_location() {
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Ok((0, vec![orphan])));
+    assert_eq!(result.unwrap(), (0, vec![orphan]));
 }
 
 #[test]
@@ -484,7 +493,7 @@ fn eval_cardset_no_card_position_not_found() {
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Ok((0, vec![])));
+    assert_eq!(result.unwrap(), (0, vec![]));
 }
 
 #[test]
@@ -497,7 +506,7 @@ fn eval_card_position_at_in_range() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Ok(0));
+    assert_eq!(result.unwrap(), 0);
 }
 
 #[test]
@@ -511,8 +520,8 @@ fn eval_card_position_at_out_of_range() {
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
     assert_eq!(
-        result,
-        Err("No card at index 99 in location Stock".to_string())
+        result.unwrap_err().to_string(),
+        "No card at index 99 in location Stock".to_string()
     );
 }
 
@@ -526,7 +535,10 @@ fn eval_card_position_at_missing_loc() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Err("Location MissingLoc not found".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Location MissingLoc not found".to_string()
+    );
 }
 
 #[test]
@@ -538,7 +550,7 @@ fn eval_card_position_top_present() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Ok(0));
+    assert_eq!(result.unwrap(), 0);
 }
 
 #[test]
@@ -551,8 +563,8 @@ fn eval_card_position_top_empty() {
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
     assert_eq!(
-        result,
-        Err("No card at top of location EmptyLoc".to_string())
+        result.unwrap_err().to_string(),
+        "No card at top of location EmptyLoc".to_string()
     );
 }
 
@@ -565,7 +577,10 @@ fn eval_card_position_top_missing_loc() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Err("Location MissingLoc not found".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Location MissingLoc not found".to_string()
+    );
 }
 
 #[test]
@@ -577,7 +592,7 @@ fn eval_card_position_bottom_present() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Ok(1));
+    assert_eq!(result.unwrap(), 1);
 }
 
 #[test]
@@ -590,8 +605,8 @@ fn eval_card_position_bottom_empty() {
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
     assert_eq!(
-        result,
-        Err("No card at bottom of location EmptyLoc".to_string())
+        result.unwrap_err().to_string(),
+        "No card at bottom of location EmptyLoc".to_string()
     );
 }
 
@@ -604,7 +619,10 @@ fn eval_card_position_bottom_missing_loc() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Err("Location MissingLoc not found".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Location MissingLoc not found".to_string()
+    );
 }
 
 #[test]
@@ -631,7 +649,7 @@ fn infer_location_from_cards_infallible() {
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Ok((0, vec![orphan])));
+    assert_eq!(result.unwrap(), (0, vec![orphan]));
 }
 
 fn pointmap_fixture() -> GameData {
@@ -676,7 +694,7 @@ fn eval_card_position_extrema_point_map_max() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Ok(0));
+    assert_eq!(result.unwrap(), 0);
 }
 
 #[test]
@@ -696,7 +714,7 @@ fn eval_card_position_extrema_point_map_min() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Ok(1));
+    assert_eq!(result.unwrap(), 1);
 }
 
 #[test]
@@ -716,7 +734,10 @@ fn eval_card_position_extrema_point_map_missing() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Err("PointMap NoSuchPointMap not found".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "PointMap NoSuchPointMap not found".to_string()
+    );
 }
 
 #[test]
@@ -747,7 +768,10 @@ fn eval_card_position_extrema_point_map_empty() {
     };
 
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Err("PointMap NoSuchPointMap not found".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "PointMap NoSuchPointMap not found".to_string()
+    );
 }
 
 fn precedence_fixture() -> GameData {
@@ -790,7 +814,7 @@ fn eval_card_position_extrema_precedence_max() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Ok(1));
+    assert_eq!(result.unwrap(), 1);
 }
 
 #[test]
@@ -810,7 +834,7 @@ fn eval_card_position_extrema_precedence_min() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Ok(0));
+    assert_eq!(result.unwrap(), 0);
 }
 
 #[test]
@@ -830,7 +854,10 @@ fn eval_card_position_extrema_precedence_missing() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Err("Precedence NoSuchPrec not found".to_string()));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Precedence NoSuchPrec not found".to_string()
+    );
 }
 
 #[test]
@@ -856,7 +883,7 @@ fn eval_card_position_extrema_precedence_value_not_in() {
         },
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
-    assert_eq!(result, Ok(1));
+    assert_eq!(result.unwrap(), 1);
 }
 
 #[test]
@@ -892,8 +919,8 @@ fn eval_card_position_extrema_precedence_empty() {
     };
     let result = Evaluator::eval_card_position(&expr, &gd);
     assert_eq!(
-        result,
-        Err("No card found for ExtremaPrecedence".to_string())
+        result.unwrap_err().to_string(),
+        "No card found for ExtremaPrecedence".to_string()
     );
 }
 
@@ -911,7 +938,7 @@ fn eval_cardset_card_position_variant() {
         },
     };
     let result = Evaluator::eval_cardset(&expr, &gd);
-    assert_eq!(result, Ok((0, vec![0])));
+    assert_eq!(result.unwrap(), (0, vec![0]));
 }
 
 #[test]

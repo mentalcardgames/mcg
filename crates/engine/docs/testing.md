@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/debug/tests.rs
   - crates/engine/tests/quantifier_test.rs
   - crates/engine/test_games/
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # Testing Strategy
@@ -23,7 +23,7 @@ last_validated: 2026-08-09
 > [`invariants.md`](./invariants.md).
 
 The engine is a **single-threaded, fully synchronous, deterministic** FSM interpreter
-(see [`interfaces.md`](./interfaces.md) �6). There is no I/O concealed inside the library
+(see [`interfaces.md`](./interfaces.md) �6). There is no I/O concealed inside the library
 (except the optional trace log opened by [`controller/mod.rs`](../src/controller/mod.rs)),
 no `tokio`, no threads. This makes the **entire crate testable with plain `cargo test`** —
 no mock servers, no time control, noDeterministic-runtime tricks. Every test in the suite
@@ -582,7 +582,7 @@ and conserves all 52 cards**, regardless of what the player does.
 |---|---|
 | [`README.md`](./README.md) | Hub of the engine wiki; module map |
 | [`invariants.md`](./invariants.md) | Read before authoring any engine test — I-1..I-20 are the most common regression targets |
-| [`error-handling.md`](./error-handling.md) | Source of `Result<_, String>` error-message strings to assert against |
+| [`error-handling.md`](./error-handling.md) | Source of `EngineError` variants and their stable `Display` messages to assert against |
 | [`lifecycle.md`](./lifecycle.md) | Step sequencing and quantifier pre-dispatch timing — explains *why* traces look the way they do |
 | [`observability.md`](./observability.md) | The `event_sender` / `trace_sender` seams tests capture through |
 | [`data-structures.md`](./data-structures.md) | Field-level layout for hand-building `GameData` in unit tests |

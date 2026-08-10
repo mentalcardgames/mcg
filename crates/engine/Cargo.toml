@@ -13,6 +13,7 @@ path = "src/bin/engine-tui/main.rs"
 front_end = { path = "../front_end" }
 serde_json = "1"
 rand = "0.8"
+thiserror = "2"
 ratatui = "0.28"
 crossterm = "0.28"
 crossbeam-channel = "0.5"
