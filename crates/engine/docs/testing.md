@@ -23,7 +23,7 @@ last_validated: 2026-08-10
 > [`invariants.md`](./invariants.md).
 
 The engine is a **single-threaded, fully synchronous, deterministic** FSM interpreter
-(see [`interfaces.md`](./interfaces.md) �6). There is no I/O concealed inside the library
+(see [`interfaces.md`](./interfaces.md) §6). There is no I/O concealed inside the library
 (except the optional trace log opened by [`controller/mod.rs`](../src/controller/mod.rs)),
 no `tokio`, no threads. This makes the **entire crate testable with plain `cargo test`** —
 no mock servers, no time control, noDeterministic-runtime tricks. Every test in the suite

@@ -37,7 +37,7 @@ Three error channels exist, all carrying the same `EngineError`:
 
 | Channel | Type | Origin |
 |---|---|---|
-| Run failure | `Result<GameData, EngineError>` from `crates::engine::controller::run_game` (`crates/engine/src/controller/mod.rs:31`) | Propagated from `crates::engine::interpreter::StepResult::Error` or `Controller::get_input`. |
+| Run failure | `Result<GameData, EngineError>` from `crates::engine::controller::run_game` (`crates/engine/src/controller/mod.rs:96`) | Propagated from `crates::engine::interpreter::StepResult::Error` or `Controller::get_input`. |
 | Step failure | `crates::engine::interpreter::StepResult::Error(EngineError)` (`crates/engine/src/interpreter/types.rs:71`) | Missing state, bad edge counts, evaluator errors, quantifier-resume validation errors (below). |
 | Eval failure | `Result<_, EngineError>` from every `crates::engine::query::Evaluator` method | Division by zero, missing memory/location/precedence/pointmap/combo, type-mismatched memory, out-of-range index, "no current player/stage", etc. |
 
@@ -136,9 +136,9 @@ well-formed DSL input:
 
 | Site | Condition | Failure mode |
 |---|---|---|
-| `crates/engine/src/game_data.rs:130-136` | `crates::engine::game_data::GameData::add_location` owner (non-Table) not in `players` | `panic!("add_location: owner {} not found in players", owner_name)` — unreachable via DSL since `CreateLocation` resolves the owner first (F-8) |
-| `crates/engine/src/game_data.rs:197-210` | `crates::engine::game_data::GameData::next_player` found idx missing from `turn_order` | `panic!("next_player: next_player {} not found in turn_order {:?}", next_player, self.turn_order)` (see I-13 — safe given `resolve_turn`'s contract) |
-| `crates/engine/src/quantifier.rs:122` | `crates::engine::quantifier::alloc_synth` `serde_json::from_value` failure | `.expect("StateID deserialisation from a valid u32 cannot fail")` — the input is `Value::from(raw: u32)` and `StateID` derives `Deserialize` as a transparent newtype around `u32`, so this expect is unreachable by construction. Listed for completeness; it does not fire on any real input. |
+| `crates/engine/src/game_data.rs:139-156` | `crates::engine::game_data::GameData::add_location` owner (non-Table) not in `players` | `panic!("add_location: owner {} not found in players", owner_name)` — unreachable via DSL since `CreateLocation` resolves the owner first (F-8) |
+| `crates/engine/src/game_data.rs:228-246` | `crates::engine::game_data::GameData::next_player` found idx missing from `turn_order` | `panic!("next_player: next_player {} not found in turn_order {:?}", next_player, self.turn_order)` (see I-13 — safe given `resolve_turn`'s contract) |
+| `crates/engine/src/quantifier.rs:138` | `crates::engine::quantifier::alloc_synth` `serde_json::from_value` failure | `.expect("StateID deserialisation from a valid u32 cannot fail")` — the input is `Value::from(raw: u32)` and `StateID` derives `Deserialize` as a transparent newtype around `u32`, so this expect is unreachable by construction. Listed for completeness; it does not fire on any real input. |
 
 **The quantifier subsystem introduces no new *real* panic sites.** The only `.expect` in
 `crates/engine/src/quantifier.rs` is the unreachable-by-construction one in `alloc_synth` (above);
@@ -146,7 +146,7 @@ well-formed DSL input:
 `build_dest_all_chain` returns `Err` at `:413-440`; `build_dest_all_chain_with_memory` returns
 `Err` at `:505-534`. The resume arms in `crates/engine/src/interpreter/quant_driver.rs` likewise
 return `StepResult::Error` on bad input (see the variant list in §1), never `panic!`. The
-setup-`Any` guard returns `StepResult::Error`, never `panic!` (`interpreter/mod.rs:157-159`).
+setup-`Any` guard returns `StepResult::Error`, never `panic!` (`interpreter/mod.rs:160-163`).
 
 > **Panic capture:** `run_game`/`run_game_with` catch panics inside the run loop
 > (`crates/engine/src/controller/mod.rs`) in two situations: (1) **always**, when the caller set
@@ -160,7 +160,7 @@ setup-`Any` guard returns `StepResult::Error`, never `panic!` (`interpreter/mod.
 
 **Silent no-ops** (neither error nor panic — agents must know these exist and do nothing):
 
-- `front_end::ast::ActionRule::FlipAction` (`crates/engine/src/action.rs:164-167`) — payload fields
+- `front_end::ast::ActionRule::FlipAction` (`crates/engine/src/action.rs:207-211`) — payload fields
   ignored entirely; the per-card status slot (`GameData::card_statuses`) exists but is unused.
   Intended to become (de)encryption when card cryptography lands (see `engine-vs-design.md` §1b).
 - `front_end::ast::ActionRule::BidAction`, `BidMemoryAction`, `DemandAction`, `DemandMemoryAction`,
@@ -179,11 +179,11 @@ collection-memory `todo!()` arms (now implemented).
 
 **NOT silent no-ops** (the quantifier arms — they actively mutate or prompt):
 
-- `QuantSite::DestPlayerAll` / `DestPlayerAny` / `SrcCardsAnyOrRange` (`interpreter/mod.rs:131-150`)
+- `QuantSite::DestPlayerAll` / `DestPlayerAny` / `SrcCardsAnyOrRange` (`interpreter/mod.rs:137-153`)
   build a synthetic overlay chain or issue a `NeedsInput` prompt — they do real work.
-- The resume arms in `quant_driver.rs:213-334` write the synthetic memory slot, build/insert
+- The resume arms in `quant_driver.rs:307-479` write the synthetic memory slot, build/insert
   replacement edges, and advance `current_state` — they do real work.
-- The `SYNTH_MEMORY_KEY` cleanup (`interpreter/mod.rs:65-79`) removes a slot — it does real work
+- The `SYNTH_MEMORY_KEY` cleanup (`interpreter/mod.rs:71-85`) removes a slot — it does real work
   (and is itself an invariant, I-18).
 
 A quantifier site is never a silent no-op; verify this remains true if you add a new

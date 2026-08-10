@@ -37,15 +37,15 @@ plus a single ad-hoc `eprintln!` (§5). For the error channels themselves, see
 ## 1. Reactive Event Callback (`event_sender`)
 
 ```rust
-// crates/engine/src/controller/mod.rs:35
+// crates/engine/src/controller/mod.rs:100
 event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
 ```
 
 `crates::engine::controller::run_game` accepts it as its 4th argument
-(`crates/engine/src/controller/mod.rs:31-37`). It is invoked by
+(`crates/engine/src/controller/mod.rs:96-104`). It is invoked by
 `crates::engine::controller::Controller::emit_event`
-(`crates/engine/src/controller/mod.rs:290-294`) at the **top of every loop iteration**
-(`mod.rs:153`) *and* once more just before returning `GameOver` (`mod.rs:163`). The callback
+(`crates/engine/src/controller/mod.rs:427-431`) at the **top of every loop iteration**
+(`mod.rs:270`) *and* once more just before returning `GameOver` (`mod.rs:281`). The callback
 receives `&GameData`, so a host can render or snapshot after every single transition without
 polling. This is the recommended coarse-grained observability seam for production hosts that want
 per-loop state snapshots — note this is per-loop-iteration, *not* per-FSM-transition; the
@@ -60,7 +60,7 @@ fine-grained per-transition seam is the `trace_sender` of §2.
 ## 2. Per-Transition Trace Sender (`trace_sender`) — post-Stage-5
 
 ```rust
-// crates/engine/src/controller/mod.rs:36
+// crates/engine/src/controller/mod.rs:101
 trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
 ```
 
@@ -74,7 +74,7 @@ without instrumenting the interpreter's interior.
 ### 2.1 `TraceEntry`
 
 ```rust
-// crates/engine/src/interpreter/trace.rs:1-8
+// crates/engine/src/interpreter/trace.rs:14-21
 pub enum TraceEntry {
     Step { from: u32, to: u32, event: TraceEvent },
 }
@@ -91,7 +91,7 @@ strings. Hosts inspect `rule`/`expr` directly; the text views are derived at ren
 (§2.3).
 
 ```rust
-// crates/engine/src/interpreter/trace.rs:14-67
+// crates/engine/src/interpreter/trace.rs:23-62
 pub enum TraceEvent {
     Action { rule: GameRule },
     Choice { chosen_idx: usize, options: Vec<String> },
@@ -113,8 +113,8 @@ and counts are the only string fields — they have no structured equivalent.
 Each variant is emitted by exactly one arm of `Interpreter::step`
 (`crates/engine/src/interpreter/mod.rs`) or by the quantifier driver
 (`crates/engine/src/interpreter/quant_driver.rs`):
-- `Action` — `Payload::Action` arm (`interpreter/mod.rs:154-171`) and the overlay-dispatch branch
-  (`interpreter/mod.rs:91-100`); the `GameRule` is cloned from the edge being dispatched.
+- `Action` — `Payload::Action` arm (`interpreter/mod.rs:159-172`) and the overlay-dispatch branch
+  (`interpreter/mod.rs:92-105`); the `GameRule` is cloned from the edge being dispatched.
 - `Choice` — `Payload::Choice` arm (`interpreter/mod.rs:173-194`).
 - `OptionalAccept`/`OptionalDecline` — `Payload::Optional` arm (`interpreter/mod.rs:195-228`).
 - `Condition` — `Payload::Condition` arm (`interpreter/mod.rs:229-265`).
@@ -123,7 +123,7 @@ Each variant is emitted by exactly one arm of `Interpreter::step`
 - `EndStage` — `Payload::EndStage` arm (`interpreter/mod.rs:332-345`).
 - `Trigger` — `Payload::Trigger` arm (`interpreter/mod.rs:346-356`).
 - `Quantifier` — quantifier initial prompt, resume, and fan-out arms
-  (`interpreter/quant_driver.rs:128,174,202,230,268,326`).
+  (`interpreter/quant_driver.rs:159,182,208,236,295,325,375,413,471`).
 
 ### 2.3 Text views (derived, not stored)
 
@@ -210,7 +210,7 @@ writer; it is `Clone` (cheap `Arc` clone).
 
 When the caller also passes a `trace_sender` (`run_game`'s 5th arg), `run_game` does **not** make
 the caller's closure and the file logger race for the same `TraceEntry`. Instead it composes them
-into a single `Box<dyn Fn(TraceEntry) + Send>` (`crates/engine/src/controller/mod.rs:71-84`) that
+into a single `Box<dyn Fn(TraceEntry) + Send>` (`crates/engine/src/controller/mod.rs:170-183`) that
 first logs to the file (if open) and then forwards to the caller's closure (if present). The
 interpreter only sees the composed sender; it does not know whether one or both backends exist.
 Hosts therefore do **not** need to duplicate the file logging themselves — passing a `trace_sender`
@@ -275,7 +275,7 @@ There are **no** `eprintln!`/`println!`/`dbg!` calls left in the production libr
 (see `engine-vs-design.md` F-8). The `println!`s in `crates/engine/src/bin/cgdsl-play.rs` are
 CLI output, not engine telemetry. One `eprintln!` remains in the `run_game` startup path: when
 `MCG_TRACE_LOG` resolves to a path but `TraceLogger::open` fails
-(`crates/engine/src/controller/mod.rs:43-49`), a `Warning: failed to open trace log ...` message
+(`crates/engine/src/controller/mod.rs:139-146`), a `Warning: failed to open trace log ...` message
 goes to stderr and the run continues without file logging — this is intentional grace, not a
 panic.
 

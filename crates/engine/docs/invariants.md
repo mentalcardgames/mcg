@@ -31,9 +31,9 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > `crates::engine::game_data::GameData::current_player: Option<usize>` indexes **`turn_order`**,
 > not `players`. `turn_order` holds indices into `players`. The helper
 > `crates::engine::game_data::GameData::get_current_player`
-> (`crates/engine/src/game_data.rs:190-195`) does `turn_order[current_player] → players[…]`. Code
+> (`crates/engine/src/game_data.rs:228-246`) does `turn_order[current_player] → players[…]`. Code
 > that treats `current_player` as a player index is wrong.
-> `front_end::ast::ActionRule::CycleAction` (`crates/engine/src/action.rs:209-232`) deliberately
+> `front_end::ast::ActionRule::CycleAction` (`crates/engine/src/action.rs:349-371`) deliberately
 > stores the *turn-order position* (`turn_order.iter().position(...)`), not the player index.
 
 > **I-2 — `GameData::new()` initializes `current_player = Some(0)` with an empty `turn_order`.**
@@ -87,7 +87,7 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > `locations[loc_idx].cards`. To find which location holds a card, the engine scans all locations
 > (`crates::engine::game_data::GameData::find_location_of_card`,
 > `crates/engine/src/game_data.rs:169-173`, used by `query/cardset.rs:66,175`;
-> `crates/engine/src/query/cardset.rs:519-536` `infer_location_from_cards`).
+> `crates/engine/src/query/cardset.rs:595-613` `infer_location_from_cards`).
 > `crates::engine::action::execute_cardset_move` scans **all locations per moved card**
 > (`crates/engine/src/action.rs:386-388`) — O(cards × locations). Do not assume O(1) card location
 > lookup.
@@ -111,29 +111,29 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > now that the buffer is empty, yields `NeedsInput` again. For
 > `crates::engine::controller::InputSource::TestFile` this **consumes the next recorded line** as a
 > re-prompt; for `InputSource::Player` the controller's own validation loop
-> (`crates/engine/src/controller/mod.rs:302-319`, `validate_player_input`) re-invokes the closure.
+> (`crates/engine/src/controller/mod.rs:439-457`, `validate_player_input`) re-invokes the closure.
 > For `ChoosePlayer`/`ChooseCards` (post-Stage-5), the controller's `validate_player_input`
-> (`controller/mod.rs:305-317`) checks **all three** conditions:
+> (`controller/mod.rs:444-455`) checks **all three** conditions:
 > - `Choice`: `idx <= max_index`;
 > - `ChoosePlayer`: `idx < candidates.len()`;
 > - `ChooseCards`: no `i >= display.len()`, `selected.len() >= min`, `selected.len() <= max`.
 > A `Player`-sourced answer that fails is dropped and the closure re-invoked (the loop can spin
 > forever — see I-15). The interpreter's *resume* path is stricter: a `ChoosePlayer` `idx` outside
 > `candidates` returns `StepResult::Error(EngineError::ChoosePlayerIdxOutOfRange)`
-> (`crates/engine/src/interpreter/quant_driver.rs:219-225`), and a `ChooseCards` index outside
+> (`crates/engine/src/interpreter/quant_driver.rs:366-369`), and a `ChooseCards` index outside
 > `candidate_ids` returns `StepResult::Error(EngineError::ChooseCardsIndexOutOfRange)`
-> (`quant_driver.rs:387-391`). The `TestFile` path has no validation loop: it consumes one line per
-> request and **errors on exhaustion** (`controller/mod.rs:220-223`,
+> (`quant_driver.rs:538-539`). The `TestFile` path has no validation loop: it consumes one line per
+> request and **errors on exhaustion** (`controller/mod.rs:351`,
 > `EngineError::TestInputExhausted`).
 
 > **I-9 — `set_memory` assigns the caller-provided `MemoryValue` verbatim (was: increment-by-1).**
-> `crates::engine::game_data::GameData::set_memory` (`crates/engine/src/game_data.rs:329-331`)
+> `crates::engine::game_data::GameData::set_memory` (`crates/engine/src/game_data.rs:339-341`)
 > inserts the `MemoryValue` it is given, overwriting any prior value. It is the write-side
 > primitive used by `ActionRule::SetMemory` *after* the `MemoryType` expression has been
 > evaluated by `action.rs` (eval failures surface as recoverable `Err`s since 2026-08 — they
 > previously panicked). Earlier engine revisions incremented an `Int` memory by 1 and ignored
 > the type argument; that behavior is gone — do not reintroduce it. `reset_memory`
-> (`crates/engine/src/game_data.rs:333-339`) still only resets `Int` memories (silent no-op on
+> (`crates/engine/src/game_data.rs:343-345`) still only resets `Int` memories (silent no-op on
 > other variants).
 
 > **I-10 — `add_memory` initializes some `MemoryType`s to mismatched `MemoryValue`s.**
@@ -165,11 +165,11 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > eligible player and `current_player` becomes `None`.
 
 > **I-13 — `resolve_turn` / `next_player` find the next *eligible* player, wrapping the turn order.**
-> (`crates/engine/src/game_data.rs:261-274` for `resolve_turn`, `:197-214` for `next_player`).
+> (`crates/engine/src/game_data.rs:308-313` for `resolve_turn`, `:228-246` for `next_player`).
 > Eligible = `in_game && in_stage[current_stage]`. If none is eligible, `current_player` becomes
 > `None` and the game is effectively stuck (no `Error` is raised).
 > `crates::engine::game_data::GameData::next_player` uses `unwrap_or_else(|| panic!(...))` on the
-> found position (`crates/engine/src/game_data.rs:204-209`) — safe only because `resolve_turn`
+> found position (`crates/engine/src/game_data.rs:236`) — safe only because `resolve_turn`
 > returning `Some(idx)` guarantees the idx is in `turn_order`.
 > **Note (2026-08-09):** `cycle to next` resolving to no eligible *other* player is now a
 > **recoverable** `StepResult::Error` (`EngineError::NoNextPlayerAvailable`), not a panic — see
@@ -181,16 +181,16 @@ For the panic conditions that enforce some of these, see [`error-handling.md`](.
 > `front_end::ast::CardSet::Memory` with cards not found in any location, it returns `(0, card_ids)`
 > (`crates/engine/src/query/cardset.rs:70`) — **location index 0 is a fallback sentinel**, not a
 > real answer. `crates::engine::query::Evaluator::infer_location_from_cards`
-> (`crates/engine/src/query/cardset.rs:519-536`) similarly falls back to `Ok(0)`. Consumers that
+> (`crates/engine/src/query/cardset.rs:595-613`) similarly falls back to `Ok(0)`. Consumers that
 > index `locations[0]` after such a result may read an unrelated pile.
 
 > **I-15 — `InputSource::Player`'s validation loop can spin forever.**
-> `crates/engine/src/controller/mod.rs:176-181` re-calls `callback(input_type)` with `continue`
-> while `validate_player_input(&raw, &input_type)` (`controller/mod.rs:302-319`) returns `false`.
+> `crates/engine/src/controller/mod.rs:291-297` re-calls `callback(input_type)` with `continue`
+> while `validate_player_input(&raw, &input_type)` (`controller/mod.rs:439-457`) returns `false`.
 > Post-Stage-5 this loop now spins on **any** of `Choice`/`ChoosePlayer`/`ChooseCards` out-of-range
 > answers (see I-8 for the per-variant checks). A buggy closure that always returns an out-of-range
 > answer will hang the run loop with no error. The `TestFile` path has no such loop (it consumes
-> one line per request and errors on exhaustion — `controller/mod.rs:220-223`).
+> one line per request and errors on exhaustion — `controller/mod.rs:351`).
 
 ---
 
@@ -205,7 +205,7 @@ pending-resume state match, and the setup-`Any` guard.
 > so they never collide with the densely-from-0-allocated real IR ids.**
 > `crates::engine::interpreter::Interpreter::new` seeds `next_synth = u32::MAX - 1`
 > (`crates/engine/src/interpreter/mod.rs:59`). `crates::engine::quantifier::alloc_synth`
-> (`crates/engine/src/quantifier.rs:118-123`) reads the current value, then advances the counter
+> (`crates/engine/src/quantifier.rs:134-138`) reads the current value, then advances the counter
 > with `next_synth.wrapping_sub(1)`. `wrapping_sub` (not `-`) prevents an overflow panic on
 > pathological reuse; the `u32` id space (2³²) is effectively unlimited for any realistic game.
 > Real IR ids, allocated densely from 0 upward by the `front_end` IR builder, can therefore never
@@ -269,7 +269,7 @@ pending-resume state match, and the setup-`Any` guard.
 > preserved so a future matching input can still resolve it.
 
 > **I-22 — Positional card queries on empty locations resolve to the bare location.**
-> `Evaluator::eval_group`'s `CardPosition` arm (`crates/engine/src/query/cardset.rs:173-195`)
+> `Evaluator::eval_group`'s `CardPosition` arm (`crates/engine/src/query/cardset.rs:264-280`)
 > extracts the location name from positional queries (`Top`, `Bottom`, `At`) before evaluating
 > the card position. If the location exists but the positional lookup fails (e.g. `top(Discard)` on
 > an empty pile), it gracefully returns `(loc_idx, vec![])` instead of erroring. This is necessary

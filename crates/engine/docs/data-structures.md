@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/interpreter/ir_ext.rs
   - crates/engine/src/controller/mod.rs
   - crates/front_end/src/ir.rs
-last_validated: 2026-08-09
+last_validated: 2026-08-10
 ---
 
 # Data Structures & State Model
@@ -68,7 +68,7 @@ attributes (e.g. `Rank → Ace`, `Suite → Hearts`). Cards are stored **only** 
 `crates::engine::game_data::CardStatus` (`game_data.rs:30-35`) is a per-card visibility slot,
 stored **parallel to `cards`** in `GameData::card_statuses` (same indexing). It was added 2026-08
 and is currently **unused by the engine**: every card is created `FaceUp`, and `card_status` /
-`set_card_status` (`game_data.rs:182-192`) are the only accessors. It is reserved for the card
+`set_card_status` (`game_data.rs:190-198`) are the only accessors. It is reserved for the card
 encryption work — `FlipAction` should become (de)encrypting a card's face (see
 `engine-vs-design.md` §1b).
 
@@ -100,9 +100,9 @@ pub enum MemoryValue {
 `crates::engine::game_data::MemoryValue` is the dynamically-typed storage for DSL "memory"
 variables. There is **no** separate `TeamCollection` variant — a stored team collection is
 represented as `MemoryValue::Team(String)` holding one team name (the read sites are
-`crates/engine/src/query/int.rs:277` and `crates/engine/src/query/player.rs:199`), and
+`crates/engine/src/query/int.rs:271-295` and `crates/engine/src/query/player.rs:186-195`), and
 `front_end::ast::MemoryType::TeamCollection` initializes to `MemoryValue::Int(0)`
-(`crates/engine/src/game_data.rs:304-319`, inside `GameData::add_memory`'s match), a known
+(`crates/engine/src/game_data.rs:314-329`, inside `GameData::add_memory`'s match), a known
 mismatch documented as invariant I-10 in [`invariants.md`](./invariants.md). The
 `MemoryValue::CardSet` variant is also used by the quantifier subsystem to carry player-chosen
 card ids — see the `SYNTH_MEMORY_KEY` discussion in [`observability.md`](./observability.md) and
@@ -258,12 +258,12 @@ pub enum InputType {
 ### 3.3 `TraceEntry` / `TraceEvent` — the per-step trace seam (post-Stage-5)
 
 ```rust
-// crates/engine/src/interpreter/trace.rs:1-8
+// crates/engine/src/interpreter/trace.rs:14-21
 pub enum TraceEntry {
     Step { from: u32, to: u32, event: TraceEvent },
 }
 
-// crates/engine/src/interpreter/trace.rs:14-67
+// crates/engine/src/interpreter/trace.rs:23-62
 pub enum TraceEvent {
     Action { rule: GameRule },
     Choice { chosen_idx: usize, options: Vec<String> },
@@ -279,7 +279,7 @@ pub enum TraceEvent {
 ```
 
 `from`/`to` are **raw** `StateID` integers (via `StateID::raw()`). Both enums derive `Clone +
-Debug`; both also implement `std::fmt::Display` (`trace.rs:48-102`) producing human-readable lines
+Debug`; both also implement `std::fmt::Display` (`trace.rs:169-215`) producing human-readable lines
 suitable for `mcg-trace.log` (e.g. `[12->13] Action:Move deal 26 from Deck private to P1Pile`). The
 `Quantifier` variant is emitted by the quantifier driver at synthetic-state allocation/deallocation
 (`interpreter/quant_driver.rs:363-375`). See [`observability.md`](./observability.md) for how

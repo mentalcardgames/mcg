@@ -52,7 +52,7 @@ field-level layouts live in [`data-structures.md`](./data-structures.md) §1–�
 **`cgdsl_engine::run_game`** — drives the FSM to completion (Mode A entry point).
 
 ```rust
-// crates/engine/src/controller/mod.rs:32
+// crates/engine/src/controller/mod.rs:96
 pub fn run_game(
     ir: Ir<LoweredPayLoad>,
     game_data: GameData,
@@ -121,7 +121,7 @@ pub enum InputSource {
 
 Intent: `Player` is the closure a UI/CLI host supplies (the primary integration point); `TestFile`
 is the recorded-replay path for test-suite writers. The closure bound is `Send + Sync` (stronger
-than the `Send`-only `event_sender`/`trace_sender` — see �6 §2).
+than the `Send`-only `event_sender`/`trace_sender` — see §6 §2).
 The controller validates closure answers and re-prompts on violation (I-8, I-15); the `TestFile`
 path errors on exhaustion rather than re-prompting — see §4.2.
 
@@ -163,7 +163,7 @@ Intent: 3-arg construction. The Mode B skeleton in §4.6 calls it with exactly t
 **`Interpreter::step`** — one FSM transition (the Mode B driver).
 
 ```rust
-// crates/engine/src/interpreter/mod.rs:64
+// crates/engine/src/interpreter/mod.rs:70
 pub fn step(&mut self) -> StepResult
 ```
 
@@ -174,7 +174,7 @@ Loop sequencing: [`lifecycle.md`](./lifecycle.md) §3.
 **`Interpreter::provide_input`** — pushes one `Input` onto the LIFO input buffer.
 
 ```rust
-// crates/engine/src/interpreter/mod.rs:372
+// crates/engine/src/interpreter/mod.rs:377
 pub fn provide_input(&mut self, input: Input)
 ```
 
@@ -303,7 +303,7 @@ pub struct PointMap { pub name: String, pub map: HashMap<String, i32> }
 ### §1.4 Read-side queries — `Evaluator`
 
 `Evaluator` is **not re-exported at the crate root**; import it as `cgdsl_engine::query::Evaluator`
-(`crates/engine/src/query/mod.rs:173`, a zero-sized struct used as a namespace for stateless
+(`crates/engine/src/query/mod.rs:176`, a zero-sized struct used as a namespace for stateless
 read-only associated functions). It is included here because the plan groups re-exported symbols
 by concern, but hosts wanting on-demand derived stats outside a running game reach for these
 methods (cross-reference: full method list in [`data-structures.md`](./data-structures.md) §3.5).
@@ -333,7 +333,7 @@ memory, out-of-range index, "no current player/stage", …) are catalogued in
 Full verbatim enum bodies:
 
 ```rust
-// crates/engine/src/interpreter/trace.rs:2
+// crates/engine/src/interpreter/trace.rs:14-21
 pub enum TraceEntry {
     Step {
         from: u32,
@@ -344,7 +344,7 @@ pub enum TraceEntry {
 ```
 
 ```rust
-// crates/engine/src/interpreter/trace.rs:14-67
+// crates/engine/src/interpreter/trace.rs:23-62
 pub enum TraceEvent {
     Action { rule: GameRule },
     Choice { chosen_idx: usize, options: Vec<String> },
@@ -461,7 +461,7 @@ The five inputs a host supplies:
 
 ### `InputSource::TestFile` line-format protocol
 
-For test-suite writers. The on-disk replay format (`crates/engine/src/controller/mod.rs:200-275`):
+For test-suite writers. The on-disk replay format (`crates/engine/src/controller/mod.rs:328-426`):
 
 | Line | Maps to |
 |---|---|
@@ -472,8 +472,8 @@ For test-suite writers. The on-disk replay format (`crates/engine/src/controller
 | `c <csv>` | `Input { player_id: "P1", kind: InputKind::ChooseCards { selected: <0-based> } }` — input is 1-based, internally converted; comma-separated |
 | `Name:y` / `Name:<N>` / etc. | Same as above, with `player_id: "Name"` (defaults to `"P1"` when no prefix) |
 
-Blank lines and `#…` comment lines are ignored (`controller/mod.rs:211-216`). On exhaustion the
-path returns the error `"Test input file exhausted (input #N)"` (`controller/mod.rs:223`) rather
+Blank lines and `#…` comment lines are ignored (`controller/mod.rs:330-343`). On exhaustion the
+path returns the error `"Test input file exhausted (input #N)"` (`controller/mod.rs:351`) rather
 than re-prompting. Other parse errors are catalogued in [`error-handling.md`](./error-handling.md) §1.
 
 ---
@@ -483,7 +483,7 @@ than re-prompting. Other parse errors are catalogued in [`error-handling.md`](./
 What a host receives:
 
 - **`Ok(GameData)`** — a deep clone of the terminal state. The clone is O(total state); see
-  �6 §3 and the Mode B note in §6.
+  §6 §3 and the Mode B note in §6.
 - **`Err(EngineError)`** — engine-level error; the engine does **not** roll back mutations already
   applied (see [`error-handling.md`](./error-handling.md) §2).
 - **During run: per-iteration `&GameData` snapshots** — via `event_sender` (see §5).
@@ -554,7 +554,7 @@ loop {
 
 For each `StepResult::NeedsInput(InputType::X)` variant, the matching `Input::Y` the host must
 return via `provide_input`, and the validation the controller enforces on `Player`-sourced answers
-(`crates/engine/src/controller/mod.rs:302-319`). The controller re-prompts the closure on violation
+(`crates/engine/src/controller/mod.rs:439-457`). The controller re-prompts the closure on violation
 (I-8, I-15 — spin risk for buggy closures). The `TestFile` path errors on exhaustion (`§2`) rather
 than re-prompting.
 
@@ -602,7 +602,7 @@ the game view, `trace_sender` for a debug/status panel.
 - **No state-pause/resume hook** beyond holding the `Interpreter` between `step()` calls in Mode B.
 - **No rollback.** Mutation is in-place; an `Error` leaves a partial state.
 - **No multi-thread sharing of a `Controller`.** `Send` but not `Sync` — see
-  �6 §2.
+  §6 §2.
 - **No streaming of intermediate results** beyond the two callbacks (`event_sender` /
   `trace_sender`).
 - **No way to inject custom mutations** — the only writes the engine performs are via `Payload`
@@ -650,7 +650,7 @@ Mode B is the recommended path for the upcoming UI project (see §4.1).
 - **`debug.rs`** — `DebugLevel::{Low, Medium, High}` formatted dumps; `format_game_data` /
   `save_game_data`. Cross-ref [`observability.md`](./observability.md) §4.
 - **Structured/`tracing` integration:** not present; hosts that need it must add it themselves
-  (cross-ref [`error-handling.md`](./error-handling.md) §1 / �6 §4).
+  (cross-ref [`error-handling.md`](./error-handling.md) §1 / §6 §4).
 
 ---
 
@@ -669,7 +669,7 @@ trace-logging plumbing:
 - `TraceLogger` (`controller/trace_logger.rs:10`) stores `Arc<Mutex<BufWriter<File>>>` so the
   composed trace-sender closure (handed to `Interpreter`) can write back into the same writer.
 - `run_game` allocates `Arc<Mutex<usize>>` as a step counter shared between the run loop and the
-  composed trace sender (`controller/mod.rs:67,71-84`).
+  composed trace sender (`controller/mod.rs:170-183`).
 - When a trace log is open, `run_game` wraps `controller.run()` in
   `catch_unwind(AssertUnwindSafe(..))`, logs the panic, then `resume_unwind`s (no thread spawned).
 

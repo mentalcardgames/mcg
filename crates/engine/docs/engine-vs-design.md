@@ -27,11 +27,11 @@ last_validated: 2026-08-10
 
 | ID | Bug | Fix | Regression test |
 |---|---|---|---|
-| F-1 | `set_memory` incremented `Int` memories by 1 instead of assigning (I-9) | Now assigns the evaluated `MemoryValue` (`game_data.rs:301`) | `game_data_tests` / `memory_test` suite |
-| F-2 | `execute_cardset_move` dest guard used `>` not `>=` — `dest_loc_idx == len` panicked with an index error | Guard now `>=` with a clear message (`action.rs:538`) | `action_tests` |
+| F-1 | `set_memory` incremented `Int` memories by 1 instead of assigning (I-9) | Now assigns the evaluated `MemoryValue` (`game_data.rs:339-341`) | `game_data_tests` / `memory_test` suite |
+| F-2 | `execute_cardset_move` dest guard used `>` not `>=` — `dest_loc_idx == len` panicked with an index error | Guard now `>=` with a clear message (`action.rs:610-617`) | `action_tests` |
 | F-3 | `OwnerOfMemory` looked up `"{memory}_{owner}"` instead of `"{owner}_{memory}"` — always failed or hit the wrong slot | Key order corrected (`query/player.rs:93`) | `player_tests::eval_player_aggregate_owner_of_memory_{min,max}` |
 | F-4 | `GroupOwner` with a `where`-filter evaluated the base location against the *current* player, then filtered by owner — `Hand of P:P2 where Rank is "X"` returned nothing whenever current ≠ P2 | Base location resolved against the owner (`query/cardset.rs`, `owner_base_location`) | `go_fish` demo game + `cardset_tests` |
-| F-5 | `ShuffleAction` replaced the whole location with the evaluated set — `shuffle top 3 of Deck` discarded the rest of the pile | Selected cards shuffled in place; unselected untouched (`action.rs:192`) | `shuffle_test` |
+| F-5 | `ShuffleAction` replaced the whole location with the evaluated set — `shuffle top 3 of Deck` discarded the rest of the pile | Selected cards shuffled in place; unselected untouched (`action.rs:224-240`) | `shuffle_test` |
 | F-6 | Three `debug` tests hard-coded Unix `/tmp/` paths — failed on Windows | `std::env::temp_dir()` (`debug/tests.rs`) | suite is green on Windows |
 | F-7 | `blackjack_runs_end_to_end` hung forever (input closure returned a wrong `player_id`; the controller's validation re-prompted infinitely, I-15/I-23) | Closure tracks the current player via `event_sender` | `flow_test` |
 | F-8 | **Panic table removed — `action::execute` is fallible.** `cycle to next` with no eligible *other* player (D-1), `SetMemory`/`ResetMemory` without a current player, `CycleAction` eval/player/turn-order failures, `CreateLocation`/`CreateMemory` owner resolution, `CreateCardOnLocation`, `CreatePointMap`, `Score`/`ScoreMemory` int eval, and all `execute_cardset_move` failure modes now return `StepResult::Error` instead of panicking. `Interpreter::execute_edge` returns `Result<(), EngineError>`; `ShuffleAction` eval failures are errors (were `eprintln!` + continue). | `action.rs` (all arms), `interpreter/mod.rs` | `action_tests` (7 former `#[should_panic]` pins converted) + `errors_cycle_no_next.cgdsl` + `errors_set_memory_no_current.cgdsl` |
@@ -169,7 +169,7 @@ stage Laydown for current until Set in Hand empty
   (`ensure_stage_entered`). Fix: carry the participant collection into the IR
   payload and gate stage entry on it.
 - **P-2 (SimStage ≡ SeqStage, B-3).** `build_sim_stage` is an identical copy
-  (`ir.rs:654`, explicit TODO). No simultaneous execution exists.
+  (`ir.rs:649`, explicit TODO). No simultaneous execution exists.
 - **P-3 (setup-`Any` rejected, I-20).** `location X on any`, `turnorder any`,
   etc. error with "quantifier 'any' is not supported in setup rules". `All`
   works. Wanted: either implement setup-`Any` (prompt before setup) or document
@@ -250,3 +250,11 @@ prerequisites are noted so a later project can pick them up:
   `mcg-cli` location (it is a `native_mcg` binary, not a workspace crate),
   `docs/README.md` module map, and the `cgdsl-authoring-guide.md` blackjack
   walkthrough (which previously taught the unguarded `cycle to next` pattern).
+- **Fifth pass (2026-08-10):** error-handling refactor to `EngineError` (typed enum, no
+  `Result<_, String>` left), `RunOptions` builder + `run_game_with`, opt-in trace logging
+  with stamped header/footer, `cgdsl-play` CLI flags + exit codes, typed `TraceEvent`
+  payloads, `ErrorKind` classifier, optional `tracing` bridge, TUI split with live engine
+  status. **Total: 518 tests green (427 lib + 5 cgdsl-play + 9 engine-tui + 77
+  integration, +1 ignored)**; `clippy --no-deps -D warnings` and `fmt --check` clean in
+  both feature configurations. Workspace caveat unchanged: `cargo clippy --workspace`
+  still fails on pre-existing `code_gen` lints (outside this crate).
