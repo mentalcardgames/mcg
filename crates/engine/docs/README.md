@@ -64,18 +64,17 @@ This crate is part of a larger workspace. Other crates you may need:
 7. [`testing.md`](./testing.md) — test layers, fixture conventions, commands
 
 **Integrating from outside:**
-8. [`interfaces.md`](./interfaces.md) — public API surface, data flow
-9. [`api-usage.md`](./api-usage.md) — `run_game()` examples
+8. [`interfaces.md`](./interfaces.md) — public API, data flow, threading, worked examples (the host contract hub)
 
 **Reference:**
-10. [`developer-notes.md`](./developer-notes.md) — design decisions (memory ownership, scoring)
-11. [`engine-vs-design.md`](./engine-vs-design.md) — divergences from the intended DSL design, with repros
-12. [`error-handling.md`](./error-handling.md) — panic sites, recoverable errors, silent no-ops
-13. [`concurrency.md`](./concurrency.md) — threading model, `Send`/`Sync`
-14. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
+9. [`developer-notes.md`](./developer-notes.md) — design decisions (memory ownership, scoring)
+10. [`engine-vs-design.md`](./engine-vs-design.md) — divergences from the intended DSL design, with repros
+11. [`error-handling.md`](./error-handling.md) — panic sites, recoverable errors, silent no-ops
+12. [`observability.md`](./observability.md) — trace hooks, debug output, `MCG_TRACE_LOG`
 
 **Handoff set (2026-08):**
-15. [`NEXT_STEPS.md`](./NEXT_STEPS.md) — future-work project seeds (bachelor/master)
+13. [`mechanics-matrix.md`](./mechanics-matrix.md) — which card-game mechanics the system supports (capability matrix + gap summary)
+14. [`NEXT_STEPS.md`](./NEXT_STEPS.md) — future-work project seeds (bachelor/master)
 
 ## Module Map
 
@@ -162,7 +161,7 @@ crates/engine/src/
 ## Build and Test
 
 ```
-cargo test -p cgdsl-engine              # 488 tests (414 unit + 74 integration)
+cargo test -p cgdsl-engine              # 499 tests (414 unit + 77 integration + 8 TUI)
 cargo test -p cgdsl-engine --test <name> # single integration test file
 cargo clippy -p cgdsl-engine --all-targets -- -D warnings
 cargo fmt -p cgdsl-engine -- --check

@@ -50,7 +50,7 @@ fine-grained per-transition seam is the `trace_sender` of §2.
 
 > The callback receives a shared `&GameData` — it must not mutate through it. Hosts that need a
 > snapshot must `clone()`. The bound is `Fn(&GameData) + Send` but **not** `Sync` — see
-> [`concurrency.md`](./concurrency.md) §2 for multi-thread host implications.
+> [`interfaces.md`](./interfaces.md) §6.2 for multi-thread host implications.
 
 ---
 
@@ -165,7 +165,7 @@ the following structured lines:
   `Err` (`controller/mod.rs:120-133`).
 - **Panic line** (`trace_logger.rs:52-57`): `=== Panic: <msg> ===` written before
   `std::panic::resume_unwind` re-panics in the caller; see §4 of
-  [`concurrency.md`](./concurrency.md) and the panic-capture note below.
+  [`interfaces.md`](./interfaces.md) �6 and the panic-capture note below.
 
 `TraceLogger` itself stores `Arc<Mutex<BufWriter<File>>>` (`trace_logger.rs:10`) so both the
 composed sender closure (handed to `Interpreter`) and the post-run footer writes go through one

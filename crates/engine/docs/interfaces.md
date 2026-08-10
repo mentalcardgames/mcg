@@ -2,7 +2,7 @@
 type: agent_wiki_node
 module: crates::engine
 scope: [public API — all modules]
-topics: [public-api, data-flow, ui-interface, observability, integration, controller-contract]
+topics: [public-api, data-flow, ui-interface, observability, integration, controller-contract, threading, worked-examples]
 associated_files:
   - crates/engine/src/lib.rs
   - crates/engine/src/controller/mod.rs
@@ -15,10 +15,12 @@ last_validated: 2026-08-09
 
 # Public Interfaces — the External Host Contract
 
-> Audience: the project lead starting the greenfield external-UI project shortly. This is the
+> **Audience:** the project lead starting the greenfield external-UI project shortly. This is the
 > **integration hub**: a reader who finishes this page should be able to write a working host
 > (CLI, GUI, or network relay) from scratch. Every other wiki page is a spoke linked from here —
 > this page inventories the public API surface and links out for field-level detail.
+> It also absorbs the former `api-usage.md` (worked examples, §7) and `concurrency.md`
+> (threading/`Send`/`Sync`, §6).
 
 The engine's public API surface is the set of symbols re-exported at the crate root by
 `crates/engine/src/lib.rs:9-13`. `Controller` itself is `pub(crate)` — an external host never
@@ -62,7 +64,7 @@ Intent: blocks the calling thread, drives the FSM to `GameOver`/`Error`, returns
 the terminal state. The two `Option<Box<dyn Fn + Send>>` args compose with the optional
 `MCG_TRACE_LOG` file logger internally — see [`observability.md`](./observability.md) §3.1. For the
 run-loop sequencing see [`lifecycle.md`](./lifecycle.md); for thread-safety bounds see
-[`concurrency.md`](./concurrency.md) §2. Invariants: I-2 (empty-state sentinel), I-4 (GameOver
+�6 §2. Invariants: I-2 (empty-state sentinel), I-4 (GameOver
 condition), I-15 (validation-loop spin), I-16 (synthetic-id seed). Error strings: see
 [`error-handling.md`](./error-handling.md) §2.
 
@@ -78,7 +80,7 @@ pub enum InputSource {
 
 Intent: `Player` is the closure a UI/CLI host supplies (the primary integration point); `TestFile`
 is the recorded-replay path for test-suite writers. The closure bound is `Send + Sync` (stronger
-than the `Send`-only `event_sender`/`trace_sender` — see [`concurrency.md`](./concurrency.md) §2).
+than the `Send`-only `event_sender`/`trace_sender` — see �6 §2).
 The controller validates closure answers and re-prompts on violation (I-8, I-15); the `TestFile`
 path errors on exhaustion rather than re-prompting — see §4.2.
 
@@ -438,7 +440,7 @@ than re-prompting. Other parse errors are catalogued in [`error-handling.md`](./
 What a host receives:
 
 - **`Ok(GameData)`** — a deep clone of the terminal state. The clone is O(total state); see
-  [`concurrency.md`](./concurrency.md) §3 and the Mode B note in §6.
+  �6 §3 and the Mode B note in §6.
 - **`Err(String)`** — engine-level error; the engine does **not** roll back mutations already
   applied (see [`error-handling.md`](./error-handling.md) §2).
 - **During run: per-iteration `&GameData` snapshots** — via `event_sender` (see §5).
@@ -557,7 +559,7 @@ the game view, `trace_sender` for a debug/status panel.
 - **No state-pause/resume hook** beyond holding the `Interpreter` between `step()` calls in Mode B.
 - **No rollback.** Mutation is in-place; an `Error` leaves a partial state.
 - **No multi-thread sharing of a `Controller`.** `Send` but not `Sync` — see
-  [`concurrency.md`](./concurrency.md) §2.
+  �6 §2.
 - **No streaming of intermediate results** beyond the two callbacks (`event_sender` /
   `trace_sender`).
 - **No way to inject custom mutations** — the only writes the engine performs are via `Payload`
@@ -605,21 +607,243 @@ Mode B is the recommended path for the upcoming UI project (see §4.1).
 - **`debug.rs`** — `DebugLevel::{Low, Medium, High}` formatted dumps; `format_game_data` /
   `save_game_data`. Cross-ref [`observability.md`](./observability.md) §4.
 - **Structured/`tracing` integration:** not present; hosts that need it must add it themselves
-  (cross-ref [`error-handling.md`](./error-handling.md) §1 / [`concurrency.md`](./concurrency.md) §4).
+  (cross-ref [`error-handling.md`](./error-handling.md) §1 / �6 §4).
 
 ---
 
-## §6. Lifecycle & Threading Contract (summary)
+## §6. Lifecycle, Threading & Resource Contract
 
-Full detail in [`lifecycle.md`](./lifecycle.md) and [`concurrency.md`](./concurrency.md).
+The engine is **single-threaded and fully synchronous**; `run_game` blocks the calling thread
+([`lifecycle.md`](./lifecycle.md) §1). `catch_unwind` captures panics into the trace log then
+re-panics ([`observability.md`](./observability.md) §3.2) — UI hosts running Mode B own the
+panic-handling themselves, no `catch_unwind` wraps `step()` directly.
 
-- **Single-threaded, fully synchronous**; `run_game` blocks the calling thread
-  ([`lifecycle.md`](./lifecycle.md) §1).
-- **`catch_unwind` captures panics** into the trace log then re-panics ([`observability.md`](./observability.md) §3.2).
-  UI hosts running Mode B own the panic-handling themselves — no `catch_unwind` wraps `step()` directly.
-- **`Send`/`Sync`:** `Interpreter` is `Send` but NOT `Sync` (because
-  `trace_sender: Box<dyn Fn + Send>`); `Controller` likewise `Send` not `Sync`;
-  `InputSource::Player` closure must be `Send + Sync`; `GameData` is `Send + Sync`. Cross-ref
-  [`concurrency.md`](./concurrency.md) §2.
-- **Resource:** the terminal `GameData::clone()` in `run_game` is O(total state); Mode B avoids
-  this clone by reading `interp.game_data` in place. Cross-ref [`concurrency.md`](./concurrency.md) §3.
+### §6.1 Threading model
+
+No `tokio`, no `async`, no `spawn` in the production path. The only `std::sync` usage sits in the
+trace-logging plumbing:
+
+- `TraceLogger` (`controller/trace_logger.rs:10`) stores `Arc<Mutex<BufWriter<File>>>` so the
+  composed trace-sender closure (handed to `Interpreter`) can write back into the same writer.
+- `run_game` allocates `Arc<Mutex<usize>>` as a step counter shared between the run loop and the
+  composed trace sender (`controller/mod.rs:67,71-84`).
+- When a trace log is open, `run_game` wraps `controller.run()` in
+  `catch_unwind(AssertUnwindSafe(..))`, logs the panic, then `resume_unwind`s (no thread spawned).
+
+The only concurrency-relevant public contract is the `Send + Sync` bound on the `Player` input
+closure — so a host may move an `InputSource` across threads; the engine itself never spawns
+threads.
+
+### §6.2 `Send` / `Sync` characteristics
+
+None of the engine types implement (or derive) `Send`/`Sync` explicitly; their auto-trait status
+follows from their fields:
+
+| Type | Auto `Send`? | Auto `Sync`? | Rationale |
+|---|---|---|---|
+| `GameData` | yes | yes | `Vec`/`HashMap` of `String`/`usize`/`i32`/`bool`/`u32`; no `Rc`/`RefCell`/raw. |
+| `Interpreter` | yes | **no** | Carries `trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>` — a `Box<dyn Fn + Send>` is `Send` but not `Sync`. |
+| `Controller` (private) | yes | **no** | `event_sender: Box<dyn Fn(&GameData) + Send>` is `Send` not `Sync`. |
+| `InputSource` | yes | yes | `Player` closure explicitly `Send + Sync`; `TestFile(PathBuf)` likewise. |
+| `Evaluator` | yes | yes | Zero-sized; no interior mutability. |
+| `StepResult`, `Input`, `InputType`, `DebugLevel`, `TraceEntry`, `TraceEvent` | yes | yes | Plain data. |
+
+**Interior mutability:** none in the production state machine (no `RefCell`/`Cell`/`RwLock`); the
+two `Mutex` uses are observation-only. Callbacks receive `&GameData` / `TraceEntry` by value —
+hosts that need a snapshot must `clone()`.
+
+**Implication for hosts:** because `event_sender` is `Send` but not `Sync`, a host emitting events
+from multiple worker threads must wrap the engine in its own `Mutex<Controller>` or run it on one
+dedicated thread and communicate via channels.
+
+### §6.3 Resource management
+
+- **Memory:** `GameData` is a flat aggregate of owned `Vec`/`HashMap`; the only large allocation
+  is the terminal `clone()` in `run_game` (O(total state); Mode B avoids it by reading
+  `interp.game_data` in place). Card ids are never reused; `cards.len()` grows monotonically. The
+  quantifier overlay is bounded by `FANOUT_CAP = 64` and never leaks past overlay-dispatch
+  completion.
+- **File descriptors:** the test-input file is opened lazily, consumed, and dropped within
+  `read_test_file`; `save_game_data` opens per call; `TraceLogger::open` opens once per
+  `run_game` and drops on return. No FD leaks.
+- **Network sockets:** none — the engine is transport-agnostic (each player runs their own
+  backend per the workspace P2P intent).
+- **Drop order:** `Controller` owns `Interpreter` owns `GameData`; standard Rust drop order; no
+  `Drop` impls in the crate.
+
+### §6.4 Dependencies inventory
+
+`crates/engine/Cargo.toml`:
+
+- **Library target:** `front_end` (IR/AST/lowering); `serde_json` (`alloc_synth`'s `StateID`
+  construction — `serde` is not a direct dependency); `rand` (`ShuffleAction`,
+  `CreateTurnorderRandom`).
+- **`engine-tui` binary:** `ratatui` + `crossterm` (terminal UI), `crossbeam-channel` (input
+  loop).
+- **`cgdsl-play` binary:** no extra dependencies (auto-discovered; only `engine-tui` has an
+  explicit `[[bin]]` entry).
+- Error handling is stringly-typed (`Result<_, String>`); no unused dependencies remain.
+
+---
+
+## §7. Worked Examples
+
+> The examples from the former `api-usage.md` live here. For the extension seams
+> (`InputSource::Player`, `event_sender`, `trace_sender`) and the `Evaluator` read-side methods,
+> see §1, §4.2, and §1.4 above.
+
+### §7.1 The golden path — `run_game`
+
+The canonical end-to-end flow is: parse `.cgdsl` → lower to
+`front_end::ir::Ir<front_end::ir::LoweredPayLoad>` → construct an empty `GameData` → supply an
+`InputSource` (and optionally an event and/or trace callback) → call `run_game`. The runnable
+example below mirrors `crates/engine/src/bin/cgdsl-play.rs` but is written as an external
+consumer and adds the event-sender and trace-sender hooks:
+
+```rust
+// In a downstream crate's example or test. Requires:
+//   cgdsl-engine = { path = "../crates/engine" }
+//   front_end    = { path = "../crates/front_end" }
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+use cgdsl_engine::{
+    run_game, GameData, Input, InputKind, InputSource, InputType, TraceEntry, DebugLevel, format_game_data,
+};
+use front_end::validation::parse_document;
+
+fn main() {
+    // 1. Load + parse + lower the DSL source into the FSM the engine consumes.
+    let source = std::fs::read_to_string("path/to/game.cgdsl")
+        .expect("failed to read game file");
+    let game = parse_document(&source).expect("failed to parse .cgdsl");
+    let ir = game.to_lowered_graph(); // -> Ir<LoweredPayLoad>
+
+    // 2. Fresh, empty game state. `current_player` starts at Some(0) (see I-2).
+    let game_data = GameData::new();
+
+    // 3. Choose an input source.
+    //
+    //    (a) Recorded/replayable: a text file with one line per input request.
+    //        Lines: "y"/"yes" -> OptionalAccept, "n"/"no" -> OptionalDecline,
+    //        "<N>"  -> Choice { idx: N-1 }        (1-based choice index),
+    //        "p <N>"-> ChoosePlayer { idx: N-1 }  (1-based candidate index),
+    //        "c <csv>" -> ChooseCards { selected: [..] } (1-based, comma-separated).
+    //        Blank/# lines are ignored.
+    let input_source = InputSource::TestFile(PathBuf::from("path/to/inputs.txt"));
+
+    //    (b) Interactive / programmatic: a closure. The engine hands you an
+    //        InputType (Choice | Optional | ChoosePlayer | ChooseCards) and you
+    //        return an Input. Must be Send + Sync (see §6.2).
+    #[allow(dead_code)]
+    fn interactive_input(input_type: InputType) -> Input {
+        match input_type {
+            InputType::Choice { options, max_index } => {
+                println!("Choose: {:?}", options);
+                // ...read stdin, validate 0..=max_index, return Input { player_id, kind: InputKind::Choice { idx } }
+                Input { player_id: "P1".into(), kind: InputKind::Choice { idx: 0 } }
+            }
+            InputType::Optional(prompt) => {
+                println!("{}", prompt);
+                Input { player_id: "P1".into(), kind: InputKind::OptionalAccept }
+            }
+            InputType::ChoosePlayer { candidates, prompt } => {
+                println!("{}: {:?}", prompt, candidates);
+                // ...return Input { player_id, kind: InputKind::ChoosePlayer { idx } }
+                Input { player_id: "P1".into(), kind: InputKind::ChoosePlayer { idx: 0 } }
+            }
+            InputType::ChooseCards { display, min, max, prompt } => {
+                println!("{}: {}..={} of {:?}", prompt, min, max, display);
+                // ...return Input { player_id, kind: InputKind::ChooseCards { selected: vec![0] } }
+                Input { player_id: "P1".into(), kind: InputKind::ChooseCards { selected: vec![0] } }
+            }
+        }
+    }
+    let _interactive = InputSource::Player(Box::new(interactive_input));
+
+    // 4. Optional event hook: invoked with &GameData after every loop iteration and
+    //    once more at GameOver. Receives a shared reference — do NOT mutate through
+    //    it. (Closure bound is `Fn(&GameData) + Send` — NOT Sync; see §6.2.)
+    let event_sender: Option<Box<dyn Fn(&GameData) + Send>> = Some(Box::new({
+        move |gd: &GameData| {
+            // Render a frame, log a diff, or forward over a channel. For a snapshot
+            // you must `clone()` — see observability.md §1.
+            println!("{}", format_game_data(gd, DebugLevel::Medium));
+        }
+    }));
+
+    // 5. Optional trace hook: invoked once per FSM *transition* with a TraceEntry
+    //    (not per loop iteration). Bound is `Fn(TraceEntry) + Send` (also NOT Sync,
+    //    see §6.2). See observability.md §2.
+    let trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>> = Some(Box::new({
+        move |entry: TraceEntry| {
+            // entry implements Display, so a one-line trace readout is trivial:
+            println!("{}", entry);
+        }
+    }));
+
+    // 6. Run to completion. Returns the terminal GameData (deep-cloned) or an
+    //    error string. This call BLOCKS the current thread until GameOver/Error.
+    //    When MCG_TRACE_LOG is set, `run_game` composes the file logger with the
+    //    caller's trace_sender, so hosts do NOT need to duplicate file logging
+    //    (see observability.md §3.1).
+    match run_game(ir, game_data, input_source, event_sender, trace_sender) {
+        Ok(final_state) => {
+            println!("Game over. {} players still in game.",
+                final_state.players.iter().filter(|p| p.in_game).count());
+            println!("{}", cgdsl_engine::format_game_data(&final_state, cgdsl_engine::DebugLevel::High));
+        }
+        Err(e) => eprintln!("Game error: {e}"),
+    }
+}
+```
+
+A minimal replay test (no event hook, no trace hook, no `MCG_TRACE_LOG`) reduces to one line,
+exactly as the in-tree test `crates/engine/src/controller/tests.rs` does:
+
+```rust
+let result = run_game(ir, GameData::new(), InputSource::TestFile(path), None, None);
+assert!(result.is_ok());
+```
+
+> **Signature:** `pub fn run_game(ir, game_data, input_source, event_sender, trace_sender) -> Result<GameData, String>`.
+> The two `Option<Box<dyn Fn + Send>>` arguments may be mixed freely; `run_game` composes them
+> with the optional `MCG_TRACE_LOG` file logger internally (see [`observability.md`](./observability.md) §3.1).
+
+### §7.2 Driving the interpreter manually (Mode B)
+
+Hosts that need finer-grained control (e.g., to persist state between requests in a server) can
+skip `run_game` and drive an `Interpreter` directly — this is the contract
+`Controller::run` itself implements:
+
+```rust
+use cgdsl_engine::{Interpreter, StepResult, Input, InputType, GameData};
+// `Interpreter::new` is the canonical constructor (seeds `current_state = ir.entry`,
+// `next_synth = u32::MAX - 1`, empty `pending_overlay` / `pending_quant`). All fields
+// remain `pub` so direct struct construction is *also* a supported pattern, but
+// omitting the quantifier bookkeeping fields will misbehave on the first quantifier
+// edge — prefer `new`. See data-structures.md §3.1.
+
+let mut interp = Interpreter::new(
+    ir,                  // Ir<LoweredPayLoad>
+    GameData::new(),
+    None,                // trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>
+);
+
+loop {
+    match interp.step() {
+        StepResult::Ok => {}                                       // advanced one edge
+        StepResult::NeedsInput(it: InputType) => {                 // stalled; ask your UI…
+            let input: Input = my_ui_resolve(it);                  // …then push and continue
+            interp.provide_input(input);
+        }
+        StepResult::GameOver => break,                             // terminal
+        StepResult::Error(msg) => { eprintln!("{msg}"); break; }  // see error-handling.md §2
+    }
+}
+// interp.game_data is the final state (no extra clone is performed here).
+```
+
+Note: manual driving does **not** get the `MCG_TRACE_LOG` file logging or the panic-capture
+behavior — those live in `run_game`. If you drive `Interpreter` directly and want trace logging,
+pass a `trace_sender` to `Interpreter::new` and write the file yourself, or call `run_game`.

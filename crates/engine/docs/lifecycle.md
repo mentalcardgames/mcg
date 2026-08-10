@@ -80,7 +80,7 @@ Key sequencing facts:
   so a panic is logged to the trace file before being re-raised — see
   [`observability.md`](./observability.md) §3.2.
 - There is no scheduler, no green threads, no `Future`s; `run()` **blocks the calling thread** until
-  `GameOver` or `Error`. See [`concurrency.md`](./concurrency.md).
+  `GameOver` or `Error`. See [`interfaces.md`](./interfaces.md) �6.
 
 ---
 
@@ -257,6 +257,6 @@ dropped at the end of `run_game`; no explicit teardown is required. The test-inp
 handle is dropped at the end of `Controller::read_test_file`'s loading block
 (`crates/engine/src/controller/mod.rs:204-218`). Drop order (`Controller` owns `Interpreter` owns
 `GameData`) is standard Rust and no `Drop` impls exist in the crate — see
-[`concurrency.md`](./concurrency.md) §3. If a trace log was opened, `TraceLogger` and its
+[`interfaces.md`](./interfaces.md) §6.3. If a trace log was opened, `TraceLogger` and its
 underlying `BufWriter<File>` are dropped when `run_game` returns, flushing any remaining buffered
 lines.

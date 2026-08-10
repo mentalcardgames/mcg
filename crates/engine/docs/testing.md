@@ -23,7 +23,7 @@ last_validated: 2026-08-09
 > [`invariants.md`](./invariants.md).
 
 The engine is a **single-threaded, fully synchronous, deterministic** FSM interpreter
-(see [`concurrency.md`](./concurrency.md)). There is no I/O concealed inside the library
+(see [`interfaces.md`](./interfaces.md) �6). There is no I/O concealed inside the library
 (except the optional trace log opened by [`controller/mod.rs`](../src/controller/mod.rs)),
 no `tokio`, no threads. This makes the **entire crate testable with plain `cargo test`** —
 no mock servers, no time control, noDeterministic-runtime tricks. Every test in the suite
@@ -37,24 +37,24 @@ runs in microseconds.
    fixed input sequence yields exactly one terminal state. Tests exploit this by
    constructing one of three things and asserting on the result:
 
-   | Layer | Construct directly | Assert on |
-   |---|---|---|
-   | Pure unit | AST/IR enums, `GameData::new()` | return value of `Evaluator::eval_*`, `quantifier::*`, `GameData::*` |
-   | Interpreter-level | a small hand-built `Ir` and `Interpreter` | `StepResult` variants, `current_state`, side-effects on `game_data` |
-   | Fixture integration | a `.cgdsl` file under `test_games/` | terminal `GameData`, emitted `TraceEntry`s, snapshots |
+| Layer               | Construct directly                        | Assert on                                                           |
+| ------------------- | ----------------------------------------- | ------------------------------------------------------------------- |
+| Unit Tests          | AST/IR enums, `GameData::new()`           | return value of `Evaluator::eval_*`, `quantifier::*`, `GameData::*` |
+| Interpreter-level   | a small hand-built `Ir` and `Interpreter` | `StepResult` variants, `current_state`, side-effects on `game_data` |
+| Fixture integration | a `.cgdsl` file under `test_games/`       | terminal `GameData`, emitted `TraceEntry`s, snapshots               |
 
-2. **Prefer fixtures over hand-built IR for engine arms.** Hand-building `Edge`s and
+3. **Prefer fixtures over hand-built IR for engine arms.** Hand-building `Edge`s and
    `Payload`s is verbose and couples tests to the IR representation. For any behavior that
    crosses an interpreter `step()` boundary (actions, conditions, stages, quantifier
    dispatch), write a `.cgdsl` fixture and drive it through `run_game`. Reserve
    hand-built-IR tests for the interpreter's own dispatch logic (Choice/Optional prompt
    shapes, edge-count errors, etc.) — see `src/interpreter/tests.rs` for the pattern.
 
-3. **Pin invariants, not implementations.** Every guardrail I-1..I-20 in
+4. **Pin invariants, not implementations.** Every guardrail I-1..I-20 in
    [`invariants.md`](./invariants.md) must have at least one regression test. When
    refactoring, the test should fail loudly before the invariant is silently violated.
 
-4. **TDD for new engine arms.** When adding a new `ActionRule` / `SetUpRule` / `Payload`
+5. **TDD for new engine arms.** When adding a new `ActionRule` / `SetUpRule` / `Payload`
    variant or a new `Evaluator` method, write the failing test first. See §6.
 
 ---
@@ -385,7 +385,7 @@ Conventions the suite aims for (not yet fully met — see §10):
 5. Every `.expect`/`panic!`/`unwrap`/`todo!` site listed in [`error-handling.md`](./error-handling.md)
    §2 has a `#[should_panic(expected = "…")]` test pinning the panic message — unless the
    site is a known bug scheduled for a fix (in which case file it in
-   [`developer-notes.md`](./known-bugs.md) and write the regression test around the *corrected*
+   [`engine-vs-design.md`](./engine-vs-design.md) and write the regression test around the *corrected*
    behavior).
 6. Every `TraceEvent::Display` arm in `src/interpreter/trace.rs` has a test pinning the
    rendered string format (so trace-log consumers downstream of `cgdsl-engine` don't
@@ -396,7 +396,7 @@ Conventions the suite aims for (not yet fully met — see §10):
 When a test reveals behavior that disagrees with intent (e.g. the WTO mismatch in I-9, or
 the `>` vs `>=` off-by-one in `execute_cardset_move`), the workflow is:
 
-1. Add the bug to [`developer-notes.md`](./known-bugs.md) with a B-n id if not already present.
+1. Add the bug to [`engine-vs-design.md`](./engine-vs-design.md) with a B-n id if not already present.
 2. **Do not** write a "pin current behavior" test — that cements the bug. Instead, write
    the regression test around the *corrected* behavior; it will stay red until the fix lands.
 3. Land the fix and the now-passing regression test in the same commit.
@@ -524,7 +524,7 @@ Per §8.1, these are bugs to fix before writing the regression tests:
 guard, and the collection-memory `todo!()`s — was converted to recoverable errors
 on 2026-08-09; see `engine-vs-design.md` §1.)
 
-When fixing, file entries under [`developer-notes.md`](./known-bugs.md), land the corrected
+When fixing, file entries under [`engine-vs-design.md`](./engine-vs-design.md), land the corrected
 behavior and its regression test together.
 
 ## 12. Behavioral Fixtures — `tests/behavior_test.rs`
@@ -586,5 +586,5 @@ and conserves all 52 cards**, regardless of what the player does.
 | [`lifecycle.md`](./lifecycle.md) | Step sequencing and quantifier pre-dispatch timing — explains *why* traces look the way they do |
 | [`observability.md`](./observability.md) | The `event_sender` / `trace_sender` seams tests capture through |
 | [`data-structures.md`](./data-structures.md) | Field-level layout for hand-building `GameData` in unit tests |
-| [`api-usage.md`](./api-usage.md) | Golden path and manual interpreter driving patterns reused by §6 |
-| [`developer-notes.md`](./known-bugs.md) | Bugs scheduled for fix; tests should be written around corrected behavior |
+| [`interfaces.md`](./interfaces.md) | Public API, data flow, threading, and worked examples (golden path + manual driving, §7) reused by §6 |
+| [`engine-vs-design.md`](./engine-vs-design.md) | Bugs scheduled for fix; tests should be written around corrected behavior |

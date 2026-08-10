@@ -17,7 +17,7 @@ last_validated: 2026-08-09
 # Error Handling, Panic Conditions & Diagnostics
 
 The engine is **stringly-typed throughout** — there is no custom `Error` enum despite `thiserror`
-being declared in `Cargo.toml` (see [`concurrency.md`](./concurrency.md) §4). This page enumerates
+being declared in `Cargo.toml` (see [`interfaces.md`](./interfaces.md) §6.4). This page enumerates
 the error channels, the recoverable vs. panic/silent paths, and points to
 [`observability.md`](./observability.md) for telemetry. Several panic sites enforce invariants from
 [`invariants.md`](./invariants.md); cross-references use the `I-N` IDs.
@@ -48,7 +48,8 @@ single name"` (`crates/engine/src/query/player.rs:291-294`),
 are not in the data model)"` (`crates/engine/src/query/player.rs:310-312`),
 `"Card position not found in any location"`.
 
-Controller-level errors (in `crates/engine/src/controller/mod.rs`): `"Failed to open test file
+Controller-level errors (in `crates/engine/src/controller/mod.rs`): 
+"Failed to open test file
 {path}: {e}"` (`:206`), `"Failed to read test file {path}: {e}"` (`:210`), `"Test input file
 exhausted (input #{})"` (`:223`), `"Invalid test input #{}: expected 'p <N>', got '{}'"
 (`:229-233`), `"Invalid test input #{}: player indices start at 1, got 0"` (`:235-238`),

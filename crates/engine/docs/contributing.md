@@ -48,14 +48,14 @@ Where to touch when adding or modifying engine functionality.
 | 1 | The source file (e.g., `types.rs`) | Add/modify the type or function |
 | 2 | `crates/engine/src/lib.rs` | Re-export if it should be public |
 | 3 | `crates/engine/docs/interfaces.md` | Update the public API inventory |
-| 4 | `crates/engine/docs/api-usage.md` | Update code examples if the integration pattern changed |
+| 4 | `crates/engine/docs/interfaces.md` | Update the public API inventory (§1) and the worked examples (§7) if the integration pattern changed |
 
 ## Testing conventions
 
 - **Unit tests** live alongside source files (e.g., `action_tests.rs`, `query/int_tests.rs`) — wired via `#[cfg(test)] #[path = "..."] mod tests;`
 - **Fixture tests** live in `crates/engine/tests/` — one file per feature area
 - **Fixtures** live in `crates/engine/test_games/` — minimal `.cgdsl` files, 2-3 players, named `<area>_<variant>.cgdsl`
-- **Run:** `cargo test -p cgsdl-engine` (full suite), `cargo test -p cgsdl-engine --test <name>` (single file)
+- **Run:** `cargo test -p cgdsl-engine` (full suite), `cargo test -p cgdsl-engine --test <name>` (single file)
 
 ## Guardrails
 
@@ -68,7 +68,7 @@ Where to touch when adding or modifying engine functionality.
 ## Build commands
 
 ```
-cargo test -p cgdsl-engine                    # 488 tests
+cargo test -p cgdsl-engine                    # 499 tests
 cargo clippy -p cgdsl-engine --all-targets -- -D warnings
 cargo fmt -p cgdsl-engine -- --check
 just tui [GAME]                                # interactive TUI testing

@@ -308,8 +308,8 @@ struct Controller {
 ```
 
 `Controller` is the (still-private) run-loop owner. Post-Stage-5 it gained a `step_count:
-Arc<Mutex<usize>>` field shared with the composed trace-sender closure (see §1 of
-[`concurrency.md`](./concurrency.md) and [`observability.md`](./observability.md)).
+Arc<Mutex<usize>>` field shared with the composed trace-sender closure (see §6.1 of
+[`interfaces.md`](./interfaces.md) and [`observability.md`](./observability.md)).
 
 ### 3.5 `Evaluator` — the read-side namespace
 

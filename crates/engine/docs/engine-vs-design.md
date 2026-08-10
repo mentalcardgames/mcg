@@ -144,9 +144,14 @@ last_validated: 2026-08-09
   over-fires (read-side, below) can always be dismissed — and games can offer
   "lay down or pass" freely (Go Fish's book mechanic uses this). For "lay
   down everything", pair the move with a stage loop:
-  `stage Laydown for current until Set in Hand empty { move Set in Hand of
-  current private to Table }` — `until <combo> in <pile> empty` is a valid
-  end condition (a combo group is a cardset; `card_set_empty` applies).
+```
+stage Laydown for current until Set in Hand empty 
+	{ 
+	move Set in Hand of
+	current private to Table 
+	}
+```
+   — `until <combo> in <pile> empty` is a valid end condition (a combo group is a cardset; `card_set_empty` applies).
 - **Read-side remains over-approximating:** `size(cards Set in Hand)` still
   counts *any* duplicated rank (pairs included) and applies `size` to the
   whole pile — the filter semantics themselves are unchanged.
