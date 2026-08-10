@@ -103,6 +103,13 @@ pub enum PendingKind {
         candidates: Vec<String>,
         original: Edge<LoweredPayLoad>,
     },
+    /// `SetupAny` (I-20, relaxed): a setup rule contains `Quantifier::Any`
+    /// (e.g. `location Hand on any`); the chosen player is substituted into
+    /// every any-site of the setup before dispatch.
+    SetupAny {
+        candidates: Vec<String>,
+        original: Edge<LoweredPayLoad>,
+    },
     /// `SrcCardsAnyOrRange`: a card subset must be chosen from
     /// `candidate_ids`; on resume, the chosen ids are written into the
     /// synthetic memory slot and the original edge's `from`/`quantity` are
@@ -430,6 +437,78 @@ pub fn edge_source_any(edge: &Edge<LoweredPayLoad>) -> Option<PlayerCollection> 
         front_end::ast::MoveCardSet::MoveQuantity { from, .. } => from,
     };
     source_any_site(from)
+}
+
+/// Clone `edge` and replace every `Quantifier::Any` in its setup rule with the
+/// chosen player's literal — the setup-`Any` counterpart of the move
+/// substitutions (I-20, relaxed 2026-08-10). Any-sites can appear as an
+/// `Owner` (`location X on any`, `memory M on any`) or as a player collection
+/// (`team T1 with any`, `turnorder any`).
+pub fn substitute_setup_any(
+    edge: &Edge<LoweredPayLoad>,
+    player_name: String,
+) -> Edge<LoweredPayLoad> {
+    let mut repl = edge.clone();
+    if let Payload::Action(front_end::ast::GameRule::SetUp { setup }) = &mut repl.payload {
+        substitute_setup_any_in_rule(setup, &player_name);
+    }
+    repl
+}
+
+fn substitute_setup_any_in_rule(setup: &mut SetUpRule, name: &str) {
+    match setup {
+        SetUpRule::CreateTeams { teams } => {
+            for (_, pc) in teams {
+                if is_any_player_collection(pc) {
+                    *pc = PlayerCollection::Literal {
+                        players: vec![PlayerExpr::Literal {
+                            name: name.to_string(),
+                        }],
+                    };
+                }
+            }
+        }
+        SetUpRule::CreateTurnorder { player_collection }
+        | SetUpRule::CreateTurnorderRandom { player_collection } => {
+            if is_any_player_collection(player_collection) {
+                *player_collection = PlayerCollection::Literal {
+                    players: vec![PlayerExpr::Literal {
+                        name: name.to_string(),
+                    }],
+                };
+            }
+        }
+        SetUpRule::CreateLocation { owner, .. } => substitute_any_owner(owner, name),
+        SetUpRule::CreateMemory { owner, .. }
+        | SetUpRule::CreateMemoryWithMemoryType { owner, .. } => substitute_any_owner(owner, name),
+        _ => {}
+    }
+}
+
+fn is_any_player_collection(pc: &PlayerCollection) -> bool {
+    matches!(
+        pc,
+        PlayerCollection::Aggregate {
+            aggregate: AggregatePlayerCollection::Quantifier {
+                quantifier: Quantifier::Any
+            }
+        }
+    )
+}
+
+fn substitute_any_owner(owner: &mut Owner, name: &str) {
+    if let Owner::PlayerCollection {
+        player_collection: pc,
+    } = owner
+    {
+        if is_any_player_collection(pc) {
+            *owner = Owner::Player {
+                player: PlayerExpr::Literal {
+                    name: name.to_string(),
+                },
+            };
+        }
+    }
 }
 
 /// If `edge` also carries a card-amount quantifier site (`Quantifier::Any` or

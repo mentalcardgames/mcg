@@ -82,7 +82,7 @@ against) are unchanged from the pre-enum string errors; representative examples:
 - **Interpreter** (`interpreter/mod.rs`): `CurrentStateNotFoundInIr { state }`,
   `NoOutgoingEdges { state }`, `NoEdgesFound { state }`, `ConditionEdgeCount { state, found }`,
   `EndConditionEdgeCount { state, found }`, `ConditionEdgeMissing`,
-  `EndConditionEdgeMissing`, `UnexpectedInputForOptional`, `AnyInSetupRule`.
+  `EndConditionEdgeMissing`, `UnexpectedInputForOptional`.
 - **Quantifier** (`quantifier.rs`, `quant_driver.rs`): `DestPlayerFanoutExceedsCap { n, cap }`,
   `SelectionDoesNotSatisfyRange { count, range }` (re-prompt message, see §2),
   `SelectionExceedsAvailable { count, available }`, `ChoosePlayerIdxOutOfRange { idx, len }`,
@@ -146,7 +146,7 @@ well-formed DSL input:
 `build_dest_all_chain` returns `Err` at `:413-440`; `build_dest_all_chain_with_memory` returns
 `Err` at `:505-534`. The resume arms in `crates/engine/src/interpreter/quant_driver.rs` likewise
 return `StepResult::Error` on bad input (see the variant list in §1), never `panic!`. The
-setup-`Any` guard returns `StepResult::Error`, never `panic!` (`interpreter/mod.rs:160-163`).
+setup-`Any` guard prompts for a player (`step_setup_any`), never `panic!` (`interpreter/mod.rs:160-163`).
 
 > **Panic capture:** `run_game`/`run_game_with` catch panics inside the run loop
 > (`crates/engine/src/controller/mod.rs`) in two situations: (1) **always**, when the caller set

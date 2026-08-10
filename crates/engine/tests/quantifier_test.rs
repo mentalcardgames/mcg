@@ -624,33 +624,47 @@ fn setup_location_literal_creates_per_player_hands() {
     );
 }
 
+/// `location Hand on any`: setup-`Any` (I-20, relaxed) prompts for one player
+/// and creates the location for the chosen player instead of erroring.
 #[test]
-fn setup_location_any_returns_error() {
-    let ir = load_game("setup_location_any_errors.cgdsl");
-    let result = run_game_with(
+fn setup_location_any_prompts_and_creates_for_chosen_player() {
+    let ir = load_game("setup_location_any.cgdsl");
+    let prompts = Arc::new(Mutex::new(0usize));
+    let prompts_clone = prompts.clone();
+    let gd = run_game_with(
         ir,
         GameData::new(),
-        InputSource::Player(Box::new(|_it: InputType| Input {
-            player_id: "P1".into(),
-            kind: InputKind::Choice { idx: 0 },
+        InputSource::Player(Box::new(move |it: InputType| match it {
+            InputType::ChoosePlayer { .. } => {
+                *prompts_clone.lock().unwrap() += 1;
+                Input {
+                    player_id: "P1".into(),
+                    kind: InputKind::ChoosePlayer { idx: 1 }, // P2
+                }
+            }
+            _ => Input {
+                player_id: "P1".into(),
+                kind: InputKind::Choice { idx: 0 },
+            },
         })),
         RunOptions::default(),
+    )
+    .expect("game should complete");
+
+    assert_eq!(
+        *prompts.lock().unwrap(),
+        1,
+        "exactly one ChoosePlayer prompt"
     );
-    match result {
-        Err(e) => {
-            assert!(
-                e.to_string().contains("not supported in setup rules"),
-                "error message should mention 'not supported in setup rules', got: {e}"
-            );
-        }
-        Ok(gd) => {
-            panic!(
-                "expected error but got Ok(GameData). GameData has {:?} players, {:?} locations",
-                gd.players.len(),
-                gd.locations.len()
-            );
-        }
-    }
+    assert_eq!(
+        player_location(&gd, 1, "Hand").unwrap().cards.len(),
+        1,
+        "P2's Hand was created by the prompt and received the deal"
+    );
+    assert!(
+        player_location(&gd, 0, "Hand").is_none(),
+        "P1 has no Hand — the any-site resolved to P2 only"
+    );
 }
 
 #[test]

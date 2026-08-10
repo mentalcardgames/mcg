@@ -628,16 +628,17 @@ validates and can issue a new `NeedsInput` on failure.
 
 ---
 
-### 6.5 `any` in Setup Rules (Rejected)
+### 6.5 `any` in Setup Rules (Prompted)
 
 **DSL:** `location Hand on any`
 
 **Engine:** Before dispatching a setup rule edge, the quantifier guard
 (`setup_contains_any`) checks whether any element collection uses
-`Quantifier::Any`. If yes, returns
-`StepResult::Error(EngineError::AnyInSetupRule)` —
-Display `"quantifier 'any' is not supported in setup rules"` —
-before any `GameData` mutation occurs (invariant I-20).
+`Quantifier::Any`. If yes, `step()` issues a `ChoosePlayer` prompt
+(`step_setup_any`); on resume the chosen player is substituted into *every*
+any-site of the setup (`quantifier::substitute_setup_any`) before any
+`GameData` mutation occurs (invariant I-20 — relaxed 2026-08-10 from
+"rejected" to "prompted").
 
 ---
 

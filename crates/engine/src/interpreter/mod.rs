@@ -162,7 +162,10 @@ impl Interpreter {
                 Payload::Action(gr) => {
                     if let front_end::ast::GameRule::SetUp { setup } = gr {
                         if crate::quantifier::setup_contains_any(setup) {
-                            return StepResult::Error(EngineError::AnyInSetupRule);
+                            // Setup-`Any` (I-20, relaxed 2026-08-10): prompt
+                            // for the player and substitute it into every
+                            // any-site of the setup, instead of erroring.
+                            return self.step_setup_any(&edge.clone());
                         }
                     }
                     if let Some(ref sender) = self.trace_sender {

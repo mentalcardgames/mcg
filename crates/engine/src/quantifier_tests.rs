@@ -510,6 +510,79 @@ fn edge_source_any_detects_chained_source() {
     assert!(crate::quantifier::edge_source_any(&clean).is_none());
 }
 
+/// A `SetUp` edge carrying the given rule.
+fn setup_edge(setup: SetUpRule) -> Edge<LoweredPayLoad> {
+    Edge {
+        to: dest_state(),
+        payload: Payload::Action(GameRule::SetUp { setup }),
+        meta: None,
+    }
+}
+
+#[test]
+fn substitute_setup_any_replaces_location_owner() {
+    let edge = setup_edge(SetUpRule::CreateLocation {
+        locations: vec!["Hand".to_string()],
+        owner: aggregate_owner(Quantifier::Any),
+    });
+    let repl = substitute_setup_any(&edge, "P2".to_string());
+    let Payload::Action(GameRule::SetUp { setup }) = &repl.payload else {
+        panic!("expected a setup payload");
+    };
+    let SetUpRule::CreateLocation { owner, .. } = setup else {
+        panic!("expected CreateLocation");
+    };
+    assert_eq!(
+        owner,
+        &Owner::Player {
+            player: PlayerExpr::Literal {
+                name: "P2".to_string(),
+            },
+        }
+    );
+}
+
+#[test]
+fn substitute_setup_any_replaces_turnorder_collection() {
+    let edge = setup_edge(SetUpRule::CreateTurnorder {
+        player_collection: PlayerCollection::Aggregate {
+            aggregate: AggregatePlayerCollection::Quantifier {
+                quantifier: Quantifier::Any,
+            },
+        },
+    });
+    let repl = substitute_setup_any(&edge, "P3".to_string());
+    let Payload::Action(GameRule::SetUp { setup }) = &repl.payload else {
+        panic!("expected a setup payload");
+    };
+    let SetUpRule::CreateTurnorder { player_collection } = setup else {
+        panic!("expected CreateTurnorder");
+    };
+    assert_eq!(
+        player_collection,
+        &PlayerCollection::Literal {
+            players: vec![PlayerExpr::Literal {
+                name: "P3".to_string(),
+            }],
+        }
+    );
+}
+
+#[test]
+fn substitute_setup_any_leaves_any_free_setups_untouched() {
+    let edge = setup_edge(SetUpRule::CreatePlayer {
+        players: vec!["P1".to_string()],
+    });
+    let repl = substitute_setup_any(&edge, "P2".to_string());
+    let Payload::Action(GameRule::SetUp { setup }) = &repl.payload else {
+        panic!("expected a setup payload");
+    };
+    let SetUpRule::CreatePlayer { players } = setup else {
+        panic!("expected CreatePlayer");
+    };
+    assert_eq!(players, &vec!["P1".to_string()]);
+}
+
 #[test]
 fn substitute_source_player_rewrites_from_owner() {
     let edge = move_qty_edge(

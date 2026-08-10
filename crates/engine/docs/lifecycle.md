@@ -213,9 +213,12 @@ The pre-dispatch arms, in order:
 
 6. **Setup-`Any` guard** (`interpreter/mod.rs:160-163`). For a `Payload::Action` whose `GameRule`
    is `SetUp { setup }`, `step()` checks `crate::quantifier::setup_contains_any(setup)`. If any
-   element collection of the setup uses `Quantifier::Any`, it returns
-   `StepResult::Error(EngineError::AnyInSetupRule)` *before* calling
-   `execute_edge` — no `GameData` mutation occurs (invariant I-20). `Quantifier::All` in setup is
+   element collection of the setup uses `Quantifier::Any`, it issues a
+   `ChoosePlayer` prompt (`step_setup_any`); on resume the chosen player is
+   substituted into every any-site of the setup (`substitute_setup_any`)
+   *before* calling
+   `execute_edge` — no `GameData` mutation occurs until the prompt is answered
+   (invariant I-20, relaxed 2026-08-10). `Quantifier::All` in setup is
    supported and expands to all in-game players.
 
 After the pre-dispatch arms, the per-`Payload` dispatch

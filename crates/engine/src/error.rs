@@ -423,10 +423,6 @@ pub enum EngineError {
     #[error("Unexpected input for Optional")]
     UnexpectedInputForOptional,
 
-    /// A `SetUp` edge whose setup contains `Quantifier::Any` (invariant I-20).
-    #[error("quantifier 'any' is not supported in setup rules")]
-    AnyInSetupRule,
-
     // =====================================================================
     // Quantifier errors (`crates::engine::quantifier`, `quant_driver`)
     // =====================================================================
@@ -600,8 +596,7 @@ impl EngineError {
             | EngineError::EndConditionEdgeCount { .. }
             | EngineError::ConditionEdgeMissing
             | EngineError::EndConditionEdgeMissing
-            | EngineError::UnexpectedInputForOptional
-            | EngineError::AnyInSetupRule => ErrorKind::Interpreter,
+            | EngineError::UnexpectedInputForOptional => ErrorKind::Interpreter,
 
             EngineError::DestPlayerFanoutExceedsCap { .. }
             | EngineError::SelectionDoesNotSatisfyRange { .. }

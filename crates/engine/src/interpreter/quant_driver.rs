@@ -24,6 +24,11 @@ impl Interpreter {
                 candidates: Vec<String>,
                 original: Edge<LoweredPayLoad>,
             },
+            SetupAny {
+                idx: usize,
+                candidates: Vec<String>,
+                original: Edge<LoweredPayLoad>,
+            },
             Cards {
                 selected: Vec<usize>,
                 candidate_ids: Vec<usize>,
@@ -69,6 +74,17 @@ impl Interpreter {
                     },
                     InputKind::ChoosePlayer { idx },
                 ) => Resume::SourcePlayer {
+                    idx: *idx,
+                    candidates: candidates.clone(),
+                    original: original.clone(),
+                },
+                (
+                    crate::quantifier::PendingKind::SetupAny {
+                        candidates,
+                        original,
+                    },
+                    InputKind::ChoosePlayer { idx },
+                ) => Resume::SetupAny {
                     idx: *idx,
                     candidates: candidates.clone(),
                     original: original.clone(),
@@ -129,6 +145,11 @@ impl Interpreter {
                 candidates,
                 original,
             } => self.resume_source_player_any(idx, candidates, original),
+            Resume::SetupAny {
+                idx,
+                candidates,
+                original,
+            } => self.resume_setup_any(idx, candidates, original),
             Resume::Cards {
                 selected,
                 candidate_ids,
@@ -260,6 +281,34 @@ impl Interpreter {
             },
         });
         self.emit_quant_trace("SourcePlayerAny", format!("{} candidates", n));
+        StepResult::NeedsInput(InputType::ChoosePlayer {
+            candidates,
+            prompt: "Choose a player".to_string(),
+        })
+    }
+
+    /// `SetupAny` arm (initial): a setup rule contains `Quantifier::Any`
+    /// (e.g. `location Hand on any`) — prompt for one player, then substitute
+    /// it into every any-site of the setup before dispatch (I-20, relaxed).
+    pub(super) fn step_setup_any(&mut self, edge: &Edge<LoweredPayLoad>) -> StepResult {
+        let pc = front_end::ast::PlayerCollection::Aggregate {
+            aggregate: front_end::ast::AggregatePlayerCollection::Quantifier {
+                quantifier: front_end::ast::Quantifier::Any,
+            },
+        };
+        let candidates = match self.resolve_player_names(&pc) {
+            Ok(n) => n,
+            Err(e) => return StepResult::Error(e),
+        };
+        let n = candidates.len();
+        self.pending_quant = Some(crate::quantifier::PendingQuant {
+            state: self.current_state,
+            kind: crate::quantifier::PendingKind::SetupAny {
+                candidates: candidates.clone(),
+                original: edge.clone(),
+            },
+        });
+        self.emit_quant_trace("SetupAny", format!("{} candidates", n));
         StepResult::NeedsInput(InputType::ChoosePlayer {
             candidates,
             prompt: "Choose a player".to_string(),
@@ -444,6 +493,26 @@ impl Interpreter {
         let repl = crate::quantifier::substitute_source_player(&original, name.clone());
         self.emit_quant_trace("SourcePlayerAny", format!("chose {}", name));
         self.quantify_or_dispatch(repl)
+    }
+
+    /// Resume a `SetupAny`: substitute the chosen player into every any-site
+    /// of the setup rule and dispatch the concrete edge.
+    fn resume_setup_any(
+        &mut self,
+        idx: usize,
+        candidates: Vec<String>,
+        original: Edge<LoweredPayLoad>,
+    ) -> StepResult {
+        let Some(name) = candidates.get(idx) else {
+            return StepResult::Error(EngineError::ChoosePlayerIdxOutOfRange {
+                idx,
+                len: candidates.len(),
+            });
+        };
+        let name = name.clone();
+        let repl = crate::quantifier::substitute_setup_any(&original, name.clone());
+        self.emit_quant_trace("SetupAny", format!("chose {}", name));
+        self.dispatch_concrete(repl)
     }
 
     /// Resume a `CardsAnyOrRange`: validate the selection against any

@@ -249,16 +249,17 @@ pending-resume state match, and the setup-`Any` guard.
 > in normal flow the equality always holds; the guard exists so a future caller cannot misroute an
 > answer.
 
-> **I-20 — Setup rules containing `Quantifier::Any` are rejected before dispatch.**
+> **I-20 — Setup rules containing `Quantifier::Any` are resolved by a player prompt
+> before dispatch (relaxed 2026-08-10; previously rejected).**
 > `step()`'s setup-`Any` guard (`crates/engine/src/interpreter/mod.rs:155-161`) checks
 > `crate::quantifier::setup_contains_any(setup)` for any `Payload::Action(GameRule::SetUp {
-> setup })` edge. If any element collection is `Aggregate { Quantifier::Any }`, `step()` returns
-> `StepResult::Error(EngineError::AnyInSetupRule)` *before* calling
-> `execute_edge` — no `GameData` mutation occurs. `Quantifier::All` in setup is supported
-> (it expands to all in-game players via `resolve_owner_to_names` →
+> setup })` edge. If any element collection is `Aggregate { Quantifier::Any }`, `step()` issues a
+> `ChoosePlayer` prompt (`step_setup_any`) and, on resume, substitutes the chosen player into
+> *every* any-site of the setup (`quantifier::substitute_setup_any`) *before* calling
+> `execute_edge` — no `GameData` mutation occurs until the prompt is answered. `Quantifier::All`
+> in setup is supported (it expands to all in-game players via `resolve_owner_to_names` →
 > `Evaluator::resolve_player_collection`, see I-10's setup note in
-> [`lifecycle.md`](./lifecycle.md) §2). See also the corresponding error-variant entry in
-> [`error-handling.md`](./error-handling.md).
+> [`lifecycle.md`](./lifecycle.md) §2).
 
 > **I-21 — Stale input on quantifier prompt mismatch is discarded.**
 > `take_quant_resume` (`crates/engine/src/interpreter/quant_driver.rs:78`) pops mismatched input
