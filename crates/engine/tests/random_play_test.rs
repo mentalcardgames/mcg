@@ -21,7 +21,9 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use cgdsl_engine::{run_game, EngineError, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{
+    run_game_with, EngineError, GameData, Input, InputKind, InputSource, InputType, RunOptions,
+};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 use rand::rngs::StdRng;
@@ -176,12 +178,11 @@ impl RandomPlayer {
 fn play_random_game(name: &str, seed: u64) -> Result<GameData, EngineError> {
     let ir = load_game(name);
     let player = RandomPlayer::new(seed);
-    run_game(
+    run_game_with(
         ir,
         GameData::new(),
         player.input_source(),
-        Some(player.event_sender()),
-        None,
+        RunOptions::new().with_event_sender(player.event_sender()),
     )
 }
 

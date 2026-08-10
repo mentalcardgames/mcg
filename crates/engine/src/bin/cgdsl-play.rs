@@ -3,7 +3,7 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::validation::parse_document;
 
 fn main() {
@@ -36,9 +36,9 @@ fn main() {
     let player_name: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
     let pn_writer = player_name.clone();
-    let state_sender = Some(Box::new(move |gd: &GameData| {
+    let state_sender = Box::new(move |gd: &GameData| {
         *pn_writer.lock().unwrap() = gd.get_current_player().map(|p| p.name.clone());
-    }) as Box<dyn Fn(&GameData) + Send>);
+    }) as Box<dyn Fn(&GameData) + Send>;
 
     let pn_reader = player_name.clone();
     let input_source = match input_file {
@@ -54,7 +54,12 @@ fn main() {
     };
 
     let game_data = GameData::new();
-    match run_game(ir, game_data, input_source, state_sender, None) {
+    match run_game_with(
+        ir,
+        game_data,
+        input_source,
+        RunOptions::new().with_event_sender(state_sender),
+    ) {
         Ok(state) => print_summary(&state),
         Err(e) => {
             eprintln!("Game error: {e}");

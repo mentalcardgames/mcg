@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -23,8 +23,8 @@ fn default_input() -> InputSource {
 #[test]
 fn shuffle_action_preserves_card_count() {
     let ir = load_game("shuffle_action.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
 
     let stock = gd
         .locations

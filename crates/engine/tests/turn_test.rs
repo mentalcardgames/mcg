@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -23,12 +23,11 @@ fn default_input() -> Input {
 #[test]
 fn turn_end_turn_advances_current_player() {
     let ir = load_game("turn_end_turn.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| default_input())),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -39,12 +38,11 @@ fn turn_end_turn_advances_current_player() {
 #[test]
 fn turn_cycle_to_named_sets_player() {
     let ir = load_game("turn_cycle_to_named.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| default_input())),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -55,12 +53,11 @@ fn turn_cycle_to_named_sets_player() {
 #[test]
 fn turn_end_stage_named_pops_stage_stack() {
     let ir = load_game("turn_end_stage_named.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| default_input())),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -73,12 +70,11 @@ fn turn_end_stage_named_pops_stage_stack() {
 #[test]
 fn turn_stage_deal_all_in_counted_stage() {
     let ir = load_game("turn_stage_deal_all.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| default_input())),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 

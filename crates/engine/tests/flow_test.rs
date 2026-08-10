@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -23,8 +23,8 @@ fn default_input() -> InputSource {
 #[test]
 fn flow_if_true_executes_body() {
     let ir = load_game("flow_if_true.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
 
     assert_eq!(
         gd.players[0].score, 10,
@@ -37,8 +37,8 @@ fn flow_if_true_executes_body() {
 #[test]
 fn flow_unless_true_skips_body() {
     let ir = load_game("flow_unless_true.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
 
     assert_eq!(
         gd.players[0].score, 0,
@@ -51,7 +51,7 @@ fn flow_unless_true_skips_body() {
 #[test]
 fn flow_optional_accept_executes_body() {
     let ir = load_game("flow_optional_accept.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|it: InputType| match it {
@@ -64,8 +64,7 @@ fn flow_optional_accept_executes_body() {
                 kind: InputKind::Choice { idx: 0 },
             },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -80,7 +79,7 @@ fn flow_optional_accept_executes_body() {
 #[test]
 fn flow_optional_bust_eliminates_on_over_limit() {
     let ir = load_game("flow_optional_bust.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|it: InputType| match it {
@@ -93,8 +92,7 @@ fn flow_optional_bust_eliminates_on_over_limit() {
                 kind: InputKind::Choice { idx: 0 },
             },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -105,8 +103,8 @@ fn flow_optional_bust_eliminates_on_over_limit() {
 #[test]
 fn flow_compare_aggregate_true_branch_executes() {
     let ir = load_game("flow_compare_aggregate.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
 
     assert_eq!(
         gd.players[0].score, 1,
@@ -137,7 +135,7 @@ fn blackjack_runs_end_to_end() {
     let current: std::sync::Arc<std::sync::Mutex<Option<String>>> =
         std::sync::Arc::new(std::sync::Mutex::new(None));
     let current_writer = current.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -167,10 +165,9 @@ fn blackjack_runs_end_to_end() {
                 },
             }
         })),
-        Some(Box::new(move |gd: &GameData| {
+        RunOptions::new().with_event_sender(Box::new(move |gd: &GameData| {
             *current_writer.lock().unwrap() = gd.get_current_player().map(|p| p.name.clone());
         })),
-        None,
     )
     .expect("blackjack should complete");
 

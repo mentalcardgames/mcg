@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use cgdsl_engine::{
-    run_game, GameData, Input, InputKind, InputSource, InputType, TraceEntry, TraceEvent,
+    run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions, TraceEntry,
+    TraceEvent,
 };
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
@@ -30,8 +31,13 @@ fn always_choice_0() -> InputSource {
 #[test]
 fn move_top_card_to_hand_succeeds() {
     let ir = load_game("action_move_top_to_hand.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), always_choice_0(), None, None).expect("game should complete");
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        always_choice_0(),
+        RunOptions::default(),
+    )
+    .expect("game should complete");
     let stock = gd
         .locations
         .iter()
@@ -56,12 +62,11 @@ fn stage_round_counter_incremented_exactly_once_per_traversal() {
     let ir = load_game("turn_switch.cgdsl");
     let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
     let trace_clone = trace.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         always_choice_0(),
-        None,
-        Some(Box::new(move |e: TraceEntry| {
+        RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
             trace_clone.lock().unwrap().push(e);
         })),
     )
@@ -97,7 +102,12 @@ fn stage_round_counter_incremented_exactly_once_per_traversal() {
 #[test]
 fn cycle_to_next_with_no_eligible_player_errors() {
     let ir = load_game("errors_cycle_no_next.cgdsl");
-    let err = match run_game(ir, GameData::new(), always_choice_0(), None, None) {
+    let err = match run_game_with(
+        ir,
+        GameData::new(),
+        always_choice_0(),
+        RunOptions::default(),
+    ) {
         Err(e) => e,
         Ok(_) => panic!("cycle to next must error, not panic"),
     };
@@ -111,7 +121,12 @@ fn cycle_to_next_with_no_eligible_player_errors() {
 #[test]
 fn set_memory_without_current_player_errors() {
     let ir = load_game("errors_set_memory_no_current.cgdsl");
-    let err = match run_game(ir, GameData::new(), always_choice_0(), None, None) {
+    let err = match run_game_with(
+        ir,
+        GameData::new(),
+        always_choice_0(),
+        RunOptions::default(),
+    ) {
         Err(e) => e,
         Ok(_) => panic!("SetMemory must error, not panic"),
     };
@@ -127,8 +142,13 @@ fn set_memory_without_current_player_errors() {
 #[test]
 fn empty_where_set_destination_uses_base_location() {
     let ir = load_game("fix_empty_where_dest.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), always_choice_0(), None, None).expect("game should complete");
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        always_choice_0(),
+        RunOptions::default(),
+    )
+    .expect("game should complete");
     let first = gd.locations.iter().find(|l| l.name == "First").unwrap();
     let second = gd.locations.iter().find(|l| l.name == "Second").unwrap();
     assert_eq!(first.cards.len(), 0, "location 0 must NOT receive the card");
@@ -139,7 +159,12 @@ fn empty_where_set_destination_uses_base_location() {
 #[test]
 fn combo_same_rank_matches_only_pairs() {
     let ir = load_game("fix_combo_same_rank.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), always_choice_0(), None, None).expect("game should complete");
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        always_choice_0(),
+        RunOptions::default(),
+    )
+    .expect("game should complete");
     assert_eq!(gd.players[0].score, 2, "pair = 2 cards, not 3");
 }

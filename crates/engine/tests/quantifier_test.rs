@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use cgdsl_engine::{
-    run_game, GameData, Input, InputKind, InputSource, InputType, Interpreter, Location,
-    StepResult, TraceEntry, TraceEvent,
+    run_game_with, GameData, Input, InputKind, InputSource, InputType, Interpreter, Location,
+    RunOptions, StepResult, TraceEntry, TraceEvent,
 };
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
@@ -74,15 +74,14 @@ fn quantifier_deal_all_fans_out_one_card_per_player() {
     let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
     let trace_clone = trace.clone();
 
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        Some(Box::new(move |e: TraceEntry| {
+        RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
             trace_clone.lock().unwrap().push(e);
         })),
     )
@@ -119,7 +118,7 @@ fn quantifier_deal_any_moves_chosen_card() {
     let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
     let trace_clone = trace.clone();
 
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|it: InputType| match it {
@@ -132,8 +131,7 @@ fn quantifier_deal_any_moves_chosen_card() {
                 kind: InputKind::Choice { idx: 0 },
             },
         })),
-        None,
-        Some(Box::new(move |e: TraceEntry| {
+        RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
             trace_clone.lock().unwrap().push(e);
         })),
     )
@@ -162,7 +160,7 @@ fn quantifier_range_rejects_zero_then_moves_two() {
     let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
     let trace_clone = trace.clone();
 
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -192,8 +190,7 @@ fn quantifier_range_rejects_zero_then_moves_two() {
                 },
             }
         })),
-        None,
-        Some(Box::new(move |e: TraceEntry| {
+        RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
             trace_clone.lock().unwrap().push(e);
         })),
     )
@@ -226,7 +223,7 @@ fn quantifier_dest_any_deals_to_chosen_player() {
     let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
     let trace_clone = trace.clone();
 
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|it: InputType| match it {
@@ -239,8 +236,7 @@ fn quantifier_dest_any_deals_to_chosen_player() {
                 kind: InputKind::Choice { idx: 0 },
             },
         })),
-        None,
-        Some(Box::new(move |e: TraceEntry| {
+        RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
             trace_clone.lock().unwrap().push(e);
         })),
     )
@@ -282,7 +278,7 @@ fn quantifier_all_then_any_single_prompt_then_fanout() {
     let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
     let trace_clone = trace.clone();
 
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -300,8 +296,7 @@ fn quantifier_all_then_any_single_prompt_then_fanout() {
                 }
             }
         })),
-        None,
-        Some(Box::new(move |e: TraceEntry| {
+        RunOptions::new().with_trace_sender(Box::new(move |e: TraceEntry| {
             trace_clone.lock().unwrap().push(e);
         })),
     )
@@ -375,15 +370,14 @@ fn quantifier_ir_not_mutated_and_memory_cleaned() {
 #[test]
 fn setup_location_all_creates_per_player_hands() {
     let ir = load_game("setup_location_all.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -404,15 +398,14 @@ fn setup_location_all_creates_per_player_hands() {
 #[test]
 fn setup_location_literal_creates_per_player_hands() {
     let ir = load_game("setup_location_literal.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -433,15 +426,14 @@ fn setup_location_literal_creates_per_player_hands() {
 #[test]
 fn setup_location_any_returns_error() {
     let ir = load_game("setup_location_any_errors.cgdsl");
-    let result = run_game(
+    let result = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     );
     match result {
         Err(e) => {
@@ -463,15 +455,14 @@ fn setup_location_any_returns_error() {
 #[test]
 fn setup_turnorder_all_resolves_to_in_game_players() {
     let ir = load_game("setup_turnorder_all.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -485,15 +476,14 @@ fn setup_turnorder_all_resolves_to_in_game_players() {
 #[test]
 fn setup_teams_all_resolves_all_players() {
     let ir = load_game("setup_teams_all.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 

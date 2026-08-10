@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use cgdsl_engine::game_data::MemoryValue;
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -17,15 +17,14 @@ fn load_game(name: &str) -> Ir<LoweredPayLoad> {
 #[test]
 fn scoring_score_literal_adds_to_player_score() {
     let ir = load_game("scoring_score_literal_to_player.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -37,15 +36,14 @@ fn scoring_score_literal_adds_to_player_score() {
 #[test]
 fn scoring_score_int_expr_resolves_correctly() {
     let ir = load_game("scoring_score_int_expr_to_player.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -58,15 +56,14 @@ fn scoring_score_int_expr_resolves_correctly() {
 #[test]
 fn scoring_score_binary_adds_to_all_players() {
     let ir = load_game("scoring_score_binary_to_all.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -78,15 +75,14 @@ fn scoring_score_binary_adds_to_all_players() {
 #[test]
 fn scoring_score_memory_writes_to_global_slot() {
     let ir = load_game("scoring_score_memory_write.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -106,15 +102,14 @@ fn scoring_score_memory_writes_to_global_slot() {
 #[test]
 fn scoring_winner_explicit_single_eliminates_others() {
     let ir = load_game("scoring_winner_explicit_single.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -126,15 +121,14 @@ fn scoring_winner_explicit_single_eliminates_others() {
 #[test]
 fn scoring_winner_explicit_multiple_keeps_named_players() {
     let ir = load_game("scoring_winner_explicit_multiple.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -146,15 +140,14 @@ fn scoring_winner_explicit_multiple_keeps_named_players() {
 #[test]
 fn scoring_winner_with_max_score_eliminates_lower() {
     let ir = load_game("scoring_winner_with_max_score.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -173,15 +166,14 @@ fn scoring_winner_with_max_score_eliminates_lower() {
 #[test]
 fn scoring_winner_with_min_score_eliminates_higher() {
     let ir = load_game("scoring_winner_with_min_score.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -196,15 +188,14 @@ fn scoring_winner_with_min_score_eliminates_higher() {
 #[test]
 fn scoring_winner_with_tie_keeps_all_matching() {
     let ir = load_game("scoring_winner_with_tie.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -226,15 +217,14 @@ fn scoring_winner_with_tie_keeps_all_matching() {
 #[test]
 fn scoring_winner_with_highest_memory_wins() {
     let ir = load_game("scoring_winner_with_memory.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -246,15 +236,14 @@ fn scoring_winner_with_highest_memory_wins() {
 #[test]
 fn scoring_aggregate_int_to_current() {
     let ir = load_game("scoring_aggregate_int_to_current.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -265,15 +254,14 @@ fn scoring_aggregate_int_to_current() {
 #[test]
 fn scoring_winner_with_highest_position_wins() {
     let ir = load_game("scoring_winner_with_position.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 

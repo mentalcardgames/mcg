@@ -175,7 +175,12 @@ fn test_input_file_ordering_and_validation() {
     let ir = game.to_lowered_graph();
 
     let game_data = GameData::new();
-    let result = run_game(ir, game_data, InputSource::TestFile(input_path), None, None);
+    let result = run_game_with(
+        ir,
+        game_data,
+        InputSource::TestFile(input_path),
+        RunOptions::default(),
+    );
 
     assert!(result.is_ok(), "Game should complete successfully");
 }
@@ -203,14 +208,13 @@ fn run_ordering_game_snapshots() -> (
     let snapshots_clone = snapshots.clone();
     let game_data = GameData::new();
 
-    let result = run_game(
+    let result = run_game_with(
         ir,
         game_data,
         InputSource::TestFile(input_path),
-        Some(Box::new(move |gd| {
+        RunOptions::new().with_event_sender(Box::new(move |gd| {
             snapshots_clone.write().unwrap().push(gd.clone());
         })),
-        None,
     );
 
     (snapshots, result)
@@ -285,19 +289,20 @@ fn test_play_stage_advances_turn_and_runs_two_iterations() {
     let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
     let trace_clone = trace.clone();
 
-    let result = run_game(
+    let result = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_input_type: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        Some(Box::new(move |gd: &GameData| {
-            snapshots_clone.lock().unwrap().push(gd.clone());
-        })),
-        Some(Box::new(move |entry: TraceEntry| {
-            trace_clone.lock().unwrap().push(entry);
-        })),
+        RunOptions::new()
+            .with_event_sender(Box::new(move |gd: &GameData| {
+                snapshots_clone.lock().unwrap().push(gd.clone());
+            }))
+            .with_trace_sender(Box::new(move |entry: TraceEntry| {
+                trace_clone.lock().unwrap().push(entry);
+            })),
     );
 
     assert!(result.is_ok(), "game should complete: {:?}", result.err());

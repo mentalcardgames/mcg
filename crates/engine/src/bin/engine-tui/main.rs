@@ -9,7 +9,9 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType, TraceEntry};
+use cgdsl_engine::{
+    run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions, TraceEntry,
+};
 use crossbeam_channel::{bounded, Receiver, Sender};
 use front_end::validation::parse_document;
 
@@ -126,13 +128,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (state_tx, state_rx): (Sender<GameData>, Receiver<GameData>) = bounded(100);
 
     let trace_sender: Sender<TraceEntry> = trace_tx.clone();
-    let trace_sender = Some(Box::new(move |entry: TraceEntry| {
+    let trace_sender = Box::new(move |entry: TraceEntry| {
         let _ = trace_sender.send(entry);
-    }) as Box<dyn Fn(TraceEntry) + Send>);
+    }) as Box<dyn Fn(TraceEntry) + Send>;
 
-    let state_sender = Some(Box::new(move |gd: &GameData| {
+    let state_sender = Box::new(move |gd: &GameData| {
         let _ = state_tx.send(gd.clone());
-    }) as Box<dyn Fn(&GameData) + Send>);
+    }) as Box<dyn Fn(&GameData) + Send>;
 
     let input_rx = input_rx;
     let input_type_tx = input_type_tx;
@@ -157,12 +159,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             engine_panic_clone.store(true, Ordering::SeqCst);
             prev_hook(panic_info);
         }));
-        run_game(
+        run_game_with(
             engine_ir,
             GameData::new(),
             input_source,
-            state_sender,
-            trace_sender,
+            RunOptions::new()
+                .with_event_sender(state_sender)
+                .with_trace_sender(trace_sender),
         )
     });
 

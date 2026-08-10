@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -23,12 +23,11 @@ fn default_input() -> Input {
 #[test]
 fn setup_create_combo_stores_entry() {
     let ir = load_game("setup_create_combo.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| default_input())),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -39,12 +38,11 @@ fn setup_create_combo_stores_entry() {
 #[test]
 fn setup_create_precedence_stores_entry() {
     let ir = load_game("setup_create_precedence.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| default_input())),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -55,12 +53,11 @@ fn setup_create_precedence_stores_entry() {
 #[test]
 fn setup_create_pointmap_stores_entry() {
     let ir = load_game("setup_create_pointmap.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| default_input())),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -75,12 +72,11 @@ fn setup_create_pointmap_stores_entry() {
 #[test]
 fn setup_create_memory_initializes_slot() {
     let ir = load_game("setup_create_memory.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| default_input())),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 

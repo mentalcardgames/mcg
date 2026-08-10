@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -16,7 +16,7 @@ fn load_game(name: &str) -> Ir<LoweredPayLoad> {
 #[test]
 fn optional_multi_action_accept_fires_both_rules() {
     let ir = load_game("optional_multi_action.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|it: InputType| match it {
@@ -29,8 +29,7 @@ fn optional_multi_action_accept_fires_both_rules() {
                 kind: InputKind::Choice { idx: 0 },
             },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -41,7 +40,7 @@ fn optional_multi_action_accept_fires_both_rules() {
 #[test]
 fn optional_multi_action_decline_fires_neither() {
     let ir = load_game("optional_multi_action.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|it: InputType| match it {
@@ -54,8 +53,7 @@ fn optional_multi_action_decline_fires_neither() {
                 kind: InputKind::Choice { idx: 0 },
             },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 

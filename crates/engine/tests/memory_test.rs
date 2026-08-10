@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use cgdsl_engine::game_data::MemoryValue;
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -24,8 +24,8 @@ fn default_input() -> InputSource {
 #[test]
 fn memory_set_int_stores_value() {
     let ir = load_game("memory_set_int.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
 
     match gd.get_memory("P1_M") {
         Some(MemoryValue::Int(n)) => assert_eq!(*n, 42, "P1_M should be Int(42)"),
@@ -36,8 +36,8 @@ fn memory_set_int_stores_value() {
 #[test]
 fn memory_set_string_stores_value() {
     let ir = load_game("memory_set_string.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
 
     match gd.get_memory("P1_M") {
         Some(MemoryValue::String(s)) => assert_eq!(s, "Hello", "P1_M should be String(\"Hello\")"),
@@ -48,8 +48,8 @@ fn memory_set_string_stores_value() {
 #[test]
 fn memory_reset_zeros_int() {
     let ir = load_game("memory_reset.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
 
     match gd.get_memory("P1_M") {
         Some(MemoryValue::Int(n)) => assert_eq!(*n, 0, "P1_M should be Int(0) after reset"),
@@ -60,8 +60,8 @@ fn memory_reset_zeros_int() {
 #[test]
 fn memory_set_then_read_back_via_evaluator() {
     let ir = load_game("memory_read_back.cgdsl");
-    let gd =
-        run_game(ir, GameData::new(), default_input(), None, None).expect("game should complete");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
 
     assert_eq!(gd.players[0].score, 5, "P1 score should be 5");
 }

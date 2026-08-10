@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -16,15 +16,14 @@ fn load_game(name: &str) -> Ir<LoweredPayLoad> {
 #[test]
 fn out_of_game_eliminates_player() {
     let ir = load_game("out_of_game.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -36,15 +35,14 @@ fn out_of_game_eliminates_player() {
 #[test]
 fn out_of_stage_current_removes_from_stage() {
     let ir = load_game("out_of_stage_current.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -65,15 +63,14 @@ fn out_of_stage_current_removes_from_stage() {
 #[test]
 fn out_of_stage_named_removes_from_named_stage() {
     let ir = load_game("out_of_stage_named.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 
@@ -94,15 +91,14 @@ fn out_of_stage_named_removes_from_named_stage() {
 #[test]
 fn out_runtime_current_eliminates_current_player() {
     let ir = load_game("out_runtime_current.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_it: InputType| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("game should complete");
 

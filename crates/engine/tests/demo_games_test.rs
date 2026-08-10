@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -46,15 +46,14 @@ fn players_in_game(gd: &GameData) -> usize {
 #[test]
 fn war_runs_to_completion() {
     let ir = load_game("war.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("war should complete");
 
@@ -88,7 +87,7 @@ fn blackjack_runs_to_completion() {
     let calls_clone = calls.clone();
     let tracker = CurrentTracker::new();
     let current_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -115,8 +114,7 @@ fn blackjack_runs_to_completion() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("blackjack should complete");
 
@@ -133,7 +131,7 @@ fn crazy_eights_runs_to_completion() {
     // card), decline the draw-optional. No player is ever chosen for a gift.
     let tracker = CurrentTracker::new();
     let current_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -165,8 +163,7 @@ fn crazy_eights_runs_to_completion() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("crazy eights should complete");
 
@@ -192,7 +189,7 @@ fn five_card_draw_runs_to_completion() {
     // Every draw round: discard exactly one card (pick index 0), draw one.
     let tracker = CurrentTracker::new();
     let current_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -213,8 +210,7 @@ fn five_card_draw_runs_to_completion() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("five card draw should complete");
 
@@ -248,7 +244,7 @@ fn blackjack_all_hit_until_bust() {
     let ir = load_game("blackjack.cgdsl");
     let tracker = CurrentTracker::new();
     let current_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -265,8 +261,7 @@ fn blackjack_all_hit_until_bust() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("blackjack must not crash even when everyone busts");
 
@@ -281,7 +276,7 @@ fn crazy_eights_draw_every_turn() {
     let ir = load_game("crazy_eights.cgdsl");
     let tracker = CurrentTracker::new();
     let current_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -310,8 +305,7 @@ fn crazy_eights_draw_every_turn() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("crazy eights must terminate with the draw path");
 
@@ -327,7 +321,7 @@ fn go_fish_rotating_asks() {
     let current_for_closure = tracker.0.clone();
     let asks = Arc::new(Mutex::new(0usize));
     let asks_clone = asks.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -366,8 +360,7 @@ fn go_fish_rotating_asks() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("go fish must complete with rotating asks");
 
@@ -380,7 +373,7 @@ fn go_fish_runs_to_completion() {
     // Always ask for "Ace" (option 0).
     let tracker = CurrentTracker::new();
     let current_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -413,8 +406,7 @@ fn go_fish_runs_to_completion() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("go fish should complete");
 

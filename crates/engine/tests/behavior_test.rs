@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use cgdsl_engine::{run_game, GameData, Input, InputKind, InputSource, InputType};
+use cgdsl_engine::{run_game_with, GameData, Input, InputKind, InputSource, InputType, RunOptions};
 use front_end::ir::{Ir, LoweredPayLoad};
 use front_end::validation::parse_document;
 
@@ -81,7 +81,7 @@ fn play_go_fish_ask(option_idx: usize) -> GameData {
     let ir = load_game("behavior_go_fish_ask.cgdsl");
     let tracker = Tracker::new();
     let who_for_closure = tracker.0.clone();
-    run_game(
+    run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -101,8 +101,7 @@ fn play_go_fish_ask(option_idx: usize) -> GameData {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("go fish ask must complete")
 }
@@ -157,15 +156,14 @@ fn go_fish_ask_missing_rank_draws_one() {
 #[test]
 fn war_battle_captures_and_declares_winner() {
     let ir = load_game("behavior_war.cgdsl");
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(|_| Input {
             player_id: "P1".into(),
             kind: InputKind::Choice { idx: 0 },
         })),
-        None,
-        None,
+        RunOptions::default(),
     )
     .expect("war must complete");
 
@@ -196,7 +194,7 @@ fn blackjack_stands_dealer_draws_and_best_hand_wins() {
     let ir = load_game("behavior_blackjack.cgdsl");
     let tracker = Tracker::new();
     let who_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -216,8 +214,7 @@ fn blackjack_stands_dealer_draws_and_best_hand_wins() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("blackjack must complete");
 
@@ -253,7 +250,7 @@ fn five_card_draw_scores_hand_bonuses() {
     let ir = load_game("behavior_five_card_draw.cgdsl");
     let tracker = Tracker::new();
     let who_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -273,8 +270,7 @@ fn five_card_draw_scores_hand_bonuses() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("five card draw must complete");
 
@@ -297,7 +293,7 @@ fn combo_laydown_prompts_and_validates() {
     let who_for_closure = tracker.0.clone();
     let asks = Arc::new(Mutex::new(0usize));
     let asks_clone = asks.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -331,8 +327,7 @@ fn combo_laydown_prompts_and_validates() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("combo laydown must complete");
 
@@ -366,7 +361,7 @@ fn combo_book_lays_down_four_of_a_kind() {
     let ir = load_game("behavior_combo_book.cgdsl");
     let tracker = Tracker::new();
     let who_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -388,8 +383,7 @@ fn combo_book_lays_down_four_of_a_kind() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("combo book must complete");
 
@@ -414,7 +408,7 @@ fn combo_until_stage_loops_until_hand_cleared() {
     let ir = load_game("behavior_combo_until.cgdsl");
     let tracker = Tracker::new();
     let who_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -436,8 +430,7 @@ fn combo_until_stage_loops_until_hand_cleared() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("combo-until stage must complete");
 
@@ -461,7 +454,7 @@ fn crazy_eights_empty_hand_wins() {
     let ir = load_game("behavior_crazy_eights.cgdsl");
     let tracker = Tracker::new();
     let who_for_closure = tracker.0.clone();
-    let gd = run_game(
+    let gd = run_game_with(
         ir,
         GameData::new(),
         InputSource::Player(Box::new(move |it: InputType| {
@@ -494,8 +487,7 @@ fn crazy_eights_empty_hand_wins() {
                 },
             }
         })),
-        Some(tracker.sender()),
-        None,
+        RunOptions::new().with_event_sender(tracker.sender()),
     )
     .expect("crazy eights must complete");
 
