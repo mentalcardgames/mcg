@@ -30,13 +30,13 @@ fn int_collection_mem(key: &str) -> IntCollection {
     }
 }
 
-// â”€â”€ Iâ€‘1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-1 ──────────────────────────────────────────────────────────
 #[test]
 fn eval_int_literal() {
     assert_eq!(Evaluator::eval_int(&lit(42), &GameData::new()).unwrap(), 42);
 }
 
-// â”€â”€ Iâ€‘2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-2 ──────────────────────────────────────────────────────────
 #[test]
 fn eval_int_binary_plus() {
     assert_eq!(
@@ -61,7 +61,7 @@ fn eval_int_binary_mul() {
     );
 }
 
-// â”€â”€ Iâ€‘3 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-3 ──────────────────────────────────────────────────────────
 #[test]
 fn eval_int_binary_div_by_zero() {
     assert_eq!(
@@ -72,7 +72,7 @@ fn eval_int_binary_div_by_zero() {
     );
 }
 
-// â”€â”€ Iâ€‘4 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-4 ──────────────────────────────────────────────────────────
 #[test]
 fn eval_int_binary_div_nonzero() {
     assert_eq!(
@@ -89,14 +89,14 @@ fn eval_int_binary_mod_nonzero() {
     );
 }
 
-// â”€â”€ Iâ€‘5 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-5 ──────────────────────────────────────────────────────────
 #[test]
 #[should_panic]
 fn eval_int_binary_mod_by_zero() {
     let _ = Evaluator::eval_int(&binexpr(lit(1), IntOp::Mod, lit(0)), &GameData::new());
 }
 
-// â”€â”€ Iâ€‘6 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-6 ──────────────────────────────────────────────────────────
 #[test]
 fn eval_int_query_int_collection_at_in_range() {
     let ic = IntCollection::Literal {
@@ -130,7 +130,7 @@ fn eval_int_query_int_collection_at_out_of_range() {
     );
 }
 
-// â”€â”€ Iâ€‘7 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-7 ──────────────────────────────────────────────────────────
 #[test]
 fn eval_int_size_of_int_collection_memory_present() {
     let mut gd = GameData::new();
@@ -156,7 +156,7 @@ fn eval_int_size_of_int_collection_memory_missing() {
     );
 }
 
-// â”€â”€ Iâ€‘8 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-8 ──────────────────────────────────────────────────────────
 #[test]
 fn eval_int_size_of_player_collection_memory() {
     let mut gd = GameData::new();
@@ -176,7 +176,7 @@ fn eval_int_size_of_player_collection_memory() {
     assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 2);
 }
 
-// â”€â”€ Iâ€‘9 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-9 ──────────────────────────────────────────────────────────
 #[test]
 fn eval_int_aggregate_sum_of_int_collection() {
     let ic = IntCollection::Literal {
@@ -197,7 +197,7 @@ fn eval_int_aggregate_sum_of_int_collection_empty() {
     assert_eq!(Evaluator::eval_int(&expr, &GameData::new()).unwrap(), 0);
 }
 
-// â”€â”€ Iâ€‘10 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-10 ─────────────────────────────────────────────────────────
 fn card_with(map: &[(&str, &str)]) -> crate::game_data::Card {
     let mut c = HashMap::new();
     for (k, v) in map {
@@ -255,7 +255,7 @@ fn eval_int_aggregate_sum_of_card_set_missing_pointmap() {
     );
 }
 
-// â”€â”€ Iâ€‘11 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-11 ─────────────────────────────────────────────────────────
 fn extrema_cardset(extrema: Extrema, cs_key: &str, pointmap: &str) -> IntExpr {
     IntExpr::Aggregate {
         aggregate: AggregateInt::ExtremaCardset {
@@ -335,7 +335,7 @@ fn eval_int_aggregate_extrema_cardset_empty() {
     );
 }
 
-// â”€â”€ Iâ€‘12 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-12 ─────────────────────────────────────────────────────────
 fn extrema_int_collection(extrema: Extrema, ints: Vec<IntExpr>) -> IntExpr {
     IntExpr::Aggregate {
         aggregate: AggregateInt::ExtremaIntCollection {
@@ -382,7 +382,7 @@ fn eval_int_aggregate_extrema_int_collection_empty() {
     );
 }
 
-// â”€â”€ Iâ€‘13 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-13 ─────────────────────────────────────────────────────────
 #[test]
 fn eval_int_runtime_current_stage_round_counter() {
     let mut gd = GameData::new();
@@ -407,7 +407,7 @@ fn eval_int_runtime_current_stage_round_counter_no_stage() {
     );
 }
 
-// â”€â”€ Iâ€‘14 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-14 ─────────────────────────────────────────────────────────
 #[test]
 fn eval_int_runtime_stage_round_counter_named() {
     let mut gd = GameData::new();
@@ -431,7 +431,7 @@ fn eval_int_runtime_stage_round_counter_absent() {
     assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 0);
 }
 
-// â”€â”€ Iâ€‘15 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-15 ─────────────────────────────────────────────────────────
 fn memory_int(key: &str) -> IntExpr {
     IntExpr::Memory {
         memory: UseSingleMemory::WithOwner {
@@ -485,7 +485,7 @@ fn eval_int_memory_no_owner_error() {
     );
 }
 
-// â”€â”€ Iâ€‘16 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-16 ─────────────────────────────────────────────────────────
 #[test]
 fn eval_int_size_of_location_collection_memory_wrong_type() {
     let mut gd = GameData::new();
@@ -521,7 +521,7 @@ fn eval_int_size_of_location_collection_memory_missing() {
     );
 }
 
-// â”€â”€ Iâ€‘17 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-17 ─────────────────────────────────────────────────────────
 #[test]
 fn eval_int_size_of_team_collection_memory_wrong_type() {
     let mut gd = GameData::new();
@@ -573,7 +573,7 @@ fn eval_int_collection_memory_no_owner_error() {
     );
 }
 
-// â”€â”€ Iâ€‘18 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-18 ─────────────────────────────────────────────────────────
 #[test]
 fn eval_int_size_of_int_collection_aggregate_memory() {
     // Implemented 2026-08: aggregates the slot across every owner.
@@ -637,7 +637,7 @@ fn eval_int_size_of_int_collection_aggregate_memory_missing_errors() {
     );
 }
 
-// â”€â”€ Iâ€‘19 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-19 ─────────────────────────────────────────────────────────
 #[test]
 fn eval_int_size_of_team_collection_aggregate_memory() {
     // Implemented 2026-08: aggregates the slot across every owner.
@@ -661,7 +661,7 @@ fn eval_int_size_of_team_collection_aggregate_memory() {
     assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 2);
 }
 
-// â”€â”€ Iâ€‘20 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-20 ─────────────────────────────────────────────────────────
 #[test]
 fn eval_int_size_of_string_collection_aggregate_memory() {
     // Implemented 2026-08: aggregates the slot across every owner.
@@ -685,7 +685,7 @@ fn eval_int_size_of_string_collection_aggregate_memory() {
     assert_eq!(Evaluator::eval_int(&expr, &gd).unwrap(), 2);
 }
 
-// â”€â”€ Iâ€‘21 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-21 ─────────────────────────────────────────────────────────
 #[test]
 fn resolve_quantity_int() {
     let q = Quantity::Int { int: lit(3) };
@@ -726,7 +726,7 @@ fn resolve_quantity_quantifier_any() {
     );
 }
 
-// â”€â”€ Iâ€‘22 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-22 ─────────────────────────────────────────────────────────
 #[test]
 fn resolve_quantity_int_range_start_satisfied() {
     let q = Quantity::IntRange {
@@ -777,7 +777,7 @@ fn resolve_quantity_int_range_and_fails() {
             op_int: vec![(IntRangeOperator::And, IntCompare::Le, lit(4))],
         },
     };
-    // available=5, 5 <= 4 is false â†’ returns Ok(0)
+    // available=5, 5 <= 4 is false - returns Ok(0)
     assert_eq!(
         Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
         0
@@ -792,7 +792,7 @@ fn resolve_quantity_int_range_or_chain() {
             op_int: vec![(IntRangeOperator::Or, IntCompare::Eq, lit(7))],
         },
     };
-    // available=5, 5 == 7 false â†’ falls through to Ok(available)
+    // available=5, 5 == 7 false - falls through to Ok(available)
     assert_eq!(
         Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
         5
@@ -807,14 +807,14 @@ fn resolve_quantity_int_range_or_satisfied() {
             op_int: vec![(IntRangeOperator::Or, IntCompare::Eq, lit(5))],
         },
     };
-    // available=5, 5 == 5 true â†’ returns Ok(available)
+    // available=5, 5 == 5 true - returns Ok(available)
     assert_eq!(
         Evaluator::resolve_quantity(&q, 5, &GameData::new()).unwrap(),
         5
     );
 }
 
-// â”€â”€ Iâ€‘23 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-23 ─────────────────────────────────────────────────────────
 #[test]
 fn resolve_quantity_runtime_memory_evaluated_live() {
     // Runtime-backed quantities are evaluated against the live GameData
@@ -852,7 +852,7 @@ fn resolve_quantity_runtime_memory_missing_errors() {
     );
 }
 
-// â”€â”€ Iâ€‘24 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── I-24 ─────────────────────────────────────────────────────────
 #[test]
 fn resolve_quantity_int_range_evaluated_live() {
     let mut gd = GameData::new();
@@ -872,7 +872,7 @@ fn resolve_quantity_int_range_evaluated_live() {
             op_int: vec![],
         },
     };
-    // available=100 >= 2 â†’ satisfied â†’ Ok(100) (previously eval failed against
+    // available=100 >= 2 - satisfied - Ok(100) (previously eval failed against
     // an empty GameData and fell back to Ok(0)).
     assert_eq!(Evaluator::resolve_quantity(&q, 100, &gd).unwrap(), 100);
 }

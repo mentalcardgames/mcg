@@ -1,9 +1,0 @@
-// Exercise: M is "hello" sets memory M to String("hello") - Table_M.
-player P1
-turnorder (P:P1)
-memory M on table
-
-stage Play for current 1 times {
-  M is "Hello"
-  end stage
-}

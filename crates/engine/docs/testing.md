@@ -81,19 +81,23 @@ crates/engine/
 │       ├── mod.rs
 │       └── tests.rs
 └── tests/                       ← integration tests (separate compilation units)
-    ├── action_test.rs           │  one file per feature area, auto-discovered by Cargo:
+    ├── common/mod.rs            │  shared harness (load_game, default_input, test_file,
+    │                            │  total_cards, players_in_game, player_location,
+    │                            │  table_location, move_traces, CurrentTracker,
+    │                            │  accept_everything) — pulled in with `mod common;`
+    ├── actions_test.rs          │  one file per feature area, auto-discovered by Cargo:
     ├── behavior_test.rs         │  deterministic rule-outcome fixtures
     ├── demo_games_test.rs       │  the five demo games driven end-to-end
-    ├── flow_test.rs             │  if/optional/stage flow
-    ├── memory_test.rs           │  memory semantics
-    ├── optional_test.rs         │
-    ├── out_test.rs              │  elimination
+    ├── elimination_test.rs      │  I-24 skip/auto-end, cycle-skip, winner-set traces
+    ├── flow_test.rs             │  if/optional/choose/stage flow
+    ├── hygiene_test.rs          │  fixture-hygiene guard (no orphaned .cgdsl)
+    ├── memory_test.rs           │  memory initial values + numeric `bid` prompt
     ├── quantifier_test.rs       │
     ├── random_play_test.rs      │  random-input monkey tests
     ├── scoring_test.rs          │
-    ├── setup_test.rs            │
-    ├── shuffle_test.rs          │
-    └── turn_test.rs             ┘
+    ├── setup_test.rs            │  setup rules incl. setup quantifiers
+    ├── teams_test.rs            │  team-owned state
+    └── verb_semantics_test.rs   ┘
 ```
 
 **Naming conventions:**
@@ -102,7 +106,8 @@ crates/engine/
 |---|---|---|
 | Top-level module `foo.rs` (e.g. `game_data.rs`, `quantifier.rs`) | `foo_tests.rs` next to it | `#[cfg(test)] #[path = "foo_tests.rs"] mod tests;` at the bottom of `foo.rs` |
 | Submodule `foo/mod.rs` (e.g. `controller/`, `interpreter/`, `debug/`) | `foo/tests.rs` | `#[cfg(test)] #[path = "tests.rs"] mod tests;` somewhere in `foo/mod.rs` |
-| Cross-crate / end-to-end | `crates/engine/tests/<name>.rs` | auto-discovered by Cargo; one `#[test]` per integration scenario |
+| Cross-crate / end-to-end | `crates/engine/tests/<area>_test.rs` | auto-discovered by Cargo; one `#[test]` per integration scenario |
+| Shared integration harness | `crates/engine/tests/common/mod.rs` | every integration file opens with `mod common;` plus an explicit `use common::{...};` (files in subdirectories of `tests/` are never compiled as test targets themselves) |
 
 **Why the `#[path]` indirection?** It keeps the test file a sibling of the code under
 test but keeps `mod.rs` short. It also lets tests reach `pub(super)` items via `use
@@ -174,17 +179,18 @@ Use this layer to assert:
 
 ### 3.3 Fixture integration tests — `tests/` + `test_games/`
 
-The default for any cross-arm behavior. The shared loader:
+The default for any cross-arm behavior. The shared loader lives in
+`tests/common/mod.rs` (every integration file pulls it in with
+`mod common;` + `use common::load_game;`):
 
 ```rust
-// tests/quantifier_test.rs:20 — copy this helper into any new integration test file
-fn load_game(name: &str) -> Ir<LoweredPayLoad> {
+// tests/common/mod.rs — do not copy this into a new test file; use `mod common;`
+pub fn load_game(name: &str) -> Ir<LoweredPayLoad> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let path = manifest.join("test_games").join(name);
-    let src = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
-    let game = parse_document(&src)
-        .unwrap_or_else(|e| panic!("parse {}: {}", path.display(), e));
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {}", path.display(), e));
+    let game = parse_document(&src).unwrap_or_else(|e| panic!("parse {}: {}", path.display(), e));
     game.to_lowered_graph()
 }
 ```
@@ -345,30 +351,32 @@ authoring new ones):
 
 | Fixture | Tests | Demonstrates |
 |---|---|---|
-| `ordering_test.cgdsl` + `.txt` | `controller/tests.rs:105,127` | Minimal end-to-end golden replay |
-| `quantifier_deal_all.cgdsl` | `tests/quantifier_test.rs:72` | `Quantifier::All` dest-player fan-out |
-| `quantifier_deal_any.cgdsl` | `tests/quantifier_test.rs:114` | `Quantifier::Any` card choice |
-| `quantifier_range.cgdsl` | `tests/quantifier_test.rs:148` | `IntRange` quantity, re-prompt on 0 |
-| `quantifier_dest_any.cgdsl` | `tests/quantifier_test.rs:206` | `AggregatePlayerCollection::Quantifier::Any` dest |
-| `quantifier_all_then_any.cgdsl` | `tests/quantifier_test.rs:253` | Stack of two quantifier sites |
-| `setup_location_all.cgdsl` / `_literal.cgdsl` / `_any.cgdsl` | `tests/quantifier_test.rs:572ff` | `SetUpRule` location quantifier handling (all / literal / any-prompt) |
-| `setup_turnorder_all.cgdsl` / `setup_teams_all.cgdsl` | `tests/quantifier_test.rs:412,431` | Setup `All` resolution |
-| `turn_switch.cgdsl` | `controller/tests.rs:210` | Stage entry + turn advance |
-| `skip_ineligible.cgdsl` | `tests/ergonomics_test.rs` | Ineligible-player skip + stage auto-end (I-24): eliminated players never prompted, post-elimination instructions skipped, empty winner set |
-| `memory_initial_value.cgdsl` | `tests/ergonomics_test.rs` | Memory declarations honour their initial value; typed init (I-10) |
-| `bid_prompt.cgdsl` + `.txt` | `tests/ergonomics_test.rs` | Numeric input prompt (`InputType::Number`): `bid any`/range, out-of-bounds re-ask |
-| `team_locations.cgdsl` | `tests/ergonomics_test.rs` | Team-owned locations/memories = one shared instance per team |
-| `team_pile_reads.cgdsl` | `tests/ergonomics_test.rs` | Team pile addressing: bare name, `X of T:Red`, `owner of`, `&I:M of T:Red` |
+| `ordering_test.cgdsl` + `.txt` | `src/controller/tests.rs` | Minimal end-to-end golden replay |
+| `quantifier_deal_all.cgdsl` | `tests/quantifier_test.rs` | `Quantifier::All` dest-player fan-out |
+| `quantifier_deal_any.cgdsl` | `tests/quantifier_test.rs` | `Quantifier::Any` card choice |
+| `quantifier_range.cgdsl` | `tests/quantifier_test.rs` | `IntRange` quantity, re-prompt on 0 |
+| `quantifier_dest_any.cgdsl` | `tests/quantifier_test.rs` | `AggregatePlayerCollection::Quantifier::Any` dest |
+| `quantifier_all_then_any.cgdsl` | `tests/quantifier_test.rs` | Stack of two quantifier sites |
+| `setup_location_all.cgdsl` / `_literal.cgdsl` / `_any.cgdsl` | `tests/setup_test.rs` | `SetUpRule` location quantifier handling (all / literal / any-prompt, I-20) |
+| `setup_turnorder_all.cgdsl` / `setup_teams_all.cgdsl` | `tests/setup_test.rs` | Setup `All` resolution |
+| `auto_end_cycle_no_eligible.cgdsl` / `auto_end_set_memory_skipped.cgdsl` | `tests/actions_test.rs` | I-13 relaxed: `cycle to next` with nobody eligible / skipped `SetMemory` auto-end the stage (named `auto_end_*`, not `errors_*` — they assert success) |
+| `turn_switch.cgdsl` | `src/controller/tests.rs`, `tests/actions_test.rs` | Stage entry + turn advance; I-5 counter-once regression |
+| `skip_ineligible.cgdsl` | `tests/elimination_test.rs` | Ineligible-player skip + stage auto-end (I-24): eliminated players never prompted, post-elimination instructions skipped, empty winner set |
+| `memory_initial_value.cgdsl` | `tests/memory_test.rs` | Memory declarations honour their initial value; typed init (I-10) |
+| `bid_prompt.cgdsl` + `.txt` | `tests/memory_test.rs` | Numeric input prompt (`InputType::Number`): `bid any`/range, out-of-bounds re-ask |
+| `team_locations.cgdsl` | `tests/teams_test.rs` | Team-owned locations/memories = one shared instance per team |
+| `team_pile_reads.cgdsl` | `tests/teams_test.rs` | Team pile addressing: bare name, `X of T:Red`, `owner of`, `&I:M of T:Red` |
 | `verb_deal_count.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | `deal >= M and <= N` / `deal any` prompt for the **count** |
 | `verb_deal_range_automatic.cgdsl` | `tests/verb_semantics_test.rs` | Degenerate `>= 2 and <= 2` range deals automatically |
 | `verb_deal_count_to_all.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | Deal-count prompt chains with the dest-`all` fan-out |
 | `verb_move_exact_n.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | `move N` = pick exactly N; wrong count re-prompts |
 | `verb_move_exact_n_short_pile.cgdsl` + `.txt` | `tests/verb_semantics_test.rs` | Exact-N prompt clamps to the available cards |
 | `verb_positional_automatic.cgdsl` | `tests/verb_semantics_test.rs` | Positional sources (`top(X)`, `X[N]`) never prompt |
-| `cycle_skips_out_of_game.cgdsl` | `tests/ergonomics_test.rs` | Out-of-game-but-in-stage players are skipped by `cycle to next`/`previous` and the `next` expression (I-13 regression) |
-| `winner_set_remaining.cgdsl` | `tests/ergonomics_test.rs` | Winner set = players left in game when no winner statement exists |
-| `winner_set_declared.cgdsl` | `tests/ergonomics_test.rs` | `end game with winner X` eliminates the rest; the survivor is the winner set |
-| `location_resolution.cgdsl`, `test.cgdsl` | TUI fixtures | Interactive play (load via `just tui <name>`) |
+| `cycle_skips_out_of_game.cgdsl` | `tests/elimination_test.rs` | Out-of-game-but-in-stage players are skipped by `cycle to next`/`previous` and the `next` expression (I-13 regression) |
+| `winner_set_remaining.cgdsl` | `tests/elimination_test.rs` | Winner set = players left in game when no winner statement exists |
+| `winner_set_declared.cgdsl` | `tests/elimination_test.rs` | `end game with winner X` eliminates the rest; the survivor is the winner set |
+| `behavior_combo_laydown.cgdsl` / `_book.cgdsl` / `_until.cgdsl` | `tests/behavior_test.rs` | Combo lay-down validation, four-of-a-kind books, lay-down-all stage loop (D-16) |
+| `location_resolution.cgdsl`, `test.cgdsl` | TUI fixtures | Interactive play (load via `just tui <name>`; allow-listed in `tests/hygiene_test.rs`) |
 
 **Authoring conventions:**
 
@@ -497,17 +505,33 @@ Concrete example: you've added an `ActionRule::StashAction { card_set }`.
 | Command | Purpose |
 |---|---|
 | `cargo test -p cgdsl-engine` | Run the entire engine test suite (all layers) |
-| `cargo test -p cgdsl-engine --test quantifier_test` | Run only the integration tests file |
+| `cargo test -p cgdsl-engine --lib` / `--bins` | Unit+dispatch+controller layer / binary smoke tests |
+| `cargo test -p cgdsl-engine --test <area>_test` | Run only one integration tests file (e.g. `flow_test`) |
 | `cargo test -p cgdsl-engine <test_name>` | Run one named test (substring match) |
 | `cargo test -p cgdsl-engine -- --nocapture` | Show `println!` output from tests |
-| `cargo clippy -p cgdsl-engine --all-targets -- -D warnings` | Lint (per `AGENTS.md`) |
+| `cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings` | Lint (per `AGENTS.md`; `--no-deps` skips the pre-existing `front_end`/`code_gen` workspace lints — see `engine-vs-design.md` §5) |
 | `cargo fmt -p cgdsl-engine -- --check` | Format check (per `AGENTS.md`) |
-| `cargo test --workspace` | Whole-workspace tests (per `AGENTS.md`) |
-| `just tui` | Open the engine TUI on the default fixture (`test_games/ordering_test.cgdsl`) |
-| `just tui <name>` | Open the TUI on `test_games/<name>.cgdsl` (interactive fixture exploration) |
+| `just test-engine` | Full engine suite (`--all-targets`) |
+| `just test-engine-lib` / `just test-engine-bins` | Layer subsets |
+| `just test-engine-area <area>` | One integration file (e.g. `just test-engine-area flow`) |
+| `just test-engine-ci` | Tests + clippy + fmt, exit code only (the gate) |
+| `just coverage-engine` | Line coverage report for the lib target (see below) |
+| `just tui [<name>]` | Open the engine TUI on `test_games/<name>.cgdsl` (default `ordering_test`) |
 
-There is **no coverage tooling** wired into the workspace today. When coverage
-instrumentation is added (e.g. `cargo-llvm-cov`), document the invocation here.
+### Coverage
+
+Wired since 2026-08 via `cargo-llvm-cov` (install once:
+`cargo install cargo-llvm-cov` + `rustup component add llvm-tools-preview`):
+
+```
+just coverage-engine                        # lib-target unit coverage (≈64% lines)
+cargo llvm-cov -p cgdsl-engine --all-targets   # full coverage incl. integration (slower)
+cargo llvm-cov -p cgdsl-engine --html      # browsable report under target/llvm-cov
+```
+
+Baseline (2026-08, `--lib`): **63.98% lines / 69.31% regions / 63.87% functions**.
+The biggest documented sink is the quantifier resume state machine
+(`interpreter/quant_driver.rs`, ~7% lines) — see §11.
 
 ---
 
@@ -516,21 +540,19 @@ instrumentation is added (e.g. `cargo-llvm-cov`), document the invocation here.
 (This section is a holding pen for gaps discovered during refactoring. Append items as
 you trip over them; promote to dedicated tests when the area is touched.)
 
-- `src/controller/trace_logger.rs` — `TraceLogger::open`/`log_*`/`flush`/`resolve_log_path`
-  (env var `MCG_TRACE_LOG`) have no direct tests. Only exercised indirectly via
-  `run_game` when the env var is set.
 - `src/interpreter/quant_driver.rs` resume arms (`step_dest_player_all`,
   `step_dest_player_any`, `step_src_cards_any_or_range`,
   `step_src_cards_exact_n`, `step_deal_count`, `take_quant_resume`) are only
-  reachable via the integration tests in `tests/quantifier_test.rs`; no direct unit
-  tests of the resume state machine.
-- `src/query/{bool,int,string,player,cardset}.rs` — the `Evaluator` methods are currently
-  exercised only transitively through `interpreter::step` and `action::execute_*`. No
-  direct unit test suites exist for them yet. Each documented error string in
-  [`error-handling.md`](./error-handling.md) §1 needs a positive/negative-test pair.
-- `src/bin/cgdsl-play.rs` and `src/bin/engine-tui/**` are out of scope for library
-  coverage; consider adding smoke tests that assert the binaries parse a fixture and
-  exit 0 when those crates' stability becomes load-bearing.
+  reachable via the integration tests in `tests/quantifier_test.rs`; no direct
+  unit tests of the resume state machine. This is the crate's largest coverage
+  sink (≈7% lines under `cargo llvm-cov --lib`; ~69% for the rest of the lib).
+- `src/controller/trace_logger.rs` — `TraceLogger` has four embedded tests
+  (path resolution, open, flush) but the composed
+  sender/`catch_unwind` interplay is only exercised indirectly via
+  `run_game` when `MCG_TRACE_LOG` is set.
+- `src/bin/cgdsl-play.rs` and `src/bin/engine-tui/**` keep embedded smoke tests
+  (CLI usage errors, key/input handling — 14 tests); they need private access,
+  so they are not promoted to `tests/`.
 
 ### Known behavior bugs scheduled for fix (not pin tests)
 

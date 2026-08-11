@@ -78,3 +78,28 @@ agents:
 tui GAME="crates/engine/test_games/ordering_test.cgdsl":
     cargo run -p cgdsl-engine --bin engine-tui -- {{GAME}}
 
+# Run the full cgdsl-engine test suite (lib + bins + integration)
+test-engine:
+    cargo test -p cgdsl-engine --all-targets
+
+# Run only the cgdsl-engine library (unit + interpreter + controller) tests
+test-engine-lib:
+    cargo test -p cgdsl-engine --lib
+
+# Run only the cgdsl-engine binary smoke tests (cgdsl-play, engine-tui)
+test-engine-bins:
+    cargo test -p cgdsl-engine --bins
+
+# Run one integration test area, e.g. `just test-engine-area flow`
+test-engine-area AREA:
+    cargo test -p cgdsl-engine --test {{AREA}}_test
+
+# The full engine gate: tests + clippy + fmt (exit code only)
+test-engine-ci:
+    cargo test -p cgdsl-engine --all-targets
+    cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings
+    cargo fmt -p cgdsl-engine -- --check
+
+# Engine line coverage (requires cargo-llvm-cov + the llvm-tools rustup component)
+coverage-engine:
+    cargo llvm-cov -p cgdsl-engine --lib

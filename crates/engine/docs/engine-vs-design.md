@@ -177,8 +177,8 @@ team, team-keyed);
 - **2026-08-10 (winner set):** `GameData::winner_names()` (winners = players
   still in game), `end game with winner X` now eliminates everyone else, and
   the winner set is logged by the TUI, the trace file, and `cgdsl-play`.
-- **Test counts:** `cargo test -p cgdsl-engine` — 551 tests green (442 lib +
-  5 cgdsl-play + 9 engine-tui + 95 integration, +1 ignored); `clippy --no-deps
-  -D warnings` and `fmt --check` clean. Workspace caveat: `cargo clippy
-  --workspace` still fails on pre-existing `front_end` library lints and a
-  `code_gen` lint outside this crate.
+- **Test counts:** `cargo test -p cgdsl-engine` — 527 tests green (439 lib +
+  5 cgdsl-play + 9 engine-tui + 74 integration); `clippy -p cgdsl-engine
+  --all-targets --no-deps -D warnings` and `fmt --check` clean. Workspace
+  caveat: `cargo clippy --workspace` still fails on pre-existing `front_end`
+  library lints and a `code_gen` lint outside this crate.

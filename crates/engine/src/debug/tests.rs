@@ -15,7 +15,7 @@ fn tmp_path(name: &str) -> PathBuf {
 }
 
 #[test]
-fn test_debug_level_from_marker_valid() {
+fn debug_level_from_marker_valid() {
     assert_eq!(DebugLevel::from_marker("<!--LOW-->"), Some(DebugLevel::Low));
     assert_eq!(
         DebugLevel::from_marker("<!--MEDIUM-->"),
@@ -28,7 +28,7 @@ fn test_debug_level_from_marker_valid() {
 }
 
 #[test]
-fn test_debug_level_from_marker_case_insensitive() {
+fn debug_level_from_marker_case_insensitive() {
     assert_eq!(DebugLevel::from_marker("<!--low-->"), Some(DebugLevel::Low));
     assert_eq!(
         DebugLevel::from_marker("<!--Medium-->"),
@@ -41,21 +41,21 @@ fn test_debug_level_from_marker_case_insensitive() {
 }
 
 #[test]
-fn test_debug_level_from_marker_invalid() {
+fn debug_level_from_marker_invalid() {
     assert_eq!(DebugLevel::from_marker("<!--INVALID-->"), None);
     assert_eq!(DebugLevel::from_marker("low"), None);
     assert_eq!(DebugLevel::from_marker(""), None);
 }
 
 #[test]
-fn test_debug_level_marker_roundtrip() {
+fn debug_level_marker_roundtrip() {
     assert_eq!(DebugLevel::Low.marker(), "<!--LOW-->");
     assert_eq!(DebugLevel::Medium.marker(), "<!--MEDIUM-->");
     assert_eq!(DebugLevel::High.marker(), "<!--HIGH-->");
 }
 
 #[test]
-fn test_format_game_data_low() {
+fn format_game_data_low() {
     let data = GameData::new();
     let output = format_game_data(&data, DebugLevel::Low);
     assert!(!output.is_empty());
@@ -66,7 +66,7 @@ fn test_format_game_data_low() {
 }
 
 #[test]
-fn test_format_game_data_medium() {
+fn format_game_data_medium() {
     let data = GameData::new();
     let output = format_game_data(&data, DebugLevel::Medium);
     assert!(!output.is_empty());
@@ -77,7 +77,7 @@ fn test_format_game_data_medium() {
 }
 
 #[test]
-fn test_format_game_data_high() {
+fn format_game_data_high() {
     let data = GameData::new();
     let output = format_game_data(&data, DebugLevel::High);
     assert!(!output.is_empty());
@@ -90,7 +90,7 @@ fn test_format_game_data_high() {
 }
 
 #[test]
-fn test_save_game_data_creates_file() {
+fn save_game_data_creates_file() {
     let data = GameData::new();
     let path = tmp_path("create");
     let _ = fs::remove_file(&path);
@@ -102,7 +102,7 @@ fn test_save_game_data_creates_file() {
 }
 
 #[test]
-fn test_save_game_data_appends_to_file() {
+fn save_game_data_appends_to_file() {
     let data = GameData::new();
     let path = tmp_path("append");
     let _ = fs::remove_file(&path);
@@ -118,7 +118,7 @@ fn test_save_game_data_appends_to_file() {
 }
 
 #[test]
-fn test_format_game_data_low_with_players() {
+fn format_game_data_low_with_players() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.add_player("Bob".to_string());
@@ -130,7 +130,7 @@ fn test_format_game_data_low_with_players() {
 }
 
 #[test]
-fn test_format_game_data_low_with_stage() {
+fn format_game_data_low_with_stage() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.add_player("Bob".to_string());
@@ -145,7 +145,7 @@ fn test_format_game_data_low_with_stage() {
 }
 
 #[test]
-fn test_format_game_data_low_turn_order_indices() {
+fn format_game_data_low_turn_order_indices() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.add_player("Bob".to_string());
@@ -156,7 +156,7 @@ fn test_format_game_data_low_turn_order_indices() {
 }
 
 #[test]
-fn test_format_game_data_low_card_counts() {
+fn format_game_data_low_card_counts() {
     use std::collections::HashMap;
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
@@ -189,7 +189,7 @@ fn test_format_game_data_low_card_counts() {
 }
 
 #[test]
-fn test_format_game_data_medium_scores() {
+fn format_game_data_medium_scores() {
     let mut data = GameData::new();
     let p1 = data.add_player("Alice".to_string());
     data.players[p1].score = 100;
@@ -205,7 +205,7 @@ fn test_format_game_data_medium_scores() {
 }
 
 #[test]
-fn test_format_game_data_medium_teams() {
+fn format_game_data_medium_teams() {
     let mut data = GameData::new();
     let p1 = data.add_player("Alice".to_string());
     let p2 = data.add_player("Bob".to_string());
@@ -223,7 +223,7 @@ fn test_format_game_data_medium_teams() {
 }
 
 #[test]
-fn test_format_game_data_medium_memories() {
+fn format_game_data_medium_memories() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.turn_order = vec![0];
@@ -236,7 +236,7 @@ fn test_format_game_data_medium_memories() {
 }
 
 #[test]
-fn test_format_game_data_medium_truncated_cards() {
+fn format_game_data_medium_truncated_cards() {
     use std::collections::HashMap;
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
@@ -260,7 +260,7 @@ fn test_format_game_data_medium_truncated_cards() {
 }
 
 #[test]
-fn test_format_game_data_high_full_player_details() {
+fn format_game_data_high_full_player_details() {
     let mut data = GameData::new();
     let p1 = data.add_player("Alice".to_string());
     data.players[p1].score = 50;
@@ -275,7 +275,7 @@ fn test_format_game_data_high_full_player_details() {
 }
 
 #[test]
-fn test_format_game_data_high_all_cards() {
+fn format_game_data_high_all_cards() {
     use std::collections::HashMap;
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
@@ -304,7 +304,7 @@ fn test_format_game_data_high_all_cards() {
 }
 
 #[test]
-fn test_format_game_data_high_combos_precedences_pointmaps() {
+fn format_game_data_high_combos_precedences_pointmaps() {
     use front_end::ast::{AggregateFilter, FilterExpr, IntCompare, IntExpr};
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
@@ -343,7 +343,7 @@ fn test_format_game_data_high_combos_precedences_pointmaps() {
 }
 
 #[test]
-fn test_format_game_data_high_memories_typed() {
+fn format_game_data_high_memories_typed() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.turn_order = vec![0];
@@ -362,7 +362,7 @@ fn test_format_game_data_high_memories_typed() {
 }
 
 #[test]
-fn test_format_game_data_memory_value_variants() {
+fn format_game_data_memory_value_variants() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.turn_order = vec![0];
@@ -412,14 +412,14 @@ fn test_format_game_data_memory_value_variants() {
 }
 
 #[test]
-fn test_format_game_data_empty_players() {
+fn format_game_data_empty_players() {
     let data = GameData::new();
     let output = format_game_data(&data, DebugLevel::Low);
     assert!(output.contains("Players:"));
 }
 
 #[test]
-fn test_format_game_data_empty_locations() {
+fn format_game_data_empty_locations() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.turn_order = vec![0];
@@ -429,7 +429,7 @@ fn test_format_game_data_empty_locations() {
 }
 
 #[test]
-fn test_format_game_data_empty_cards() {
+fn format_game_data_empty_cards() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.add_location(
@@ -446,7 +446,7 @@ fn test_format_game_data_empty_cards() {
 }
 
 #[test]
-fn test_format_game_data_single_player() {
+fn format_game_data_single_player() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.turn_order = vec![0];
@@ -457,7 +457,7 @@ fn test_format_game_data_single_player() {
 }
 
 #[test]
-fn test_format_game_data_current_player_none() {
+fn format_game_data_current_player_none() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.turn_order = vec![];
@@ -468,7 +468,7 @@ fn test_format_game_data_current_player_none() {
 }
 
 #[test]
-fn test_format_game_data_empty_turn_order() {
+fn format_game_data_empty_turn_order() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.turn_order = vec![];
@@ -479,7 +479,7 @@ fn test_format_game_data_empty_turn_order() {
 }
 
 #[test]
-fn test_save_game_data_then_format() {
+fn save_game_data_then_format() {
     let mut data = GameData::new();
     data.add_player("Alice".to_string());
     data.add_player("Bob".to_string());
@@ -503,7 +503,7 @@ fn test_save_game_data_then_format() {
 }
 
 #[test]
-fn test_save_game_data_preserves_level_marker() {
+fn save_game_data_preserves_level_marker() {
     let data = GameData::new();
     let path = tmp_path("marker");
     let _ = fs::remove_file(&path);

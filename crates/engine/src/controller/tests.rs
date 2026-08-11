@@ -9,7 +9,7 @@ use std::sync::Arc;
 /// Verify that [`read_test_file`] correctly parses `y`, `n`, and numeric
 /// lines in FIFO order into the corresponding [`Input`] variants.
 #[test]
-fn test_input_parsing() {
+fn input_parsing() {
     let default_ir = Ir::<LoweredPayLoad>::default();
     let interpreter = Interpreter::new(
         Ir {
@@ -89,7 +89,7 @@ fn test_input_parsing() {
 /// Ensure that popping from an empty `line_buffer` produces the expected
 /// `"Test input file exhausted"` error.
 #[test]
-fn test_input_exhausted_error() {
+fn input_exhausted_error() {
     let default_ir = Ir::<LoweredPayLoad>::default();
     let interpreter = Interpreter::new(
         Ir {
@@ -123,7 +123,7 @@ fn test_input_exhausted_error() {
 /// Verify that [`read_test_file`] correctly parses a `Name:` prefix on
 /// each line (e.g. `P2:y`, `P3:c 1,3`), setting the right `player_id`.
 #[test]
-fn test_input_parsing_name_prefix() {
+fn input_parsing_name_prefix() {
     let default_ir = Ir::<LoweredPayLoad>::default();
     let interpreter = Interpreter::new(
         Ir {
@@ -163,7 +163,7 @@ fn test_input_parsing_name_prefix() {
 }
 
 #[test]
-fn test_input_file_ordering_and_validation() {
+fn input_file_ordering_and_validation() {
     use front_end::validation::parse_document;
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -221,7 +221,7 @@ fn run_ordering_game_snapshots() -> (
 }
 
 #[test]
-fn test_debug_integration_game_snapshots() {
+fn debug_integration_game_snapshots() {
     use crate::debug::{format_game_data, DebugLevel};
 
     let (snapshots, result) = run_ordering_game_snapshots();
@@ -243,7 +243,7 @@ fn test_debug_integration_game_snapshots() {
 }
 
 #[test]
-fn test_debug_integration_verify_game_progression() {
+fn debug_integration_verify_game_progression() {
     use crate::debug::{format_game_data, DebugLevel};
 
     let (snapshots, result) = run_ordering_game_snapshots();
@@ -272,7 +272,7 @@ fn test_debug_integration_verify_game_progression() {
 }
 
 #[test]
-fn test_play_stage_advances_turn_and_runs_two_iterations() {
+fn play_stage_advances_turn_and_runs_two_iterations() {
     use crate::interpreter::TraceEvent;
     use front_end::validation::parse_document;
     use std::sync::{Arc, Mutex};

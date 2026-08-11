@@ -177,31 +177,32 @@ crates/engine/src/
 │   │   ├── trace.rs               — trace relay types (detail filters)
 │   │   └── ui/                    — state, layout, game_state, trace_log, input, controls
 │   └── cgdsl-play.rs              — CLI game driver (interactive + file replay; `--log`, `--debug-level` flags)
-├── test_games/                    — 90 .cgdsl fixture files (incl. the five demo games)
-└── tests/                         — integration tests (one file per feature area)
-    ├── quantifier_test.rs
-    ├── action_test.rs
-    ├── scoring_test.rs
-    ├── setup_test.rs
-    ├── turn_test.rs
-    ├── out_test.rs
-    ├── memory_test.rs
-    ├── flow_test.rs
-    ├── optional_test.rs
-    ├── shuffle_test.rs
-    ├── demo_games_test.rs         — the five handoff demo games driven end-to-end
-    ├── behavior_test.rs           — deterministic (non-shuffled) behavioral fixtures with exact expected outcomes
-    ├── ergonomics_test.rs         — turn-flow, memory, team, winner-set regressions
+├── test_games/                    — 64 .cgdsl fixture files (incl. the five demo games) + .txt replay pairs
+└── tests/                         — integration tests (one file per feature area, auto-discovered)
+    ├── common/mod.rs              — shared harness (load_game, default_input, CurrentTracker, …)
+    ├── actions_test.rs            — action arms + regressions (I-5, I-13, D-5, D-11, D-14)
+    ├── setup_test.rs              — setup rules incl. setup quantifiers (I-20)
+    ├── scoring_test.rs            — cross-boundary scoring: tie/memory/position winners, aggregates
+    ├── flow_test.rs               — if/optional/choose/stage flow
+    ├── quantifier_test.rs         — all quantifier sites
+    ├── elimination_test.rs        — ineligible-player skip, auto-end (I-24), winner-set traces (I-25)
+    ├── teams_test.rs              — team-owned locations/memories
+    ├── memory_test.rs             — memory initial values + numeric `bid` prompt
     ├── verb_semantics_test.rs     — `deal`/`move` quantity semantics
-    └── random_play_test.rs        — monkey tests: random inputs, 40 seeds per game
+    ├── behavior_test.rs           — deterministic (non-shuffled) behavioral fixtures with exact expected outcomes
+    ├── demo_games_test.rs         — the five handoff demo games driven end-to-end
+    ├── random_play_test.rs        — monkey tests: random inputs, 40 seeds per game
+    └── hygiene_test.rs            — guard: no orphaned .cgdsl fixtures
 ```
 
 ## Build and Test
 
 ```
-cargo test -p cgdsl-engine              # 551 tests (442 lib + 5 cgdsl-play + 9 TUI + 95 integration, +1 ignored)
+cargo test -p cgdsl-engine              # 527 tests (439 lib + 5 cgdsl-play + 9 TUI + 74 integration)
 cargo test -p cgdsl-engine --test <name> # single integration test file
-cargo clippy -p cgdsl-engine --all-targets -- -D warnings
+cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings
 cargo fmt -p cgdsl-engine -- --check
+just test-engine / test-engine-lib / test-engine-bins / test-engine-area <area>   # class selection
+just coverage-engine                      # line coverage via cargo-llvm-cov
 just tui [GAME]                          # interactive testing
 ```
