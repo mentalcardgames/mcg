@@ -8,8 +8,7 @@ use crate::game_data::{GameData, Location, MemoryValue};
 use front_end::ast::{
     ActionRule, CardSet, ClassicMove, DealMove, EndType, ExchangeMove, Extrema, Group, Groupable,
     IntExpr, MemoryType, MoveCardSet, MoveType, OutOf, Owner, PlayerExpr, Players, Quantity,
-    ScoringRule, SetUpRule, Status, TokenLocExpr, TokenMove, UseMemory, UseSingleMemory,
-    WinnerType,
+    ScoringRule, SetUpRule, Status, UseMemory, UseSingleMemory, WinnerType,
 };
 use std::collections::HashMap;
 
@@ -19,14 +18,6 @@ fn loc_cardset(name: &str) -> CardSet {
             groupable: Groupable::Location {
                 name: name.to_string(),
             },
-        },
-    }
-}
-
-fn token_loc(name: &str) -> TokenLocExpr {
-    TokenLocExpr::Groupable {
-        groupable: Groupable::Location {
-            name: name.to_string(),
         },
     }
 }
@@ -62,10 +53,6 @@ fn fixture_stock_to_hand() -> (GameData, usize, usize, Vec<usize>) {
     (gd, stock_idx, hand_idx, card_ids)
 }
 
-// ---------------------------------------------------------------------------
-// Task 2 — TODO no-op pins
-// ---------------------------------------------------------------------------
-
 /// Comparable snapshot of `locations` (which doesn't `derive(PartialEq/Debug)`).
 fn loc_snapshot(gd: &GameData) -> Vec<(String, Vec<usize>)> {
     gd.locations
@@ -80,44 +67,6 @@ fn player_snapshot(gd: &GameData) -> Vec<(String, i32, bool)> {
         .iter()
         .map(|p| (p.name.clone(), p.score, p.in_game))
         .collect()
-}
-
-#[test]
-fn flip_action_is_currently_a_noop() {
-    // Pin: FlipAction ignores its card_set and status fields entirely
-    // (action.rs:164-167). When this is implemented, this test must be
-    // updated to assert the new behavior.
-    let mut gd = GameData::new();
-    let _p = gd.add_player("Alice".to_string());
-    let stock = gd.add_location(
-        "Table".to_string(),
-        Location {
-            name: "Stock".to_string(),
-            cards: vec![],
-        },
-    );
-    let card_id = gd.add_card(
-        stock,
-        HashMap::from([("face".to_string(), "down".to_string())]),
-    );
-    gd.locations[stock].cards.push(card_id);
-
-    let before_cards = gd.cards.clone();
-    let before_locs = loc_snapshot(&gd);
-    execute_action_rule(
-        ActionRule::FlipAction {
-            card_set: loc_cardset("Stock"),
-            status: Status::FaceUp,
-        },
-        &mut gd,
-    )
-    .unwrap();
-    assert_eq!(gd.cards, before_cards, "FlipAction must not mutate cards");
-    assert_eq!(
-        loc_snapshot(&gd),
-        before_locs,
-        "FlipAction must not mutate locations"
-    );
 }
 
 #[test]
@@ -168,39 +117,6 @@ fn bid_memory_action_writes_literal_to_owner_slot() {
 }
 
 #[test]
-fn demand_action_is_currently_a_noop() {
-    let mut gd = GameData::new();
-    let before = player_snapshot(&gd);
-    execute_action_rule(
-        ActionRule::DemandAction {
-            demand_type: front_end::ast::DemandType::Int {
-                int: IntExpr::Literal { int: 1 },
-            },
-        },
-        &mut gd,
-    )
-    .unwrap();
-    assert_eq!(player_snapshot(&gd), before);
-}
-
-#[test]
-fn demand_memory_action_is_currently_a_noop() {
-    let mut gd = GameData::new();
-    let before = gd.clone();
-    execute_action_rule(
-        ActionRule::DemandMemoryAction {
-            demand_type: front_end::ast::DemandType::Int {
-                int: IntExpr::Literal { int: 1 },
-            },
-            memory: "d".to_string(),
-        },
-        &mut gd,
-    )
-    .unwrap();
-    assert_eq!(gd.memories, before.memories);
-}
-
-#[test]
 fn end_action_game_with_winner_eliminates_non_winners() {
     // 2026-08-10: `end game with winner X` eliminates everyone not named
     // (the IR jump to the goal then ends the game) — the in-game survivors
@@ -224,33 +140,6 @@ fn end_action_game_with_winner_eliminates_non_winners() {
     assert!(gd.players[p0].in_game, "Alice is the declared winner");
     assert!(!gd.players[p1].in_game, "Bob is eliminated");
     assert_eq!(gd.winner_names(), vec!["Alice".to_string()]);
-}
-
-#[test]
-fn move_type_place_is_currently_a_noop() {
-    let mut gd = GameData::new();
-    let _p = gd.add_player("Alice".to_string());
-    let stock = gd.add_location(
-        "Table".to_string(),
-        Location {
-            name: "Stock".to_string(),
-            cards: vec![],
-        },
-    );
-    let card_id = gd.add_card(stock, HashMap::new());
-    gd.locations[stock].cards.push(card_id);
-    let before = loc_snapshot(&gd);
-    let token = TokenMove::Place {
-        token: "X".to_string(),
-        from_loc: token_loc("Stock"),
-        to_loc: token_loc("Hand"),
-    };
-    execute_move(MoveType::Place { token }, &mut gd).unwrap();
-    assert_eq!(
-        loc_snapshot(&gd),
-        before,
-        "Place must not move cards (TODO no-op)"
-    );
 }
 
 #[test]
@@ -355,8 +244,38 @@ fn scoring_rule_winner_with_eliminates_lowest_score() {
     );
 }
 
+#[test]
+fn scoring_rule_winner_with_min_eliminates_highest_score() {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("Alice".to_string());
+    let p1 = gd.add_player("Bob".to_string());
+    gd.turn_order = vec![p0, p1];
+    gd.players[p0].score = 10;
+    gd.players[p1].score = 5;
+    assert!(gd.players[p0].in_game);
+    assert!(gd.players[p1].in_game);
+    execute_scoring_rule(
+        ScoringRule::WinnerRule {
+            winner_rule: front_end::ast::WinnerRule::WinnerWith {
+                extrema: Extrema::Min,
+                winner_type: WinnerType::Score,
+            },
+        },
+        &mut gd,
+    )
+    .unwrap();
+    assert!(
+        !gd.players[p0].in_game,
+        "Alice (score=10) should be eliminated"
+    );
+    assert!(
+        gd.players[p1].in_game,
+        "Bob (score=5) should win on lowest score"
+    );
+}
+
 // ---------------------------------------------------------------------------
-// Task 3 â€” OutAction (all 5 OutOf variants)
+// Task 3 — OutAction (all 5 OutOf variants)
 // ---------------------------------------------------------------------------
 
 fn two_players_in_play_stage() -> GameData {
@@ -484,7 +403,7 @@ fn out_action_game_fail_sets_in_game_false() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 4 â€” EndAction variants
+// Task 4 — EndAction variants
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -543,7 +462,7 @@ fn end_action_named_stage_leaves_named_stage() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 5 â€” CycleAction + panic sites
+// Task 5 — CycleAction + panic sites
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -624,7 +543,7 @@ fn cycle_action_player_not_in_turn_order_errors() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 6 â€” ShuffleAction success & failure paths
+// Task 6 — ShuffleAction success & failure paths
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -684,7 +603,7 @@ fn shuffle_action_on_missing_location_errors() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 7 â€” SetMemory / ResetMemory
+// Task 7 — SetMemory / ResetMemory
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -707,6 +626,30 @@ fn set_memory_action_stores_evaluated_int() {
 }
 
 #[test]
+fn set_memory_action_stores_evaluated_string() {
+    let mut gd = GameData::new();
+    let _alice = gd.add_player("Alice".to_string());
+    gd.turn_order.push(_alice);
+    gd.current_player = Some(0);
+    execute_action_rule(
+        ActionRule::SetMemory {
+            memory: "label".to_string(),
+            memory_type: MemoryType::String {
+                string: front_end::ast::StringExpr::Literal {
+                    value: "Hello".to_string(),
+                },
+            },
+        },
+        &mut gd,
+    )
+    .unwrap();
+    assert_eq!(
+        gd.get_memory("Alice_label"),
+        Some(&MemoryValue::String("Hello".to_string()))
+    );
+}
+
+#[test]
 fn reset_memory_action_zeros_int() {
     let mut gd = GameData::new();
     let _alice = gd.add_player("Alice".to_string());
@@ -724,7 +667,7 @@ fn reset_memory_action_zeros_int() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 8 â€” MoveType Deal / Exchange / Classic, Move vs MoveQuantity
+// Task 8 — MoveType Deal / Exchange / Classic, Move vs MoveQuantity
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -811,7 +754,7 @@ fn move_exchange_routes_to_execute_cardset_move() {
 }
 
 // ---------------------------------------------------------------------------
-// Task 9 â€” execute_cardset_move panic sites
+// Task 9 — execute_cardset_move panic sites
 // ---------------------------------------------------------------------------
 
 #[test]

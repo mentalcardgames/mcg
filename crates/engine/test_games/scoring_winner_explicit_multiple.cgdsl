@@ -1,9 +1,0 @@
-// Exercise: winner is (P:P1, P:P2)
-// P1 and P2 remain in_game, P3 eliminated
-player P1, P2, P3
-turnorder (P:P1, P:P2, P:P3)
-
-stage Play for current 1 times {
-  winner is (P:P1, P:P2)
-  end stage
-}

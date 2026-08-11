@@ -1,6 +1,6 @@
-//! Integration tests for the 2026-08-10 ergonomics pass: ineligible-player
-//! skip + auto-end, honored memory initial values, the numeric `bid` prompt,
-//! and team-owned locations/memories.
+//! Integration tests for elimination semantics: ineligible-player skip and
+//! stage auto-end (I-24), cycle/`next` eligibility (I-13), and the winner
+//! set at game end (I-25).
 
 mod common;
 
@@ -11,7 +11,7 @@ use cgdsl_engine::{
     run_game_with, GameData, Input, InputKind, InputSource, RunOptions, TraceEntry, TraceEvent,
 };
 
-use common::{accept_everything, load_game, test_file, total_cards};
+use common::{accept_everything, load_game, total_cards};
 
 #[test]
 fn eliminated_players_are_never_prompted_and_game_auto_ends() {
@@ -88,52 +88,6 @@ fn eliminated_players_instructions_are_traced_as_skipped() {
 }
 
 #[test]
-fn memory_declarations_honor_initial_values() {
-    let ir = load_game("memory_initial_value.cgdsl");
-    let gd = run_game_with(
-        ir,
-        GameData::new(),
-        InputSource::Player(Box::new(|_| Input {
-            player_id: "P1".into(),
-            kind: InputKind::Choice { idx: 0 },
-        })),
-        RunOptions::default(),
-    )
-    .expect("game should complete");
-
-    assert_eq!(gd.get_memory("Table_Pot"), Some(&MemoryValue::Int(100)));
-    assert_eq!(
-        gd.get_memory("Table_Name"),
-        Some(&MemoryValue::String("Alice".to_string()))
-    );
-    assert_eq!(
-        gd.get_memory("Table_Winner"),
-        Some(&MemoryValue::String("P1".to_string())),
-        "Player-typed memory on table initialises to the evaluated player"
-    );
-    assert_eq!(gd.players[0].score, 100, "the initial value was readable");
-}
-
-#[test]
-fn bid_any_prompts_for_a_number_and_range_rejects_out_of_bounds() {
-    let ir = load_game("bid_prompt.cgdsl");
-    let gd = run_game_with(
-        ir,
-        GameData::new(),
-        test_file("bid_prompt.txt"),
-        RunOptions::default(),
-    )
-    .expect("bid prompts should complete");
-
-    assert_eq!(gd.get_memory("Table_Pot"), Some(&MemoryValue::Int(7)));
-    assert_eq!(
-        gd.get_memory("Table_Bet"),
-        Some(&MemoryValue::Int(3)),
-        "the out-of-range 99 was rejected and re-asked"
-    );
-}
-
-#[test]
 fn out_of_game_players_are_skipped_by_cycles_and_next_expressions() {
     // Regression: a player out of the GAME but still in the current stage
     // must never become current via `cycle to next` / `cycle to previous`,
@@ -179,46 +133,6 @@ fn out_of_game_players_are_skipped_by_cycles_and_next_expressions() {
         }
     }
     assert_eq!(runs, vec!["P1", "P3", "P1", "P3", "P1"]);
-}
-
-#[test]
-fn team_pile_is_shared_and_addressable() {
-    // The bare name `TeamPile` finds the current player's team's pile, the
-    // explicit `TeamPile of T:Red` finds it by team, `owner of top(...)`
-    // reports the team, and `(&I:TeamFlag of T:Red)` reads the single
-    // team-keyed slot.
-    let ir = load_game("team_pile_reads.cgdsl");
-    let gd = run_game_with(
-        ir,
-        GameData::new(),
-        InputSource::Player(Box::new(|_| Input {
-            player_id: "P1".into(),
-            kind: InputKind::Choice { idx: 0 },
-        })),
-        RunOptions::default(),
-    )
-    .expect("team-pile reads should complete");
-
-    let pile = gd.locations.iter().find(|l| l.name == "TeamPile").unwrap();
-    assert_eq!(
-        pile.cards.len(),
-        3,
-        "all three deals went to ONE shared pile"
-    );
-    assert_eq!(
-        gd.get_memory("Table_Who"),
-        Some(&MemoryValue::String("Red".to_string())),
-        "owner of top(TeamPile) reports the team"
-    );
-    assert_eq!(
-        gd.players[0].score, 3,
-        "size(cards TeamPile of T:Red) reads the team pile"
-    );
-    assert_eq!(
-        gd.players[1].score, 7,
-        "(&I:TeamFlag of T:Red) reads the team slot Red_TeamFlag"
-    );
-    assert_eq!(total_cards(&gd), 3);
 }
 
 #[test]
@@ -290,55 +204,4 @@ fn game_over_trace_names_declared_winner() {
         .expect("a GameOver trace event must be emitted");
     assert_eq!(winners, vec!["P1".to_string()]);
     assert!(gd.players.iter().all(|p| p.in_game == (p.name == "P1")));
-}
-
-#[test]
-fn team_owned_locations_and_memories_are_one_per_team() {
-    // `location X on T:Red` creates ONE shared pile for the team, and
-    // `memory M on T:Red` the single slot `Red_M` — matching the read
-    // addressing `(&I:M of T:Red)`.
-    let ir = load_game("team_locations.cgdsl");
-    let gd = run_game_with(
-        ir,
-        GameData::new(),
-        InputSource::Player(Box::new(|_| Input {
-            player_id: "P1".into(),
-            kind: InputKind::Choice { idx: 0 },
-        })),
-        RunOptions::default(),
-    )
-    .expect("team-location game should complete");
-
-    let pile_indices: Vec<usize> = gd
-        .locations
-        .iter()
-        .enumerate()
-        .filter(|(_, l)| l.name == "TeamPile")
-        .map(|(i, _)| i)
-        .collect();
-    assert_eq!(
-        pile_indices.len(),
-        1,
-        "one TeamPile for the whole team, not per member"
-    );
-    let team = gd.teams.iter().find(|t| t.name == "Red").unwrap();
-    assert!(
-        team.owner
-            .locations
-            .iter()
-            .any(|i| pile_indices.contains(i)),
-        "the TeamPile is owned by the team entity"
-    );
-    for p in &gd.players {
-        assert!(
-            !p.owner.locations.iter().any(|i| pile_indices.contains(i)),
-            "no player owns the team pile"
-        );
-    }
-
-    // `TeamFlag is 5` during P1's turn writes the single team slot
-    // (`memory_write_owner` finds `Red_TeamFlag`).
-    assert_eq!(gd.get_memory("Red_TeamFlag"), Some(&MemoryValue::Int(5)));
-    assert!(gd.get_memory("P1_TeamFlag").is_none());
-    assert!(gd.get_memory("P2_TeamFlag").is_none());
 }

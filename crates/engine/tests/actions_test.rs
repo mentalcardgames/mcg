@@ -124,3 +124,14 @@ fn combo_same_rank_matches_only_pairs() {
         .expect("game should complete");
     assert_eq!(gd.players[0].score, 2, "pair = 2 cards, not 3");
 }
+
+/// Write→read composition: a `SetMemory` write followed by a memory read in
+/// the same game resolves through the evaluator (owner-prefixed slot).
+#[test]
+fn memory_set_then_read_back_via_evaluator() {
+    let ir = load_game("memory_read_back.cgdsl");
+    let gd = run_game_with(ir, GameData::new(), default_input(), RunOptions::default())
+        .expect("game should complete");
+
+    assert_eq!(gd.players[0].score, 5, "P1 score should be 5");
+}
