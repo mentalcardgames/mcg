@@ -48,6 +48,7 @@ module and carries a doc comment per variant. The `Display` messages are the **s
 diagnostic surface** — tests assert them via `to_string()`; representative examples:
 
 - **Query/evaluator** (`query/`): `DivisionByZero` ("Division by zero"),
+  `ModuloByZero` ("Modulo by zero"),
   `MemoryNotFound { key }` ("Memory {key} not found"), `MemoryNotInt` /
   `MemoryNotIntFor { key }` / `MemoryNotString` / `MemoryNotTeam` /
   `MemoryNotCardSet` / `MemoryNotPlayerCollection` / … (the "Memory value is not a …"

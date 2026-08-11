@@ -54,6 +54,10 @@ pub enum EngineError {
     #[error("Division by zero")]
     DivisionByZero,
 
+    /// Integer modulo by zero.
+    #[error("Modulo by zero")]
+    ModuloByZero,
+
     /// `RuntimePlayer::Current` / `RuntimePlayer::Next` etc. with no current
     /// player set.
     #[error("No current player")]
@@ -541,6 +545,7 @@ impl EngineError {
     pub fn kind(&self) -> ErrorKind {
         match self {
             EngineError::DivisionByZero
+            | EngineError::ModuloByZero
             | EngineError::NoCurrentPlayer
             | EngineError::NoCurrentStage
             | EngineError::NoNextPlayerAvailable

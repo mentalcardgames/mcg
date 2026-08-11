@@ -24,7 +24,13 @@ impl Evaluator {
                             Ok(left / right)
                         }
                     }
-                    IntOp::Mod => Ok(left % right),
+                    IntOp::Mod => {
+                        if right == 0 {
+                            Err(EngineError::ModuloByZero)
+                        } else {
+                            Ok(left % right)
+                        }
+                    }
                 }
             }
             IntExpr::Query { query } => match query {

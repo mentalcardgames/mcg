@@ -91,9 +91,13 @@ fn eval_int_binary_mod_nonzero() {
 
 // ── I-5 ──────────────────────────────────────────────────────────
 #[test]
-#[should_panic]
 fn eval_int_binary_mod_by_zero() {
-    let _ = Evaluator::eval_int(&binexpr(lit(1), IntOp::Mod, lit(0)), &GameData::new());
+    assert_eq!(
+        Evaluator::eval_int(&binexpr(lit(1), IntOp::Mod, lit(0)), &GameData::new())
+            .unwrap_err()
+            .to_string(),
+        "Modulo by zero".to_string()
+    );
 }
 
 // ── I-6 ──────────────────────────────────────────────────────────

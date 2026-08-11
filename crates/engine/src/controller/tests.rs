@@ -466,7 +466,7 @@ type InvalidLineCase = (&'static str, fn(&EngineError) -> bool);
 /// Each malformed `TestFile` line must surface its typed error variant
 /// (part of the I-8 / §2 line-format contract).
 #[test]
-fn test_input_invalid_lines_error() {
+fn input_invalid_lines_error() {
     let cases: Vec<InvalidLineCase> = vec![
         ("p 0", |e| {
             matches!(e, EngineError::InvalidTestInputPlayerZero { .. })

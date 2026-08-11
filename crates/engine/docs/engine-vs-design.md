@@ -107,7 +107,7 @@ last_validated: 2026-08-11
 |---|---|---|---|---|
 | Blackjack | `test_games/blackjack.cgdsl` | optionals per turn | optionals, points, `sum`, `size(playersin)`, `cycle to next` (unguarded — self-wrap + skip mode), `winner is highest score` | Ace = 11 only; standing re-asks each round (D-3); dealer is a tableau, not a player |
 | War | `test_games/war.cgdsl` | none (automatic) | `until (A or B)` exit, point-map comparison, `if` chains, moves, scoring | ties discard both cards (no war redeal) |
-| Crazy Eights | `test_games/crazy_eights.cgdsl` | choose-card + choose-player per turn | `move 1` (pick-one play), `Hand of any` (ChoosePlayer), `deal N` draws, `until (A or B) or N times`, lowest-score winner | no match constraint on plays; draw may be gifted to any player (house rule) |
+| Crazy Eights | `test_games/crazy_eights.cgdsl` | choose-card + choose-player per turn | `move 1` (pick-one play), `Hand of any` (ChoosePlayer), `deal N` draws, `until (A or B) or N times`, lowest-score winner | plays are match-constrained via a `where`-filter on the top of the Discard (`move 1 from Hand where Rank is Rank of top(Discard) or …`); draw may be gifted to any player (house rule) |
 | Five-Card Draw | `test_games/five_card_draw.cgdsl` | choose-card per draw round | `Hand of all` fan-out, `move 1` discard, `where same Rank/Suit` filters, score bonuses | draw-1 variant; additive scoring (no straights/full houses) |
 | Go Fish | `test_games/go_fish.cgdsl` | 13-way `choose` per turn | `choose` with 13 options, `where Rank is "X" of next` (owner-aware filter), draw-on-miss, memory-free scoring | ask the *next* player only; no books; hand-size scoring |
 
@@ -177,6 +177,11 @@ team, team-keyed);
 - **2026-08-10 (winner set):** `GameData::winner_names()` (winners = players
   still in game), `end game with winner X` now eliminates everyone else, and
   the winner set is logged by the TUI, the trace file, and `cgdsl-play`.
+- **2026-08-11 (mod-by-zero + encoding sweep):** `IntOp::Mod` with a zero
+  divisor panicked (`left % right`), inconsistent with the recoverable
+  `DivisionByZero`; it now returns `EngineError::ModuloByZero`. A repo-wide
+  encoding sweep replaced double-encoded UTF-8 sequences (em-dashes,
+  box-drawing, dashes, quotes) in source, tests, fixtures, and docs.
 - **Test counts:** `cargo test -p cgdsl-engine` — 551 tests green (463 lib +
   5 cgdsl-play + 9 engine-tui + 74 integration); `clippy -p cgdsl-engine
   --all-targets --no-deps -D warnings` and `fmt --check` clean. Workspace
