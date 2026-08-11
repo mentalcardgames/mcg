@@ -524,14 +524,17 @@ Wired since 2026-08 via `cargo-llvm-cov` (install once:
 `cargo install cargo-llvm-cov` + `rustup component add llvm-tools-preview`):
 
 ```
-just coverage-engine                        # lib-target unit coverage (≈64% lines)
-cargo llvm-cov -p cgdsl-engine --all-targets   # full coverage incl. integration (slower)
-cargo llvm-cov -p cgdsl-engine --html      # browsable report under target/llvm-cov
+just coverage-engine                        # full-suite coverage (all targets, ≈85% lines)
+cargo llvm-cov -p cgdsl-engine --lib        # unit-layer only (fast, ≈66% lines)
+cargo llvm-cov -p cgdsl-engine --html       # browsable report under target/llvm-cov
 ```
 
-Baseline (2026-08, `--lib`): **63.98% lines / 69.31% regions / 63.87% functions**.
-The biggest documented sink is the quantifier resume state machine
-(`interpreter/quant_driver.rs`, ~7% lines) — see §11.
+Baseline (2026-08-11, `--all-targets`): **85.07% lines / 88.75% regions /
+84.09% functions**. The largest remaining sinks are the `where`-filter
+`Adjacent`/`Higher`/`Lower` success paths plus the combo-laydown integration
+in `query/cardset.rs` (~76%) and the no-op/`SetUp` arms of `action.rs`
+(~71%) — the documented gap-pin deletion per §8.1 keeps some of those
+intentionally uncovered. See §11.
 
 ---
 
@@ -540,12 +543,14 @@ The biggest documented sink is the quantifier resume state machine
 (This section is a holding pen for gaps discovered during refactoring. Append items as
 you trip over them; promote to dedicated tests when the area is touched.)
 
-- `src/interpreter/quant_driver.rs` resume arms (`step_dest_player_all`,
-  `step_dest_player_any`, `step_src_cards_any_or_range`,
-  `step_src_cards_exact_n`, `step_deal_count`, `take_quant_resume`) are only
-  reachable via the integration tests in `tests/quantifier_test.rs`; no direct
-  unit tests of the resume state machine. This is the crate's largest coverage
-  sink (≈7% lines under `cargo llvm-cov --lib`; ~69% for the rest of the lib).
+- `src/interpreter/quant_driver.rs` — `take_quant_resume` and every resume
+  arm now have direct unit tests (`src/interpreter/quant_driver_tests.rs`),
+  pinning the I-19 state-match / I-21 stale-input guards and the dispatch /
+  re-prompt / error contract per `PendingKind`. The initial-prompt step arms
+  (`step_dest_player_all`, `step_src_cards_any_or_range`, `step_deal_count`,
+  `step_combo_source`, …) remain integration-covered via
+  `tests/quantifier_test.rs`; under `cargo llvm-cov --all-targets` the file
+  sits at ~91% lines.
 - `src/controller/trace_logger.rs` — `TraceLogger` has four embedded tests
   (path resolution, open, flush) but the composed
   sender/`catch_unwind` interplay is only exercised indirectly via

@@ -90,16 +90,22 @@ test-engine-lib:
 test-engine-bins:
     cargo test -p cgdsl-engine --bins
 
+# Run the engine suite with the optional `tracing` feature bridge enabled
+# (the trace_tracing test only compiles with it)
+test-engine-tracing:
+    cargo test -p cgdsl-engine --features tracing
+
 # Run one integration test area, e.g. `just test-engine-area flow`
 test-engine-area AREA:
     cargo test -p cgdsl-engine --test {{AREA}}_test
 
-# The full engine gate: tests + clippy + fmt (exit code only)
+# The full engine gate: tests + tracing feature + clippy + fmt (exit code only)
 test-engine-ci:
     cargo test -p cgdsl-engine --all-targets
+    cargo test -p cgdsl-engine --features tracing
     cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings
     cargo fmt -p cgdsl-engine -- --check
 
-# Engine line coverage (requires cargo-llvm-cov + the llvm-tools rustup component)
+# Engine line coverage across all targets (requires cargo-llvm-cov + llvm-tools)
 coverage-engine:
-    cargo llvm-cov -p cgdsl-engine --lib
+    cargo llvm-cov -p cgdsl-engine --all-targets

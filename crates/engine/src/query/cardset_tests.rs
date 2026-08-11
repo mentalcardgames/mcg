@@ -277,6 +277,128 @@ fn eval_cardset_group_where_filter_lower_missing_precedence() {
     );
 }
 
+/// Stock holding Ace, Queen, King, and a Joker (value not in the
+/// precedence), plus a `RankOrder` precedence Ace < Queen < King.
+fn ranked_fixture() -> GameData {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("P1".to_string());
+    gd.turn_order = vec![p0];
+    let stock = gd.add_location(
+        "Table".to_string(),
+        Location {
+            name: "Stock".to_string(),
+            cards: vec![],
+        },
+    );
+    let c0 = gd.add_card(stock, make_card(vec![("Rank", "Ace"), ("Suit", "Hearts")]));
+    let c1 = gd.add_card(
+        stock,
+        make_card(vec![("Rank", "Queen"), ("Suit", "Spades")]),
+    );
+    let c2 = gd.add_card(stock, make_card(vec![("Rank", "King"), ("Suit", "Clubs")]));
+    let c3 = gd.add_card(stock, make_card(vec![("Rank", "Joker"), ("Suit", "Wild")]));
+    gd.locations[stock].cards = vec![c0, c1, c2, c3];
+    gd.precedences.push(Precedence {
+        name: "RankOrder".to_string(),
+        key: "Rank".to_string(),
+        values: vec!["Ace".to_string(), "Queen".to_string(), "King".to_string()],
+    });
+    gd
+}
+
+#[test]
+fn eval_cardset_group_where_filter_adjacent_matches_consecutive_values() {
+    let gd = ranked_fixture();
+    let expr = CardSet::Group {
+        group: Group::Where {
+            groupable: Groupable::Location {
+                name: "Stock".to_string(),
+            },
+            filter: FilterExpr::Aggregate {
+                aggregate: AggregateFilter::Adjacent {
+                    key: "Rank".to_string(),
+                    precedence: "RankOrder".to_string(),
+                },
+            },
+        },
+    };
+    let result = Evaluator::eval_cardset(&expr, &gd);
+    let (loc, cards) = result.unwrap();
+    assert_eq!(loc, 0);
+    // (Ace,Queen) and (Queen,King) are consecutive; Joker is not in the
+    // precedence and is excluded. Pairs are deduplicated.
+    assert_eq!(cards, vec![0, 1, 2]);
+}
+
+#[test]
+fn eval_cardset_group_where_filter_higher_matches_above_target() {
+    let gd = ranked_fixture();
+    let expr = CardSet::Group {
+        group: Group::Where {
+            groupable: Groupable::Location {
+                name: "Stock".to_string(),
+            },
+            filter: FilterExpr::Aggregate {
+                aggregate: AggregateFilter::Higher {
+                    key: "Rank".to_string(),
+                    value: StringExpr::Literal {
+                        value: "Ace".to_string(),
+                    },
+                    precedence: "RankOrder".to_string(),
+                },
+            },
+        },
+    };
+    let result = Evaluator::eval_cardset(&expr, &gd);
+    let (_, cards) = result.unwrap();
+    assert_eq!(cards, vec![1, 2], "Queen and King are above Ace");
+}
+
+#[test]
+fn eval_cardset_group_where_filter_lower_matches_below_target() {
+    let gd = ranked_fixture();
+    let expr = CardSet::Group {
+        group: Group::Where {
+            groupable: Groupable::Location {
+                name: "Stock".to_string(),
+            },
+            filter: FilterExpr::Aggregate {
+                aggregate: AggregateFilter::Lower {
+                    key: "Rank".to_string(),
+                    value: StringExpr::Literal {
+                        value: "King".to_string(),
+                    },
+                    precedence: "RankOrder".to_string(),
+                },
+            },
+        },
+    };
+    let result = Evaluator::eval_cardset(&expr, &gd);
+    let (_, cards) = result.unwrap();
+    assert_eq!(cards, vec![0, 1], "Ace and Queen are below King");
+}
+
+#[test]
+fn eval_cardset_group_where_filter_size_mismatch_returns_empty() {
+    let gd = basic_fixture();
+    let expr = CardSet::Group {
+        group: Group::Where {
+            groupable: Groupable::Location {
+                name: "Stock".to_string(),
+            },
+            filter: FilterExpr::Aggregate {
+                aggregate: AggregateFilter::Size {
+                    cmp: IntCompare::Eq,
+                    int_expr: Box::new(IntExpr::Literal { int: 3 }),
+                },
+            },
+        },
+    };
+    let result = Evaluator::eval_cardset(&expr, &gd);
+    let (_, cards) = result.unwrap();
+    assert!(cards.is_empty(), "size 3 does not match a 2-card pile");
+}
+
 fn combo_fixture() -> GameData {
     let mut gd = GameData::new();
     let p0 = gd.add_player("P1".to_string());

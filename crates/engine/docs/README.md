@@ -198,7 +198,7 @@ crates/engine/src/
 ## Build and Test
 
 ```
-cargo test -p cgdsl-engine              # 527 tests (439 lib + 5 cgdsl-play + 9 TUI + 74 integration)
+cargo test -p cgdsl-engine              # 551 tests (463 lib + 5 cgdsl-play + 9 TUI + 74 integration)
 cargo test -p cgdsl-engine --test <name> # single integration test file
 cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings
 cargo fmt -p cgdsl-engine -- --check

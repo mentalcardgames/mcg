@@ -650,6 +650,200 @@ fn set_memory_action_stores_evaluated_string() {
 }
 
 #[test]
+fn set_memory_action_stores_evaluated_int_collection() {
+    let mut gd = GameData::new();
+    let _alice = gd.add_player("Alice".to_string());
+    gd.turn_order.push(_alice);
+    gd.current_player = Some(0);
+    execute_action_rule(
+        ActionRule::SetMemory {
+            memory: "nums".to_string(),
+            memory_type: MemoryType::IntCollection {
+                ints: front_end::ast::IntCollection::Literal {
+                    ints: vec![
+                        IntExpr::Literal { int: 1 },
+                        IntExpr::Literal { int: 2 },
+                        IntExpr::Literal { int: 3 },
+                    ],
+                },
+            },
+        },
+        &mut gd,
+    )
+    .unwrap();
+    assert_eq!(
+        gd.get_memory("Alice_nums"),
+        Some(&MemoryValue::IntCollection(vec![1, 2, 3]))
+    );
+}
+
+#[test]
+fn set_memory_action_stores_evaluated_string_collection() {
+    let mut gd = GameData::new();
+    let _alice = gd.add_player("Alice".to_string());
+    gd.turn_order.push(_alice);
+    gd.current_player = Some(0);
+    execute_action_rule(
+        ActionRule::SetMemory {
+            memory: "labels".to_string(),
+            memory_type: MemoryType::StringCollection {
+                strings: front_end::ast::StringCollection::Literal {
+                    strings: vec![
+                        front_end::ast::StringExpr::Literal {
+                            value: "a".to_string(),
+                        },
+                        front_end::ast::StringExpr::Literal {
+                            value: "b".to_string(),
+                        },
+                    ],
+                },
+            },
+        },
+        &mut gd,
+    )
+    .unwrap();
+    assert_eq!(
+        gd.get_memory("Alice_labels"),
+        Some(&MemoryValue::StringCollection(vec![
+            "a".to_string(),
+            "b".to_string()
+        ]))
+    );
+}
+
+#[test]
+fn set_memory_action_stores_evaluated_player_collection() {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("Alice".to_string());
+    let p1 = gd.add_player("Bob".to_string());
+    gd.turn_order = vec![p0, p1];
+    gd.current_player = Some(0);
+    execute_action_rule(
+        ActionRule::SetMemory {
+            memory: "team".to_string(),
+            memory_type: MemoryType::PlayerCollection {
+                players: front_end::ast::PlayerCollection::Literal {
+                    players: vec![
+                        PlayerExpr::Literal {
+                            name: "Alice".to_string(),
+                        },
+                        PlayerExpr::Literal {
+                            name: "Bob".to_string(),
+                        },
+                    ],
+                },
+            },
+        },
+        &mut gd,
+    )
+    .unwrap();
+    assert_eq!(
+        gd.get_memory("Alice_team"),
+        Some(&MemoryValue::PlayerCollection(vec![0, 1]))
+    );
+}
+
+#[test]
+fn set_memory_action_stores_evaluated_team_collection() {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("Alice".to_string());
+    gd.turn_order.push(p0);
+    gd.current_player = Some(0);
+    gd.teams.push(crate::game_data::Team {
+        name: "Red".to_string(),
+        players: vec![p0],
+        owner: crate::game_data::OwnerData { locations: vec![] },
+    });
+    execute_action_rule(
+        ActionRule::SetMemory {
+            memory: "colors".to_string(),
+            memory_type: MemoryType::TeamCollection {
+                teams: front_end::ast::TeamCollection::Literal {
+                    teams: vec![front_end::ast::TeamExpr::Literal {
+                        name: "Red".to_string(),
+                    }],
+                },
+            },
+        },
+        &mut gd,
+    )
+    .unwrap();
+    assert_eq!(
+        gd.get_memory("Alice_colors"),
+        Some(&MemoryValue::TeamCollection(vec!["Red".to_string()]))
+    );
+}
+
+#[test]
+fn set_memory_action_stores_evaluated_location_collection() {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("Alice".to_string());
+    gd.turn_order.push(p0);
+    gd.current_player = Some(0);
+    let stock = gd.add_location(
+        "Table".to_string(),
+        Location {
+            name: "Stock".to_string(),
+            cards: vec![],
+        },
+    );
+    execute_action_rule(
+        ActionRule::SetMemory {
+            memory: "piles".to_string(),
+            memory_type: MemoryType::LocationCollection {
+                locations: front_end::ast::LocationCollection::Literal {
+                    locations: vec!["Stock".to_string()],
+                },
+            },
+        },
+        &mut gd,
+    )
+    .unwrap();
+    assert_eq!(
+        gd.get_memory("Alice_piles"),
+        Some(&MemoryValue::LocationCollection(vec![stock]))
+    );
+}
+
+#[test]
+fn set_memory_action_stores_evaluated_card_set() {
+    let mut gd = GameData::new();
+    let p0 = gd.add_player("Alice".to_string());
+    gd.turn_order.push(p0);
+    gd.current_player = Some(0);
+    let stock = gd.add_location(
+        "Table".to_string(),
+        Location {
+            name: "Stock".to_string(),
+            cards: vec![],
+        },
+    );
+    let c0 = gd.add_card(
+        stock,
+        HashMap::from([("Rank".to_string(), "Ace".to_string())]),
+    );
+    let c1 = gd.add_card(
+        stock,
+        HashMap::from([("Rank".to_string(), "King".to_string())]),
+    );
+    gd.locations[stock].cards = vec![c0, c1];
+    execute_action_rule(
+        ActionRule::SetMemory {
+            memory: "cards".to_string(),
+            memory_type: MemoryType::CardSet {
+                card_set: loc_cardset("Stock"),
+            },
+        },
+        &mut gd,
+    )
+    .unwrap();
+    assert_eq!(
+        gd.get_memory("Alice_cards"),
+        Some(&MemoryValue::CardSet(vec![c0, c1]))
+    );
+}
+
+#[test]
 fn reset_memory_action_zeros_int() {
     let mut gd = GameData::new();
     let _alice = gd.add_player("Alice".to_string());

@@ -105,7 +105,7 @@ For the full host contract (event/trace callbacks, manual Mode-B driving, the
 ## 6. Tests & tooling
 
 ```sh
-cargo test -p cgdsl-engine                 # full suite (527 tests)
+cargo test -p cgdsl-engine                 # full suite (551 tests)
 cargo test -p cgdsl-engine --test flow_test  # one integration file
 cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings
 cargo fmt -p cgdsl-engine -- --check

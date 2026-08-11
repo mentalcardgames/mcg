@@ -252,6 +252,91 @@ fn trace_event_summary_covers_memory_and_cycle_actions() {
 }
 
 #[test]
+fn trace_event_skipped_displays_player_and_stage() {
+    let event = TraceEvent::Skipped {
+        player: "P1".to_string(),
+        stage: "Play".to_string(),
+    };
+    assert_eq!(format!("{}", event), "Skipped: P1 (out of Play)");
+}
+
+#[test]
+fn trace_event_summary_covers_out_reset_and_move_quantity() {
+    // OutAction: `out {players} of {out_of}`.
+    let out = TraceEvent::Action {
+        rule: GameRule::Action {
+            action: ActionRule::OutAction {
+                players: front_end::ast::Players::Player {
+                    player: front_end::ast::PlayerExpr::Literal {
+                        name: "P1".to_string(),
+                    },
+                },
+                out_of: front_end::ast::OutOf::Game,
+            },
+        },
+    };
+    let s = out.summary();
+    assert!(s.starts_with("out "), "got: {s}");
+    assert!(s.contains("of "), "got: {s}");
+
+    // ResetMemory: `reset {memory}`.
+    let reset = TraceEvent::Action {
+        rule: GameRule::Action {
+            action: ActionRule::ResetMemory {
+                memory: "score".to_string(),
+            },
+        },
+    };
+    assert_eq!(reset.summary(), "reset score");
+
+    // MoveQuantity: `move {qty} {from} -> {to} ({:?})`.
+    let mv = TraceEvent::Action {
+        rule: GameRule::Action {
+            action: ActionRule::Move {
+                move_type: MoveType::Classic {
+                    classic: front_end::ast::ClassicMove::MoveCardSet {
+                        move_cs: MoveCardSet::MoveQuantity {
+                            quantity: front_end::ast::Quantity::Int {
+                                int: IntExpr::Literal { int: 2 },
+                            },
+                            from: front_end::ast::CardSet::Group {
+                                group: Group::Groupable {
+                                    groupable: Groupable::Location {
+                                        name: "Deck".to_string(),
+                                    },
+                                },
+                            },
+                            status: Status::Private,
+                            to: front_end::ast::CardSet::Group {
+                                group: Group::Groupable {
+                                    groupable: Groupable::Location {
+                                        name: "Hand".to_string(),
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    };
+    let s = mv.summary();
+    assert!(s.starts_with("move "), "got: {s}");
+    assert!(s.contains("->"), "got: {s}");
+    assert!(s.contains("Deck"), "got: {s}");
+    assert!(s.contains("Hand"), "got: {s}");
+
+    // Non-Action events fall back to the pretty rendering.
+    let cond = TraceEvent::Condition {
+        expr: eq_expr(),
+        result: true,
+        negated: false,
+        took_else: false,
+    };
+    assert_eq!(cond.summary(), format!("{}", cond));
+}
+
+#[test]
 fn game_over_display_names_the_winner_set() {
     assert_eq!(
         format!(
