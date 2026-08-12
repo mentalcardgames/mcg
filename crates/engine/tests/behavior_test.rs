@@ -122,6 +122,126 @@ fn go_fish_ask_missing_rank_draws_one() {
     assert_eq!(total_cards(&gd), 24);
 }
 
+/// Drive the demo's scratch-pile ask pattern (`of any`, scripted to P2):
+/// the ask transfers the target's rank to the `Scratch` pile, the draw check
+/// runs before the take, and the take moves the cards on a hit.
+fn play_go_fish_scratch(option_idx: usize) -> GameData {
+    let ir = load_game("behavior_go_fish_scratch.cgdsl");
+    let tracker = CurrentTracker::new();
+    let who_for_closure = tracker.0.clone();
+    run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(move |it: InputType| {
+            let who = who_for_closure
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "P1".into());
+            match it {
+                InputType::ChoosePlayer { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::ChoosePlayer { idx: 1 }, // P2
+                },
+                InputType::Choice { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::Choice { idx: option_idx },
+                },
+                _ => Input {
+                    player_id: who,
+                    kind: InputKind::Choice { idx: 0 },
+                },
+            }
+        })),
+        RunOptions::new().with_event_sender(tracker.sender()),
+    )
+    .expect("scratch ask must complete")
+}
+
+#[test]
+fn go_fish_scratch_hit_transfers_without_draw() {
+    // Ask for "Three" (option 0) from P2, who holds two Threes: they must
+    // transfer and the deck must NOT shrink. Regression: the original demo
+    // order ran the draw check AFTER the take, so the (now empty) Scratch
+    // pile always satisfied it — every hit also drew from the deck.
+    let gd = play_go_fish_scratch(0);
+    assert_eq!(
+        hand_location(&gd, "P1").cards.len(),
+        9,
+        "asker gains both cards"
+    );
+    assert_eq!(
+        hand_location(&gd, "P2").cards.len(),
+        5,
+        "asked player loses them"
+    );
+    let deck = gd.locations.iter().find(|l| l.name == "Deck").unwrap();
+    assert_eq!(deck.cards.len(), 3, "no draw on a hit");
+    assert_eq!(total_cards(&gd), 24);
+}
+
+#[test]
+fn go_fish_scratch_miss_draws_one() {
+    // Ask for "Ace" (option 1): P2 holds no Aces — exactly one draw.
+    let gd = play_go_fish_scratch(1);
+    assert_eq!(hand_location(&gd, "P1").cards.len(), 8, "asker draws one");
+    assert_eq!(
+        hand_location(&gd, "P2").cards.len(),
+        7,
+        "P2 untouched on a miss"
+    );
+    let deck = gd.locations.iter().find(|l| l.name == "Deck").unwrap();
+    assert_eq!(deck.cards.len(), 2, "exactly one draw on a miss");
+    assert_eq!(total_cards(&gd), 24);
+}
+
+#[test]
+fn blackjack_standing_players_are_never_reasked() {
+    // Regression: a player who declines the hit optional once must never be
+    // asked again — `HitFlag` stays 0, `set current out of Play` removes
+    // them from the stage, and the stage auto-ends when everyone stood.
+    let ir = load_game("behavior_blackjack_stand.cgdsl");
+    let prompts = Arc::new(Mutex::new(0usize));
+    let prompts_clone = prompts.clone();
+    let tracker = CurrentTracker::new();
+    let who_for_closure = tracker.0.clone();
+    let gd = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(move |it: InputType| {
+            *prompts_clone.lock().unwrap() += 1;
+            let who = who_for_closure
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "P1".into());
+            match it {
+                InputType::Optional { .. } => Input {
+                    player_id: who,
+                    kind: InputKind::OptionalDecline,
+                },
+                _ => Input {
+                    player_id: who,
+                    kind: InputKind::Choice { idx: 0 },
+                },
+            }
+        })),
+        RunOptions::new().with_event_sender(tracker.sender()),
+    )
+    .expect("game must complete");
+
+    assert_eq!(
+        *prompts.lock().unwrap(),
+        3,
+        "one ask per player, never re-asked"
+    );
+    assert!(gd.stage_stack.is_empty(), "Play stage exited");
+    assert!(
+        gd.players.iter().all(|p| p.in_game),
+        "standing is not a bust"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // War — battle and winner
 // ---------------------------------------------------------------------------

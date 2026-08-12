@@ -1,0 +1,54 @@
+// Behavioral fixture — the demo go_fish scratch-pile ask pattern
+// (deterministic: no shuffle) — via the memory-backed ask: the choose stores
+// the rank in `AskRank` (+ `AskFlag` marker) and the shared transfer/draw
+// block below reads it back, exactly as test_games/go_fish.cgdsl does now.
+// Same deck/hands as behavior_go_fish_ask: after dealing 7:
+//   P1 = [Ace-D, Ace-C, Ace-H, Two-D, Two-C, Two-H, Three-D],
+//   P2 = [Three-C, Three-H, Four-D, Four-C, Four-H, Five-D, Five-C],
+//   Deck = [Eight-D, Eight-C, Eight-H].
+// P1 asks a *chosen* player (`of any`, scripted to P2) via the Scratch pile:
+//   - ask "Three" (P2 holds it)  -> transfer both, NO draw (regression: the
+//     draw check must run BEFORE the take — the take empties Scratch, so a
+//     later `Scratch empty` check would draw on hits too);
+//   - ask "Ace" (P2 lacks it)    -> draw exactly 1.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Deck on table
+location Scratch on table
+memory AskRank on all
+memory AskFlag on all
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight)
+    for Suit(Diamonds, Clubs, Hearts)
+
+stage Deal for current 1 times {
+  deal 7 from Deck private to Hand of all
+}
+
+stage Ask for current 1 times {
+  reset AskRank
+  reset AskFlag
+  choose {
+    if ("Three" in Hand of current) {
+      AskRank is "Three"
+      AskFlag is 1
+    }
+    or
+    if ("Ace" in Hand of current) {
+      AskRank is "Ace"
+      AskFlag is 1
+    }
+  }
+  if ((&I:AskFlag of current) == 1) {
+    deal Hand where Rank is (&S:AskRank of current) of any private to Scratch
+    if (Scratch empty) {
+      deal 1 from Deck private to Hand of current
+    }
+    if (not Scratch empty) {
+      deal Scratch private to Hand of current
+    }
+  }
+  end stage
+}

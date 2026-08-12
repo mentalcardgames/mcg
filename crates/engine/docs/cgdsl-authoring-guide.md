@@ -422,10 +422,56 @@ optional {
 ```
 
 The player is asked "do you want to…?" — accept runs the block, decline
-skips it. (Declining records nothing, so the same optional can be asked again
-next round; bound the stage with a round count.)
+skips it. There is no else-branch, so the decline path can never run a rule
+directly; use the flag-memory pattern in §7.2 when you need to *act* on a
+decline.
 
-### 7.2 `choose` — one of several options
+### 7.2 Recording a decline — the flag-memory workaround
+
+`optional` has no `else` (see `engine-vs-design.md` D-3 — the grammar/parser
+work is deferred), so a decline cannot write anything. To branch on a
+decline, **invert the logic**: the *accept* path sets a flag memory, and a
+still-zero flag *after* the optional means "declined":
+
+```
+memory HitFlag on all
+
+stage Play for current 12 times {
+    reset HitFlag                 // fresh flag for this turn
+    optional {
+        deal 1 from Deck private to Hand of current
+        HitFlag is 1              // accept path marks the flag
+    }
+    if ((&I:HitFlag of current) == 0) {
+        // declined — the "else" work lives here
+        set current out of Play
+    }
+    cycle to next
+}
+```
+
+Rules of the pattern:
+
+- Declare the flag with `memory X on all` — one slot per player (`P1_X`,
+  `P2_X`, …). The bare write `X is 1` and `reset X` resolve to the *current*
+  player's slot when several slots exist (declared-owner → current-player
+  bridge).
+- **Reset the flag at the start of each turn**, or an earlier accept lingers
+  and the check never fires.
+- Use an **int flag** (0/1): the grammar cannot compare a string memory
+  against an empty literal (`(&S:X of current) == ""` does not parse).
+- The same trick works with `choose` when the options must *record* a choice
+  for one shared block afterwards — the demo Go Fish stores the picked rank
+  in `AskRank` (a string memory) plus an `AskFlag` marker, then the transfer
+  and draw logic runs once, reading `(&S:AskRank of current)`.
+
+Live examples: `test_games/blackjack.cgdsl` (a standing player is set out of
+the Play stage and never asked again — the flag replaced the "re-asks every
+round" limitation) and `test_games/go_fish.cgdsl` (memory-backed rank ask).
+Once the parser gains `optional { … } else { … }`, these patterns can be
+replaced by real else-branches.
+
+### 7.3 `choose` — one of several options
 
 ```
 choose {
@@ -448,7 +494,7 @@ choose {
 }
 ```
 
-### 7.3 `if` — the game decides
+### 7.4 `if` — the game decides
 
 ```
 if (Hand empty) {
@@ -458,7 +504,7 @@ if (Hand empty) {
 
 There is no `else` — use two complementary `if`s or a `conditional`.
 
-### 7.4 `conditional` — first match wins
+### 7.5 `conditional` — first match wins
 
 ```
 conditional {
@@ -474,7 +520,7 @@ conditional {
 The cases are checked in order; the first true one runs, `case else` catches
 everything else.
 
-### 7.5 `trigger` — run immediately
+### 7.6 `trigger` — run immediately
 
 ```
 trigger {
@@ -817,6 +863,7 @@ owner of top(Hand)
 | Construct | Status | Notes |
 |-----------|--------|-------|
 | `unless` | ❌ Not in the language | Use `if (not <expr>)` — and write `not X`, never `not (X)` |
+| `optional { … } else { … }` | ⚠️ Workaround | The decline branch cannot run rules; record declines with a flag memory (§7.2) |
 | `for <players>` in a stage | ⚠️ No effect | All players are always in every stage; use `set … out of <stage>` to scope |
 | Simultaneous stages | ❌ | `stage X for all …` runs exactly like `for current` |
 | `flip <cardset> to <status>` | ⏳ No-op by design | Reserved for the card-crypto work |

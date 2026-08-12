@@ -105,7 +105,7 @@ last_validated: 2026-08-11
 
 | Game | File | Interactivity | Engine features exercised | Known simplifications |
 |---|---|---|---|---|
-| Blackjack | `test_games/blackjack.cgdsl` | optionals per turn | optionals, points, `sum`, `size(playersin)`, `cycle to next` (unguarded — self-wrap + skip mode), `winner is highest score` | Ace = 11 only; standing re-asks each round (D-3); dealer is a tableau, not a player |
+| Blackjack | `test_games/blackjack.cgdsl` | optionals per turn | optionals, points, `sum`, memory-tracked stand (`HitFlag` + `set current out of Play` — standing players are never re-asked), self-wrapping `cycle to next`, `winner is highest score` | Ace = 11 only; dealer is a tableau, not a player |
 | War | `test_games/war.cgdsl` | none (automatic) | `until (A or B)` exit, point-map comparison, `if` chains, moves, scoring | ties discard both cards (no war redeal) |
 | Crazy Eights | `test_games/crazy_eights.cgdsl` | choose-card + choose-player per turn | `move 1` (pick-one play), `Hand of any` (ChoosePlayer), `deal N` draws, `until (A or B) or N times`, lowest-score winner | plays are match-constrained via a `where`-filter on the top of the Discard (`move 1 from Hand where Rank is Rank of top(Discard) or …`); draw may be gifted to any player (house rule) |
 | Five-Card Draw | `test_games/five_card_draw.cgdsl` | choose-card per draw round | `Hand of all` fan-out, `move 1` discard, `where same Rank/Suit` filters, score bonuses | draw-1 variant; additive scoring (no straights/full houses) |
@@ -182,8 +182,8 @@ team, team-keyed);
   `DivisionByZero`; it now returns `EngineError::ModuloByZero`. A repo-wide
   encoding sweep replaced double-encoded UTF-8 sequences (em-dashes,
   box-drawing, dashes, quotes) in source, tests, fixtures, and docs.
-- **Test counts:** `cargo test -p cgdsl-engine` — 551 tests green (463 lib +
-  5 cgdsl-play + 9 engine-tui + 74 integration); `clippy -p cgdsl-engine
+- **Test counts:** `cargo test -p cgdsl-engine` — 553 tests green (463 lib +
+  5 cgdsl-play + 9 engine-tui + 76 integration); `clippy -p cgdsl-engine
   --all-targets --no-deps -D warnings` and `fmt --check` clean. Workspace
   caveat: `cargo clippy --workspace` still fails on pre-existing `front_end`
   library lints and a `code_gen` lint outside this crate.

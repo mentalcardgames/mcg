@@ -10,8 +10,13 @@
 //     remaining players score their hand and the highest score wins.
 //
 // Engine notes:
-//   - A player who stands is re-asked in later rounds (standing is not
-//     tracked), so the Play stage is bounded to 12 turns.
+//   - Standing is tracked via the `HitFlag` memory: the optional's accept
+//     path sets it, so a still-zero flag after the optional means "stood",
+//     and `set current out of Play` removes the player from the stage —
+//     standing players are never asked again (the optional has no
+//     else-branch, D-3, so the flag records the decline). The stage
+//     auto-ends when everyone has stood or busted (I-24); the 12-turn cap
+//     backstops an empty deck.
 //   - `cycle to next` wraps onto the current player when nobody else is
 //     eligible, and a player who is out of the game is never prompted
 //     (their instructions are skipped) — so no guards are needed
@@ -24,6 +29,7 @@ turnorder (P:P1, P:P2, P:P3)
 location Hand on all
 location DealerHand on table
 location Deck on table
+memory HitFlag on all
 
 card on Deck:
   Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King)
@@ -44,16 +50,26 @@ stage Deal for current 1 times {
   deal 1 from Deck private to DealerHand
 }
 
-// Each player may hit (accept) or stand (decline); up to 4 full rounds.
-// Busted players are skipped automatically (no `if (not current out of
-// game)` guard needed) and `cycle to next` never errors (it wraps onto
+// Each player may hit (accept) or stand (decline). Standing is tracked:
+// the optional's accept path sets `HitFlag is 1`, so a still-zero flag after
+// the optional means "stood" — `set current out of Play` removes the player
+// from the stage and they are never asked again (D-3 has no else-branch, so
+// the flag is the only way to record a decline). The stage auto-ends when
+// everyone has stood or busted (I-24); the 12-turn cap backstops an empty
+// deck. Busted players are skipped automatically (no `if (not current out
+// of game)` guard needed) and `cycle to next` never errors (it wraps onto
 // the current player when it is the only eligible one).
 stage Play for current 12 times {
+  reset HitFlag
   optional {
     deal 1 from Deck private to Hand of current
+    HitFlag is 1
     if (sum of Hand of current using BJ > 21) {
       set current out of game
     }
+  }
+  if ((&I:HitFlag of current) == 0) {
+    set current out of Play
   }
   cycle to next
 }

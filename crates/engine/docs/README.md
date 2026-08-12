@@ -177,7 +177,7 @@ crates/engine/src/
 │   │   ├── trace.rs               — trace relay types (detail filters)
 │   │   └── ui/                    — state, layout, game_state, trace_log, input, controls
 │   └── cgdsl-play.rs              — CLI game driver (interactive + file replay; `--log`, `--debug-level` flags)
-├── test_games/                    — 64 .cgdsl fixture files (incl. the five demo games) + .txt replay pairs
+├── test_games/                    — 65 .cgdsl fixture files (incl. the five demo games) + .txt replay pairs
 └── tests/                         — integration tests (one file per feature area, auto-discovered)
     ├── common/mod.rs              — shared harness (load_game, default_input, CurrentTracker, …)
     ├── actions_test.rs            — action arms + regressions (I-5, I-13, D-5, D-11, D-14)
@@ -198,7 +198,7 @@ crates/engine/src/
 ## Build and Test
 
 ```
-cargo test -p cgdsl-engine              # 551 tests (463 lib + 5 cgdsl-play + 9 TUI + 74 integration)
+cargo test -p cgdsl-engine              # 553 tests (463 lib + 5 cgdsl-play + 9 TUI + 76 integration)
 cargo test -p cgdsl-engine --test <name> # single integration test file
 cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings
 cargo fmt -p cgdsl-engine -- --check

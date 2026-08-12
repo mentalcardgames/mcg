@@ -71,7 +71,7 @@ Where to touch when adding or modifying engine functionality.
 ## Build commands
 
 ```
-cargo test -p cgdsl-engine                    # 551 tests
+cargo test -p cgdsl-engine                    # 553 tests
 cargo clippy -p cgdsl-engine --all-targets -- -D warnings
 cargo fmt -p cgdsl-engine -- --check
 just tui [GAME]                                # interactive TUI testing

@@ -78,7 +78,7 @@ last_validated: 2026-08-11
 | `if (bool) { ... }` | ✅ | ✅ | ✅ | ✅ | No `else` — use two complementary `if`s or `conditional`. |
 | `conditional { case (bool): ... case else: ... }` | ✅ | ✅ | ✅ | ⚠️ | `case (A > B)` fails to parse when both operands are complex int exprs (PEG greediness, P-8) — use sequential `if`s. |
 | `choose { ... or ... }` | ✅ | ✅ | ✅ | ✅ | One edge per `or`-separated option; each option is a *sequence* of flow components (e.g. `choose { deal X; if Y {} or deal Z }` = two options of two and one components). `InputType::Choice`; options labelled by the first payload of each branch. |
-| `optional { ... }` | ✅ | ✅ | ✅ | ✅ | Accept → body; decline → nothing (no else-branch action is possible — standing/refusal cannot be recorded). |
+| `optional { ... }` | ✅ | ✅ | ✅ | ✅ | Accept → body; decline → nothing (no else-branch — D-3; **record declines with a flag memory** instead, see `cgdsl-authoring-guide.md` §7.2) |
 | `trigger { ... }` | ✅ | ✅ | ✅ | ✅ | Body executes each time the flow reaches it (the payload itself is a no-op marker). |
 
 ## 4. End conditions & stage bookkeeping
