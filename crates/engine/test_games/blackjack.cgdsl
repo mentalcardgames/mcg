@@ -76,6 +76,8 @@ stage Play for current 12 times {
 
 // Dealer draws while below 17 (bounded to 10 attempts).
 stage Dealer for current 10 times {
+  // get any available player, if possible.
+  cycle to next
   if (sum of DealerHand using BJ < 17) {
     deal 1 from Deck private to DealerHand
   }
@@ -86,17 +88,33 @@ stage Dealer for current 10 times {
 // plays once, so no cycling is needed). Busted players stay out of game
 // and are ignored by the winner rule regardless of their hand total.
 stage Score for current 1 times {
-  if (sum of Hand of P:P1 using BJ > sum of DealerHand using BJ) {
-    score sum of Hand of P:P1 using BJ to P:P1
+  score sum of Hand of P:P1 using BJ to P:P1
+  score sum of Hand of P:P2 using BJ to P:P2
+  score sum of Hand of P:P3 using BJ to P:P3
+
+  if (sum of DealerHand using BJ > 21) {
+    // all players not out of game win if the dealer busts
+    winner is all
   }
-  if (sum of Hand of P:P2 using BJ > sum of DealerHand using BJ) {
-    score sum of Hand of P:P2 using BJ to P:P2
+
+  // if scores are <= dealer's hand, eliminate player - no matter what score, they cannot win
+  if (sum of Hand of P:P1 using BJ <= sum of DealerHand using BJ) {
+    set P:P1 out of game
   }
-  if (sum of Hand of P:P3 using BJ > sum of DealerHand using BJ) {
-    score sum of Hand of P:P3 using BJ to P:P3
+  cycle to next
+
+  if (sum of Hand of P:P2 using BJ <= sum of DealerHand using BJ) {
+    set P:P2 out of game
   }
+  cycle to next
+  
+  if (sum of Hand of P:P3 using BJ <= sum of DealerHand using BJ) {
+    set P:P3 out of game
+  }
+  cycle to next
 }
 
 stage End for current 1 times {
-  winner is highest score
+  // all players not out of game win
+  winner is all
 }
