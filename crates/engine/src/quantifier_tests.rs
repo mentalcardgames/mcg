@@ -96,28 +96,28 @@ fn deal_qty_edge(quantity: Quantity, from: CardSet, to: CardSet) -> Edge<Lowered
 }
 
 #[test]
-fn alloc_synth_yields_valid_decreasing_stateids() {
-    let mut counter = u32::MAX - 1;
-    let mut prev_raw = u32::MAX;
+fn alloc_synth_yields_valid_increasing_stateids() {
+    let mut counter = 7;
+    let mut prev_raw = 7;
     for _ in 0..1024 {
         let id = alloc_synth(&mut counter);
         let raw = id.raw();
-        assert_ne!(raw, 0, "synthetic ids must never be 0");
-        assert_eq!(raw, prev_raw - 1, "ids must decrease monotonically");
-        prev_raw = raw;
+        assert_eq!(raw, prev_raw, "ids must increase monotonically");
+        prev_raw = raw + 1;
     }
     assert_eq!(
-        alloc_synth(&mut (u32::MAX - 1)).raw(),
-        u32::MAX - 1,
-        "first allocation from a fresh seed is u32::MAX - 1"
+        alloc_synth(&mut 7).raw(),
+        7,
+        "first allocation from a fresh seed is the seed itself"
     );
 }
 
 #[test]
 fn alloc_synth_wraps_without_panicking() {
-    let mut counter = 0u32;
-    let _ = alloc_synth(&mut counter);
-    let _ = alloc_synth(&mut counter);
+    let mut counter = u32::MAX - 1;
+    assert_eq!(alloc_synth(&mut counter).raw(), u32::MAX - 1);
+    assert_eq!(alloc_synth(&mut counter).raw(), u32::MAX);
+    assert_eq!(alloc_synth(&mut counter).raw(), 0);
 }
 
 #[test]
@@ -321,7 +321,7 @@ fn build_dest_all_chain_length_and_targets() {
         loc_cardset("Stock"),
         groupowner_cardset("Hand", aggregate_owner(Quantifier::All)),
     );
-    let mut next = u32::MAX - 1;
+    let mut next = 12;
     let chain = build_dest_all_chain(
         &edge,
         vec!["P1".into(), "P2".into(), "P3".into()],
@@ -359,7 +359,7 @@ fn build_dest_all_chain_empty_is_noop() {
         loc_cardset("Stock"),
         groupowner_cardset("Hand", aggregate_owner(Quantifier::All)),
     );
-    let mut next = u32::MAX - 1;
+    let mut next = 12;
     let chain = build_dest_all_chain(&edge, vec![], &mut next).expect("empty chain ok");
     assert!(chain.is_empty());
 }
@@ -373,7 +373,7 @@ fn build_dest_all_chain_errors_over_cap() {
         loc_cardset("Stock"),
         groupowner_cardset("Hand", aggregate_owner(Quantifier::All)),
     );
-    let mut next = u32::MAX - 1;
+    let mut next = 12;
     let names: Vec<String> = (0..=FANOUT_CAP).map(|i| format!("P{i}")).collect();
     let result = build_dest_all_chain(&edge, names, &mut next);
     assert!(result.is_err(), "fan-out > cap must error");

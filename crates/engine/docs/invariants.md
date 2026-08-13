@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/query/mod.rs
   - crates/engine/src/controller/mod.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-08-11
+last_validated: 2026-08-13
 ---
 
 # System Invariants & Guardrails
@@ -200,15 +200,21 @@ The quantifier preprocessor (`crates/engine/src/quantifier.rs` and
 synthetic-state allocation, the overlay's key discipline, the synthetic memory slot, the
 pending-resume state match, and the setup-`Any` guard.
 
-> **I-16 — Synthetic `StateID`s are allocated from `u32::MAX - 1` decrementing (via `wrapping_sub`),
-> so they never collide with the densely-from-0-allocated real IR ids.**
-> `crates::engine::interpreter::Interpreter::new` seeds `next_synth = u32::MAX - 1`
-> (`crates/engine/src/interpreter/mod.rs:59`). `crates::engine::quantifier::alloc_synth`
-> (`crates/engine/src/quantifier.rs:134-138`) reads the current value, then advances the counter
-> with `next_synth.wrapping_sub(1)`. `wrapping_sub` (not `-`) prevents an overflow panic on
+> **I-16 — Synthetic `StateID`s are allocated directly above the real IR ids (seeded at
+> `max(real id) + 1`, incrementing via `wrapping_add`), so they never collide with the
+> densely-from-0-allocated real ids.**
+> `crates::engine::interpreter::Interpreter::new` seeds `next_synth` from the frozen IR:
+> `ir.states.keys().map(|s| s.raw()).max().map_or(0, |m| m.saturating_add(1))`
+> (`crates/engine/src/interpreter/mod.rs:57-68`; an empty IR seeds 0, where `alloc_synth` is
+> unreachable anyway). `crates::engine::quantifier::alloc_synth`
+> (`crates/engine/src/quantifier.rs:179-188`) reads the current value, then advances the counter
+> with `next_synth.wrapping_add(1)` and constructs the id directly via
+> `StateID::from_raw` (no serde round-trip). `wrapping_add` (not `+`) prevents an overflow panic on
 > pathological reuse; the `u32` id space (2³²) is effectively unlimited for any realistic game.
-> Real IR ids, allocated densely from 0 upward by the `front_end` IR builder, can therefore never
-> be shadowed by a synthetic id.
+> Because the IR is frozen by the time the engine runs (real ids, allocated densely from 0 upward
+> by the `front_end` IR builder, never change), synthetic ids can never be shadowed by — or shadow
+> — a real id. **Direct struct construction of `Interpreter` must seed `next_synth` the same way**
+> (`Interpreter::new` is the canonical path).
 
 > **I-17 — `pending_overlay` is keyed only by synthetic `StateID`s; real IR ids are never inserted.**
 > The overlay (`crates::engine::interpreter::Interpreter::pending_overlay`,

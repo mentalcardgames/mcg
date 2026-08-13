@@ -12,7 +12,7 @@ associated_files:
   - crates/engine/src/controller/mod.rs
   - crates/engine/src/game_data.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-08-11
+last_validated: 2026-08-13
 ---
 
 # Error Handling, Panic Conditions & Diagnostics
@@ -139,10 +139,9 @@ returns `NeedsInput` (not `Error`) so the controller re-asks the player and the 
 |---|---|---|
 | `crates/engine/src/game_data.rs:139-156` | `crates::engine::game_data::GameData::add_location` owner (non-Table, non-team) not in `players` | `panic!("add_location: owner {} not found in players", owner_name)` — unreachable via DSL since `CreateLocation` resolves the owner first |
 | `crates/engine/src/game_data.rs:228-246` | `crates::engine::game_data::GameData::next_player` found idx missing from `turn_order` | `panic!("next_player: next_player {} not found in turn_order {:?}", next_player, self.turn_order)` (see I-13 — safe given `resolve_turn`'s contract) |
-| `crates/engine/src/quantifier.rs:138` | `crates::engine::quantifier::alloc_synth` `serde_json::from_value` failure | `.expect("StateID deserialisation from a valid u32 cannot fail")` — the input is `Value::from(raw: u32)` and `StateID` derives `Deserialize` as a transparent newtype around `u32`, so this expect is unreachable by construction. Listed for completeness; it does not fire on any real input. |
 
-**The quantifier subsystem introduces no new *real* panic sites.** The only `.expect` in
-`crates/engine/src/quantifier.rs` is the unreachable-by-construction one in `alloc_synth` (above);
+**The quantifier subsystem introduces no panic sites.** `alloc_synth` constructs `StateID`
+directly via `StateID::from_raw` (no serde round-trip, no `.expect`);
 `validate_int_range` returns `Err(EngineError)` (not a panic) at `quantifier.rs:454-485`;
 `build_dest_all_chain` returns `Err` at `:413-440`; `build_dest_all_chain_with_memory` returns
 `Err` at `:505-534`. The resume arms in `crates/engine/src/interpreter/quant_driver.rs` likewise

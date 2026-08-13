@@ -172,22 +172,16 @@ pub enum PendingKind {
 /// Allocate a synthetic [`StateID`] that cannot collide with real IR ids.
 ///
 /// Real IR ids are allocated densely from 0 upward by the `front_end` IR
-/// builder. We seed the allocator at `u32::MAX - 1` and decrement, so
-/// synthetic ids live at the very top of the `u32` space and never shadow a
-/// real state. `wrapping_sub` prevents overflow panics on pathological reuse —
-/// the id space (2³²) is effectively unlimited for any realistic game.
-///
-/// `StateID`'s tuple field is private to `front_end::ir` (only `raw()` is
-/// public), so — per the plan's sanctioned fallback — we construct one via
-/// serde deserialisation: `StateID` derives `Serialize`/`Deserialize` as a
-/// transparent newtype around `u32`, so deserialising a `u32` yields the
-/// equivalent `StateID`. This stays inside the `/crates/engine` boundary
-/// (the engine crate already depends on `serde`/`serde_json`).
+/// builder, and the IR is frozen by the time the engine runs. The allocator
+/// counter is therefore seeded at `max(real id) + 1` (see
+/// `Interpreter::new`) and incremented, so synthetic ids live directly above
+/// the real ones and can never shadow a real state. `wrapping_add` prevents
+/// overflow panics on pathological reuse — the id space (2³²) is effectively
+/// unlimited for any realistic game.
 pub fn alloc_synth(next_synth: &mut u32) -> StateID {
     let raw = *next_synth;
-    *next_synth = next_synth.wrapping_sub(1);
-    serde_json::from_value(serde_json::Value::from(raw))
-        .expect("StateID deserialisation from a valid u32 cannot fail")
+    *next_synth = next_synth.wrapping_add(1);
+    StateID::from_raw(raw)
 }
 
 fn pc_is_any(pc: &PlayerCollection) -> bool {

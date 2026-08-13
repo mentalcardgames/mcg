@@ -10,7 +10,7 @@ associated_files:
   - crates/engine/src/action.rs
   - crates/engine/src/game_data.rs
   - crates/engine/src/quantifier.rs
-last_validated: 2026-08-11
+last_validated: 2026-08-13
 ---
 
 # Lifecycle & Runtime Sequencing
@@ -94,8 +94,9 @@ empty store with `current_player = Some(0)`, empty `stage_stack`, empty `memorie
 `crates::engine::controller::run_game` (`crates/engine/src/controller/mod.rs:96-250`) wraps it in
 an `crates::engine::interpreter::Interpreter` via the canonical
 `crates::engine::interpreter::Interpreter::new`
-(`crates/engine/src/interpreter/mod.rs:46-62`) — which seeds `current_state = ir.entry`,
-`input_buffer = Vec::new()`, `pending_overlay = HashMap::new()`, `next_synth = u32::MAX - 1`,
+(`crates/engine/src/interpreter/mod.rs:46-68`) — which seeds `current_state = ir.entry`,
+`input_buffer = Vec::new()`, `pending_overlay = HashMap::new()`, `next_synth = max(real id) + 1`
+(computed from the frozen IR's state ids),
 `pending_quant = None`, and stores the composed `trace_sender` — and a private
 `crates::engine::controller::Controller` (`controller/mod.rs:253-261`).
 

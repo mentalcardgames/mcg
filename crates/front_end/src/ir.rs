@@ -46,6 +46,13 @@ impl StateID {
     pub fn raw(self) -> u32 {
         self.0
     }
+
+    /// Construct a `StateID` from a raw `u32`. Primarily used by the engine's
+    /// quantifier subsystem to allocate synthetic state ids without a serde
+    /// round-trip.
+    pub const fn from_raw(raw: u32) -> Self {
+        StateID(raw)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

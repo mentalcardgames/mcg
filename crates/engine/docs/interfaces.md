@@ -10,7 +10,7 @@ associated_files:
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/interpreter/types.rs
   - crates/engine/src/game_data.rs
-last_validated: 2026-08-11
+last_validated: 2026-08-13
 ---
 
 # Public Interfaces — the External Host Contract
@@ -142,7 +142,8 @@ pub struct Interpreter {
 ```
 
 Intent: all fields are `pub` so direct struct construction is supported, but `Interpreter::new`
-(initializes `current_state = ir.entry`, `next_synth = u32::MAX - 1`, empty `pending_overlay` /
+(initializes `current_state = ir.entry`, `next_synth = max(real id) + 1` from the frozen IR, empty
+`pending_overlay` /
 `pending_quant`) is preferred — omitting the quantifier bookkeeping fields misbehaves on the first
 quantifier edge. Field-level commentary lives in [`data-structures.md`](./data-structures.md) §3.1;
 quantifier overlay/synthetic-id invariants are I-16, I-17, I-18, I-19.
@@ -747,8 +748,8 @@ dedicated thread and communicate via channels.
 
 `crates/engine/Cargo.toml`:
 
-- **Library target:** `front_end` (IR/AST/lowering); `serde_json` (`alloc_synth`'s `StateID`
-  construction — `serde` is not a direct dependency); `rand` (`ShuffleAction`,
+- **Library target:** `front_end` (IR/AST/lowering; also `StateID::from_raw` for synthetic-id
+  allocation); `rand` (`ShuffleAction`,
   `CreateTurnorderRandom`); `thiserror` (the `EngineError` enum in `crates/engine/src/error.rs`);
   `tracing` (optional, behind the `tracing` feature — the `tracing_trace_sender` bridge, see
   [`observability.md`](./observability.md) §2.4).
@@ -895,7 +896,7 @@ skip `run_game` and drive an `Interpreter` directly — this is the contract
 ```rust
 use cgdsl_engine::{Interpreter, StepResult, Input, InputType, GameData};
 // `Interpreter::new` is the canonical constructor (seeds `current_state = ir.entry`,
-// `next_synth = u32::MAX - 1`, empty `pending_overlay` / `pending_quant`). All fields
+// `next_synth = max(real id) + 1`, empty `pending_overlay` / `pending_quant`). All fields
 // remain `pub` so direct struct construction is *also* a supported pattern, but
 // omitting the quantifier bookkeeping fields will misbehave on the first quantifier
 // edge — prefer `new`. See data-structures.md §3.1.

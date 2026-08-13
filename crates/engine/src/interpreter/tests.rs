@@ -6,7 +6,16 @@ use front_end::ir::{Edge, Ir, LoweredPayLoad, Payload, StateID};
 use std::collections::HashMap;
 
 fn state_id(n: u32) -> StateID {
-    unsafe { std::mem::transmute(n) }
+    StateID::from_raw(n)
+}
+
+/// The synthetic-id base for a hand-built IR, mirroring `Interpreter::new`.
+fn synth_base(ir: &Ir<LoweredPayLoad>) -> u32 {
+    ir.states
+        .keys()
+        .map(|s| s.raw())
+        .max()
+        .map_or(0, |m| m.saturating_add(1))
 }
 
 fn make_move_action(
@@ -272,6 +281,7 @@ fn step_choice_emits_rich_options_in_needs_input() {
     );
     ir.states.insert(s3, vec![]);
 
+    let next_synth = synth_base(&ir);
     let mut interpreter = Interpreter {
         ir,
         game_data: GameData::new(),
@@ -279,7 +289,7 @@ fn step_choice_emits_rich_options_in_needs_input() {
         current_state: s0,
         trace_sender: None,
         pending_overlay: HashMap::new(),
-        next_synth: u32::MAX - 1,
+        next_synth,
         pending_quant: None,
     };
 
@@ -353,6 +363,7 @@ fn step_optional_prompt_contains_accept_action() {
     ir.states.insert(s9, vec![]);
     ir.states.insert(s3, vec![]);
 
+    let next_synth = synth_base(&ir);
     let mut interpreter = Interpreter {
         ir,
         game_data: GameData::new(),
@@ -360,7 +371,7 @@ fn step_optional_prompt_contains_accept_action() {
         current_state: s0,
         trace_sender: None,
         pending_overlay: HashMap::new(),
-        next_synth: u32::MAX - 1,
+        next_synth,
         pending_quant: None,
     };
 
@@ -407,6 +418,7 @@ fn step_optional_prompt_fallback_when_no_accept_edge() {
     ir.states.insert(s1, vec![]);
     ir.states.insert(s9, vec![]);
 
+    let next_synth = synth_base(&ir);
     let mut interpreter = Interpreter {
         ir,
         game_data: GameData::new(),
@@ -414,7 +426,7 @@ fn step_optional_prompt_fallback_when_no_accept_edge() {
         current_state: s0,
         trace_sender: None,
         pending_overlay: HashMap::new(),
-        next_synth: u32::MAX - 1,
+        next_synth,
         pending_quant: None,
     };
 
@@ -478,14 +490,16 @@ fn gd_for_bool() -> GameData {
 
 macro_rules! make_interp {
     ($ir:expr, $gd:expr, $state:expr) => {{
+        let ir = $ir;
+        let next_synth = synth_base(&ir);
         Interpreter {
-            ir: $ir,
+            ir,
             game_data: $gd,
             input_buffer: Vec::new(),
             current_state: $state,
             trace_sender: None,
             pending_overlay: HashMap::new(),
-            next_synth: u32::MAX - 1,
+            next_synth,
             pending_quant: None,
         }
     }};

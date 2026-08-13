@@ -40,9 +40,10 @@ pub struct Interpreter {
     /// never keys here, so the overlay never shadows `ir.states`. See
     /// `crate::quantifier`.
     pub pending_overlay: std::collections::HashMap<StateID, Vec<Edge<LoweredPayLoad>>>,
-    /// Counter for synthetic `StateID` allocation. Seeded at `u32::MAX - 1`
-    /// and decremented (via `wrapping_sub`) so synthetic ids never collide
-    /// with the densely-allocated-from-0 real ids.
+    /// Counter for synthetic `StateID` allocation. Seeded at
+    /// `max(real id) + 1` from the frozen IR (see `Interpreter::new`) and
+    /// incremented (via `wrapping_add`), so synthetic ids live directly above
+    /// the real ones and never collide.
     pub next_synth: u32,
     /// In-flight quantifier awaiting a player-input round-trip, if any.
     pub pending_quant: Option<crate::quantifier::PendingQuant>,
@@ -55,6 +56,12 @@ impl Interpreter {
         trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
     ) -> Self {
         let current_state = ir.entry;
+        let next_synth = ir
+            .states
+            .keys()
+            .map(|s| s.raw())
+            .max()
+            .map_or(0, |m| m.saturating_add(1));
         Self {
             ir,
             game_data,
@@ -62,7 +69,7 @@ impl Interpreter {
             current_state,
             trace_sender,
             pending_overlay: std::collections::HashMap::new(),
-            next_synth: u32::MAX - 1,
+            next_synth,
             pending_quant: None,
         }
     }

@@ -18,9 +18,7 @@ use front_end::ir::{Edge, Ir, LoweredPayLoad, Payload, StateID};
 use std::collections::HashMap;
 
 fn synth_state_id(n: u32) -> StateID {
-    // `StateID(u32)` is `#[repr(transparent)]`; transmute is a test-only
-    // shortcut (matches the helper in interpreter/tests.rs).
-    unsafe { std::mem::transmute(n) }
+    StateID::from_raw(n)
 }
 
 fn loc_cs(name: &str) -> CardSet {
@@ -98,7 +96,7 @@ fn interp_with(gd: GameData, pending: PendingQuant, input: Input) -> Interpreter
         current_state: synth_state_id(10),
         trace_sender: None,
         pending_overlay: HashMap::new(),
-        next_synth: u32::MAX - 1,
+        next_synth: 0, // default (empty) IR -> synthetic base 0,
         pending_quant: Some(pending),
     }
 }
@@ -141,7 +139,7 @@ fn take_quant_resume_returns_none_when_no_pending_quant() {
         current_state: synth_state_id(0),
         trace_sender: None,
         pending_overlay: HashMap::new(),
-        next_synth: u32::MAX - 1,
+        next_synth: 0, // default (empty) IR -> synthetic base 0,
         pending_quant: None,
     };
     let before_state = interp.current_state;
@@ -652,8 +650,14 @@ fn resume_dest_all_then_cards_builds_fanout_chain() {
             .get(&format!("Table_{}", SYNTH_MEMORY_KEY)),
         Some(&MemoryValue::CardSet(vec![card_ids[0]]))
     );
+    // I-17: the overlay is keyed only by synthetic ids — never by real IR
+    // state ids (a real state in the IR must not be shadowed).
+    interp.ir.states.insert(synth_state_id(5), vec![]);
     assert!(
-        interp.pending_overlay.keys().all(|s| s.raw() > 1000),
+        interp
+            .pending_overlay
+            .keys()
+            .all(|s| !interp.ir.states.contains_key(s)),
         "overlay keyed only by synthetic ids (I-17)"
     );
 }

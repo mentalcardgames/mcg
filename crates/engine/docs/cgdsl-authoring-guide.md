@@ -316,8 +316,8 @@ by itself. You never need to guard against that.
 
 ### 5.3 When a player is out
 
-`set … out of game` removes a player from the game entirely; `set … out of
-<stage>` removes them from one stage:
+`set … out of game` removes a player from the game entirely; 
+`set … out of <stage>` removes them from one stage:
 
 ```
 set P:P1 out of game        // eliminated

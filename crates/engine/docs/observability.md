@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/controller/trace_logger.rs
   - crates/engine/src/interpreter/trace.rs
   - crates/engine/src/action.rs
-last_validated: 2026-08-11
+last_validated: 2026-08-13
 ---
 
 # Observability & Diagnostics
@@ -81,8 +81,8 @@ pub enum TraceEntry {
 ```
 
 `from`/`to` are **raw** `StateID` integers (via `StateID::raw()`), so they include the synthetic
-ids the quantifier subsystem allocates from `u32::MAX - 1` downward (see invariant I-16 in
-[`invariants.md`](./invariants.md)).
+ids the quantifier subsystem allocates above the real ones (seeded at `max(real id) + 1`, see
+invariant I-16 in [`invariants.md`](./invariants.md)).
 
 ### 2.2 `TraceEvent`
 

@@ -13,7 +13,7 @@ associated_files:
   - crates/engine/src/debug/tests.rs
   - crates/engine/tests/quantifier_test.rs
   - crates/engine/test_games/
-last_validated: 2026-08-11
+last_validated: 2026-08-13
 ---
 
 # Testing Strategy
@@ -115,7 +115,7 @@ super::*;` without exposing a `pub` test module.
 
 **Test functions** use plain `#[test]` (no `rstest`, no parametrization crate). Where a
 behavior has many input combinations, write a generator helper and a small loop inside one
-test (see `alloc_synth_yields_valid_decreasing_stateids` in
+test (see `alloc_synth_yields_valid_increasing_stateids` in
 `src/quantifier_tests.rs:76`).
 
 ---

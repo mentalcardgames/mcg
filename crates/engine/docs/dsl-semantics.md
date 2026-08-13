@@ -3,7 +3,7 @@ type: agent_wiki_node
 module: crates::engine
 scope: [all]
 topics: [dsl, semantics, specification, reference, interpretation]
-last_validated: 2026-08-11
+last_validated: 2026-08-13
 ---
 
 # DSL Semantics Reference
@@ -770,9 +770,10 @@ any-site of the setup (`quantifier::substitute_setup_any`) before any
 
 ### 6.7 Synthetic State Lifecycle
 
-- **Allocation** (I-16): Synthetic `StateID`s are allocated from `u32::MAX - 1`
-  decrementing via `wrapping_sub`. Never collide with real IR ids (allocated
-  from 0 upward).
+- **Allocation** (I-16): Synthetic `StateID`s are allocated directly above the
+  real IR ids — seeded at `max(real id) + 1` by `Interpreter::new` and
+  incrementing via `wrapping_add`. Never collide with real IR ids (allocated
+  from 0 upward; the IR is frozen at engine time).
 - **Overlay** (I-17): `pending_overlay` maps synthetic ids to replacement edges.
   Only keyed by synthetic ids — real IR ids are never inserted. The overlay
   shadows `ir.states` only during quantifier dispatch.

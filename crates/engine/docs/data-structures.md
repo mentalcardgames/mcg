@@ -11,7 +11,7 @@ associated_files:
   - crates/engine/src/interpreter/ir_ext.rs
   - crates/engine/src/controller/mod.rs
   - crates/front_end/src/ir.rs
-last_validated: 2026-08-11
+last_validated: 2026-08-13
 ---
 
 # Data Structures & State Model
@@ -184,7 +184,8 @@ pub struct Interpreter {
     /// Ephemeral overlay of synthetic replacement edges, keyed only by synthetic
     /// `StateID`s allocated from `next_synth`. Real IR ids are never keys here.
     pub pending_overlay: HashMap<StateID, Vec<Edge<LoweredPayLoad>>>,
-    /// Counter for synthetic `StateID` allocation. Seeded at `u32::MAX - 1`.
+    /// Counter for synthetic `StateID` allocation. Seeded at
+    /// `max(real id) + 1` (see `Interpreter::new`) and incremented.
     pub next_synth: u32,
     /// In-flight quantifier awaiting a player-input round-trip, if any.
     pub pending_quant: Option<crate::quantifier::PendingQuant>,
@@ -196,19 +197,20 @@ The `Interpreter` carries 8 fields (`ir`, `game_data`, `input_buffer`,
 constructor now exists:
 
 ```rust
-// crates/engine/src/interpreter/mod.rs:45-62
+// crates/engine/src/interpreter/mod.rs:51-68
 impl Interpreter {
     pub fn new(
         ir: Ir<LoweredPayLoad>,
         game_data: GameData,
         trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
-    ) -> Self { /* seeds current_state = ir.entry, next_synth = u32::MAX - 1, etc. */ }
+    ) -> Self { /* seeds current_state = ir.entry, next_synth = max(real id) + 1, etc. */ }
 }
 ```
 
 All fields remain `pub` (the struct is constructible by hand and this is a supported pattern), but
 `Interpreter::new` is the canonical entry point: it is the only place that initialises the
-quantifier bookkeeping correctly (`pending_overlay = HashMap::new()`, `next_synth = u32::MAX - 1`,
+quantifier bookkeeping correctly (`pending_overlay = HashMap::new()`, `next_synth =
+max(real id) + 1` computed from the frozen IR,
 `pending_quant = None`, `input_buffer = Vec::new()`, `current_state = ir.entry`). Direct
 construction that omits these inits will misbehave on the first quantifier edge. See invariant I-16
 in [`invariants.md`](./invariants.md) for the `next_synth` seeding rationale.
