@@ -1,5 +1,8 @@
 set shell := ["bash", "-uc"]
 
+# Ensure `wasm-pack` exists in PATH, aborts if missing
+wasm_pack := require("wasm-pack")
+
 # List available recipes by default
 default:
     @just --list
@@ -11,12 +14,8 @@ default:
 build PROFILE="release":
     #!/usr/bin/env bash
     set -euo pipefail
-    wasm_pack="${WASM_PACK:-wasm-pack}"
+    wasm_pack="{{wasm_pack}}"
     profile="{{PROFILE}}"
-    if ! command -v "$wasm_pack" > /dev/null; then
-        echo "Error: wasm-pack is required but not installed. See https://rustwasm.github.io/wasm-pack/installer/"
-        exit 1
-    fi
     case "$profile" in
       release)
         CARGO_PROFILE_RELEASE_OPT_LEVEL=3 "$wasm_pack" build --target web --out-dir ../pkg --features wasm

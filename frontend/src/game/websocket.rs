@@ -1,5 +1,7 @@
 use mcg_shared::{Frontend2BackendMsg, PlayerConfig, Backend2FrontendMsg};
 use std::rc::Rc;
+use std::collections::HashMap;
+use std::cell::RefCell;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
@@ -21,6 +23,17 @@ pub struct WebSocketConnection {
     _onmessage: Option<Closure<dyn FnMut(MessageEvent)>>,
     _onerror: Option<Closure<dyn FnMut(Event)>>,
     _onclose: Option<Closure<dyn FnMut(CloseEvent)>>,
+
+    /// Persistent listener maps keyed by name (e.g. screen path)
+    message_listeners: Rc<RefCell<HashMap<String, Rc<dyn Fn(Backend2FrontendMsg)>>>>,
+    error_listeners: Rc<RefCell<HashMap<String, Rc<dyn Fn(String)>>>>,
+    close_listeners: Rc<RefCell<HashMap<String, Rc<dyn Fn(String)>>>>,
+
+    /// The key of the currently active listener; only this listener receives messages.
+    active_listener: Rc<RefCell<Option<String>>>,
+    // new fields active_error_listener and active_close_listener
+    active_error_listener: Rc<RefCell<Option<String>>>,
+    active_close_listener: Rc<RefCell<Option<String>>>,
 }
 
 impl Default for WebSocketConnection {
@@ -37,28 +50,24 @@ impl WebSocketConnection {
             _onmessage: None,
             _onerror: None,
             _onclose: None,
+            message_listeners: Rc::new(RefCell::new(HashMap::new())),
+            error_listeners: Rc::new(RefCell::new(HashMap::new())),
+            close_listeners: Rc::new(RefCell::new(HashMap::new())),
+            active_listener: Rc::new(RefCell::new(None)),
+            active_error_listener: Rc::new(RefCell::new(None)),
+            active_close_listener: Rc::new(RefCell::new(None)),
         }
     }
 
-    /// Connect to a WebSocket server with immediate message processing.
-    ///
-    /// Establishes a connection and sets up event handlers that immediately
-    /// process incoming messages and trigger UI updates via callbacks.
+    /// Connect to a WebSocket server. This opens a new connection and installs event handlers.
+    /// It does not manage which listener is active — that is done via `set_active_listener`.
     pub fn connect(
         &mut self,
         server_address: &str,
         players: Vec<PlayerConfig>,
-        on_message: impl Fn(Backend2FrontendMsg) + 'static,
-        on_error: impl Fn(String) + 'static,
-        on_close: impl Fn(String) + 'static,
     ) {
-        // Close any existing connection before starting a new one
+        // Close any existing connection first (prevents leaking handlers)
         self.close();
-
-        // Wrap callbacks in Rc to share with closures
-        let on_message = Rc::new(on_message);
-        let on_error = Rc::new(on_error);
-        let on_close = Rc::new(on_close);
 
         let ws_url = format!("ws://{}/ws", server_address);
         match WebSocket::new(&ws_url) {
@@ -67,83 +76,150 @@ impl WebSocketConnection {
                 let subscribe_json = match serde_json::to_string(&Frontend2BackendMsg::Subscribe) {
                     Ok(s) => s,
                     Err(e) => {
-                        on_error(format!("Failed to serialize Subscribe message: {:?}", e));
+                        self.route_error(&format!("Failed to serialize Subscribe message: {:?}", e));
                         return;
                     }
                 };
-                let newgame_msg = Frontend2BackendMsg::NewGame {
-                    players: players.clone(),
-                };
+                let newgame_msg = Frontend2BackendMsg::NewGame { players: players.clone() };
                 let newgame_json = match serde_json::to_string(&newgame_msg) {
                     Ok(s) => s,
                     Err(e) => {
-                        on_error(format!("Failed to serialize NewGame message: {:?}", e));
+                        self.route_error(&format!("Failed to serialize NewGame message: {:?}", e));
                         return;
                     }
                 };
 
+                let msg_map = self.message_listeners.clone();
+                let err_map = self.error_listeners.clone();
+                let cls_map = self.close_listeners.clone();
+                let active_key = self.active_listener.clone();
+                let active_err = self.active_error_listener.clone();
+                let active_cls = self.active_close_listener.clone();
+
+                // onopen: send Subscribe and NewGame
                 let ws_clone_for_open = ws.clone();
                 let subscribe_payload = subscribe_json;
                 let newgame_payload = newgame_json;
-                let on_error_clone = on_error.clone();
                 let onopen = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
-                    if let Err(e) = ws_clone_for_open.send_with_str(&subscribe_payload) {
-                        on_error_clone(format!("Error sending Subscribe: {:?}", e));
-                        return;
-                    }
-                    if let Err(e) = ws_clone_for_open.send_with_str(&newgame_payload) {
-                        on_error_clone(format!("Error sending NewGame: {:?}", e));
-                    }
+                    let _ = ws_clone_for_open.send_with_str(&subscribe_payload);
+                    let _ = ws_clone_for_open.send_with_str(&newgame_payload);
                 });
                 ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
 
-                // onmessage: Parse ServerMsg and process immediately
-                let on_message_clone = on_message.clone();
+                // onmessage: parse Backend2FrontendMsg and route to active listener only
                 let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
                     if let Some(txt) = e.data().as_string() {
                         if let Ok(msg) = serde_json::from_str::<Backend2FrontendMsg>(&txt) {
-                            // Process the message immediately via callback
-                            on_message_clone(msg);
+                            if let Some(active) = active_key.borrow().as_ref() {
+                                if let Some(cb) = msg_map.borrow().get(active) {
+                                    cb(msg);
+                                }
+                            }
                         }
                     }
                 });
                 ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
 
-                // onerror: Process error immediately
+                // onerror: route to active error listener only
                 let server_address_err = server_address.to_string();
-                let on_error_clone = on_error.clone();
                 let onerror = Closure::<dyn FnMut(Event)>::new(move |_e: Event| {
-                    on_error_clone(format!("Failed to connect to {}.", server_address_err));
+                    let reason = format!("Failed to connect to {}.", server_address_err);
+                    if let Some(active) = active_err.borrow().as_ref() {
+                        if let Some(cb) = err_map.borrow().get(active) {
+                            cb(reason);
+                            return;
+                        }
+                    }
+                    // fallback to all error listeners
+                    for cb in err_map.borrow().values() {
+                        cb(reason.clone());
+                    }
                 });
                 ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
 
-                // onclose: Process close immediately
-                let on_close_clone = on_close.clone();
+                // onclose: route to active close listener only (fallback to all)
                 let onclose = Closure::<dyn FnMut(CloseEvent)>::new(move |e: CloseEvent| {
                     let reason = if e.reason().is_empty() {
                         format!("Connection closed (code {}).", e.code())
                     } else {
                         format!("Connection closed (code {}): {}", e.code(), e.reason())
                     };
-                    on_close_clone(reason);
+                    if let Some(active) = active_cls.borrow().as_ref() {
+                        if let Some(cb) = cls_map.borrow().get(active) {
+                            cb(reason);
+                            return;
+                        }
+                    }
+                    for cb in cls_map.borrow().values() {
+                        cb(reason.clone());
+                    }
                 });
                 ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
 
-                // Store the closures to manage their lifetime properly
+                self._onopen = Some(onopen);
                 self._onmessage = Some(onmessage);
                 self._onerror = Some(onerror);
                 self._onclose = Some(onclose);
-                self._onopen = Some(onopen);
                 self.ws = Some(ws);
             }
             Err(err) => {
-                // Handle initial WebSocket creation error
-                on_error(format!("WebSocket connect error: {:?}", err));
+                self.route_error(&format!("WebSocket connect error: {:?}", err));
             }
         }
     }
 
-    /// Send a `ClientMsg` to the server if connected.
+    /// Register a named listener set once. If `key` already exists, just updates the callbacks without adding a new entry.
+    /// Use a unique key per screen (e.g. screen path).
+    pub fn register_listener_once(
+        &mut self,
+        key: &str,
+        on_message: impl Fn(Backend2FrontendMsg) + 'static,
+        on_error: impl Fn(String) + 'static,
+        on_close: impl Fn(String) + 'static,
+    ) {
+        let key_str = key.to_string();
+        {
+            let mut msgs = self.message_listeners.borrow_mut();
+            msgs.insert(key_str.clone(), Rc::new(on_message));
+        }
+        {
+            let mut errs = self.error_listeners.borrow_mut();
+            errs.insert(key_str.clone(), Rc::new(on_error));
+        }
+        {
+            let mut cls = self.close_listeners.borrow_mut();
+            cls.insert(key_str, Rc::new(on_close));
+        }
+    }
+
+    /// Set which listener key is active. Only that listener receives events.
+    pub fn set_active_listener(&mut self, key: Option<&str>) {
+        *self.active_listener.borrow_mut() = key.map(|s| s.to_string());
+        *self.active_error_listener.borrow_mut() = key.map(|s| s.to_string());
+        *self.active_close_listener.borrow_mut() = key.map(|s| s.to_string());
+    }
+
+    /// Remove previously registered listeners if needed.
+    pub fn remove_listeners(&mut self, key: &str) {
+        self.message_listeners.borrow_mut().remove(key);
+        self.error_listeners.borrow_mut().remove(key);
+        self.close_listeners.borrow_mut().remove(key);
+    }
+
+    fn route_error(&self, err: &str) {
+        // If an active error listener exists, route to it; otherwise route to all error listeners.
+        if let Some(active) = self.active_error_listener.borrow().as_ref() {
+            if let Some(cb) = self.error_listeners.borrow().get(active) {
+                cb(err.to_string());
+                return;
+            }
+        }
+        for cb in self.error_listeners.borrow().values() {
+            cb(err.to_string());
+        }
+    }
+
+    /// Send a `Frontend2BackendMsg` to the server if connected.
     pub fn send_msg(&self, msg: &Frontend2BackendMsg) {
         if let Some(ws) = &self.ws {
             if let Ok(txt) = serde_json::to_string(msg) {
@@ -163,10 +239,9 @@ impl WebSocketConnection {
         }
     }
 
-    /// Close the WebSocket connection.
+    /// Close the WebSocket connection and drop handlers.
     pub fn close(&mut self) {
         if let Some(ws) = self.ws.take() {
-            // Clear event handlers before closing to prevent leaks
             ws.set_onmessage(None);
             ws.set_onerror(None);
             ws.set_onclose(None);

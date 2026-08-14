@@ -123,12 +123,15 @@ impl ClientState {
         self.connection.pending_messages.push_back(msg);
     }
 
+    /// Process all pending server messages
     pub fn dispatch_pending_messages(&mut self) {
         while let Some(msg) = self.connection.pending_messages.pop_front() {
             self.apply_server_msg(msg);
         }
     }
 
+    /// Helper to apply an incoming Backend2FrontendMsg into the shared ClientState.
+    /// Effects may call this helper while holding the appropriate repaint context.
     pub fn apply_server_msg(&mut self, msg: Backend2FrontendMsg) {
         match msg {
             Backend2FrontendMsg::State(gs) => {
@@ -140,8 +143,10 @@ impl ClientState {
             Backend2FrontendMsg::Error(e) => {
                 self.ui.last_error = Some(e.clone());
             }
-            Backend2FrontendMsg::Pong => {}
-            Backend2FrontendMsg::QrRes(_content) => {}
+            Backend2FrontendMsg::OurName(string) => {
+                self.settings.name = string.clone();
+            }
+            _ => {}
         }
     }
 }

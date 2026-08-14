@@ -28,7 +28,7 @@ pub fn build_ws_url(base: &str) -> anyhow::Result<Url> {
     Ok(url)
 }
 
-/// Connect over websocket, send the provided ClientMsg and pass all responses to the printer until timeout.
+/// Connect over websocket, send the provided Frontend2BackendMsg and pass all responses to the printer until timeout.
 pub async fn run_once_ws(
     ws_addr: &str,
     client_msg: Frontend2BackendMsg,
@@ -117,7 +117,7 @@ pub async fn run_once_iroh(
     Ok(())
 }
 
-/// Write the provided ClientMsg as newline-delimited JSON to the given writer.
+/// Write the provided Frontend2BackendMsg as newline-delimited JSON to the given writer.
 async fn send_client_msg_over_stream<W>(send: &mut W, client_msg: &Frontend2BackendMsg) -> anyhow::Result<()>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
@@ -130,8 +130,8 @@ where
     Ok(())
 }
 
-/// Read newline-delimited ServerMsg responses from `reader` until the timeout (ms)
-/// Returns the last ServerMsg received (if any) and leaves handling to the caller.
+/// Read newline-delimited Backend2FrontendMsg responses from `reader` until the timeout (ms)
+/// Returns the last Backend2FrontendMsg received (if any) and leaves handling to the caller.
 async fn read_iroh_responses_until_timeout<R>(
     reader: &mut R,
     wait_ms: u64,

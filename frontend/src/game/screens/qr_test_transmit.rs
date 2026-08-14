@@ -1,5 +1,4 @@
 use super::{AppInterface, ScreenDef, ScreenMetadata, ScreenWidget};
-use crate::game::websocket::WebSocketConnection;
 use crate::sprintln;
 use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
 use image::{ImageBuffer, Luma};
@@ -18,11 +17,11 @@ pub struct QrTestTransmit {
     qr_queue: VecDeque<ImageBuffer<Luma<u8>, Vec<u8>>>,
     input: String,
     texture_handle: Option<TextureHandle>,
-    web_socket_connection: WebSocketConnection,
     epoch: Rc<RefCell<Epoch>>,
     file_list: Vec<String>,
     zoom: f32,
     last_code_shown: Option<f64>,
+    initialized: bool,
 }
 
 impl QrTestTransmit {
@@ -53,11 +52,65 @@ impl QrTestTransmit {
 impl ScreenWidget for QrTestTransmit {
     fn ui(
         &mut self,
-        _app_interface: &mut AppInterface,
+        app_interface: &mut AppInterface,
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
         let ctx = ui.ctx().clone();
+
+        // Lazy connect using central WebSocket
+        if !self.initialized {
+            let epoch_copy = self.epoch.clone();
+            let ctx_for_msg = ctx.clone();
+            let ctx_for_err = ctx_for_msg.clone();
+            let ctx_for_close = ctx_for_msg.clone();
+
+            let on_msg = move |x: Backend2FrontendMsg| match x {
+                Backend2FrontendMsg::QrRes(content) => {
+                    let s = String::from_utf8_lossy(&content);
+                    sprintln!("Got a response:\n\t- {:?}", s);
+                    if let Ok(mut epoch) = epoch_copy.try_borrow_mut() {
+                        let ap = Package::new(&content);
+                        epoch.write(ap);
+                        epoch.header.participant += 1;
+                        epoch.header.participant %= MAX_PARTICIPANTS as u8;
+                    }
+                    ctx_for_msg.request_repaint();
+                }
+                _ => {
+                    sprintln!("Got an unhandled message:\n\t- {:?}", x);
+                    ctx_for_msg.request_repaint();
+                }
+            };
+            let on_err = move |e: String| {
+                sprintln!("Got an error:\n\t- {:?}", e);
+                ctx_for_err.request_repaint();
+            };
+            let on_cls = move |c: String| {
+                sprintln!("Got a close:\n\t- {:?}", c);
+                ctx_for_close.request_repaint();
+            };
+
+            let mut players = Vec::new();
+            let p = PlayerConfig {
+                id: PlayerId::from(1337),
+                name: "QR_COMM".to_string(),
+                is_bot: false,
+            };
+            players.push(p);
+
+            let server = app_interface.state().settings.server_address.clone();
+            if !app_interface.ws.is_connected() {
+                    app_interface.ws.connect(&server, players);
+            }
+
+            // Register listener once and activate it
+            app_interface.ws.register_listener_once("/transmit", on_msg, on_err, on_cls);
+            app_interface.ws.set_active_listener(Some("/transmit"));
+
+            self.initialized = true;
+        }
+
         ui.heading("QR Transmission Demo");
         ui.add_space(12.0);
         ui.label(format!("QR-Codes in Queue: {}", self.qr_queue.len()));
@@ -82,7 +135,7 @@ impl ScreenWidget for QrTestTransmit {
                 if let Ok(epoch) = self.epoch.try_borrow_mut() {
                     if let Some(file) = self.file_list.get(epoch.header.participant as usize) {
                         let message = Frontend2BackendMsg::QrReq(file.clone());
-                        self.web_socket_connection.send_msg(&message);
+                        app_interface.ws.send_msg(&message);
                     }
                 }
             }
@@ -128,6 +181,11 @@ impl ScreenWidget for QrTestTransmit {
             ui.add(image);
         }
     }
+
+    fn on_exit(&mut self, app_interface: &mut AppInterface) {
+        // Deactivate this screen's listener, keep it registered
+        app_interface.ws.set_active_listener(None);
+    }
 }
 
 impl ScreenDef for QrTestTransmit {
@@ -153,43 +211,6 @@ impl ScreenDef for QrTestTransmit {
         me.file_list.push(String::from("data_1.txt"));
         me.file_list.push(String::from("homepage.md"));
         me.file_list.push(String::from("dataset-card.png"));
-        let epoch_copy = me.epoch.clone();
-        let on_msg = move |x| match x {
-            Backend2FrontendMsg::State(s) => {
-                sprintln!("Got a message state:\n\t- {:?}", s);
-            }
-            Backend2FrontendMsg::Error(e) => {
-                sprintln!("Got a message error:\n\t- {:?}", e);
-            }
-            Backend2FrontendMsg::QrRes(content) => {
-                let s = String::from_utf8_lossy(&content);
-                sprintln!("Got a response:\n\t- {:?}", s);
-                if let Ok(mut epoch) = epoch_copy.try_borrow_mut() {
-                    let ap = Package::new(&content);
-                    epoch.write(ap);
-                    epoch.header.participant += 1;
-                    epoch.header.participant %= MAX_PARTICIPANTS as u8;
-                }
-            }
-            Backend2FrontendMsg::Pong => {
-                sprintln!("Got a pong");
-            }
-        };
-        let on_err = |e| {
-            sprintln!("Got an error:\n\t- {:?}", e);
-        };
-        let on_cls = |c| {
-            sprintln!("Got a close:\n\t- {:?}", c);
-        };
-        let mut players = Vec::new();
-        let p = PlayerConfig {
-            id: PlayerId::from(1337),
-            name: "QR_COMM".to_string(),
-            is_bot: false,
-        };
-        players.push(p);
-        me.web_socket_connection
-            .connect("127.0.0.1:3000", players, on_msg, on_err, on_cls);
         Box::new(me)
     }
 }

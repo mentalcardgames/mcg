@@ -150,6 +150,7 @@ impl Camera {
             self.frame_count += 1;
             if self.frame_count.is_multiple_of(5) {
                 self.analyze_qr_frame_raw(&pixels, canvas_width as usize, canvas_height as usize);
+                self.analyze_qr_frame(&pixels, canvas_width as usize, canvas_height as usize);
             }
             if let Some(texture) = &mut self.frame_texture {
                 texture.set(color_image, egui::TextureOptions::LINEAR);

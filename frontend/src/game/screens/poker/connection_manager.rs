@@ -36,7 +36,7 @@ impl ConnectionManager {
         app_state.ui.last_info = Some(format!("Connecting to {}...", self.edit_server_address));
         app_state.settings.server_address = self.edit_server_address.clone();
 
-        // Create a shared message queue using Rc<RefCell<VecDeque<ServerMsg>>>
+        // Create a shared message queue using Rc<RefCell<VecDeque<Backend2FrontendMsg>>>
         let message_queue =
             std::rc::Rc::new(std::cell::RefCell::new(std::collections::VecDeque::<
                 mcg_shared::Backend2FrontendMsg,
@@ -53,31 +53,37 @@ impl ConnectionManager {
         let ctx_for_error = ctx.clone();
         let ctx_for_close = ctx.clone();
 
-        conn.connect(
-            &self.edit_server_address,
-            players,
-            move |msg: mcg_shared::Backend2FrontendMsg| {
-                // Queue the message safely
-                if let Ok(mut queue) = msg_queue_for_msg.try_borrow_mut() {
-                    queue.push_back(msg);
+        // Connect using the new simplified API (no per-call closures)
+
+        conn.connect(&self.edit_server_address, players);
+
+        // Register a persistent named listener exactly once and activate it.
+        // Use a descriptive key for this manager.
+        let key = "/poker/connection_manager";
+        conn.register_listener_once(
+            key,
+            move |msg: Backend2FrontendMsg| {
+                if let Ok(mut q) = msg_queue_for_msg.try_borrow_mut() {
+                    q.push_back(msg);
                     ctx_for_msg.request_repaint();
                 }
             },
             move |error: String| {
-                // Queue the error safely
-                if let Ok(mut queue) = error_queue_for_error.try_borrow_mut() {
-                    queue.push_back(error);
+                if let Ok(mut q) = error_queue_for_error.try_borrow_mut() {
+                    q.push_back(error);
                     ctx_for_error.request_repaint();
                 }
             },
             move |reason: String| {
-                // Queue the close reason safely
-                if let Ok(mut queue) = error_queue_for_close.try_borrow_mut() {
-                    queue.push_back(reason);
+                if let Ok(mut q) = error_queue_for_close.try_borrow_mut() {
+                    q.push_back(reason);
                     ctx_for_close.request_repaint();
                 }
             },
         );
+
+        // Activate this listener so routing will deliver events here while connected via this UI flow.
+        conn.set_active_listener(Some(key));
 
         // Store the queues for processing in the update loop
         self.message_queue = Some(message_queue);
