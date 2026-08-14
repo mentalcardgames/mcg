@@ -1,0 +1,14 @@
+// Team-owned locations and memories: ONE shared instance per team, keyed by
+// the team name — `location X on T:Red` creates a single pile owned by the
+// team (found via the bare name while a Red member is current, or via
+// `X of T:Red`), and `memory M on T:Red` creates the single slot `Red_M`.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+team Red with (P:P1, P:P2)
+location TeamPile on T:Red
+memory TeamFlag on T:Red
+
+stage Play for current 2 times {
+  TeamFlag is 5
+  cycle to next
+}

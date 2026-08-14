@@ -1,0 +1,14 @@
+// Setup-`Any` (I-20, relaxed 2026-08-10): `location Hand on any` prompts for
+// one player; the chosen player becomes the location's owner.
+player P1, P2
+turnorder (P:P1, P:P2)
+location Hand on any
+location Stock on table
+
+card on Stock:
+  Rank(Ace, Two)
+    for Suite(Hearts)
+
+stage Setup for current 1 times {
+  deal 1 from top(Stock) private to Hand
+}

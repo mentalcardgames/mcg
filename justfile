@@ -1,4 +1,4 @@
-set shell := ["bash", "-c"]
+set shell := ["bash", "-uc"]
 
 # Ensure `wasm-pack` exists in PATH, aborts if missing
 wasm_pack := require("wasm-pack")
@@ -69,3 +69,42 @@ agents:
     cp AGENTS.md CRUSH.md
     cp AGENTS.md WARP.md
 
+# Run the engine TUI for interactive testing
+# Usage: just tui [GAME]
+# Examples:
+#   just tui                        # Run with default test game
+#   just tui my_game.cgdsl         # Run with specific game (relative to cwd)
+tui GAME="crates/engine/test_games/ordering_test.cgdsl":
+    cargo run -p cgdsl-engine --bin engine-tui -- {{GAME}}
+
+# Run the full cgdsl-engine test suite (lib + bins + integration)
+test-engine:
+    cargo test -p cgdsl-engine --all-targets
+
+# Run only the cgdsl-engine library (unit + interpreter + controller) tests
+test-engine-lib:
+    cargo test -p cgdsl-engine --lib
+
+# Run only the cgdsl-engine binary smoke tests (cgdsl-play, engine-tui)
+test-engine-bins:
+    cargo test -p cgdsl-engine --bins
+
+# Run the engine suite with the optional `tracing` feature bridge enabled
+# (the trace_tracing test only compiles with it)
+test-engine-tracing:
+    cargo test -p cgdsl-engine --features tracing
+
+# Run one integration test area, e.g. `just test-engine-area flow`
+test-engine-area AREA:
+    cargo test -p cgdsl-engine --test {{AREA}}_test
+
+# The full engine gate: tests + tracing feature + clippy + fmt (exit code only)
+test-engine-ci:
+    cargo test -p cgdsl-engine --all-targets
+    cargo test -p cgdsl-engine --features tracing
+    cargo clippy -p cgdsl-engine --all-targets --no-deps -- -D warnings
+    cargo fmt -p cgdsl-engine -- --check
+
+# Engine line coverage across all targets (requires cargo-llvm-cov + llvm-tools)
+coverage-engine:
+    cargo llvm-cov -p cgdsl-engine --all-targets

@@ -1,0 +1,39 @@
+// Behavioral fixture — blackjack stand tracking (deterministic: no shuffle).
+// Mirrors test_games/blackjack.cgdsl's Play stage: the optional's accept
+// path sets `HitFlag is 1`, so `(&I:HitFlag of current) == 0` after the
+// optional means "stood" and the player is set out of the Play stage —
+// standing players are never asked again, and the stage auto-ends (I-24)
+// once everyone has stood.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Deck on table
+memory HitFlag on all
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight)
+    for Suit(Diamonds, Clubs, Hearts)
+
+points BJ on Rank(
+  Ace: 11, Two: 2, Three: 3, Four: 4,
+  Five: 5, Six: 6, Seven: 7, Eight: 8
+)
+
+stage Deal for current 1 times {
+  deal 2 from Deck private to Hand of all
+}
+
+stage Play for current 12 times {
+  reset HitFlag
+  optional {
+    deal 1 from Deck private to Hand of current
+    HitFlag is 1
+    if (sum of Hand of current using BJ > 21) {
+      set current out of game
+    }
+  }
+  if ((&I:HitFlag of current) == 0) {
+    set current out of Play
+  }
+  cycle to next
+}

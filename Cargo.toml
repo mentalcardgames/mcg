@@ -7,6 +7,7 @@ members = [
     "crates/front_end",
     "crates/lsp_server",
     "crates/code_gen",
+    "crates/engine",
 ]
 default-members = ["native_mcg", "shared"]
 resolver = "2"

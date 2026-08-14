@@ -1,0 +1,13 @@
+// Numeric input prompt (2026-08-10): `bid any on <memory> of <owner>` asks
+// the current player for a number (InputType::Number); a range quantity
+// bounds the prompt and out-of-range answers are rejected and re-asked.
+// `bid 5 on <memory> of <owner>` (literal) writes without prompting.
+player P1
+turnorder (P:P1)
+memory Pot 0 on table
+
+stage Play for current 1 times {
+  bid any on Pot of table
+  bid >= 1 and <= 10 on Bet of table
+  end stage
+}

@@ -40,6 +40,7 @@ pub mod ast {
         gen_vec_min_1_kvis,
         gen_vec_min_1_ints,
         gen_flows_safe,
+        gen_options_safe,
     };
 
     // Operator
@@ -1747,8 +1748,10 @@ pub mod ast {
     ///    associated with that choice.
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Arbitrary)]
     pub struct ChoiceRule {
-        #[arbitrary(with = gen_flows_safe)]
-        pub options: Vec<FlowComponent>,
+        /// One entry per `or`-separated branch; each branch is a *sequence*
+        /// of flow components executed in order when that option is chosen.
+        #[arbitrary(with = gen_options_safe)]
+        pub options: Vec<Vec<FlowComponent>>,
     }
 
     /// Defines a competitive "First-to-Claim" rule within a simultaneous game stage.

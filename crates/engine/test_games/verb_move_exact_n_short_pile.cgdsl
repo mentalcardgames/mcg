@@ -1,0 +1,17 @@
+// Verb semantics (2026-08-10): `move 5` over a 2-card pile clamps the
+// prompt to min=max=2 (an unsatisfiable exact count must not trap the
+// player in re-prompts).
+player P1
+turnorder (P:P1)
+location Hand on all
+location Discard on table
+location Deck on table
+
+card on Deck:
+  Rank(Ace, Two) for Suit(Hearts)
+
+stage Play for current 1 times {
+  deal 2 from Deck private to Hand of P:P1
+  move 5 from Hand of P:P1 private to Discard
+  end stage
+}

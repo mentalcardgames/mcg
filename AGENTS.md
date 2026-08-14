@@ -11,6 +11,7 @@ MCG is a Rust Cargo workspace for a browser-based card game. The frontend crate 
 - `just backend` – Launch the `native_mcg` server; it binds to the first free port ≥3000 and serves `/`, `/pkg`, `/media`, and `/ws`.
 - `just backend-bg` / `just kill-backend` – Start or stop the backend in the background (useful for automation).
 - `just cli -- <args>` – Forward arguments to the `mcg-cli` binary (WebSocket client for state inspection and commands).
+- `just tui [GAME]` – Run the engine TUI for interactive testing. Defaults to `crates/engine/test_games/ordering_test.cgdsl`.
 - `just agents` – Copy the current `AGENTS.md` into `CLAUDE.md` and `CRUSH.md` for other assistants.
 
 ## Development Notes

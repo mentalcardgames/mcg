@@ -1,0 +1,16 @@
+// Verb semantics (2026-08-10): `move N from <non-positional>` prompts the
+// player to pick exactly N cards (min=max=N).
+player P1
+turnorder (P:P1)
+location Hand on all
+location Discard on table
+location Deck on table
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five) for Suit(Hearts)
+
+stage Play for current 1 times {
+  deal 3 from Deck private to Hand of P:P1
+  move 2 from Hand of P:P1 private to Discard
+  end stage
+}

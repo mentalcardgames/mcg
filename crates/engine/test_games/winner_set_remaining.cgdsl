@@ -1,0 +1,9 @@
+// Winner set at game end (2026-08-10): no explicit winner statement, so the
+// winners are simply the players still in the game — here P1 and P3.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  set P:P2 out of game
+  end stage
+}

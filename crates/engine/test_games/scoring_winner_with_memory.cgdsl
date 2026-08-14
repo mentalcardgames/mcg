@@ -1,0 +1,13 @@
+// Test: per-player ScoreMemory + WinnerWith::Memory
+// P1 scores 10 to M, P2 scores 5 to M, P3 scores 3 to M
+// winner is highest M → P1 wins
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  score 10 to M of P:P1
+  score 5 to M of P:P2
+  score 3 to M of P:P3
+  winner is highest M
+  end stage
+}

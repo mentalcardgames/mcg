@@ -1,0 +1,27 @@
+// Team-owned location reads: ONE shared TeamPile for team Red. The bare name
+// resolves to the team pile while a Red member is current; `TeamPile of
+// T:Red` addresses it explicitly; `owner of top(TeamPile)` reports the team;
+// `(&I:TeamFlag of T:Red)` reads the single team slot `Red_TeamFlag`.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+team Red with (P:P1, P:P2)
+location TeamPile on T:Red
+location Hand on all
+location Deck on table
+memory Who on table
+memory TeamFlag 7 on T:Red
+
+card on Deck:
+  Rank(Ace, Two, Three) for Suit(Hearts)
+
+stage Play for current 3 times {
+  deal 1 from top(Deck) private to TeamPile
+  Who is owner of top(TeamPile)
+  cycle to next
+}
+
+stage Score for current 1 times {
+  score size(cards TeamPile of T:Red) to P:P1
+  score (&I:TeamFlag of T:Red) to P:P2
+  end stage
+}

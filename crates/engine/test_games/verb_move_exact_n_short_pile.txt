@@ -1,0 +1,2 @@
+# Answer for verb_move_exact_n_short_pile.cgdsl: pick both cards.
+c 1,2

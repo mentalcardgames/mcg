@@ -12,6 +12,7 @@ combo Set where ((size >= 3 and distinct Suite) and Rank is "Ace")
 combo Deadwood where (not Sequence and not Set)
 
 stage Preparation for current 1 times {
+  shuffle Stock
   deal 12 from top(Stock) private to Hand of all
 }
 

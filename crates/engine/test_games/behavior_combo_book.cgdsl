@@ -1,0 +1,26 @@
+// Behavioral fixture — laying down a Go Fish "book" (4 of a kind).
+//
+// Deterministic deck (10 cards, one suit): Ace x4, King x2, Three x4.
+// The `Book` combo is `same Rank and size >= 4`; the combo-source move
+// prompts over the whole hand and validates the selection. The player
+// selects the four Aces -> valid, laid down. (A 2+2 split would also pass
+// the filter — a documented D-16 simplification; a 3+1 split is rejected.)
+player P1
+turnorder (P:P1)
+location Hand on P:P1
+location Books on table
+location Deck on table
+
+combo Book where (same Rank and size >= 4)
+
+card on Deck:
+  Rank(Ace, Ace, Ace, Ace, King, King, Three, Three, Three, Three)
+    for Suit(Diamonds)
+
+stage Deal for current 1 times {
+  deal 10 from Deck private to Hand
+}
+
+stage LayBook for current 1 times {
+  move Book in Hand of current private to Books
+}

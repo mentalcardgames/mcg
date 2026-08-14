@@ -1,0 +1,70 @@
+// Behavioral fixture — Go Fish ask semantics (deterministic: no shuffle).
+//
+// Deck (creation order, 24 cards). Card expansion is rank-major with the
+// suit innermost: Ace-D, Ace-C, Ace-H, Two-D, Two-C, Two-H, Three-D, ...
+// After dealing 7 to each player:
+//   P1 = [Ace-D, Ace-C, Ace-H, Two-D, Two-C, Two-H, Three-D],
+//   P2 = [Three-C, Three-H, Four-D, Four-C, Four-H, Five-D, Five-C],
+//   P3 = [Five-H, Six-D, Six-C, Six-H, Seven-D, Seven-C, Seven-H],
+//   Deck = [Eight-D, Eight-C, Eight-H].
+// P1 asks the next player (P2) for a rank:
+//   - a rank P2 holds (Three, Four, Five) -> transfer, no draw;
+//   - a rank P2 lacks (Ace..Two, Six..Eight) -> draw exactly 1.
+// Mirrors test_games/go_fish.cgdsl mechanics (8 of its 13 rank options).
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Deck on table
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight)
+    for Suit(Diamonds, Clubs, Hearts)
+
+stage Deal for current 1 times {
+  deal 7 from Deck private to Hand of all
+}
+
+stage Ask for current 1 times {
+  choose {
+    if (size(cards Hand where Rank is "Ace" of next) == 0) {
+      deal 1 from Deck private to Hand of current
+    }
+    deal Hand where Rank is "Ace" of next private to Hand of current
+    or
+    if (size(cards Hand where Rank is "Two" of next) == 0) {
+      deal 1 from Deck private to Hand of current
+    }
+    deal Hand where Rank is "Two" of next private to Hand of current
+    or
+    if (size(cards Hand where Rank is "Three" of next) == 0) {
+      deal 1 from Deck private to Hand of current
+    }
+    deal Hand where Rank is "Three" of next private to Hand of current
+    or
+    if (size(cards Hand where Rank is "Four" of next) == 0) {
+      deal 1 from Deck private to Hand of current
+    }
+    deal Hand where Rank is "Four" of next private to Hand of current
+    or
+    if (size(cards Hand where Rank is "Five" of next) == 0) {
+      deal 1 from Deck private to Hand of current
+    }
+    deal Hand where Rank is "Five" of next private to Hand of current
+    or
+    if (size(cards Hand where Rank is "Six" of next) == 0) {
+      deal 1 from Deck private to Hand of current
+    }
+    deal Hand where Rank is "Six" of next private to Hand of current
+    or
+    if (size(cards Hand where Rank is "Seven" of next) == 0) {
+      deal 1 from Deck private to Hand of current
+    }
+    deal Hand where Rank is "Seven" of next private to Hand of current
+    or
+    if (size(cards Hand where Rank is "Eight" of next) == 0) {
+      deal 1 from Deck private to Hand of current
+    }
+    deal Hand where Rank is "Eight" of next private to Hand of current
+  }
+  end stage
+}

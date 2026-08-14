@@ -1,0 +1,16 @@
+// Verb semantics (2026-08-10): `deal >= M and <= N` prompts for the COUNT
+// ("how many cards?" — an InputType::Number), then deals that many from the
+// top automatically. `deal any` = count in 1..pile-size.
+player P1
+turnorder (P:P1)
+location Hand on all
+location Deck on table
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five) for Suit(Hearts)
+
+stage Play for current 1 times {
+  deal >= 2 and <= 4 from Deck private to Hand of P:P1
+  deal any from Deck private to Hand of P:P1
+  end stage
+}

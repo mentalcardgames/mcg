@@ -1,0 +1,11 @@
+player P1
+turnorder (P:P1)
+location Hand on P:P1
+location Stock on table
+
+card on Stock:
+  Rank(Ace)
+
+stage Play for current 1 times {
+  move top(Stock) private to Hand
+}

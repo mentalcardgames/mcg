@@ -1,0 +1,76 @@
+// Crazy Eights — 3 players, shed all your cards.
+//
+// Rules:
+//   - Each player is dealt 5 cards; one card starts the Discard pile.
+//   - On your turn, play **exactly one card that matches** the top of the
+//     Discard pile — same rank or same suit — or any 8 (wild). The engine
+//     only offers matching cards (the play prompt lists them), so plays are
+//     always legal.
+//   - If you cannot play (no match, no 8), you **must** draw one card.
+//   - After playing (or being forced to draw), you may draw one card and
+//     give it to *any* player — a house rule.
+//   - The game ends when the deck runs out, a player empties their hand,
+//     or after 30 turns; the player with the fewest cards wins.
+//
+// Remaining house rules / deviations (documented, not hidden):
+//   - Declining both the play and the voluntary draw passes the turn
+//     entirely (the DSL's `optional` has no else-branch to force a draw on
+//     decline — D-3).
+//   - The "hand empty" end condition is only checked when the current
+//     player's turn starts, so a win is detected with up to one round of
+//     delay (the 30-turn cap guarantees termination).
+//
+// Engine notes:
+//   - Playing uses `move 1 from Hand where (...) of current`, which prompts
+//     the player to pick exactly ONE matching card (2026-08-10 verb
+//     semantics: `move N` = pick N cards; `deal N` = automatic top N).
+//   - The match filter reads the top of the Discard pile live:
+//     `Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or
+//     Rank is "Eight")`.
+//   - Drawing uses `Hand of any`, which prompts for a player
+//     (InputType::ChoosePlayer).
+
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Deck on table
+location Discard on table
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King)
+    for Suit(Diamonds, Clubs, Hearts, Spades)
+
+shuffle Deck
+
+stage Deal for current 1 times {
+  deal 5 from Deck private to Hand of all
+  deal 1 from Deck private to Discard
+}
+
+stage Play for current until (Deck empty or Hand of current empty) or 30 times {
+  if (not Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current empty) {
+    optional {
+      move 1 from Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current private to Discard
+    }
+  }
+  if (Hand where (Rank is Rank of top(Discard) or (Suit is Suit of top(Discard) or Rank is "Eight")) of current empty) {
+    if (not Deck empty) {
+      deal 1 from Deck private to Hand of current
+    }
+  }
+  if (not Deck empty) {
+    optional {
+      deal 1 from Deck private to Hand of any
+    }
+  }
+  cycle to next
+}
+
+stage Score for current 3 times {
+  score size(cards Hand of current) to current
+  cycle to next
+}
+
+stage End for current 1 times {
+  winner is lowest score
+}

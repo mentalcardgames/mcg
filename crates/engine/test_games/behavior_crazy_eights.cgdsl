@@ -1,0 +1,43 @@
+// Behavioral fixture — Crazy Eights empty-hand win (deterministic: no
+// shuffle). Deck (20 cards, creation order Rank(Ace..Seven) x Suit(D) plus
+// six extra): dealing 5 each + 1 starter leaves 4 in the Deck.
+// P1 plays one card per turn (choosing the first); P2/P3 always decline.
+// After P1's 5th play the hand is empty; when the turn returns to P1 the
+// stage exits. P1 has 0 cards -> lowest score -> P1 wins.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Deck on table
+location Discard on table
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace, Two, Three, Four, Five, Six, Seven)
+    for Suit(Diamonds)
+
+stage Deal for current 1 times {
+  deal 5 from Deck private to Hand of all
+  deal 1 from Deck private to Discard
+}
+
+stage Play for current until (Deck empty or Hand of current empty) or 30 times {
+  if (not Hand of current empty) {
+    optional {
+      move any from Hand of current private to Discard
+    }
+  }
+  if (not Deck empty) {
+    optional {
+      deal 1 from Deck private to Hand of any
+    }
+  }
+  cycle to next
+}
+
+stage Score for current 3 times {
+  score size(cards Hand of current) to current
+  cycle to next
+}
+
+stage End for current 1 times {
+  winner is lowest score
+}

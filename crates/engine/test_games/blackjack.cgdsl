@@ -1,0 +1,120 @@
+// Blackjack (casino-style, simplified) — 3 players vs. a table dealer.
+//
+// Rules:
+//   - 52-card deck, Ace counts 11 (no soft-ace handling).
+//   - Each player is dealt 2 cards; the dealer 1 (face up).
+//   - Players take turns: hit (accept the optional) or stand (decline).
+//     Busted hands (sum > 21) are eliminated automatically.
+//   - The dealer then draws while their hand sums below 17.
+//   - Players whose hand does not beat the dealer are eliminated; the
+//     remaining players score their hand and the highest score wins.
+//
+// Engine notes:
+//   - Standing is tracked via the `HitFlag` memory: the optional's accept
+//     path sets it, so a still-zero flag after the optional means "stood",
+//     and `set current out of Play` removes the player from the stage —
+//     standing players are never asked again (the optional has no
+//     else-branch, D-3, so the flag records the decline). The stage
+//     auto-ends when everyone has stood or busted (I-24); the 12-turn cap
+//     backstops an empty deck.
+//   - `cycle to next` wraps onto the current player when nobody else is
+//     eligible, and a player who is out of the game is never prompted
+//     (their instructions are skipped) — so no guards are needed
+//     (2026-08-10, I-13 relaxed).
+//   - When every player busts, the stage auto-ends with an empty winner
+//     set (no player is in the game any more).
+
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location DealerHand on table
+location Deck on table
+memory HitFlag on all
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King)
+    for Suit(Diamonds, Clubs, Hearts, Spades)
+
+points BJ on Rank(
+  Ace: 11, Two: 2, Three: 3, Four: 4, Five: 5, Six: 6,
+  Seven: 7, Eight: 8, Nine: 9, Ten: 10,
+  Jack: 10, Queen: 10, King: 10
+)
+
+shuffle Deck
+
+stage Deal for current 1 times {
+  deal 2 from Deck private to Hand of P:P1
+  deal 2 from Deck private to Hand of P:P2
+  deal 2 from Deck private to Hand of P:P3
+  deal 1 from Deck private to DealerHand
+}
+
+// Each player may hit (accept) or stand (decline). Standing is tracked:
+// the optional's accept path sets `HitFlag is 1`, so a still-zero flag after
+// the optional means "stood" — `set current out of Play` removes the player
+// from the stage and they are never asked again (D-3 has no else-branch, so
+// the flag is the only way to record a decline). The stage auto-ends when
+// everyone has stood or busted (I-24); the 12-turn cap backstops an empty
+// deck. Busted players are skipped automatically (no `if (not current out
+// of game)` guard needed) and `cycle to next` never errors (it wraps onto
+// the current player when it is the only eligible one).
+stage Play for current 12 times {
+  reset HitFlag
+  optional {
+    deal 1 from Deck private to Hand of current
+    HitFlag is 1
+    if (sum of Hand of current using BJ > 21) {
+      set current out of game
+    }
+  }
+  if ((&I:HitFlag of current) == 0) {
+    set current out of Play
+  }
+  cycle to next
+}
+
+// Dealer draws while below 17 (bounded to 10 attempts).
+stage Dealer for current 10 times {
+  // get any available player, if possible.
+  cycle to next
+  if (sum of DealerHand using BJ < 17) {
+    deal 1 from Deck private to DealerHand
+  }
+}
+
+// Eliminate players the dealer beats; survivors score their hand.
+// Each player is handled explicitly (one pass per player — the dealer
+// plays once, so no cycling is needed). Busted players stay out of game
+// and are ignored by the winner rule regardless of their hand total.
+stage Score for current 1 times {
+  score sum of Hand of P:P1 using BJ to P:P1
+  score sum of Hand of P:P2 using BJ to P:P2
+  score sum of Hand of P:P3 using BJ to P:P3
+
+  if (sum of DealerHand using BJ > 21) {
+    // all players not out of game win if the dealer busts
+    winner is all
+  }
+
+  // if scores are <= dealer's hand, eliminate player - no matter what score, they cannot win
+  if (sum of Hand of P:P1 using BJ <= sum of DealerHand using BJ) {
+    set P:P1 out of game
+  }
+  cycle to next
+
+  if (sum of Hand of P:P2 using BJ <= sum of DealerHand using BJ) {
+    set P:P2 out of game
+  }
+  cycle to next
+  
+  if (sum of Hand of P:P3 using BJ <= sum of DealerHand using BJ) {
+    set P:P3 out of game
+  }
+  cycle to next
+}
+
+stage End for current 1 times {
+  // all players not out of game win
+  winner is all
+}

@@ -1,0 +1,19 @@
+// Tests: optional body with deal + conditional bust elimination
+// P1 has 1 Ace (11), hits → gets another Ace → sum=22 > 11 → eliminated
+player P1, P2
+turnorder (P:P1, P:P2)
+location Hand on all
+location Deck on table
+card on Deck: Rank(Ace, Ace) for Suit(Diamonds, Hearts)
+points BJ on Rank(Ace: 11)
+deal 1 from top(Deck) private to Hand of all
+
+stage Play for current 1 times {
+  optional {
+    deal 1 from top(Deck) private to Hand
+    if (sum of Hand of current using BJ > 11) {
+      set current out of game
+    }
+  }
+  end stage
+}

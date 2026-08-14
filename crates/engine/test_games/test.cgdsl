@@ -1,0 +1,31 @@
+player P1, P2
+team T1 with (P:P1, P:P2)
+turnorder (P:P1, P:P2)
+location Stock, Hand on all
+location Table, Discard on table
+
+card on Stock:
+  Rank(Ace, Two, Three, Four)
+    for Suite(Diamonds, Hearts, Spades, Clubs)
+
+precedence RankOrder on Rank(Ace, Two, Three, Four)
+points Values on Rank(Ace: 1, Two: 2, Three: 3, Four: 4)
+
+stage Setup for current 1 times {
+  deal 3 from top(Stock) private to Hand
+}
+
+stage Play for current until end {
+  shuffle Stock
+  choose {
+    move top(Hand) face down to Table
+    or
+    move top(Hand) face up to Discard
+  }
+
+  optional {
+    deal 1 from top(Stock) private to Hand
+  }
+
+  cycle to next
+}

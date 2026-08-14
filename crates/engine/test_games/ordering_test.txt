@@ -1,0 +1,11 @@
+# Test input file for ordering verification
+# Blank lines and comments are skipped
+# First valid line = first input consumed
+
+1
+
+y
+
+2
+
+n

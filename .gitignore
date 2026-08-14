@@ -17,6 +17,10 @@ server.log
 mcg-server.toml
 tags
 mcg_server_public.toml
+*.log
+
+*.dot
+.obsidian/
 
 CLAUDE.md
 CRUSH.md

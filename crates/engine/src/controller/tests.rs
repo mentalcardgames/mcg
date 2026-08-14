@@ -1,0 +1,642 @@
+use super::*;
+use crate::game_data::GameData;
+use crate::interpreter::{Input, InputKind, InputType, Interpreter, TraceEntry};
+use front_end::ir::{Ir, LoweredPayLoad};
+use std::collections::VecDeque;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+/// Verify that [`read_test_file`] correctly parses `y`, `n`, and numeric
+/// lines in FIFO order into the corresponding [`Input`] variants.
+#[test]
+fn input_parsing() {
+    let default_ir = Ir::<LoweredPayLoad>::default();
+    let interpreter = Interpreter::new(
+        Ir {
+            states: std::collections::HashMap::new(),
+            entry: default_ir.entry,
+            goal: default_ir.goal,
+        },
+        GameData::new(),
+        None,
+    );
+    let mut controller = Controller {
+        interpreter,
+        input_source: InputSource::TestFile(PathBuf::from("/nonexistent")),
+        event_sender: None,
+        line_buffer: VecDeque::from([
+            "1".to_string(),
+            "y".to_string(),
+            "2".to_string(),
+            "n".to_string(),
+            "p 2".to_string(),
+            "c 1,3".to_string(),
+        ]),
+        file_loaded: true,
+        input_sequence: 0,
+        step_count: Arc::new(std::sync::Mutex::new(0)),
+    };
+
+    let path = PathBuf::from("/nonexistent");
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 }
+        }
+    );
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::OptionalAccept
+        }
+    );
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 1 }
+        }
+    );
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::OptionalDecline
+        }
+    );
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::ChoosePlayer { idx: 1 }
+        },
+        "p 2 -> ChoosePlayer idx 1"
+    );
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P1".into(),
+            kind: InputKind::ChooseCards {
+                selected: vec![0, 2]
+            }
+        },
+        "c 1,3 -> ChooseCards selected [0,2]"
+    );
+}
+
+/// Ensure that popping from an empty `line_buffer` produces the expected
+/// `"Test input file exhausted"` error.
+#[test]
+fn input_exhausted_error() {
+    let default_ir = Ir::<LoweredPayLoad>::default();
+    let interpreter = Interpreter::new(
+        Ir {
+            states: std::collections::HashMap::new(),
+            entry: default_ir.entry,
+            goal: default_ir.goal,
+        },
+        GameData::new(),
+        None,
+    );
+    let mut controller = Controller {
+        interpreter,
+        input_source: InputSource::TestFile(PathBuf::from("test_input.txt")),
+        event_sender: None,
+        line_buffer: VecDeque::from(["1".to_string()]),
+        file_loaded: true,
+        input_sequence: 0,
+        step_count: Arc::new(std::sync::Mutex::new(0)),
+    };
+
+    let path = PathBuf::from("test_input.txt");
+    assert!(controller.read_test_file(&path).is_ok());
+    let result = controller.read_test_file(&path);
+    assert!(result.is_err());
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Test input file exhausted (input #0)"
+    );
+}
+
+/// Verify that [`read_test_file`] correctly parses a `Name:` prefix on
+/// each line (e.g. `P2:y`, `P3:c 1,3`), setting the right `player_id`.
+#[test]
+fn input_parsing_name_prefix() {
+    let default_ir = Ir::<LoweredPayLoad>::default();
+    let interpreter = Interpreter::new(
+        Ir {
+            states: std::collections::HashMap::new(),
+            entry: default_ir.entry,
+            goal: default_ir.goal,
+        },
+        GameData::new(),
+        None,
+    );
+    let mut controller = Controller {
+        interpreter,
+        input_source: InputSource::TestFile(PathBuf::from("/nonexistent")),
+        event_sender: None,
+        line_buffer: VecDeque::from(["P2:y".to_string(), "P3:c 1,3".to_string()]),
+        file_loaded: true,
+        input_sequence: 0,
+        step_count: Arc::new(std::sync::Mutex::new(0)),
+    };
+    let path = PathBuf::from("/nonexistent");
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P2".into(),
+            kind: InputKind::OptionalAccept,
+        }
+    );
+    assert_eq!(
+        controller.read_test_file(&path).unwrap(),
+        Input {
+            player_id: "P3".into(),
+            kind: InputKind::ChooseCards {
+                selected: vec![0, 2],
+            },
+        }
+    );
+}
+
+#[test]
+fn input_file_ordering_and_validation() {
+    use front_end::validation::parse_document;
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let game_path = manifest_dir.join("test_games/ordering_test.cgdsl");
+    let input_path = manifest_dir.join("test_games/ordering_test.txt");
+
+    let source = std::fs::read_to_string(&game_path).expect("Failed to read test game file");
+    let game = parse_document(&source).expect("Failed to parse game");
+    let ir = game.to_lowered_graph();
+
+    let game_data = GameData::new();
+    let result = run_game_with(
+        ir,
+        game_data,
+        InputSource::TestFile(input_path),
+        RunOptions::default(),
+    );
+
+    assert!(result.is_ok(), "Game should complete successfully");
+}
+
+/// Shared setup for the two `ordering_test` debug-integration tests: load
+/// `test_games/ordering_test.cgdsl`, run the game with a `TestFile` input
+/// source, and capture every emitted `GameData` snapshot. Returns the
+/// snapshots `Arc` and the run result so each test keeps its own unique
+/// assertions. See Stage 6 / sub-task B5.
+fn run_ordering_game_snapshots() -> (
+    std::sync::Arc<std::sync::RwLock<Vec<GameData>>>,
+    Result<GameData, crate::error::EngineError>,
+) {
+    use front_end::validation::parse_document;
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let game_path = manifest_dir.join("test_games/ordering_test.cgdsl");
+    let input_path = manifest_dir.join("test_games/ordering_test.txt");
+
+    let source = std::fs::read_to_string(&game_path).expect("Failed to read test game file");
+    let game = parse_document(&source).expect("Failed to parse game");
+    let ir = game.to_lowered_graph();
+
+    let snapshots = std::sync::Arc::new(std::sync::RwLock::new(Vec::new()));
+    let snapshots_clone = snapshots.clone();
+    let game_data = GameData::new();
+
+    let result = run_game_with(
+        ir,
+        game_data,
+        InputSource::TestFile(input_path),
+        RunOptions::new().with_event_sender(Box::new(move |gd| {
+            snapshots_clone.write().unwrap().push(gd.clone());
+        })),
+    );
+
+    (snapshots, result)
+}
+
+#[test]
+fn debug_integration_game_snapshots() {
+    use crate::debug::{format_game_data, DebugLevel};
+
+    let (snapshots, result) = run_ordering_game_snapshots();
+
+    assert!(result.is_ok());
+    assert!(!snapshots.read().unwrap().is_empty());
+
+    let output_low = format_game_data(&snapshots.read().unwrap()[0], DebugLevel::Low);
+    assert!(!output_low.is_empty());
+    assert!(output_low.contains("GAME DATA (LOW)"));
+
+    let output_medium = format_game_data(&snapshots.read().unwrap()[0], DebugLevel::Medium);
+    assert!(!output_medium.is_empty());
+    assert!(output_medium.contains("GAME DATA (MEDIUM)"));
+
+    let output_high = format_game_data(&snapshots.read().unwrap()[0], DebugLevel::High);
+    assert!(!output_high.is_empty());
+    assert!(output_high.contains("GAME DATA (HIGH)"));
+}
+
+#[test]
+fn debug_integration_verify_game_progression() {
+    use crate::debug::{format_game_data, DebugLevel};
+
+    let (snapshots, result) = run_ordering_game_snapshots();
+
+    assert!(result.is_ok());
+
+    let first_snapshot = &snapshots.read().unwrap()[0];
+    let first_output = format_game_data(first_snapshot, DebugLevel::Low);
+
+    assert!(first_output.contains("Players:"));
+
+    if snapshots.read().unwrap().len() > 1 {
+        let second_snapshot = &snapshots.read().unwrap()[1];
+        let second_output = format_game_data(second_snapshot, DebugLevel::Low);
+
+        assert!(
+            second_output.contains("Players:"),
+            "All snapshots should contain player info"
+        );
+
+        assert!(
+            first_output != second_output,
+            "Snapshots should show different game states"
+        );
+    }
+}
+
+#[test]
+fn play_stage_advances_turn_and_runs_two_iterations() {
+    use crate::interpreter::TraceEvent;
+    use front_end::validation::parse_document;
+    use std::sync::{Arc, Mutex};
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let game_path = manifest_dir.join("test_games/turn_switch.cgdsl");
+
+    let source = std::fs::read_to_string(&game_path).expect("read turn_switch.cgdsl");
+    let game = parse_document(&source).expect("parse turn_switch.cgdsl");
+    let ir = game.to_lowered_graph();
+
+    let snapshots: Arc<Mutex<Vec<GameData>>> = Arc::new(Mutex::new(Vec::new()));
+    let snapshots_clone = snapshots.clone();
+    let trace: Arc<Mutex<Vec<TraceEntry>>> = Arc::new(Mutex::new(Vec::new()));
+    let trace_clone = trace.clone();
+
+    let result = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::Player(Box::new(|_input_type: InputType| Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 },
+        })),
+        RunOptions::new()
+            .with_event_sender(Box::new(move |gd: &GameData| {
+                snapshots_clone.lock().unwrap().push(gd.clone());
+            }))
+            .with_trace_sender(Box::new(move |entry: TraceEntry| {
+                trace_clone.lock().unwrap().push(entry);
+            })),
+    );
+
+    assert!(result.is_ok(), "game should complete: {:?}", result.err());
+
+    let trace_vec = trace.lock().unwrap().clone();
+    let play_rounds = trace_vec
+        .iter()
+        .filter(|e| {
+            if let TraceEntry::Step {
+                event: TraceEvent::StageRoundCounter { stage, .. },
+                ..
+            } = *e
+            {
+                stage.as_str() == "Play"
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(
+        play_rounds, 2,
+        "Play must run 2 iterations (one StageRoundCounter traversal each); got {}",
+        play_rounds
+    );
+
+    let reached_p2 = snapshots
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|gd: &GameData| gd.current_player == Some(1));
+    assert!(
+        reached_p2,
+        "current_player must reach P2 (Some(1)) during Play — enter_stage must fire before the first cycle-to-next"
+    );
+}
+
+/// `RunOptions::capture_panics(true)` converts a panic inside the run loop
+/// (here: a panicking `event_sender`) into `Err(EngineError::InternalPanic)`
+/// instead of aborting the process.
+#[test]
+fn capture_panics_true_returns_internal_panic_error() {
+    use crate::error::EngineError;
+
+    let ir = Ir::<LoweredPayLoad>::default();
+    let result = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::TestFile(PathBuf::from("/nonexistent-input")),
+        RunOptions::new()
+            .with_event_sender(Box::new(|_gd: &GameData| panic!("deliberate test panic")))
+            .capture_panics(true),
+    );
+    match result {
+        Err(EngineError::InternalPanic { message }) => {
+            assert!(
+                message.contains("deliberate test panic"),
+                "panic message must be preserved, got: {message}"
+            );
+        }
+        other => panic!("expected Err(InternalPanic), got {:?}", other.map(|_| ())),
+    }
+}
+
+/// Legacy behavior (default `capture_panics(false)`): without a trace log the
+/// panic propagates to the caller exactly as before.
+#[test]
+#[should_panic(expected = "deliberate test panic")]
+fn capture_panics_false_propagates_panic() {
+    let ir = Ir::<LoweredPayLoad>::default();
+    let _ = run_game(
+        ir,
+        GameData::new(),
+        InputSource::TestFile(PathBuf::from("/nonexistent-input")),
+        Some(Box::new(|_gd: &GameData| panic!("deliberate test panic"))),
+        None,
+    );
+}
+
+/// End-to-end: with `with_log_path`, the trace file gets the stamped header
+/// (engine version, ISO timestamp, game name) and a step-counted footer.
+#[test]
+fn trace_file_has_stamped_header_and_footer() {
+    use front_end::validation::parse_document;
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let game_path = manifest_dir.join("test_games/ordering_test.cgdsl");
+    let input_path = manifest_dir.join("test_games/ordering_test.txt");
+    let log_path = std::env::temp_dir().join(format!("mcg-trace-test-{}.log", std::process::id()));
+    let _ = std::fs::remove_file(&log_path);
+
+    let source = std::fs::read_to_string(&game_path).expect("read ordering_test.cgdsl");
+    let game = parse_document(&source).expect("parse ordering_test.cgdsl");
+    let ir = game.to_lowered_graph();
+
+    let result = run_game_with(
+        ir,
+        GameData::new(),
+        InputSource::TestFile(input_path),
+        RunOptions::new()
+            .with_log_path(log_path.clone())
+            .with_game_name("ordering_test"),
+    );
+    assert!(result.is_ok(), "game should complete: {:?}", result.err());
+
+    let content = std::fs::read_to_string(&log_path).expect("read trace file");
+    let _ = std::fs::remove_file(&log_path);
+
+    assert!(
+        content.starts_with("=== MCG Trace Log ==="),
+        "header first line"
+    );
+    assert!(
+        content.contains(&format!(
+            "Version: {} (cgdsl-engine)",
+            env!("CARGO_PKG_VERSION")
+        )),
+        "header must carry the engine version"
+    );
+    assert!(
+        content.contains("Started: 20") && content.contains(" UTC"),
+        "header must carry an ISO timestamp, got: {content}"
+    );
+    assert!(
+        content.contains("Game: ordering_test"),
+        "header must carry the game name"
+    );
+    assert!(
+        content.contains("GameOver after ")
+            && content.contains("winners: ")
+            && content.ends_with(" ===\n"),
+        "footer must count steps and name the winner set: {content}"
+    );
+}
+
+/// A `Controller` whose `line_buffer` is pre-loaded (no file I/O).
+fn controller_with_lines(lines: Vec<&str>) -> Controller {
+    let default_ir = Ir::<LoweredPayLoad>::default();
+    let interpreter = Interpreter::new(
+        Ir {
+            states: std::collections::HashMap::new(),
+            entry: default_ir.entry,
+            goal: default_ir.goal,
+        },
+        GameData::new(),
+        None,
+    );
+    Controller {
+        interpreter,
+        input_source: InputSource::TestFile(PathBuf::from("/nonexistent")),
+        event_sender: None,
+        line_buffer: VecDeque::from(lines.into_iter().map(|s| s.to_string()).collect::<Vec<_>>()),
+        file_loaded: true,
+        input_sequence: 0,
+        step_count: Arc::new(std::sync::Mutex::new(0)),
+    }
+}
+
+/// A `TestFile` line and the error variant it must produce.
+type InvalidLineCase = (&'static str, fn(&EngineError) -> bool);
+
+/// Each malformed `TestFile` line must surface its typed error variant
+/// (part of the I-8 / §2 line-format contract).
+#[test]
+fn input_invalid_lines_error() {
+    let cases: Vec<InvalidLineCase> = vec![
+        ("p 0", |e| {
+            matches!(e, EngineError::InvalidTestInputPlayerZero { .. })
+        }),
+        ("c 0", |e| {
+            matches!(e, EngineError::InvalidTestInputCardZero { .. })
+        }),
+        ("0", |e| {
+            matches!(e, EngineError::InvalidTestInputChoiceZero { .. })
+        }),
+        ("p x", |e| {
+            matches!(e, EngineError::InvalidTestInputP { .. })
+        }),
+        ("c x", |e| {
+            matches!(e, EngineError::InvalidTestInputC { .. })
+        }),
+        ("n x", |e| {
+            matches!(e, EngineError::InvalidTestInputNumber { .. })
+        }),
+        ("P2:p 0", |e| {
+            matches!(e, EngineError::InvalidTestInputPlayerZero { .. })
+        }),
+    ];
+    for (line, check) in cases {
+        let mut controller = controller_with_lines(vec![line]);
+        let result = controller.read_test_file(&PathBuf::from("/nonexistent"));
+        let err = result.expect_err(&format!("line {line:?} must error"));
+        assert!(
+            check(&err),
+            "line {line:?} yielded the wrong variant: {err}"
+        );
+        assert_eq!(err.kind(), crate::error::ErrorKind::Input);
+    }
+}
+
+/// The `Player`-path validation table (I-8/I-23): out-of-range answers are
+/// rejected so `get_input` re-prompts, and player-id mismatches never pass.
+#[test]
+fn validate_player_input_enforces_the_turn_contract() {
+    let choice = InputType::Choice {
+        options: vec!["a".to_string()],
+        max_index: 0,
+    };
+    assert!(validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 0 }
+        },
+        &choice,
+        "P1"
+    ));
+    assert!(!validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::Choice { idx: 1 }
+        },
+        &choice,
+        "P1"
+    ));
+
+    let pick_player = InputType::ChoosePlayer {
+        candidates: vec!["P1".to_string(), "P2".to_string()],
+        prompt: "pick".to_string(),
+    };
+    assert!(validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::ChoosePlayer { idx: 1 }
+        },
+        &pick_player,
+        "P1"
+    ));
+    assert!(!validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::ChoosePlayer { idx: 2 }
+        },
+        &pick_player,
+        "P1"
+    ));
+
+    let pick_cards = InputType::ChooseCards {
+        display: vec![std::collections::HashMap::new(); 2],
+        min: 1,
+        max: 2,
+        prompt: "pick".to_string(),
+    };
+    assert!(validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::ChooseCards {
+                selected: vec![0, 1]
+            }
+        },
+        &pick_cards,
+        "P1"
+    ));
+    assert!(!validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::ChooseCards { selected: vec![2] }
+        },
+        &pick_cards,
+        "P1"
+    ));
+    assert!(!validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::ChooseCards { selected: vec![] }
+        },
+        &pick_cards,
+        "P1"
+    ));
+
+    let number = InputType::Number {
+        min: Some(1),
+        max: Some(10),
+        prompt: "how many?".to_string(),
+    };
+    assert!(validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::Number { value: 5 }
+        },
+        &number,
+        "P1"
+    ));
+    assert!(!validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::Number { value: 0 }
+        },
+        &number,
+        "P1"
+    ));
+    assert!(!validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::Number { value: 11 }
+        },
+        &number,
+        "P1"
+    ));
+
+    // I-23: only the current player's answers pass; pre-setup (no current
+    // player, empty name) accepts anything.
+    assert!(!validate_player_input(
+        &Input {
+            player_id: "P2".into(),
+            kind: InputKind::Choice { idx: 0 }
+        },
+        &choice,
+        "P1"
+    ));
+    assert!(validate_player_input(
+        &Input {
+            player_id: "P2".into(),
+            kind: InputKind::Choice { idx: 0 }
+        },
+        &choice,
+        ""
+    ));
+
+    // Unmatched pairs fall through (the catch-all accepts).
+    assert!(validate_player_input(
+        &Input {
+            player_id: "P1".into(),
+            kind: InputKind::OptionalAccept
+        },
+        &choice,
+        "P1"
+    ));
+}

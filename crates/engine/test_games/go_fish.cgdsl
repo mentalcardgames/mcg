@@ -1,0 +1,164 @@
+// Go Fish — 3 players, ask any player for a rank you hold, lay down books
+// (sets of four).
+//
+// Rules:
+//   - 52-card deck; each player is dealt 7 cards.
+//   - On your turn, ask **any player** for one rank **that you hold**: if
+//     they hold any cards of that rank, they must hand them all over;
+//     otherwise you draw one card from the deck (go fish). Ranks you do not
+//     hold are not offered (standard rule).
+//   - After the ask, you may lay down a book: four cards of the same rank.
+//     The engine validates the chosen set against the `Book` combo (submit
+//     0 cards to skip). Books land on your Books pile and score 4 points.
+//   - The game ends when the deck runs out or a player empties their hand
+//     (or after 24 turns); the most books wins.
+//
+// Engine notes (how the new capabilities are used):
+//   - The ask is a 13-way `choose` (one option per rank — the DSL has no
+//     "choose a value" expression yet); each option is guarded by
+//     `"<Rank>" in Hand of current` so unheld ranks are no-ops. The chosen
+//     rank is stored in the `AskRank` string memory (with an `AskFlag`
+//     marker) instead of duplicating the ask logic 13 times; the transfer
+//     and draw logic below runs once, reading `(&S:AskRank of current)`.
+//   - The transfer uses `deal Hand where Rank is (&S:AskRank of current)
+//     of any …` — a memory read in a where-filter plus the `SourcePlayerAny`
+//     quantifier (2026-08-10) prompts a `ChoosePlayer` and substitutes the
+//     choice, so you ask *any* player.
+//   - Draw-on-miss uses a scratch-pile pattern: the transfer moves the
+//     target's cards to the `Scratch` pile (empty set = no-op on a miss).
+//     The draw check runs **before** the take: `if (Scratch empty)` draws
+//     while the pile still reflects the ask result, then the take moves the
+//     cards on a hit. (Inverting this order re-introduces draw-on-hit — the
+//     take empties the pile, so a later `Scratch empty` check always fires.)
+//   - Picking an unheld rank leaves `AskFlag` at 0, so the shared block is
+//     skipped and the turn is wasted — the standard rule is preserved.
+//   - Laying down uses the combo-source move (`ComboSource`): the player
+//     picks cards from the whole hand and the engine validates them against
+//     the combo filter, re-prompting on mismatch. `same Rank` matches any
+//     duplicated rank, so a 2+2 split also passes the filter — a documented
+//     simplification of the combo semantics (engine-vs-design.md D-16).
+//   - Scoring is by books (4 points per book) instead of hand size.
+//
+// Remaining deviations (engine-gated, not authoring):
+//   - The player prompt includes yourself — asking yourself wastes the turn
+//     (the "any" candidates are all in-game players).
+//   - A successful ask does not grant another ask — the engine has no
+//     conditional re-ask loop inside a turn.
+//   - The `Scratch` pile is a visible table location (a scratch pile is the
+//     only way to reference a prompted player's cards in a condition).
+
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Books on all
+location Deck on table
+location Scratch on table
+memory AskRank on all
+memory AskFlag on all
+
+combo Book where (same Rank and size >= 4)
+
+card on Deck:
+  Rank(Ace, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King)
+    for Suit(Diamonds, Clubs, Hearts, Spades)
+
+shuffle Deck
+
+stage Deal for current 1 times {
+  deal 7 from Deck private to Hand of all
+}
+
+stage Ask for current until (Deck empty or Hand of current empty) or 24 times {
+  reset AskRank
+  reset AskFlag
+  choose {
+    if ("Ace" in Hand of current) {
+      AskRank is "Ace"
+      AskFlag is 1
+    }
+    or
+    if ("Two" in Hand of current) {
+      AskRank is "Two"
+      AskFlag is 1
+    }
+    or
+    if ("Three" in Hand of current) {
+      AskRank is "Three"
+      AskFlag is 1
+    }
+    or
+    if ("Four" in Hand of current) {
+      AskRank is "Four"
+      AskFlag is 1
+    }
+    or
+    if ("Five" in Hand of current) {
+      AskRank is "Five"
+      AskFlag is 1
+    }
+    or
+    if ("Six" in Hand of current) {
+      AskRank is "Six"
+      AskFlag is 1
+    }
+    or
+    if ("Seven" in Hand of current) {
+      AskRank is "Seven"
+      AskFlag is 1
+    }
+    or
+    if ("Eight" in Hand of current) {
+      AskRank is "Eight"
+      AskFlag is 1
+    }
+    or
+    if ("Nine" in Hand of current) {
+      AskRank is "Nine"
+      AskFlag is 1
+    }
+    or
+    if ("Ten" in Hand of current) {
+      AskRank is "Ten"
+      AskFlag is 1
+    }
+    or
+    if ("Jack" in Hand of current) {
+      AskRank is "Jack"
+      AskFlag is 1
+    }
+    or
+    if ("Queen" in Hand of current) {
+      AskRank is "Queen"
+      AskFlag is 1
+    }
+    or
+    if ("King" in Hand of current) {
+      AskRank is "King"
+      AskFlag is 1
+    }
+  }
+  if ((&I:AskFlag of current) == 1) {
+    deal Hand where Rank is (&S:AskRank of current) of any private to Scratch
+    if (Scratch empty) {
+      deal 1 from Deck private to Hand of current
+    }
+    if (not Scratch empty) {
+      deal Scratch private to Hand of current
+    }
+  }
+  if (not Book in Hand of current empty) {
+    optional {
+      move Book in Hand of current private to Books
+    }
+  }
+  cycle to next
+}
+
+stage Score for current 3 times {
+  score size(cards Books of current) to current
+  cycle to next
+}
+
+stage End for current 1 times {
+  winner is highest score
+}

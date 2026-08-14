@@ -1,0 +1,315 @@
+---
+type: agent_wiki_node
+module: crates::engine
+scope: [engine::debug, engine::controller, engine::interpreter, engine::action]
+topics: [observability, telemetry, debugging, events, trace, diagnostics]
+associated_files:
+  - crates/engine/src/debug/mod.rs
+  - crates/engine/src/debug/low.rs
+  - crates/engine/src/debug/medium.rs
+  - crates/engine/src/debug/high.rs
+  - crates/engine/src/debug/save.rs
+  - crates/engine/src/controller/mod.rs
+  - crates/engine/src/controller/trace_logger.rs
+  - crates/engine/src/interpreter/trace.rs
+  - crates/engine/src/action.rs
+last_validated: 2026-08-13
+---
+
+# Observability & Diagnostics
+
+The engine has **no hard `tracing`/`log` dependency** — `tracing` is an *optional* dependency
+behind the `tracing` cargo feature (§2.4); without the feature there are zero imports of either
+crate in `crates/engine/src`. Telemetry is provided by four mechanisms plus an optional bridge:
+
+1. A reactive `event_sender` callback (per-loop-iteration `&GameData` snapshot) — §1.
+2. A per-FSM-transition `trace_sender` callback emitting `TraceEntry` values — §2.
+3. The `MCG_TRACE_LOG` trace file produced by `TraceLogger` (opt-in — see §3).
+4. The structured `crates::engine::debug` formatter/dumps (`DebugLevel` Low/Medium/High) — §4.
+5. An optional `tracing` bridge (`features = ["tracing"]`) that forwards `TraceEntry`s as
+   structured `tracing` events — §2.4.
+
+plus a single ad-hoc `eprintln!` (§5). For the error channels themselves, see
+[`error-handling.md`](./error-handling.md).
+
+---
+
+## 1. Reactive Event Callback (`event_sender`)
+
+```rust
+// crates/engine/src/controller/mod.rs:100
+event_sender: Option<Box<dyn Fn(&GameData) + Send>>,
+```
+
+`crates::engine::controller::run_game` accepts it as its 4th argument
+(`crates/engine/src/controller/mod.rs:96-104`). It is invoked by
+`crates::engine::controller::Controller::emit_event`
+(`crates/engine/src/controller/mod.rs:427-431`) at the **top of every loop iteration**
+(`mod.rs:270`) *and* once more just before returning `GameOver` (`mod.rs:281`). The callback
+receives `&GameData`, so a host can render or snapshot after every single transition without
+polling. This is the recommended coarse-grained observability seam for production hosts that want
+per-loop state snapshots — note this is per-loop-iteration, *not* per-FSM-transition; the
+fine-grained per-transition seam is the `trace_sender` of §2.
+
+> The callback receives a shared `&GameData` — it must not mutate through it. Hosts that need a
+> snapshot must `clone()`. The bound is `Fn(&GameData) + Send` but **not** `Sync` — see
+> [`interfaces.md`](./interfaces.md) §6.2 for multi-thread host implications.
+
+---
+
+## 2. Per-Transition Trace Sender (`trace_sender`)
+
+```rust
+// crates/engine/src/controller/mod.rs:101
+trace_sender: Option<Box<dyn Fn(TraceEntry) + Send>>,
+```
+
+`run_game`'s **5th** argument. Unlike `event_sender` (which is per-loop-iteration and gets the
+`&GameData`), `trace_sender` is invoked **once per FSM transition** (i.e. once per `step()` that
+returns `Ok`/`NeedsInput`/`GameOver`) with a `crates::engine::interpreter::TraceEntry`. It is the
+recommended **structured logging seam**: a host that wants per-edge detail (action subtype, choice
+index, condition results, quantifier branch taken) implements one closure and gets every transition
+without instrumenting the interpreter's interior.
+
+### 2.1 `TraceEntry`
+
+```rust
+// crates/engine/src/interpreter/trace.rs:14-21
+pub enum TraceEntry {
+    Step { from: u32, to: u32, event: TraceEvent },
+}
+```
+
+`from`/`to` are **raw** `StateID` integers (via `StateID::raw()`), so they include the synthetic
+ids the quantifier subsystem allocates above the real ones (seeded at `max(real id) + 1`, see
+invariant I-16 in [`invariants.md`](./invariants.md)).
+
+### 2.2 `TraceEvent`
+
+The events carry **typed payloads** — the actual AST nodes — not pre-rendered
+strings. Hosts inspect `rule`/`expr` directly; the text views are derived at render time
+(§2.3).
+
+```rust
+// crates/engine/src/interpreter/trace.rs:23-62
+pub enum TraceEvent {
+    Action { rule: GameRule },
+    Choice { chosen_idx: usize, options: Vec<String> },
+    OptionalAccept,
+    OptionalDecline,
+    Condition { expr: BoolExpr, result: bool, negated: bool, took_else: bool },
+    EndCondition { expr: EndCondition, result: bool, stage: String, exited: bool },
+    StageRoundCounter { stage: String, new_count: u32 },
+    EndStage { stage: String },
+    Trigger,
+    /// The current player is out of the game / out of the current stage:
+    /// the instruction edge was advanced through without executing
+    /// (ineligible-player skip, I-24).
+    Skipped { player: String, stage: String },
+    /// The FSM reached the goal: the game is over. `winners` is the winner
+    /// set — every player still `in_game` (`GameData::winner_names`), empty
+    /// when nobody won. Emitted once, on the transition into
+    /// `StepResult::GameOver`.
+    GameOver { winners: Vec<String> },
+    Quantifier { kind: String, detail: String },
+}
+```
+
+`Action.rule` / `Condition.expr` / `EndCondition.expr` are the full `front_end::ast` nodes being
+executed/evaluated. The `Choice.options`, `Optional` prompt, `Quantifier.kind/detail`, stage names
+and counts are the only string fields — they have no structured equivalent.
+
+Each variant is emitted by exactly one arm of `Interpreter::step`
+(`crates/engine/src/interpreter/mod.rs`) or by the quantifier driver
+(`crates/engine/src/interpreter/quant_driver.rs`):
+- `Action` — `Payload::Action` arm and the overlay-dispatch branch; the `GameRule` is cloned from
+  the edge being dispatched.
+- `Choice` — `Payload::Choice` arm.
+- `OptionalAccept`/`OptionalDecline` — `Payload::Optional` arm.
+- `Condition` — `Payload::Condition` arm.
+- `EndCondition` — `Payload::EndCondition` arm.
+- `StageRoundCounter` — `Payload::StageRoundCounter` arm.
+- `EndStage` — `Payload::EndStage` arm.
+- `Trigger` — `Payload::Trigger` arm.
+- `Skipped` — the (S) ineligible-player skip check (I-24).
+- `GameOver` — the transition into `StepResult::GameOver` (I-25).
+- `Quantifier` — the quantifier initial-prompt, resume, and fan-out arms in `quant_driver.rs`.
+
+### 2.3 Text views (derived, not stored)
+
+- `TraceEntry` and `TraceEvent` implement `std::fmt::Display` — `TraceEntry` formats as
+  `[{from}->{to}] {event}`, so a one-line trace readout is `format!("{}", entry)`. This is what the
+  file logger (§3) writes per step.
+- `TraceEvent::pretty()` — the simplified DSL text (identical to `Display`).
+- `TraceEvent::raw()` — the `Debug` view: `Action` renders `<subtype> <Debug of rule>` (e.g.
+  `Action:Move Move { move_type: ... }`), `Condition`/`EndCondition` render `{:?}` of the
+  expression. The TUI toggles pretty/raw with `r`.
+- `TraceEvent::summary()` — a compact **structured** one-liner derived from the payload
+  (e.g. `move 1 Deck -> Hand of P:P1 (Private)`, `set score := 10`, `cycle to next`); falls back
+  to `pretty()` for events without a structured form. Useful for hosts that want the semantic
+  content without matching the AST themselves.
+
+### 2.4 `tracing` integration (feature: `tracing`)
+
+With the `tracing` cargo feature enabled (`cgdsl-engine = { features = ["tracing"] }`),
+`cgdsl_engine::tracing_trace_sender()` returns a `trace_sender`-compatible closure that forwards
+every `TraceEntry` to the `tracing` crate as a structured event on the `cgdsl_engine::trace`
+target at `TRACE` level:
+
+```rust
+let options = RunOptions::new().with_trace_sender(tracing_trace_sender());
+// filter with RUST_LOG=cgdsl_engine::trace=trace (or your subscriber's filter)
+```
+
+Each event carries structured fields: `from`/`to` (raw `StateID`s), `pretty` (the DSL one-liner),
+`summary` (`TraceEvent::summary()`), and `raw` (`TraceEvent::raw()`). The feature adds no runtime
+cost when disabled (the module is `#[cfg]`-gated and `tracing` is an optional dependency).
+
+---
+
+## 3. The Trace File: `MCG_TRACE_LOG` / `with_log_path`
+
+`crates::engine::controller::run_game_with` resolves a log path at startup via the private
+`trace_logger::resolve_log_path` (`crates/engine/src/controller/trace_logger.rs`). Precedence:
+
+```text
+RunOptions::with_log_path(p)  → p (wins over everything)
+MCG_TRACE_LOG env var:
+  "" / "off" / "none" (case-insensitive) → disabled
+  any other string                      → used verbatim as the path
+neither set                           → disabled (no file is ever created
+                                         in the working directory by default)
+```
+
+The `cgdsl-play` binary exposes this as `cgdsl-play --log <path>` (its trace header is also
+tagged with the game-file name); interactive users can just set `MCG_TRACE_LOG=path`.
+
+If a path was resolved and `TraceLogger::open` succeeds, `run_game_with` writes the following
+structured lines:
+
+- **Header** (written before the run loop):
+  ```
+  === MCG Trace Log ===
+  Version: <CARGO_PKG_VERSION> (cgdsl-engine)
+  Started: <YYYY-MM-DD HH:MM:SS UTC>
+  Game: <game_name>            ← only when RunOptions::with_game_name was set
+  Entry: <{:?} of ir.entry.raw()>
+  Goal: <{:?} of ir.goal.raw()>
+  Input source: <"interactive" or the test file path>
+  ====================
+  ```
+  The timestamp is UTC and dependency-free (`trace_logger.rs::format_timestamp`, Hinnant's
+  `civil_from_days`); the version line is `env!("CARGO_PKG_VERSION")`.
+- **Per-step lines** (one per `TraceEntry`):
+  ```
+  [Step NNN] <TraceEntry Display>
+  ```
+  where `NNN` is the controller's `step_count` (loop iterations), shared with the composed
+  sender closure.
+- **Footer**:
+  - `=== GameOver after N steps — winners: <names> ===` on success, where
+    `<names>` is the winner set (`GameData::winner_names()` — every player
+    still in game, in declaration order; `none` when nobody won), or
+    `=== Error: <e> (after N steps) ===` on `Err` — `N` is the total
+    loop-iteration count.
+- **Panic line**: `=== Panic: <msg> (after N steps) ===` written before the panic is converted
+  (`capture_panics(true)`) or re-raised; see §3.2 and [`error-handling.md`](./error-handling.md) §2.
+
+`TraceLogger` itself stores `Arc<Mutex<BufWriter<File>>>` (`trace_logger.rs:10`) so both the
+composed sender closure (handed to `Interpreter`) and the post-run footer writes go through one
+writer; it is `Clone` (cheap `Arc` clone).
+
+### 3.1 Caller `trace_sender` + file logger composition
+
+When the caller also passes a `trace_sender` (`run_game`'s 5th arg), `run_game` does **not** make
+the caller's closure and the file logger race for the same `TraceEntry`. Instead it composes them
+into a single `Box<dyn Fn(TraceEntry) + Send>` (`crates/engine/src/controller/mod.rs:170-183`) that
+first logs to the file (if open) and then forwards to the caller's closure (if present). The
+interpreter only sees the composed sender; it does not know whether one or both backends exist.
+Hosts therefore do **not** need to duplicate the file logging themselves — passing a `trace_sender`
+for live structured observation plus letting `MCG_TRACE_LOG` write the file is a fully supported
+combination.
+
+### 3.2 Panic capture
+
+Panic capture is governed by two conditions (`crates/engine/src/controller/mod.rs`):
+
+- **`RunOptions::capture_panics(true)`** — the run is always wrapped in
+  `std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| controller.run()))`. On panic, the
+  message is logged as `=== Panic: <msg> ===` to the trace file if one is open, and the panic is
+  **converted** to `Err(EngineError::InternalPanic { message })` — the host process does not
+  abort. This is the recommended setting for embedded hosts (Mode B, servers, the TUI).
+- **Legacy default (`capture_panics(false)`)** — the run is wrapped *only* when a trace log is
+  open, purely to log the panic before `std::panic::resume_unwind(payload)` re-panics in the
+  caller's thread. Net effect: **the panic surfaces to the caller AFTER being logged**. Without a
+  trace log, `run_game` calls `controller.run()` directly with no `catch_unwind`; the panic
+  propagates exactly as before.
+
+---
+
+## 4. `crates::engine::debug` — Structured Human-Readable Dumps
+
+Three verbosity levels selectable via `crates::engine::debug::DebugLevel`
+(`crates/engine/src/debug/mod.rs:13-37`):
+
+```rust
+pub enum DebugLevel { Low, Medium, High }
+impl DebugLevel {
+    pub fn from_marker(s: &str) -> Option<Self>;   // parses "<!--LOW-->" etc., case-insensitive
+    pub fn marker(&self) -> &'static str;          // inverse
+}
+pub fn format_game_data(data: &GameData, level: DebugLevel) -> String;   // mod.rs:38-44
+pub fn format_game_data(data: &GameData, level: DebugLevel) -> String;   // mod.rs:38-44
+pub fn save_game_data(data: &GameData, path: &Path) -> io::Result<()>;   // save.rs:8-24
+```
+
+The level-specific formatters live in dedicated submodules:
+
+| Level | Implementation | Includes |
+|---|---|---|
+| `crates::engine::debug::DebugLevel::Low` | `crates/engine/src/debug/low.rs` (`format_game_data_low`) | Player names, current player, current stage, turn-order indices, card count per location. |
+| `crates::engine::debug::DebugLevel::Medium` | `crates/engine/src/debug/medium.rs` (`format_game_data_medium`) | All of Low + per-player scores, teams, all memories, per-location card names (first 5 if >5). |
+| `crates::engine::debug::DebugLevel::High` | `crates/engine/src/debug/high.rs` (`format_game_data_high`) | Full dump: every player with `in_stage` map, teams with raw indices, all locations with raw card-id vecs, every card's full attribute map, stage stack, all stage counters, all memories (typed), combos, precedences, point maps. |
+
+`crates::engine::debug::save_game_data` (`crates/engine/src/debug/save.rs:8-24`) **appends** to
+`path` (creating it if absent) and **persists the `DebugLevel`** as an HTML comment marker on the
+file's first line: on subsequent calls it reads the existing first line via
+`crates::engine::debug::DebugLevel::from_marker` and reuses that level (defaulting to `Medium` if
+absent/unparseable). This round-trip (`DebugLevel::marker` ↔ `DebugLevel::from_marker`) is tested
+in `crates/engine/src/debug/tests.rs` (`from_marker` cases at lines 8-37, marker round-trip at
+41-45) — lets a log file self-describe its verbosity.
+
+---
+
+## 5. Ad-hoc stderr
+
+There are **no** `eprintln!`/`println!`/`dbg!` calls left in the production library: the former
+`eprintln!("ShuffleAction failed: {}", e)` was converted to a recoverable `Err`
+(see `engine-vs-design.md`). The `println!`s in `crates/engine/src/bin/cgdsl-play.rs` are
+CLI output, not engine telemetry. One `eprintln!` remains in the `run_game` startup path: when
+`MCG_TRACE_LOG` resolves to a path but `TraceLogger::open` fails
+(`crates/engine/src/controller/mod.rs:139-146`), a `Warning: failed to open trace log ...` message
+goes to stderr and the run continues without file logging — this is intentional grace, not a
+panic.
+
+---
+
+## 6. Agent Guidance for Adding Telemetry
+
+Two seams are now sanctioned:
+
+1. **`event_sender`** (per loop iteration, with `&GameData`) — coarse-grained; use for rendering or
+   taking state snapshots after every transition.
+2. **`trace_sender`** (per FSM transition, with `TraceEntry`) — fine-grained and structured; the
+   recommended seam for adding new telemetry. Adding a new `TraceEvent` variant is a one-edit
+   change to `crates/engine/src/interpreter/trace.rs` plus emission at the relevant branch of
+   `Interpreter::step` (or `quant_driver.rs`).
+
+Prefer extending the `crates::engine::debug` level-gated formatter or hooking one of these two
+seams rather than sprinkling `println!`/`eprintln!` through
+`crates/engine/src/action.rs`/`crates/engine/src/query/`/`crates/engine/src/interpreter/`. If true
+structured logging is desired, `tracing` would need to be added to `crates/engine/Cargo.toml` (it
+is not currently a dependency) and spans established around
+`crates::engine::interpreter::Interpreter::step` /
+`crates::engine::action::execute` /
+`crates::engine::query::Evaluator::eval_*`; do not assume spans already exist.

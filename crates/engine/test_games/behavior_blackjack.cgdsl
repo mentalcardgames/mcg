@@ -1,0 +1,62 @@
+// Behavioral fixture — Blackjack dealing, dealer draw, scoring, winner
+// (deterministic: no shuffle). Deck (9 cards, creation order):
+//   P1 = [Ten, Ace] = 21, P2 = [Ten, Two] = 12, P3 = [Seven, Eight] = 15,
+//   dealer = [Six], then draws Five (11) and Seven (18) and stops.
+// Everyone stands. P1 (21) beats the dealer (18) and wins; P2/P3 do not
+// beat the dealer and are eliminated by the winner rule.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location DealerHand on table
+location Deck on table
+
+card on Deck:
+  Rank(Ten, Ace, Ten, Two, Seven, Eight, Six, Five, Seven)
+    for Suit(Diamonds)
+
+points BJ on Rank(
+  Ace: 11, Two: 2, Five: 5, Six: 6, Seven: 7, Eight: 8, Ten: 10
+)
+
+stage Deal for current 1 times {
+  deal 2 from Deck private to Hand of P:P1
+  deal 2 from Deck private to Hand of P:P2
+  deal 2 from Deck private to Hand of P:P3
+  deal 1 from Deck private to DealerHand
+}
+
+stage Play for current 12 times {
+  if (not current out of game) {
+    optional {
+      deal 1 from Deck private to Hand of current
+      if (sum of Hand of current using BJ > 21) {
+        set current out of game
+      }
+    }
+  }
+  if (size(playersin) >= 2) {
+    cycle to next
+  }
+}
+
+stage Dealer for current 10 times {
+  if (sum of DealerHand using BJ < 17) {
+    deal 1 from Deck private to DealerHand
+  }
+}
+
+stage Score for current 1 times {
+  if (sum of Hand of P:P1 using BJ > sum of DealerHand using BJ) {
+    score sum of Hand of P:P1 using BJ to P:P1
+  }
+  if (sum of Hand of P:P2 using BJ > sum of DealerHand using BJ) {
+    score sum of Hand of P:P2 using BJ to P:P2
+  }
+  if (sum of Hand of P:P3 using BJ > sum of DealerHand using BJ) {
+    score sum of Hand of P:P3 using BJ to P:P3
+  }
+}
+
+stage End for current 1 times {
+  winner is highest score
+}

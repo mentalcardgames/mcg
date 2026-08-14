@@ -1,0 +1,70 @@
+// Five-Card Draw ("draw-1" poker) — 3 players.
+//
+// Rules:
+//   - 52-card deck; each player is dealt 5 cards.
+//   - Each turn: discard **exactly one** card (pick it) and draw one
+//     replacement, so hands stay at 5. Up to three rounds of draw.
+//   - Hand value is scored as the sum of card points, plus a pair bonus
+//     (+10) and a flush bonus (+20) — a deliberate simplification of
+//     real poker hand ranking (straights, full houses, ... are not
+//     detectable in the DSL).
+//   - The highest score wins.
+//
+// Remaining deviations (engine-gated, not authoring):
+//   - No betting/antes — the DSL has no numeric input prompt.
+//   - The discard count is fixed at exactly one (a "jackpot"-style draw-1);
+//     discarding N and drawing N would need the discarded count as a value.
+//
+// Engine notes:
+//   - Dealing to `Hand of all` fans out to one deal per player.
+//   - Discarding uses `move 1 from Hand of current …`, which prompts the
+//     player to pick exactly one card (2026-08-10 verb semantics).
+//   - `same Rank` / `same Suit` filters are used for the bonuses.
+
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Deck on table
+location Discard on table
+
+card on Deck:
+  Rank(Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace)
+    for Suit(Diamonds, Clubs, Hearts, Spades)
+
+points RankValue on Rank(
+  Two: 2, Three: 3, Four: 4, Five: 5, Six: 6, Seven: 7,
+  Eight: 8, Nine: 9, Ten: 10, Jack: 11, Queen: 12, King: 13, Ace: 14
+)
+
+shuffle Deck
+
+stage Deal for current 1 times {
+  deal 5 from Deck private to Hand of all
+}
+
+// Up to 3 full rounds: discard exactly one card (the player picks it),
+// draw one replacement.
+stage Draw for current 9 times {
+  if (not Hand of current empty) {
+    optional {
+      move 1 from Hand of current private to Discard
+      deal 1 from Deck private to Hand of current
+    }
+  }
+  cycle to next
+}
+
+stage Score for current 3 times {
+  score sum of Hand of current using RankValue to current
+  if (size(cards Hand where same Rank of current) > 1) {
+    score 10 to current
+  }
+  if (size(cards Hand where same Suit of current) == 5) {
+    score 20 to current
+  }
+  cycle to next
+}
+
+stage End for current 1 times {
+  winner is highest score
+}

@@ -1,0 +1,23 @@
+// Skip mode (2026-08-10): eliminated players are never offered prompts and
+// their remaining instructions are skipped (only `cycle to next` still
+// runs). The `score 1 to P:P1` line sits *between* the elimination and the
+// cycle, so it is skipped once the current player is out — P1 never scores.
+// When no players remain in the game, the stage auto-ends with an empty
+// winner set. The optional is therefore offered exactly twice — P1 and P2 —
+// never to an out-of-game player, and the 10-iteration cap is never reached.
+player P1, P2
+turnorder (P:P1, P:P2)
+location Hand on all
+location Deck on table
+
+card on Deck:
+  Rank(Ace, Two)
+
+stage Play for current 10 times {
+  optional {
+    deal 1 from Deck private to Hand of current
+    set current out of game
+  }
+  score 1 to P:P1
+  cycle to next
+}

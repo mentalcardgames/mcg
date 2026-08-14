@@ -1,0 +1,12 @@
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+location Hand on all
+location Stock on table
+
+card on Stock:
+  Rank(Ace, Two, Three, Four, Five, Six)
+    for Suite(Hearts)
+
+stage Setup for current 1 times {
+  deal 1 from top(Stock) private to Hand of all
+}

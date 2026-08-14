@@ -1,0 +1,22 @@
+// Regression (I-13, F-24): a player who is marked out of the GAME but not
+// out of the current stage must never be reached by cycle actions
+// (`cycle to next` / `cycle to previous`) or the `next`/`previous` player
+// expressions. P2 is eliminated mid-stage A; P2 stays in_stage for A/B/C
+// (stage entry marks everyone), so every cycle in B and C must skip P2.
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+memory WhoNext on table
+
+stage A for current 1 times {
+  set P:P2 out of game
+  WhoNext is next
+  end stage
+}
+
+stage B for current 2 times {
+  cycle to next
+}
+
+stage C for current 2 times {
+  cycle to previous
+}

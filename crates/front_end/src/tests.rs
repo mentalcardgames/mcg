@@ -357,6 +357,61 @@ proptest! {
 }
 
 #[test]
+fn choice_rule_splits_options_on_or() {
+    // Regression (2026-08): `choose` branches must split on `or` — each
+    // branch is a *sequence* of flow components. Previously the parser
+    // flattened every component into its own option, so
+    // `choose { A B or C D }` produced 4 single-component options instead of
+    // two options of [A, B] and [C, D].
+    let dsl = "choose {\n  deal 1 from Deck private to Hand of P:P1\n  if (size(cards Deck) == 0) {\n    deal 1 from Deck private to Hand of P:P2\n  }\n  or\n  deal 2 from Deck private to Hand of P:P3\n}";
+    let choice = test_rule_consume(dsl, Rule::choice_rule, CGDSLParser::choice_rule)
+        .expect("choice_rule must parse");
+    let options = &choice.node.options;
+    assert_eq!(options.len(), 2, "two or-separated options");
+    assert_eq!(options[0].len(), 2, "first option holds two components");
+    assert_eq!(options[1].len(), 1, "second option holds one component");
+}
+
+#[test]
+fn choice_rule_single_option_no_or() {
+    // A choose block without any `or` is a single multi-component option.
+    let dsl = "choose {\n  deal 1 from Deck private to Hand of P:P1\n  deal 2 from Deck private to Hand of P:P2\n}";
+    let choice = test_rule_consume(dsl, Rule::choice_rule, CGDSLParser::choice_rule)
+        .expect("choice_rule must parse");
+    let options = &choice.node.options;
+    assert_eq!(options.len(), 1, "no or -> exactly one option");
+    assert_eq!(options[0].len(), 2, "both components in that option");
+}
+
+#[test]
+fn not_combo_empty_parses_as_boolean_negation() {
+    // Regression (2026-08): `not Book in Hand of current empty` must mean
+    // "not (the Book cards are empty)", i.e. a unary Not over card_set_empty
+    // — previously the `not` bound to the combo (NotCombo) because
+    // card_set_empty was tried before bool_expr_unary, and the condition
+    // "the non-Book cards are empty" was almost never true.
+    let dsl = "not Book in Hand of current empty";
+    let parsed = test_rule_consume(dsl, Rule::bool_expr, CGDSLParser::bool_expr)
+        .expect("bool_expr must parse");
+    let debug = format!("{:?}", parsed.node);
+    assert!(debug.contains("Unary"), "`not` must bind to the boolean: {debug}");
+    assert!(!debug.contains("NotCombo"), "must not bind to the combo: {debug}");
+    assert!(debug.contains("CardSetEmpty"), "inner bool must be the empty check: {debug}");
+}
+
+#[test]
+fn combo_not_empty_parses_as_card_set_not_empty() {
+    // The positive spelling `Book in Hand of current not empty` stays a
+    // card_set_not_empty (no leading `not` to bind).
+    let dsl = "Book in Hand of current not empty";
+    let parsed = test_rule_consume(dsl, Rule::bool_expr, CGDSLParser::bool_expr)
+        .expect("bool_expr must parse");
+    let debug = format!("{:?}", parsed.node);
+    assert!(debug.contains("CardSetNotEmpty"), "expected CardSetNotEmpty: {debug}");
+    assert!(!debug.contains("NotCombo"), "no stray NotCombo: {debug}");
+}
+
+#[test]
 fn test_reparse_game() {
     parse_ast_parse(
     "

@@ -1,0 +1,17 @@
+// Verb semantics (2026-08-10): a *positional* source is automatic for any
+// verb and quantity — `move 1 from top(Stock)` and `move 1 from Stock[0]`
+// never prompt (the position already chose the card).
+player P1
+turnorder (P:P1)
+location Stock on table
+location Hand on all
+location Discard on table
+
+card on Stock:
+  Rank(Ace, Two, Three) for Suit(Hearts)
+
+stage Play for current 1 times {
+  move 1 from top(Stock) private to Hand
+  move 1 from Stock[0] private to Discard
+  end stage
+}

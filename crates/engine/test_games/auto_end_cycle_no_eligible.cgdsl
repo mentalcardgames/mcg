@@ -1,0 +1,14 @@
+// Repro (updated 2026-08-10): cycle to next with no eligible player at all
+// is a no-op (I-13 relaxed), and the stage auto-ends when no players remain
+// in the game - the game completes with an empty winner set instead of
+// erroring. Note the ordering: the current player (P1) must eliminate the
+// others before eliminating themselves, because an out-of-game player's
+// instructions are skipped.
+player P1, P2
+turnorder (P:P1, P:P2)
+
+stage Play for current 1 times {
+  set P:P2 out of game
+  set P:P1 out of game
+  cycle to next
+}

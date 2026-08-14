@@ -160,13 +160,31 @@ impl CGDSLParser {
 
     pub(crate) fn choice_rule(input: Node) -> Result<SChoiceRule> {
         let span = OwnedSpan::from(input.as_span());
-        let node = match_nodes!(input.into_children();
-            [kw_choose(_), flow_component(f)..] => ChoiceRule {
-                options: f.collect(), // Collects the trailing flow_components into a Vec
+        // Split on the `or` keyword: every flow_component between two `or`s
+        // belongs to one option, and each option is a *sequence* of
+        // components executed in order (e.g. `choose { deal X; if Y {} or
+        // deal Z }` yields two options of two and one components).
+        let mut options: Vec<Vec<SFlowComponent>> = Vec::new();
+        let mut current: Vec<SFlowComponent> = Vec::new();
+        for child in input.into_children() {
+            match child.as_rule() {
+                Rule::flow_component => current.push(CGDSLParser::flow_component(child)?),
+                Rule::kw_or => {
+                    if !current.is_empty() {
+                        options.push(std::mem::take(&mut current));
+                    }
+                }
+                _ => {}
             }
-        );
+        }
+        if !current.is_empty() {
+            options.push(current);
+        }
 
-        Ok(SChoiceRule { node: node, span })
+        Ok(SChoiceRule {
+            node: ChoiceRule { options },
+            span,
+        })
     }
 
     pub(crate) fn kw_trigger(input: Node) -> Result<()> {

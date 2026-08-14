@@ -1,0 +1,7 @@
+// creates a point mapping from card values to integer scores
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+points Values on Rank(Ace: 1, Two: 2, Three: 3)
+stage Play for current 1 times {
+    end stage
+}

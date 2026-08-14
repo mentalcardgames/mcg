@@ -1,0 +1,19 @@
+// Repro: `combo Pair where same Rank` must match only the paired cards
+// (fixed 2026-08, D-5). Before the fix the per-card matcher compared each
+// card against itself, so every card with a Rank matched (score 3); the
+// group-wise evaluation yields exactly the pair (score 2).
+// Note: the read-side syntax is `<comboName> in <groupable>`.
+player P1
+turnorder (P:P1)
+location Hand on P:P1
+location Deck on table
+
+combo Pair where same Rank
+
+card on Deck: Rank(Ace, Ace, Two) for Suit(Diamonds)
+
+stage Play for current 1 times {
+  deal 3 from Deck private to Hand
+  score size(cards Pair in Hand) to P:P1
+  end stage
+}

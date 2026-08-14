@@ -1,0 +1,10 @@
+// Exercise: optional { score 10 to P:P1 } — when accepted, P1 gets 10
+player P1, P2, P3
+turnorder (P:P1, P:P2, P:P3)
+
+stage Play for current 1 times {
+  optional {
+    score 10 to P:P1
+  }
+  end stage
+}
