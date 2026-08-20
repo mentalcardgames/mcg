@@ -1,23 +1,18 @@
 //! Client-side (WASM) library for the MCG app.
 
-pub mod articles;
-pub mod effects;
-pub mod game;
-pub mod hardcoded_cards;
-pub mod qr_scanner;
+pub mod app;
+pub mod widgets;
+pub mod screens;
 pub mod router;
-pub mod store;
 pub mod utils;
 
-#[allow(unused_imports)]
 use eframe::AppCreator;
+use app::FrontendApp;
 use eframe::{WebOptions, WebRunner};
 use egui_extras::install_image_loaders;
-use game::App;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-
-use web_sys::{window, HtmlCanvasElement};
+use web_sys::HtmlCanvasElement;
 
 #[wasm_bindgen]
 extern "C" {
@@ -55,30 +50,11 @@ pub fn start_game(
     Ok(())
 }
 
-pub fn calculate_dpi_scale() -> f32 {
-    let window = window().expect("no global window exists");
-    let device_pixel_ratio = window.device_pixel_ratio() as f32;
-    let screen = window.screen().expect("unable to get screen object");
-    let width = screen.width().unwrap_or(1920) as f32;
-    let height = screen.height().unwrap_or(1080) as f32;
-    let diagonal = (width * width + height * height).sqrt();
-    let base_scale = if diagonal > 3000.0 {
-        1.8
-    } else if diagonal > 2000.0 {
-        1.4
-    } else if diagonal > 1500.0 {
-        1.2
-    } else {
-        1.0
-    };
-    base_scale * (device_pixel_ratio / 2.0).clamp(0.75, 1.5)
-}
-
 #[wasm_bindgen]
 pub fn start(canvas: HtmlCanvasElement) -> Result<(), JsValue> {
     let init = Box::new(|cc: &eframe::CreationContext| {
         install_image_loaders(&cc.egui_ctx);
-        let app = App::new();
+        let app = FrontendApp::new(cc.egui_ctx.clone());
         let game: Box<dyn eframe::App> = Box::new(app);
         Ok(game)
     });

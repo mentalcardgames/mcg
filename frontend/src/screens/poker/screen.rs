@@ -1,0 +1,505 @@
+use super::betting_controls::BettingControls;
+use super::connection_manager::ConnectionManager;
+use super::player_manager::{render_player_setup, PlayerManager};
+use crate::app::websocket::MessageSender;
+use crate::app::FrontendInterface;
+use crate::widgets::screen::ScreenWidget;
+use eframe::Frame;
+use egui::{Context, RichText, Ui};
+use mcg_shared::{Backend2FrontendMsg, PlayerAction, PlayerConfig, PokerStatePublic};
+
+#[derive(Default)]
+struct PlayerTableEdits {
+    bot_updates: Vec<(usize, bool)>,
+    to_remove: Option<usize>,
+    to_rename: Option<usize>,
+    apply_rename: bool,
+    cancel_rename: bool,
+}
+
+pub struct PokerOnlineScreen {
+    connection_manager: ConnectionManager,
+    player_manager: PlayerManager,
+    betting_controls: BettingControls,
+    game_state: Option<PokerStatePublic>,
+}
+
+impl PokerOnlineScreen {
+    /// Default server address for the poker client.
+    const DEFAULT_SERVER_ADDRESS: &'static str = "127.0.0.1:3000";
+
+    pub fn new() -> Self {
+        Self {
+            connection_manager: ConnectionManager::new(Self::DEFAULT_SERVER_ADDRESS.to_string()),
+            player_manager: PlayerManager::new(),
+            betting_controls: BettingControls::default(),
+            game_state: None,
+        }
+    }
+
+    fn draw_error_popup(&mut self, ctx: &Context) {
+        if self.connection_manager.last_error.is_none() {
+            return;
+        }
+
+        let mut open = true;
+        let mut close_popup = false;
+        egui::Window::new("Connection error")
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                if let Some(err) = &self.connection_manager.last_error {
+                    ui.label(err);
+                }
+                ui.add_space(8.0);
+                if ui.button("Close").clicked() {
+                    close_popup = true;
+                }
+            });
+
+        if !open || close_popup {
+            self.connection_manager.last_error = None;
+        }
+    }
+
+    fn connect(&mut self, app_interface: &mut FrontendInterface) {
+        self.connection_manager.connect(app_interface);
+    }
+
+    fn render_full_player_setup(
+        &mut self,
+        ui: &mut Ui,
+        ctx: &Context,
+        sender: &dyn MessageSender,
+        connected: bool,
+    ) {
+        render_player_setup(ui, ctx);
+
+        // Add the player table and controls
+        self.render_players_table(ui);
+        ui.add_space(8.0);
+
+        self.render_add_player_section(ui);
+        ui.add_space(16.0);
+
+        self.render_start_game_button(ui, ctx, sender, connected);
+        self.add_game_instructions(ui);
+    }
+
+    fn render_players_table(&mut self, ui: &mut Ui) {
+        ui.group(|ui| {
+            ui.label(RichText::new("Players:").strong());
+            ui.add_space(4.0);
+
+            egui::Grid::new("players_grid")
+                .num_columns(4)
+                .spacing([8.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    self.render_players_table_header(ui);
+                    self.render_players_table_rows(ui);
+                });
+        });
+    }
+
+    fn render_players_table_header(&mut self, ui: &mut Ui) {
+        ui.label(RichText::new("ID").strong());
+        ui.label(RichText::new("Name").strong());
+        ui.label(RichText::new("Bot").strong());
+        ui.label(RichText::new("Actions").strong());
+        ui.end_row();
+    }
+
+    fn render_players_table_rows(&mut self, ui: &mut Ui) {
+        let mut edits = PlayerTableEdits::default();
+
+        let players_snapshot = self.player_manager.get_players().clone();
+        for (idx, player) in players_snapshot.iter().enumerate() {
+            self.render_player_row(ui, player, idx, &mut edits);
+        }
+
+        self.apply_player_updates(edits);
+    }
+
+    fn render_player_row(
+        &mut self,
+        ui: &mut Ui,
+        player: &PlayerConfig,
+        idx: usize,
+        edits: &mut PlayerTableEdits,
+    ) {
+        ui.label(format!("{}", player.id));
+
+        // Check if this player is being renamed
+        if self.player_manager.is_renaming(player.id) {
+            // Show text edit field for renaming
+            let response = ui.text_edit_singleline(self.player_manager.get_rename_buffer_mut());
+
+            // Auto-focus the text field when rename starts
+            response.request_focus();
+
+            // Check for Enter key to confirm rename
+            if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                edits.apply_rename = true;
+            } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                edits.cancel_rename = true;
+            }
+        } else {
+            ui.label(&player.name);
+        }
+
+        let mut is_bot = player.is_bot;
+        if ui.checkbox(&mut is_bot, "").changed() {
+            edits.bot_updates.push((idx, is_bot));
+        }
+
+        ui.horizontal(|ui| {
+            self.render_player_actions(ui, player, idx, edits);
+        });
+        ui.end_row();
+    }
+
+    fn render_player_actions(
+        &mut self,
+        ui: &mut Ui,
+        player: &PlayerConfig,
+        idx: usize,
+        edits: &mut PlayerTableEdits,
+    ) {
+        // If this player is being renamed, show Save/Cancel buttons
+        if self.player_manager.is_renaming(player.id) {
+            if ui.button("Save").clicked() {
+                edits.apply_rename = true;
+            }
+            if ui.button("Cancel").clicked() {
+                edits.cancel_rename = true;
+            }
+        } else {
+            // Radio toggle to select which player the frontend would like to control.
+            // Bot players cannot be selected.
+            if player.is_bot {
+                ui.label("Bot");
+            } else {
+                ui.radio_value(
+                    self.player_manager.get_preferred_player_mut(),
+                    player.id,
+                    "Play as",
+                )
+                .on_hover_text("Select this player for this client");
+            }
+
+            if ui.button("✏").on_hover_text("Rename").clicked() {
+                edits.to_rename = Some(idx);
+            }
+            if self.player_manager.get_players().len() > 1
+                && ui.button("🗑").on_hover_text("Remove").clicked()
+            {
+                edits.to_remove = Some(idx);
+            }
+        }
+    }
+
+    fn apply_player_updates(&mut self, edits: PlayerTableEdits) {
+        // Apply bot status updates after iteration
+        for (idx, is_bot) in edits.bot_updates {
+            if let Some(p) = self.player_manager.get_players_mut().get_mut(idx) {
+                p.is_bot = is_bot;
+            }
+        }
+
+        // Handle remove after iteration
+        if let Some(idx) = edits.to_remove {
+            if idx < self.player_manager.get_players().len() {
+                self.player_manager.get_players_mut().remove(idx);
+            }
+        }
+
+        // Handle rename mode toggle
+        if let Some(idx) = edits.to_rename {
+            if let Some(player) = self.player_manager.get_players().get(idx) {
+                self.player_manager.start_renaming(player.id);
+            }
+        }
+
+        // Apply or cancel rename
+        if edits.apply_rename {
+            self.player_manager.apply_rename();
+        } else if edits.cancel_rename {
+            self.player_manager.cancel_rename();
+        }
+    }
+
+    fn render_add_player_section(&mut self, ui: &mut Ui) {
+        ui.group(|ui| {
+            ui.label(RichText::new("Add New Player:").strong());
+            ui.add_space(4.0);
+
+            ui.horizontal(|ui| {
+                ui.label("Name:");
+                ui.text_edit_singleline(self.player_manager.get_new_player_name_mut());
+
+                if ui.button("Add Player").clicked() {
+                    self.player_manager.add_new_player();
+                }
+            });
+        });
+    }
+
+    fn render_start_game_button(
+        &mut self,
+        ui: &mut Ui,
+        _ctx: &Context,
+        sender: &dyn MessageSender,
+        connected: bool,
+    ) {
+        let button = ui.button("Start New Game");
+
+        // Add tooltip if disconnected to explain what will happen
+        let button = if !connected {
+            button.on_hover_text("Please connect first to start a game")
+        } else {
+            button
+        };
+
+        if button.clicked() && connected {
+            sender.send(mcg_shared::Frontend2BackendMsg::NewGame {
+                players: self.player_manager.get_players().clone(),
+            });
+        }
+    }
+
+    fn add_game_instructions(&self, ui: &mut Ui) {
+        ui.add_space(8.0);
+        ui.label(
+            "This will connect to the server and start a new game with the configured players.",
+        );
+    }
+}
+
+crate::impl_screen_def!(
+    PokerOnlineScreen,
+    "/poker-online",
+    "Poker Online",
+    "♠",
+    "Play poker against bots or online",
+    true
+);
+
+impl Default for PokerOnlineScreen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl super::game_rendering::PokerScreenActions for PokerOnlineScreen {
+    fn render_action_buttons(
+        &mut self,
+        ui: &mut egui::Ui,
+        state: &mcg_shared::PokerStatePublic,
+        player_id: mcg_shared::PlayerId,
+        enabled: bool,
+        sender: &dyn MessageSender,
+    ) {
+        let call_amount = BettingControls::calculate_call_amount(state, player_id);
+        let player = state.players.iter().find(|p| p.id == player_id);
+
+        if let Some(player) = player {
+            ui.vertical(|ui| {
+                // First row: Check/Call and Fold buttons
+                ui.horizontal(|ui| {
+                    let check_call_label = if call_amount == 0 {
+                        RichText::new("✔ Check").size(18.0)
+                    } else {
+                        RichText::new(format!("✔ Call {}", call_amount)).size(18.0)
+                    };
+
+                    if enabled {
+                        if ui
+                            .add(
+                                egui::Button::new(check_call_label)
+                                    .min_size(egui::vec2(120.0, 40.0)),
+                            )
+                            .clicked()
+                        {
+                            sender.send(mcg_shared::Frontend2BackendMsg::Action {
+                                player_id,
+                                action: PlayerAction::CheckCall,
+                            });
+                        }
+                    } else {
+                        ui.add_enabled(
+                            false,
+                            egui::Button::new(check_call_label).min_size(egui::vec2(120.0, 40.0)),
+                        );
+                    }
+
+                    let fold_label = RichText::new("✂ Fold").size(18.0);
+                    if enabled {
+                        if ui
+                            .add(egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)))
+                            .clicked()
+                        {
+                            sender.send(mcg_shared::Frontend2BackendMsg::Action {
+                                player_id,
+                                action: PlayerAction::Fold,
+                            });
+                        }
+                    } else {
+                        ui.add_enabled(
+                            false,
+                            egui::Button::new(fold_label).min_size(egui::vec2(120.0, 40.0)),
+                        );
+                    }
+                });
+
+                if enabled {
+                    ui.add_space(8.0);
+                    // Second row: Betting/Raising controls with slider
+                    self.betting_controls
+                        .update_from_game_state(state, player_id);
+
+                    self.betting_controls
+                        .render_betting_controls(ui, state, player_id, player, sender);
+                }
+            });
+        }
+    }
+
+    fn render_action_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        state: &mcg_shared::PokerStatePublic,
+        player_id: mcg_shared::PlayerId,
+        enabled: bool,
+        show_next: bool,
+        sender: &dyn MessageSender,
+    ) {
+        ui.vertical(|ui| {
+            if show_next {
+                ui.horizontal(|ui| {
+                    let next_label = RichText::new("▶ Next hand").size(16.0);
+                    if ui
+                        .add(egui::Button::new(next_label).min_size(egui::vec2(140.0, 40.0)))
+                        .clicked()
+                    {
+                        sender.send(mcg_shared::Frontend2BackendMsg::NextHand);
+                    }
+                });
+                ui.add_space(6.0);
+            }
+            // Render the centralized action buttons (enabled or disabled)
+            self.render_action_buttons(ui, state, player_id, enabled, sender);
+        });
+    }
+}
+
+impl ScreenWidget for PokerOnlineScreen {
+    fn ui(&mut self, app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+        let ctx = ui.ctx().clone();
+        // Check for button clicks
+        let mut connection_actions = (false, false);
+        let connected = app_interface.is_connected();
+
+        {
+            let sender = app_interface.message_sender();
+            self.draw_error_popup(&ctx);
+
+            self.render_header_with_controls(
+                ui,
+                &ctx,
+                &mut connection_actions,
+                sender,
+                connected,
+            );
+
+            if let Some(state) = self.game_state.take() {
+                super::game_rendering::render_showdown_banner(
+                    ui,
+                    &state,
+                    self.player_manager.get_preferred_player(),
+                );
+                super::game_rendering::render_panels(
+                    ui,
+                    &state,
+                    self.player_manager.get_preferred_player(),
+                    self,
+                    sender,
+                );
+                self.game_state.replace(state);
+            } else {
+                ui.label("No state yet. Click Connect to start a session.");
+            }
+        }
+
+        if connection_actions.0 {
+            self.connect(app_interface);
+        }
+        if connection_actions.1 {
+            app_interface.close_connection();
+        }
+    }
+    fn on_message(&mut self, app_interface: &mut FrontendInterface, message: Backend2FrontendMsg) {
+        match message {
+            Backend2FrontendMsg::UpdatePokerState(game_state) => {
+                self.game_state = Some(game_state);
+                self.connection_manager.last_error = None;
+                self.connection_manager.last_info = None;
+            }
+            Backend2FrontendMsg::Error(error) => {
+                self.connection_manager.last_error = Some(error);
+            }
+            Backend2FrontendMsg::OurName(name) => {
+                app_interface.state_mut().name = name;
+            }
+            _ => {}
+        }
+
+    }
+}
+
+impl PokerOnlineScreen {
+    fn render_header_with_controls(
+        &mut self,
+        ui: &mut Ui,
+        ctx: &Context,
+        connection_actions: &mut (bool, bool),
+        sender: &dyn MessageSender,
+        connected: bool,
+    ) {
+        ui.horizontal(|ui| {
+            ui.heading("Poker Online");
+            ui.add_space(16.0);
+            if let Some(s) = &self.game_state {
+                ui.label(super::ui_components::stage_badge(s.stage));
+                ui.add_space(8.0);
+            }
+        });
+
+        let default_open = self.game_state.is_none();
+        egui::CollapsingHeader::new("Connection & session")
+            .default_open(default_open)
+            .show(ui, |ui| {
+                self.connection_manager.render_connection_controls(
+                    ui,
+                    ctx,
+                    &mut connection_actions.0,
+                    &mut connection_actions.1,
+                );
+            });
+
+        egui::CollapsingHeader::new("Player Setup")
+            .default_open(false)
+            .show(ui, |ui| {
+                self.render_full_player_setup(ui, ctx, sender, connected);
+            });
+
+        if let Some(err) = &self.connection_manager.last_error {
+            ui.colored_label(egui::Color32::RED, err);
+        }
+        if let Some(info) = &self.connection_manager.last_info {
+            ui.label(RichText::new(info));
+        }
+        ui.separator();
+    }
+}

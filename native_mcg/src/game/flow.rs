@@ -2,7 +2,6 @@ use anyhow::Result;
 use mcg_shared::{ActionEvent, GameAction, Stage};
 
 use crate::game::Game;
-use crate::poker::cards::card_str;
 
 impl Game {
     /// After an action is applied, update the game flow (next actor, stage changes, etc).
@@ -159,9 +158,9 @@ impl Game {
                 }));
                 println!(
                     "[STAGE] Flop: {} {} {}",
-                    card_str(self.community[0]),
-                    card_str(self.community[1]),
-                    card_str(self.community[2])
+                    self.community[0].to_string(),
+                    self.community[1].to_string(),
+                    self.community[2].to_string()
                 );
             }
             Stage::Flop => {
@@ -174,7 +173,7 @@ impl Game {
                 self.log(ActionEvent::game(GameAction::DealtCommunity {
                     cards: self.community.clone(),
                 }));
-                println!("[STAGE] Turn: {}", card_str(self.community[3]));
+                println!("[STAGE] Turn: {}", self.community[3].to_string());
             }
             Stage::Turn => {
                 let c = self
@@ -186,7 +185,7 @@ impl Game {
                 self.log(ActionEvent::game(GameAction::DealtCommunity {
                     cards: self.community.clone(),
                 }));
-                println!("[STAGE] River: {}", card_str(self.community[4]));
+                println!("[STAGE] River: {}", self.community[4].to_string());
             }
             Stage::River => {
                 self.stage = Stage::Showdown;

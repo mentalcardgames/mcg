@@ -29,10 +29,10 @@ async-trait = "0.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Iroh transport support (enabled by default).
-# Upgraded to 0.95 to match sendme example - includes online() and improved relay support.
-iroh = "0.95"
+# Iroh 1.x includes online() and improved relay support.
+iroh = "1.0.3"
 getrandom = "0.2"
-iroh-tickets = "0.2.0"
+iroh-tickets = "1.0.0"
 local_ipaddress = "0.1.0"
 
 # Required helper for async trait usage in iroh handler

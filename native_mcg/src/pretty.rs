@@ -1,5 +1,5 @@
 use mcg_shared::{
-    ActionEvent, ActionKind as SharedActionKind, BlindKind, Card, GameAction, GameStatePublic,
+    ActionEvent, ActionKind as SharedActionKind, BlindKind, Card, GameAction, PokerStatePublic,
     PlayerId, PlayerPublic, Stage,
 };
 use owo_colors::OwoColorize;
@@ -127,7 +127,7 @@ pub fn format_event_human(entry: &ActionEvent, players: &[PlayerPublic], color: 
     }
 }
 
-pub fn format_table_header(gs: &GameStatePublic, sb: u32, bb: u32, color: bool) -> String {
+pub fn format_table_header(gs: &PokerStatePublic, sb: u32, bb: u32, color: bool) -> String {
     let mut out = String::new();
     let title = if color {
         "=== New Hand ===".bold().blue().to_string()
@@ -171,7 +171,7 @@ pub fn format_table_header(gs: &GameStatePublic, sb: u32, bb: u32, color: bool) 
 }
 
 #[allow(dead_code)]
-pub fn format_state_human(gs: &GameStatePublic, color: bool) -> String {
+pub fn format_state_human(gs: &PokerStatePublic, color: bool) -> String {
     let mut out = String::new();
 
     // Header

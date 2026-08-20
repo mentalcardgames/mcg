@@ -2,7 +2,8 @@ use anyhow::Context;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
-use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
+use native_mcg::network::IROH_FRONTEND_ALPN;
 
 use super::utils::{DisplayMode, MessagePrinter};
 
@@ -89,20 +90,17 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
     use std::str::FromStr;
     use tokio::io::{AsyncBufReadExt, BufReader};
 
-    // ALPN must match the server's ALPN
-    const ALPN: &[u8] = b"mcg/iroh/1";
-
     // Bind a local endpoint
-    // Endpoint::builder() uses presets::N0 which includes DNS discovery and default relays
-    let endpoint = Endpoint::builder()
+    // presets::N0 includes DNS discovery and default relays.
+    let endpoint = Endpoint::builder(iroh::endpoint::presets::N0)
         .bind()
         .await
         .context("binding iroh endpoint for client")?;
 
-    // In iroh 0.95, PublicKey is renamed to EndpointId
+    // Iroh 1.x uses EndpointId for peer identities.
     let peer_id = EndpointId::from_str(peer_uri).context("parsing iroh endpoint id (z-base-32)")?;
     let connection = endpoint
-        .connect(peer_id, ALPN)
+        .connect(peer_id, IROH_FRONTEND_ALPN)
         .await
         .context("connecting to iroh peer (endpoint id)")?;
 

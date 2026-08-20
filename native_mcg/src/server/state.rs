@@ -10,7 +10,7 @@ use mcg_shared::{Card, CardRank, CardSuit, PlayerId};
 use crate::bot::BotManager;
 use crate::game::{Game, Player};
 use crate::pretty;
-use mcg_shared::GameStatePublic;
+use mcg_shared::PokerStatePublic;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast;
@@ -33,7 +33,6 @@ pub struct AppState {
     /// If present, transports (e.g. iroh) may persist changes to this path.
     pub config_path: Option<PathBuf>,
     pub ticket: Arc<RwLock<Option<String>>>,
-    pub remote_ticket: Arc<RwLock<Option<String>>>,
     pub peers: Arc<RwLock<HashMap<iroh::EndpointId, PeerInfo>>>,
 }
 
@@ -50,7 +49,6 @@ impl AppState {
             config: std::sync::Arc::new(RwLock::new(config)),
             config_path,
             ticket: Arc::new(RwLock::new(None)),
-            remote_ticket: Arc::new(RwLock::new(None)),
             peers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -121,7 +119,6 @@ impl Default for AppState {
             config: std::sync::Arc::new(RwLock::new(crate::config::Config::default())),
             config_path: None,
             ticket: Arc::new(RwLock::new(None)),
-            remote_ticket: Arc::new(RwLock::new(None)),
             peers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -130,7 +127,7 @@ impl Default for AppState {
 /// Represents a subscription to broadcast state updates.
 pub struct Subscription {
     pub receiver: broadcast::Receiver<mcg_shared::Backend2FrontendMsg>,
-    pub initial_state: Option<GameStatePublic>,
+    pub initial_state: Option<PokerStatePublic>,
 }
 
 /// Register a connection as a broadcast subscriber and capture the current state.
@@ -193,7 +190,7 @@ pub async fn create_new_game(
     Ok(())
 }
 
-pub async fn current_state_public(state: &AppState) -> Option<GameStatePublic> {
+pub async fn current_state_public(state: &AppState) -> Option<PokerStatePublic> {
     let lobby_r = state.lobby.read().await;
     if let Some(game) = &lobby_r.game {
         let gs = game.public();
@@ -235,7 +232,7 @@ pub async fn broadcast_state(state: &AppState) {
             gs.stage,
             current_player_name
         );
-        let _ = state.broadcaster.send(mcg_shared::Backend2FrontendMsg::State(gs));
+        let _ = state.broadcaster.send(mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs));
     }
 }
 
@@ -301,7 +298,7 @@ async fn execute_player_action(
         Ok(()) => {
             broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
-                mcg_shared::Backend2FrontendMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
                 mcg_shared::Backend2FrontendMsg::Error("No active game after action".into())
             }
@@ -314,7 +311,7 @@ async fn execute_player_action(
 async fn fetch_current_state(state: &AppState) -> mcg_shared::Backend2FrontendMsg {
     if let Some(gs) = current_state_public(state).await {
         broadcast_state(state).await;
-        mcg_shared::Backend2FrontendMsg::State(gs)
+        mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
     } else {
         mcg_shared::Backend2FrontendMsg::Error("No active game. Please start a new game first.".into())
     }
@@ -322,6 +319,7 @@ async fn fetch_current_state(state: &AppState) -> mcg_shared::Backend2FrontendMs
 
 /// Handle a NextHand message from a client
 async fn advance_to_next_hand(state: &AppState) -> mcg_shared::Backend2FrontendMsg {
+    // TODO: Starting the next hand does not handle bankrupt players or bots correctly.
     // Ensure a game exists first
     {
         let lobby_r = state.lobby.read().await;
@@ -336,7 +334,7 @@ async fn advance_to_next_hand(state: &AppState) -> mcg_shared::Backend2FrontendM
         Ok(()) => {
             broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
-                mcg_shared::Backend2FrontendMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
                 mcg_shared::Backend2FrontendMsg::Error("No active game after starting next hand".into())
             }
@@ -354,7 +352,7 @@ async fn create_game_session(
         Ok(()) => {
             broadcast_state(state).await;
             if let Some(gs) = current_state_public(state).await {
-                mcg_shared::Backend2FrontendMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
                 mcg_shared::Backend2FrontendMsg::Error(
                     "Failed to produce initial state after creating game".into(),
@@ -380,7 +378,7 @@ async fn import_game_state(
             broadcast_state(app_state).await;
             if let Some(gs) = current_state_public(app_state).await {
                 tracing::info!("Game state replaced via PushState from peer");
-                mcg_shared::Backend2FrontendMsg::State(gs)
+                mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
                 mcg_shared::Backend2FrontendMsg::Error("Failed to produce state after PushState".into())
             }
@@ -430,11 +428,9 @@ pub async fn dispatch_client_message(
         mcg_shared::Frontend2BackendMsg::PushState { state: game_state } => {
             import_game_state(state, game_state).await
         }
-        mcg_shared::Frontend2BackendMsg::QrValue(value) => {
-            tracing::info!("received QR value from client: {}", value);
-            state.remote_ticket.write().await.replace(value);
-            mcg_shared::Backend2FrontendMsg::Error("filler response".into())
-        }
+        mcg_shared::Frontend2BackendMsg::QrValue(_) => mcg_shared::Backend2FrontendMsg::Error(
+            "QR connections require a network-aware handler".into(),
+        ),
         mcg_shared::Frontend2BackendMsg::GetTicket => handle_get_ticket(state).await,
         mcg_shared::Frontend2BackendMsg::GetIP => {
             let ip = match handle_get_ip().await {

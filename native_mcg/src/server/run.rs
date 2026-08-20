@@ -1,8 +1,10 @@
 // Run and routing helpers (build_router, run_server, SPA handlers).
 
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 
 use axum::{
+    extract::FromRef,
     http::Uri,
     response::IntoResponse,
     routing::{get, post},
@@ -10,10 +12,134 @@ use axum::{
 };
 use tower_http::services::ServeDir;
 
-use crate::server::AppState;
+use crate::network::{NetworkEvent, NetworkHandle, NetworkSupervisor};
+use crate::server::{
+    network_adapter::LegacyBackendAdapter, peer_connections::PeerConnectionService, AppState,
+};
 use anyhow::{Context, Result};
+use tokio::sync::mpsc;
 
-pub fn build_router(state: AppState) -> Router {
+const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
+
+#[derive(Clone)]
+struct RouterState {
+    app: AppState,
+    network: NetworkHandle,
+    peer_connections: PeerConnectionService,
+    _network_tasks: Arc<NetworkTasks>,
+}
+
+impl FromRef<RouterState> for AppState {
+    fn from_ref(state: &RouterState) -> Self {
+        state.app.clone()
+    }
+}
+
+impl FromRef<RouterState> for NetworkHandle {
+    fn from_ref(state: &RouterState) -> Self {
+        state.network.clone()
+    }
+}
+
+impl FromRef<RouterState> for PeerConnectionService {
+    fn from_ref(state: &RouterState) -> Self {
+        state.peer_connections.clone()
+    }
+}
+
+struct NetworkTasks {
+    supervisor: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    adapter: Mutex<Option<tokio::task::JoinHandle<()>>>,
+}
+
+impl NetworkTasks {
+    async fn shutdown(&self) {
+        let supervisor = self
+            .supervisor
+            .lock()
+            .expect("network supervisor task lock poisoned")
+            .take();
+        let adapter = self
+            .adapter
+            .lock()
+            .expect("network adapter task lock poisoned")
+            .take();
+
+        if let Some(supervisor) = supervisor {
+            if let Err(error) = supervisor.await {
+                tracing::error!(%error, "network supervisor task failed during shutdown");
+            }
+        }
+        if let Some(adapter) = adapter {
+            if let Err(error) = adapter.await {
+                tracing::error!(%error, "network adapter task failed during shutdown");
+            }
+        }
+    }
+}
+
+impl Drop for NetworkTasks {
+    fn drop(&mut self) {
+        if let Some(supervisor) = self
+            .supervisor
+            .get_mut()
+            .expect("network supervisor task lock poisoned")
+            .take()
+        {
+            supervisor.abort();
+        }
+        if let Some(adapter) = self
+            .adapter
+            .get_mut()
+            .expect("network adapter task lock poisoned")
+            .take()
+        {
+            adapter.abort();
+        }
+    }
+}
+
+impl RouterState {
+    fn new(
+        app: AppState,
+        network: NetworkHandle,
+        peer_connections: PeerConnectionService,
+        network_tasks: Arc<NetworkTasks>,
+    ) -> Self {
+        Self {
+            app,
+            network,
+            peer_connections,
+            _network_tasks: network_tasks,
+        }
+    }
+}
+
+fn start_network(app: AppState) -> (NetworkHandle, PeerConnectionService, Arc<NetworkTasks>) {
+    let (event_tx, event_rx) = mpsc::channel::<NetworkEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
+    let (supervisor, network) = NetworkSupervisor::new(event_tx);
+    let peer_connections = PeerConnectionService::new(app.clone(), network.clone());
+    let adapter =
+        LegacyBackendAdapter::new(app, network.clone(), peer_connections.clone(), event_rx);
+    let supervisor = tokio::spawn(supervisor.run());
+    let adapter = tokio::spawn(adapter.run());
+
+    (
+        network,
+        peer_connections,
+        Arc::new(NetworkTasks {
+            supervisor: Mutex::new(Some(supervisor)),
+            adapter: Mutex::new(Some(adapter)),
+        }),
+    )
+}
+
+fn build_router_with_network(
+    state: AppState,
+    network: NetworkHandle,
+    peer_connections: PeerConnectionService,
+    network_tasks: Arc<NetworkTasks>,
+) -> Router {
     // Serve static files from the project root. Assumes process CWD is repo root.
     let serve_dir = ServeDir::new("pkg").append_index_html_on_directories(true);
     let serve_media = ServeDir::new("media").append_index_html_on_directories(true);
@@ -33,22 +159,27 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", get(serve_index))
         // Fallback handler for SPA routing - serve index.html for all other routes
         .fallback(spa_handler)
-        .with_state(state)
+        .with_state(RouterState::new(
+            state,
+            network,
+            peer_connections,
+            network_tasks,
+        ))
+}
+
+pub fn build_router(state: AppState) -> Router {
+    let (network, peer_connections, network_tasks) = start_network(state.clone());
+    build_router_with_network(state, network, peer_connections, network_tasks)
 }
 
 pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
-    let app = build_router(state.clone());
-
-    // Spawn the iroh listener so it runs concurrently with the Axum HTTP/WebSocket server.
-    // This is always enabled.
-    {
-        let state_clone = state.clone();
-        tokio::spawn(async move {
-            if let Err(e) = crate::server::iroh::spawn_iroh_listener(state_clone).await {
-                eprintln!("Iroh listener failed: {}", e);
-            }
-        });
-    }
+    let (network, peer_connections, network_tasks) = start_network(state.clone());
+    let app = build_router_with_network(
+        state.clone(),
+        network.clone(),
+        peer_connections,
+        network_tasks.clone(),
+    );
 
     // Continuously drive bots in the background.
     {
@@ -79,8 +210,15 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .with_context(|| format!("Failed to bind to {}", display_addr))?;
-    // axum::serve returns a future that runs the server; propagate any error if it returns one.
-    let _ = axum::serve(listener, app).await;
+    // The owned task starts Iroh concurrently and is shut down after Axum stops.
+    let iroh_listener = crate::server::iroh::spawn_iroh_listener(state, network.clone());
+    let server_result = axum::serve(listener, app).await;
+    iroh_listener.shutdown().await;
+    if let Err(error) = network.shutdown().await {
+        tracing::warn!(%error, "network supervisor stopped before server shutdown");
+    }
+    network_tasks.shutdown().await;
+    server_result.context("running HTTP/WebSocket server")?;
     Ok(())
 }
 

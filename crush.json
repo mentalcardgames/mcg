@@ -1,7 +1,0 @@
-{
-  "lsp": {
-    "rust": {
-      "command": "rust-analyzer"
-    }
-  }
-}

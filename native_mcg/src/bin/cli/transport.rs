@@ -5,7 +5,8 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
-use mcg_shared::{Frontend2BackendMsg, Backend2FrontendMsg};
+use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
+use native_mcg::network::IROH_FRONTEND_ALPN;
 
 use super::utils::MessagePrinter;
 
@@ -81,20 +82,18 @@ pub async fn run_once_iroh(
     use std::str::FromStr;
     use tokio::io::BufReader;
 
-    const ALPN: &[u8] = b"mcg/iroh/1";
-
     // Build and bind local endpoint
-    // Endpoint::builder() uses presets::N0 which includes DNS discovery and default relays
-    let endpoint = Endpoint::builder()
+    // presets::N0 includes DNS discovery and default relays.
+    let endpoint = Endpoint::builder(iroh::endpoint::presets::N0)
         .bind()
         .await
         .context("binding iroh endpoint for client")?;
 
     // Resolve peer endpoint id and open connection + bidirectional stream
-    // In iroh 0.95, PublicKey is renamed to EndpointId
+    // Iroh 1.x uses EndpointId for peer identities.
     let peer_id = EndpointId::from_str(peer_uri).context("parsing iroh endpoint id (z-base-32)")?;
     let connection = endpoint
-        .connect(peer_id, ALPN)
+        .connect(peer_id, IROH_FRONTEND_ALPN)
         .await
         .context("connecting to iroh peer (endpoint id)")?;
 
@@ -118,7 +117,10 @@ pub async fn run_once_iroh(
 }
 
 /// Write the provided Frontend2BackendMsg as newline-delimited JSON to the given writer.
-async fn send_client_msg_over_stream<W>(send: &mut W, client_msg: &Frontend2BackendMsg) -> anyhow::Result<()>
+async fn send_client_msg_over_stream<W>(
+    send: &mut W,
+    client_msg: &Frontend2BackendMsg,
+) -> anyhow::Result<()>
 where
     W: tokio::io::AsyncWrite + Unpin + Send,
 {

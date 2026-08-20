@@ -68,6 +68,3 @@ pub fn emoji_hash(data: &[u8], ctx: &Context) -> String {
     }
     emoji_string
 }
-
-#[cfg(test)]
-mod tests {}
