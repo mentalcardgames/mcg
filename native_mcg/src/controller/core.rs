@@ -193,11 +193,8 @@ impl Controller {
             }
             Frontend2BackendMsg::Subscribe => {
                 // Subscription is deprecated; return the current state to the caller if active.
-                if let Some(gs) = self.current_state_public() {
-                    Some(Backend2FrontendMsg::UpdatePokerState(gs))
-                } else {
-                    None
-                }
+                self.current_state_public()
+                    .map(Backend2FrontendMsg::UpdatePokerState)
             }
             Frontend2BackendMsg::RequestState => {
                 if let Some(gs) = self.current_state_public() {

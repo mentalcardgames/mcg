@@ -13,7 +13,7 @@ use crate::network::{
 use super::state::AppState;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) enum PeerConnectionError {
+pub enum PeerConnectionError {
     Network(NetworkError),
     DuplicatePeer(PeerId),
     LocalEndpoint(PeerId),
@@ -45,7 +45,7 @@ impl From<NetworkError> for PeerConnectionError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct EstablishedPeer {
+pub struct EstablishedPeer {
     pub connection_id: ConnectionId,
     pub peer_id: PeerId,
 }
@@ -103,14 +103,14 @@ impl Drop for PendingPeerReservation {
 /// fed back through [`Self::connection_opened`] and [`Self::connection_closed`]
 /// so HTTP requests and the legacy adapter share one view of connection state.
 #[derive(Clone)]
-pub(super) struct PeerConnectionService {
+pub struct PeerConnectionService {
     state: AppState,
     network: NetworkHandle,
     registry: Arc<Mutex<PeerConnectionState>>,
 }
 
 impl PeerConnectionService {
-    pub(super) fn new(state: AppState, network: NetworkHandle) -> Self {
+    pub fn new(state: AppState, network: NetworkHandle) -> Self {
         Self {
             state,
             network,
@@ -118,10 +118,7 @@ impl PeerConnectionService {
         }
     }
 
-    pub(super) async fn connect(
-        &self,
-        ticket: String,
-    ) -> Result<EstablishedPeer, PeerConnectionError> {
+    pub async fn connect(&self, ticket: String) -> Result<EstablishedPeer, PeerConnectionError> {
         let peer_id = peer_id_from_ticket(&ticket)?;
         if self.local_peer_id().await.as_ref() == Some(&peer_id) {
             return Err(PeerConnectionError::LocalEndpoint(peer_id));
@@ -154,7 +151,7 @@ impl PeerConnectionService {
         }
     }
 
-    pub(super) async fn connection_opened(
+    pub async fn connection_opened(
         &self,
         connection_id: ConnectionId,
         peer_id: PeerId,
@@ -229,7 +226,7 @@ impl PeerConnectionService {
         winner
     }
 
-    pub(super) async fn connection_closed(&self, connection_id: ConnectionId) {
+    pub async fn connection_closed(&self, connection_id: ConnectionId) {
         self.registry
             .lock()
             .expect("peer connection registry poisoned")

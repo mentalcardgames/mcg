@@ -99,6 +99,8 @@ pub enum PeerConnectionCommand {
 /// Commands sent from application logic to the network supervisor.
 #[derive(Clone, Debug)]
 pub enum NetworkCommand {
+    BroadcastFrontend(Backend2FrontendMsg),
+    BroadcastPeer(Peer2PeerMsg),
     SendFrontend {
         connection_id: ConnectionId,
         message: Backend2FrontendMsg,

@@ -5,12 +5,14 @@
 //! [`ControllerEvent`] messages and communicates with the async network shell via
 //! [`ControllerCommand`] and the [`ControllerSink`] trait.
 
+pub mod bridge;
 mod core;
 mod handle;
 mod runner;
 mod sink;
 mod types;
 
+pub use self::bridge::{spawn_controller_command_forwarder, spawn_network_event_forwarder};
 pub use self::core::{Controller, Lobby, PeerInfo};
 pub use handle::ControllerHandle;
 pub use runner::{spawn_controller, start_controller};
@@ -24,9 +26,7 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::network::ConnectionId;
-    use mcg_shared::{
-        Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig, PlayerId,
-    };
+    use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig, PlayerId};
     use tokio::sync::mpsc;
 
     #[test]
@@ -96,5 +96,78 @@ mod tests {
         // Shut down controller thread
         handle.shutdown().await.expect("shutdown event sent");
         thread_handle.join().expect("thread join succeeded");
+    }
+
+    #[tokio::test]
+    async fn bridge_wires_controller_with_network_supervisor() {
+        use crate::network::NetworkSupervisor;
+        use tokio::io::{duplex, split, AsyncBufReadExt, BufReader};
+
+        let (network_event_tx, network_event_rx) = mpsc::channel(16);
+        let (supervisor, network) = NetworkSupervisor::new(network_event_tx);
+        let supervisor_task = tokio::spawn(supervisor.run());
+
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let sink = ChannelControllerSink::new(command_tx);
+        let controller = Controller::new(Config::default(), None);
+        let (thread_handle, controller_handle) = start_controller(controller, 16, sink);
+
+        let _event_forwarder =
+            spawn_network_event_forwarder(network_event_rx, controller_handle.clone(), None);
+        let _command_forwarder =
+            spawn_controller_command_forwarder(command_rx, network.clone(), None);
+
+        // Register a frontend stream
+        let (frontend_stream, frontend_remote) = duplex(4096);
+        let (fe_r, fe_w) = split(frontend_stream);
+        let (fe_rem_r, _fe_rem_w) = split(frontend_remote);
+        let mut fe_reader = BufReader::new(fe_rem_r);
+
+        let _conn_id = network
+            .register_incoming_iroh_frontend(fe_r, fe_w)
+            .await
+            .expect("frontend registration succeeded");
+
+        // Request a new game from the controller via HTTP
+        let response = controller_handle
+            .send_http_request(Frontend2BackendMsg::NewGame {
+                players: vec![
+                    PlayerConfig {
+                        id: PlayerId(0),
+                        name: "Alice".into(),
+                        is_bot: false,
+                    },
+                    PlayerConfig {
+                        id: PlayerId(1),
+                        name: "Bob".into(),
+                        is_bot: false,
+                    },
+                ],
+            })
+            .await
+            .expect("response received");
+        assert!(matches!(response, Backend2FrontendMsg::UpdatePokerState(_)));
+
+        // Read the broadcasted state update on the registered frontend stream
+        let mut line = String::new();
+        fe_reader
+            .read_line(&mut line)
+            .await
+            .expect("read from frontend remote");
+        let broadcasted: Backend2FrontendMsg =
+            serde_json::from_str(line.trim()).expect("deserialize broadcasted message");
+        assert!(matches!(
+            broadcasted,
+            Backend2FrontendMsg::UpdatePokerState(_)
+        ));
+
+        // Clean shutdown
+        controller_handle
+            .shutdown()
+            .await
+            .expect("controller shutdown");
+        thread_handle.join().expect("thread join");
+        network.shutdown().await.expect("network shutdown");
+        let _ = supervisor_task.await;
     }
 }

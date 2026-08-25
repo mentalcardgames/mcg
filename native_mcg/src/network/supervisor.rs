@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use axum::extract::ws::WebSocket;
 use iroh::endpoint::Endpoint;
+use mcg_shared::{Backend2FrontendMsg, Peer2PeerMsg};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
@@ -265,6 +266,21 @@ impl NetworkHandle {
         response_rx
             .await
             .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Broadcasts a typed message across all registered frontend connections.
+    pub async fn broadcast_frontend(
+        &self,
+        message: Backend2FrontendMsg,
+    ) -> Result<(), NetworkError> {
+        self.send_command(NetworkCommand::BroadcastFrontend(message))
+            .await
+    }
+
+    /// Broadcasts a typed message across all registered peer connections.
+    pub async fn broadcast_peer(&self, message: Peer2PeerMsg) -> Result<(), NetworkError> {
+        self.send_command(NetworkCommand::BroadcastPeer(message))
+            .await
     }
 }
 
@@ -648,6 +664,14 @@ impl NetworkSupervisor {
 
     fn execute_command(&mut self, command: NetworkCommand) -> Result<(), NetworkError> {
         match command {
+            NetworkCommand::BroadcastFrontend(message) => {
+                self.broadcast_frontend(message);
+                Ok(())
+            }
+            NetworkCommand::BroadcastPeer(message) => {
+                self.broadcast_peer(message);
+                Ok(())
+            }
             NetworkCommand::SendFrontend {
                 connection_id,
                 message,
@@ -660,6 +684,30 @@ impl NetworkSupervisor {
                 connection_id,
                 reason,
             } => self.close_connection(connection_id, reason),
+        }
+    }
+
+    fn broadcast_frontend(&mut self, message: Backend2FrontendMsg) {
+        for (&connection_id, connection) in &self.connections {
+            if let ManagedTarget::Frontend { command_tx } = &connection.target {
+                if let Err(error) =
+                    command_tx.try_send(FrontendConnectionCommand::Send(message.clone()))
+                {
+                    tracing::warn!(%connection_id, %error, "failed to broadcast frontend message to connection");
+                }
+            }
+        }
+    }
+
+    fn broadcast_peer(&mut self, message: Peer2PeerMsg) {
+        for (&connection_id, connection) in &self.connections {
+            if let ManagedTarget::Peer { command_tx, .. } = &connection.target {
+                if let Err(error) =
+                    command_tx.try_send(PeerConnectionCommand::Send(message.clone()))
+                {
+                    tracing::warn!(%connection_id, %error, "failed to broadcast peer message to connection");
+                }
+            }
         }
     }
 
@@ -1281,6 +1329,57 @@ mod tests {
 
         tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
         assert_eq!(connect_task.await?, Err(NetworkError::SupervisorStopped));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn supervisor_broadcasts_to_all_peers_and_frontends() -> Result<()> {
+        let (event_tx, mut event_rx) = mpsc::channel(16);
+        let (supervisor, network) = NetworkSupervisor::new(event_tx);
+        let supervisor_task = tokio::spawn(supervisor.run());
+
+        // Setup 2 peer connections using duplex streams
+        let (peer1_stream, peer1_remote) = duplex(4096);
+        let (peer1_r, peer1_w) = split(peer1_stream);
+        let (peer1_rem_r, _peer1_rem_w) = split(peer1_remote);
+        let mut peer1_reader = BufReader::new(peer1_rem_r);
+
+        let (peer2_stream, peer2_remote) = duplex(4096);
+        let (peer2_r, peer2_w) = split(peer2_stream);
+        let (peer2_rem_r, _peer2_rem_w) = split(peer2_remote);
+        let mut peer2_reader = BufReader::new(peer2_rem_r);
+
+        let _conn1 = network
+            .register_incoming_iroh_peer(PeerId::new("peer-1"), peer1_r, peer1_w)
+            .await?;
+        let _conn2 = network
+            .register_incoming_iroh_peer(PeerId::new("peer-2"), peer2_r, peer2_w)
+            .await?;
+
+        // Drain peer connected events
+        for _ in 0..2 {
+            let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+                .await?
+                .expect("event");
+            assert!(matches!(event, NetworkEvent::PeerConnected { .. }));
+        }
+
+        // Broadcast a peer message
+        network.broadcast_peer(Peer2PeerMsg::Ping).await?;
+
+        // Read the broadcast from both peer remotes
+        let mut line1 = String::new();
+        peer1_reader.read_line(&mut line1).await?;
+        let msg1: Peer2PeerMsg = serde_json::from_str(line1.trim())?;
+        assert!(matches!(msg1, Peer2PeerMsg::Ping));
+
+        let mut line2 = String::new();
+        peer2_reader.read_line(&mut line2).await?;
+        let msg2: Peer2PeerMsg = serde_json::from_str(line2.trim())?;
+        assert!(matches!(msg2, Peer2PeerMsg::Ping));
+
+        network.shutdown().await?;
+        tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
         Ok(())
     }
 }
