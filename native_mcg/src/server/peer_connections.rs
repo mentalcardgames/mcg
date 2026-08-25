@@ -244,14 +244,13 @@ impl PeerConnectionService {
     }
 
     async fn introduce(&self, connection_id: ConnectionId) -> Result<(), NetworkError> {
-        let name = self.state.lobby.read().await.our_name.clone();
         let own_ticket = self.state.ticket.read().await.clone();
 
         if let Err(error) = self
             .network
             .send_command(NetworkCommand::SendPeer {
                 connection_id,
-                message: Peer2PeerMsg::Connect(name, own_ticket),
+                message: Peer2PeerMsg::Connect(String::new(), own_ticket),
             })
             .await
         {
@@ -324,7 +323,6 @@ mod tests {
     #[tokio::test]
     async fn service_introduces_peer_through_network_actor() -> Result<()> {
         let state = AppState::new(Config::default(), None);
-        state.lobby.write().await.our_name = "Bob".into();
         *state.ticket.write().await = Some("bob-ticket".into());
         let (event_tx, mut event_rx) = mpsc::channel::<NetworkEvent>(16);
         let (supervisor, network) = NetworkSupervisor::new(event_tx);
@@ -357,7 +355,7 @@ mod tests {
         assert!(matches!(
             serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
             Peer2PeerMsg::Connect(name, Some(ticket))
-                if name == "Bob" && ticket == "bob-ticket"
+                if name.is_empty() && ticket == "bob-ticket"
         ));
 
         supervisor_task.abort();

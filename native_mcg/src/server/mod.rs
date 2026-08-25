@@ -1,7 +1,6 @@
 pub mod bot_driver;
 pub mod http;
 pub mod iroh;
-mod network_adapter;
 pub mod peer_connections;
 pub mod run;
 pub mod state;
@@ -9,4 +8,4 @@ pub mod ws;
 
 // Export commonly used types and functions
 pub use run::run_server;
-pub use state::{broadcast_state, current_state_public, dispatch_client_message, AppState};
+pub use state::AppState;

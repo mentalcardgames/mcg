@@ -10,7 +10,7 @@ use tokio::task::{JoinHandle, JoinSet};
 
 use crate::network::{NetworkHandle, PeerId, ProtocolRole, IROH_FRONTEND_ALPN, IROH_PEER_ALPN};
 use crate::public::{path_for_config, PublicInfo};
-use crate::server::state::{AppState, PeerInfo};
+use crate::server::state::AppState;
 
 const IROH_CONNECTION_SETUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
@@ -99,15 +99,7 @@ async fn run_iroh_listener(
     println!("{ticket}");
     tracing::info!(ticket = %ticket);
     let ticket = ticket.encode_string();
-    *state.ticket.write().await = Some(ticket.clone());
-
-    state.peers.write().await.insert(
-        endpoint_id,
-        PeerInfo {
-            name: String::new(),
-            ticket,
-        },
-    );
+    *state.ticket.write().await = Some(ticket);
 
     let public_path = path_for_config(state.config_path.as_deref());
     match PublicInfo::write_iroh_node_id(&public_path, endpoint_id.to_string()) {
