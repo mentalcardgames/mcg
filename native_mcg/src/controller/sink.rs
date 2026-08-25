@@ -40,18 +40,16 @@ pub trait ControllerSink: Send {
     }
 
     /// Convenience helper to request closing a connection.
-    fn close_connection(&mut self, connection_id: ConnectionId, reason: impl Into<String>) {
+    fn close_connection(&mut self, connection_id: ConnectionId, reason: String) {
         self.send_command(ControllerCommand::CloseConnection {
             connection_id,
-            reason: reason.into(),
+            reason,
         });
     }
 
     /// Convenience helper to request initiating an outgoing peer connection.
-    fn connect_peer(&mut self, ticket: impl Into<String>) {
-        self.send_command(ControllerCommand::ConnectPeer {
-            ticket: ticket.into(),
-        });
+    fn connect_peer(&mut self, ticket: String) {
+        self.send_command(ControllerCommand::ConnectPeer { ticket });
     }
 }
 
