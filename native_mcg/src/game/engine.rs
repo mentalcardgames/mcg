@@ -1,7 +1,7 @@
 //! Core Game and Player definitions + constructors and small helpers.
 
 use anyhow::{Context, Result};
-use mcg_shared::{ActionEvent, Card, PokerStatePublic, PlayerId, PlayerPublic, Stage};
+use mcg_shared::{ActionEvent, Card, PlayerId, PlayerPublic, PokerStatePublic, Stage};
 
 #[cfg(test)]
 use mcg_shared::{CardRank, CardSuit};
@@ -18,6 +18,8 @@ pub struct Player {
     pub cards: [Card; 2],
     pub has_folded: bool,
     pub all_in: bool,
+    #[serde(default)]
+    pub is_bot: bool,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -102,6 +104,7 @@ impl Game {
             ],
             has_folded: false,
             all_in: false,
+            is_bot: false,
         });
         for i in 0..bot_count {
             v.push(Player {
@@ -114,6 +117,7 @@ impl Game {
                 ],
                 has_folded: false,
                 all_in: false,
+                is_bot: true,
             });
         }
         v
@@ -160,6 +164,7 @@ impl Game {
                 has_folded: p.has_folded,
                 all_in: p.all_in,
                 bet_this_round: self.round_bets[idx],
+                is_bot: p.is_bot,
             })
             .collect();
 
@@ -272,6 +277,7 @@ mod tests {
                 ],
                 has_folded: false,
                 all_in: false,
+                is_bot: false,
             },
             Player {
                 id: PlayerId(1),
@@ -283,6 +289,7 @@ mod tests {
                 ],
                 has_folded: false,
                 all_in: false,
+                is_bot: false,
             },
         ];
 

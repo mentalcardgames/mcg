@@ -12,9 +12,13 @@ use axum::{
 };
 use tower_http::services::ServeDir;
 
+use crate::controller::{
+    spawn_controller_command_forwarder, spawn_network_event_forwarder, start_controller,
+    ChannelControllerSink, Controller, ControllerHandle,
+};
 use crate::network::{NetworkEvent, NetworkHandle, NetworkSupervisor};
 use crate::server::{
-    network_adapter::LegacyBackendAdapter, peer_connections::PeerConnectionService, AppState,
+    bot_driver::spawn_bot_driver, peer_connections::PeerConnectionService, AppState,
 };
 use anyhow::{Context, Result};
 use tokio::sync::mpsc;
@@ -24,6 +28,7 @@ const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
 #[derive(Clone)]
 struct RouterState {
     app: AppState,
+    controller: ControllerHandle,
     network: NetworkHandle,
     peer_connections: PeerConnectionService,
     _network_tasks: Arc<NetworkTasks>,
@@ -32,6 +37,12 @@ struct RouterState {
 impl FromRef<RouterState> for AppState {
     fn from_ref(state: &RouterState) -> Self {
         state.app.clone()
+    }
+}
+
+impl FromRef<RouterState> for ControllerHandle {
+    fn from_ref(state: &RouterState) -> Self {
+        state.controller.clone()
     }
 }
 
@@ -48,31 +59,68 @@ impl FromRef<RouterState> for PeerConnectionService {
 }
 
 struct NetworkTasks {
+    controller_handle: ControllerHandle,
     supervisor: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    adapter: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    event_forwarder: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    command_forwarder: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    bot_driver: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    controller_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 impl NetworkTasks {
     async fn shutdown(&self) {
+        let _ = self.controller_handle.shutdown().await;
+
+        let bot_driver = self
+            .bot_driver
+            .lock()
+            .expect("bot driver task lock poisoned")
+            .take();
+        if let Some(bot_driver) = bot_driver {
+            bot_driver.abort();
+        }
+
         let supervisor = self
             .supervisor
             .lock()
             .expect("network supervisor task lock poisoned")
             .take();
-        let adapter = self
-            .adapter
-            .lock()
-            .expect("network adapter task lock poisoned")
-            .take();
-
         if let Some(supervisor) = supervisor {
             if let Err(error) = supervisor.await {
                 tracing::error!(%error, "network supervisor task failed during shutdown");
             }
         }
-        if let Some(adapter) = adapter {
-            if let Err(error) = adapter.await {
-                tracing::error!(%error, "network adapter task failed during shutdown");
+
+        let event_forwarder = self
+            .event_forwarder
+            .lock()
+            .expect("event forwarder task lock poisoned")
+            .take();
+        if let Some(event_forwarder) = event_forwarder {
+            if let Err(error) = event_forwarder.await {
+                tracing::error!(%error, "network event forwarder failed during shutdown");
+            }
+        }
+
+        let command_forwarder = self
+            .command_forwarder
+            .lock()
+            .expect("command forwarder task lock poisoned")
+            .take();
+        if let Some(command_forwarder) = command_forwarder {
+            if let Err(error) = command_forwarder.await {
+                tracing::error!(%error, "controller command forwarder failed during shutdown");
+            }
+        }
+
+        let controller_thread = self
+            .controller_thread
+            .lock()
+            .expect("controller thread lock poisoned")
+            .take();
+        if let Some(controller_thread) = controller_thread {
+            if let Err(error) = controller_thread.join() {
+                tracing::error!(?error, "controller thread panicked during shutdown");
             }
         }
     }
@@ -80,6 +128,14 @@ impl NetworkTasks {
 
 impl Drop for NetworkTasks {
     fn drop(&mut self) {
+        if let Some(bot_driver) = self
+            .bot_driver
+            .get_mut()
+            .expect("bot driver task lock poisoned")
+            .take()
+        {
+            bot_driver.abort();
+        }
         if let Some(supervisor) = self
             .supervisor
             .get_mut()
@@ -88,13 +144,21 @@ impl Drop for NetworkTasks {
         {
             supervisor.abort();
         }
-        if let Some(adapter) = self
-            .adapter
+        if let Some(event_forwarder) = self
+            .event_forwarder
             .get_mut()
-            .expect("network adapter task lock poisoned")
+            .expect("event forwarder task lock poisoned")
             .take()
         {
-            adapter.abort();
+            event_forwarder.abort();
+        }
+        if let Some(command_forwarder) = self
+            .command_forwarder
+            .get_mut()
+            .expect("command forwarder task lock poisoned")
+            .take()
+        {
+            command_forwarder.abort();
         }
     }
 }
@@ -102,12 +166,14 @@ impl Drop for NetworkTasks {
 impl RouterState {
     fn new(
         app: AppState,
+        controller: ControllerHandle,
         network: NetworkHandle,
         peer_connections: PeerConnectionService,
         network_tasks: Arc<NetworkTasks>,
     ) -> Self {
         Self {
             app,
+            controller,
             network,
             peer_connections,
             _network_tasks: network_tasks,
@@ -115,27 +181,64 @@ impl RouterState {
     }
 }
 
-fn start_network(app: AppState) -> (NetworkHandle, PeerConnectionService, Arc<NetworkTasks>) {
+fn start_network(
+    app: AppState,
+) -> (
+    ControllerHandle,
+    NetworkHandle,
+    PeerConnectionService,
+    Arc<NetworkTasks>,
+) {
     let (event_tx, event_rx) = mpsc::channel::<NetworkEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
     let (supervisor, network) = NetworkSupervisor::new(event_tx);
     let peer_connections = PeerConnectionService::new(app.clone(), network.clone());
-    let adapter =
-        LegacyBackendAdapter::new(app, network.clone(), peer_connections.clone(), event_rx);
+
+    let (command_tx, command_rx) = mpsc::unbounded_channel();
+    let sink = ChannelControllerSink::new(command_tx);
+    let config = app.config.try_read().map(|c| c.clone()).unwrap_or_default();
+    let config_path = app.config_path.clone();
+    let controller = Controller::new(config.clone(), config_path);
+    let (controller_thread, controller_handle) = start_controller(controller, 256, sink);
+
+    let (state_watch_tx, state_watch_rx) = tokio::sync::watch::channel(None);
+    let event_forwarder = spawn_network_event_forwarder(
+        event_rx,
+        controller_handle.clone(),
+        Some(peer_connections.clone()),
+    );
+    let command_forwarder = spawn_controller_command_forwarder(
+        command_rx,
+        network.clone(),
+        Some(peer_connections.clone()),
+        Some(state_watch_tx),
+    );
     let supervisor = tokio::spawn(supervisor.run());
-    let adapter = tokio::spawn(adapter.run());
+    let bot_delay_range = config.bot_delay_range();
+    let bot_driver = spawn_bot_driver(
+        controller_handle.clone(),
+        state_watch_rx,
+        crate::bot::BotManager::new(),
+        bot_delay_range,
+    );
 
     (
+        controller_handle.clone(),
         network,
         peer_connections,
         Arc::new(NetworkTasks {
+            controller_handle,
             supervisor: Mutex::new(Some(supervisor)),
-            adapter: Mutex::new(Some(adapter)),
+            event_forwarder: Mutex::new(Some(event_forwarder)),
+            command_forwarder: Mutex::new(Some(command_forwarder)),
+            bot_driver: Mutex::new(Some(bot_driver)),
+            controller_thread: Mutex::new(Some(controller_thread)),
         }),
     )
 }
 
 fn build_router_with_network(
     state: AppState,
+    controller: ControllerHandle,
     network: NetworkHandle,
     peer_connections: PeerConnectionService,
     network_tasks: Arc<NetworkTasks>,
@@ -161,6 +264,7 @@ fn build_router_with_network(
         .fallback(spa_handler)
         .with_state(RouterState::new(
             state,
+            controller,
             network,
             peer_connections,
             network_tasks,
@@ -168,26 +272,19 @@ fn build_router_with_network(
 }
 
 pub fn build_router(state: AppState) -> Router {
-    let (network, peer_connections, network_tasks) = start_network(state.clone());
-    build_router_with_network(state, network, peer_connections, network_tasks)
+    let (controller, network, peer_connections, network_tasks) = start_network(state.clone());
+    build_router_with_network(state, controller, network, peer_connections, network_tasks)
 }
 
 pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
-    let (network, peer_connections, network_tasks) = start_network(state.clone());
+    let (controller, network, peer_connections, network_tasks) = start_network(state.clone());
     let app = build_router_with_network(
         state.clone(),
+        controller,
         network.clone(),
         peer_connections,
         network_tasks.clone(),
     );
-
-    // Continuously drive bots in the background.
-    {
-        let state_clone = state.clone();
-        tokio::spawn(async move {
-            crate::server::bot_driver::run_bot_driver(state_clone).await;
-        });
-    }
 
     let display_addr = if addr.ip().is_loopback() {
         format!("localhost:{}", addr.port())

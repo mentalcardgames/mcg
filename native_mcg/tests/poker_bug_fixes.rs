@@ -27,6 +27,7 @@ fn create_test_players(count: usize) -> Vec<Player> {
             ],
             has_folded: false,
             all_in: false,
+            is_bot: i != 0,
         });
     }
     players

@@ -11,11 +11,11 @@ use crate::bot::BotManager;
 use crate::game::{Game, Player};
 use crate::pretty;
 use mcg_shared::PokerStatePublic;
+use std::collections::HashMap;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
-use std::collections::HashMap;
 
 pub const CHANNEL_BUFFER_SIZE: usize = 256;
 
@@ -54,19 +54,10 @@ impl AppState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct PeerInfo {
     pub name: String,
     pub ticket: String,
-}
-
-impl Default for PeerInfo {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            ticket: String::new(),
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -77,6 +68,7 @@ pub struct Lobby {
     /// the game engine remains unaware of bot status.
     pub(crate) bots: Vec<PlayerId>,
     /// Bot manager for AI decision making
+    #[allow(dead_code)]
     pub(crate) bot_manager: BotManager,
 
     //Variables used for managing connections to the lobby and enforcing max player count
@@ -173,6 +165,7 @@ pub async fn create_new_game(
             ], // Default cards initially
             has_folded: false,
             all_in: false,
+            is_bot: config.is_bot,
         };
         game_players.push(player);
     }
@@ -232,7 +225,9 @@ pub async fn broadcast_state(state: &AppState) {
             gs.stage,
             current_player_name
         );
-        let _ = state.broadcaster.send(mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs));
+        let _ = state
+            .broadcaster
+            .send(mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs));
     }
 }
 
@@ -313,7 +308,9 @@ async fn fetch_current_state(state: &AppState) -> mcg_shared::Backend2FrontendMs
         broadcast_state(state).await;
         mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
     } else {
-        mcg_shared::Backend2FrontendMsg::Error("No active game. Please start a new game first.".into())
+        mcg_shared::Backend2FrontendMsg::Error(
+            "No active game. Please start a new game first.".into(),
+        )
     }
 }
 
@@ -336,10 +333,14 @@ async fn advance_to_next_hand(state: &AppState) -> mcg_shared::Backend2FrontendM
             if let Some(gs) = current_state_public(state).await {
                 mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
-                mcg_shared::Backend2FrontendMsg::Error("No active game after starting next hand".into())
+                mcg_shared::Backend2FrontendMsg::Error(
+                    "No active game after starting next hand".into(),
+                )
             }
         }
-        Err(e) => mcg_shared::Backend2FrontendMsg::Error(format!("Failed to start new hand: {}", e)),
+        Err(e) => {
+            mcg_shared::Backend2FrontendMsg::Error(format!("Failed to start new hand: {}", e))
+        }
     }
 }
 
@@ -359,7 +360,9 @@ async fn create_game_session(
                 )
             }
         }
-        Err(e) => mcg_shared::Backend2FrontendMsg::Error(format!("Failed to create new game: {}", e)),
+        Err(e) => {
+            mcg_shared::Backend2FrontendMsg::Error(format!("Failed to create new game: {}", e))
+        }
     }
 }
 
@@ -380,10 +383,15 @@ async fn import_game_state(
                 tracing::info!("Game state replaced via PushState from peer");
                 mcg_shared::Backend2FrontendMsg::UpdatePokerState(gs)
             } else {
-                mcg_shared::Backend2FrontendMsg::Error("Failed to produce state after PushState".into())
+                mcg_shared::Backend2FrontendMsg::Error(
+                    "Failed to produce state after PushState".into(),
+                )
             }
         }
-        Err(e) => mcg_shared::Backend2FrontendMsg::Error(format!("Failed to deserialize game state: {}", e)),
+        Err(e) => mcg_shared::Backend2FrontendMsg::Error(format!(
+            "Failed to deserialize game state: {}",
+            e
+        )),
     }
 }
 
@@ -415,7 +423,9 @@ pub async fn dispatch_client_message(
         mcg_shared::Frontend2BackendMsg::Action { player_id, action } => {
             execute_player_action(state, player_id, action).await
         }
-        mcg_shared::Frontend2BackendMsg::Subscribe => mcg_shared::Backend2FrontendMsg::Error("not supported".into()),
+        mcg_shared::Frontend2BackendMsg::Subscribe => {
+            mcg_shared::Backend2FrontendMsg::Error("not supported".into())
+        }
         mcg_shared::Frontend2BackendMsg::RequestState => fetch_current_state(state).await,
         mcg_shared::Frontend2BackendMsg::Ping => {
             tracing::info!("received ping from client");
@@ -435,7 +445,11 @@ pub async fn dispatch_client_message(
         mcg_shared::Frontend2BackendMsg::GetIP => {
             let ip = match handle_get_ip().await {
                 Some(ip_addr) => ip_addr,
-                None => return mcg_shared::Backend2FrontendMsg::Error("Unable to determine local IP".into()),
+                None => {
+                    return mcg_shared::Backend2FrontendMsg::Error(
+                        "Unable to determine local IP".into(),
+                    )
+                }
             };
             mcg_shared::Backend2FrontendMsg::IPValue(ip)
         }
@@ -465,7 +479,7 @@ pub async fn dispatch_client_message(
             lobby.lobby_open = true;
             lobby.game_type = game_type.clone();
             tracing::info!("Lobby opened for game type: {}", game_type);
-            mcg_shared::Backend2FrontendMsg::Error(format!("Lobby is now open"))
+            mcg_shared::Backend2FrontendMsg::Error("Lobby is now open".to_string())
         }
         mcg_shared::Frontend2BackendMsg::PlayerName(name) => {
             let mut lobby = state.lobby.write().await;
@@ -487,8 +501,9 @@ pub async fn dispatch_client_message(
         mcg_shared::Frontend2BackendMsg::Disconnect => {
             tracing::info!("Received disconnect message from client");
             {
-            let msg = mcg_shared::Peer2PeerMsg::Disconnect(state.lobby.read().await.our_name.clone());
-            broadcast_peer_msg(state, msg);
+                let msg =
+                    mcg_shared::Peer2PeerMsg::Disconnect(state.lobby.read().await.our_name.clone());
+                broadcast_peer_msg(state, msg);
             }
 
             let mut lobby = state.lobby.write().await;
@@ -514,7 +529,11 @@ pub async fn dispatch_client_message(
         mcg_shared::Frontend2BackendMsg::GetPlayers => {
             let peers = state.peers.read().await;
             for peer in peers.values() {
-                let _ = state.broadcaster.send(mcg_shared::Backend2FrontendMsg::NewPlayer(peer.name.clone()));
+                let _ = state
+                    .broadcaster
+                    .send(mcg_shared::Backend2FrontendMsg::NewPlayer(
+                        peer.name.clone(),
+                    ));
             }
             let msg = mcg_shared::Peer2PeerMsg::RequestReady;
             broadcast_peer_msg(state, msg);

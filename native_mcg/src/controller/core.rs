@@ -606,6 +606,7 @@ impl Controller {
                 ],
                 has_folded: false,
                 all_in: false,
+                is_bot: config.is_bot,
             };
             game_players.push(player);
         }

@@ -115,7 +115,7 @@ mod tests {
         let _event_forwarder =
             spawn_network_event_forwarder(network_event_rx, controller_handle.clone(), None);
         let _command_forwarder =
-            spawn_controller_command_forwarder(command_rx, network.clone(), None);
+            spawn_controller_command_forwarder(command_rx, network.clone(), None, None);
 
         // Register a frontend stream
         let (frontend_stream, frontend_remote) = duplex(4096);

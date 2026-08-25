@@ -36,6 +36,8 @@ pub struct PlayerPublic {
     pub has_folded: bool,
     pub all_in: bool,
     pub bet_this_round: u32,
+    #[serde(default)]
+    pub is_bot: bool,
 }
 
 /// Configuration for setting up a player in a new game

@@ -50,16 +50,22 @@ pub fn spawn_network_event_forwarder(
 }
 
 /// Spawns an async task that forwards outbound [`ControllerCommand`]s from the Controller
-/// to [`NetworkHandle`] and [`PeerConnectionService`].
+/// to [`NetworkHandle`], [`PeerConnectionService`], and an optional public state [`watch::Sender`].
 pub fn spawn_controller_command_forwarder(
     mut command_rx: mpsc::UnboundedReceiver<ControllerCommand>,
     network: NetworkHandle,
     peer_service: Option<PeerConnectionService>,
+    state_watch_tx: Option<tokio::sync::watch::Sender<Option<mcg_shared::PokerStatePublic>>>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         while let Some(command) = command_rx.recv().await {
             match command {
                 ControllerCommand::BroadcastFrontend(message) => {
+                    if let mcg_shared::Backend2FrontendMsg::UpdatePokerState(ref gs) = message {
+                        if let Some(ref tx) = state_watch_tx {
+                            let _ = tx.send_replace(Some(gs.clone()));
+                        }
+                    }
                     if let Err(error) = network.broadcast_frontend(message).await {
                         tracing::warn!(%error, "failed to broadcast frontend message from controller");
                     }
