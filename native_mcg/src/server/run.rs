@@ -1,62 +1,22 @@
-// Run and routing helpers (build_router, run_server, SPA handlers).
+// Run and server orchestration helpers (start_network, run_server).
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use axum::{
-    extract::FromRef,
-    http::Uri,
-    response::IntoResponse,
-    routing::{get, post},
-    Json, Router,
-};
-use tower_http::services::ServeDir;
+use axum::Router;
 
 use crate::controller::{
     spawn_controller_command_forwarder, spawn_network_event_forwarder, start_controller,
     ChannelControllerSink, Controller, ControllerHandle,
 };
-use crate::network::{NetworkEvent, NetworkHandle, NetworkSupervisor};
-use crate::server::{
-    bot_driver::spawn_bot_driver, peer_connections::PeerConnectionService, AppState,
+use crate::network::{
+    NetworkEvent, NetworkHandle, NetworkSupervisor, PeerConnectionService, RouterState,
 };
+use crate::server::{bot_driver::spawn_bot_driver, AppState};
 use anyhow::{Context, Result};
 use tokio::sync::mpsc;
 
 const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
-
-#[derive(Clone)]
-struct RouterState {
-    app: AppState,
-    controller: ControllerHandle,
-    network: NetworkHandle,
-    peer_connections: PeerConnectionService,
-    _network_tasks: Arc<NetworkTasks>,
-}
-
-impl FromRef<RouterState> for AppState {
-    fn from_ref(state: &RouterState) -> Self {
-        state.app.clone()
-    }
-}
-
-impl FromRef<RouterState> for ControllerHandle {
-    fn from_ref(state: &RouterState) -> Self {
-        state.controller.clone()
-    }
-}
-
-impl FromRef<RouterState> for NetworkHandle {
-    fn from_ref(state: &RouterState) -> Self {
-        state.network.clone()
-    }
-}
-
-impl FromRef<RouterState> for PeerConnectionService {
-    fn from_ref(state: &RouterState) -> Self {
-        state.peer_connections.clone()
-    }
-}
 
 struct NetworkTasks {
     controller_handle: ControllerHandle,
@@ -163,24 +123,6 @@ impl Drop for NetworkTasks {
     }
 }
 
-impl RouterState {
-    fn new(
-        app: AppState,
-        controller: ControllerHandle,
-        network: NetworkHandle,
-        peer_connections: PeerConnectionService,
-        network_tasks: Arc<NetworkTasks>,
-    ) -> Self {
-        Self {
-            app,
-            controller,
-            network,
-            peer_connections,
-            _network_tasks: network_tasks,
-        }
-    }
-}
-
 fn start_network(
     app: AppState,
 ) -> (
@@ -236,55 +178,18 @@ fn start_network(
     )
 }
 
-fn build_router_with_network(
-    state: AppState,
-    controller: ControllerHandle,
-    network: NetworkHandle,
-    peer_connections: PeerConnectionService,
-    network_tasks: Arc<NetworkTasks>,
-) -> Router {
-    // Serve static files from the project root. Assumes process CWD is repo root.
-    let serve_dir = ServeDir::new("pkg").append_index_html_on_directories(true);
-    let serve_media = ServeDir::new("media").append_index_html_on_directories(true);
-
-    Router::new()
-        .route(
-            "/health",
-            get(|| async { Json(serde_json::json!({ "ok": true })) }),
-        )
-        // WebSocket endpoint (WASM GUI remains websocket-only)
-        .route("/ws", get(crate::server::ws::ws_handler))
-        // HTTP API endpoint using unified Frontend2BackendMsg/Backend2FrontendMsg payloads
-        .route("/api/message", post(crate::server::http::message_handler))
-        .nest_service("/pkg", serve_dir)
-        .nest_service("/media", serve_media)
-        // Serve index.html for the root route
-        .route("/", get(serve_index))
-        // Fallback handler for SPA routing - serve index.html for all other routes
-        .fallback(spa_handler)
-        .with_state(RouterState::new(
-            state,
-            controller,
-            network,
-            peer_connections,
-            network_tasks,
-        ))
-}
-
 pub fn build_router(state: AppState) -> Router {
     let (controller, network, peer_connections, network_tasks) = start_network(state.clone());
-    build_router_with_network(state, controller, network, peer_connections, network_tasks)
+    let router_state = RouterState::new(state, controller, network, peer_connections)
+        .with_task_guard(network_tasks);
+    crate::network::build_router(router_state)
 }
 
 pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
     let (controller, network, peer_connections, network_tasks) = start_network(state.clone());
-    let app = build_router_with_network(
-        state.clone(),
-        controller,
-        network.clone(),
-        peer_connections,
-        network_tasks.clone(),
-    );
+    let router_state =
+        RouterState::new(state.clone(), controller, network.clone(), peer_connections);
+    let app = crate::network::build_router(router_state);
 
     let display_addr = if addr.ip().is_loopback() {
         format!("localhost:{}", addr.port())
@@ -308,7 +213,7 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
         .await
         .with_context(|| format!("Failed to bind to {}", display_addr))?;
     // The owned task starts Iroh concurrently and is shut down after Axum stops.
-    let iroh_listener = crate::server::iroh::spawn_iroh_listener(state, network.clone());
+    let iroh_listener = crate::network::spawn_iroh_listener(state, network.clone());
     let server_result = axum::serve(listener, app).await;
     iroh_listener.shutdown().await;
     if let Err(error) = network.shutdown().await {
@@ -317,35 +222,4 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
     network_tasks.shutdown().await;
     server_result.context("running HTTP/WebSocket server")?;
     Ok(())
-}
-
-/// Serve index.html file
-async fn serve_index() -> impl IntoResponse {
-    match tokio::fs::read_to_string("index.html").await {
-        Ok(content) => (
-            axum::http::StatusCode::OK,
-            [("content-type", "text/html")],
-            content,
-        )
-            .into_response(),
-        Err(_) => (axum::http::StatusCode::NOT_FOUND, "index.html not found").into_response(),
-    }
-}
-
-/// Single Page Application (SPA) fallback handler - serves index.html for client-side routing
-async fn spa_handler(uri: Uri) -> impl IntoResponse {
-    let path = uri.path();
-
-    // Don't serve index.html for API routes or asset requests
-    if path.starts_with("/api")
-        || path.starts_with("/pkg")
-        || path.starts_with("/media")
-        || path.starts_with("/ws")
-        || path.starts_with("/health")
-    {
-        return axum::http::StatusCode::NOT_FOUND.into_response();
-    }
-
-    // For all other routes, serve index.html to enable client-side routing
-    serve_index().await.into_response()
 }

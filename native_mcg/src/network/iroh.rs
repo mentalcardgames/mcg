@@ -1,21 +1,28 @@
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use iroh::endpoint::Endpoint;
 use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
+use tokio::task::{JoinHandle, JoinSet};
 
+use crate::public::{path_for_config, PublicInfo};
+use crate::server::AppState;
 use crate::transport::{send_peer_msg_to_writer, send_server_msg_to_writer};
 
 use super::types::ActorEvent;
 use super::{
-    ConnectionCloseReason, ConnectionId, FrontendConnectionCommand, PeerConnectionCommand, PeerId,
+    ConnectionCloseReason, ConnectionId, FrontendConnectionCommand, NetworkHandle,
+    PeerConnectionCommand, PeerId, ProtocolRole,
 };
 
 /// Application protocol for Iroh connections between an MCG frontend and backend.
 pub const IROH_FRONTEND_ALPN: &[u8] = b"mcg/iroh/frontend";
 /// Application protocol for Iroh connections between MCG backend peers.
 pub const IROH_PEER_ALPN: &[u8] = b"mcg/iroh/peer";
+
+const IROH_CONNECTION_SETUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 pub(super) type IrohReader = Box<dyn AsyncRead + Unpin + Send>;
 pub(super) type IrohWriter = Box<dyn AsyncWrite + Unpin + Send>;
@@ -65,6 +72,261 @@ impl IrohConnector for IrohEndpointConnector {
             .map_err(|error| IrohConnectError::OpenStream(error.to_string()))?;
 
         Ok((peer_id, Box::new(reader), Box::new(writer)))
+    }
+}
+
+/// Owned background task for the Iroh endpoint and its incoming connections.
+pub struct IrohListenerTask {
+    shutdown_tx: Option<oneshot::Sender<()>>,
+    task: Option<JoinHandle<()>>,
+}
+
+impl IrohListenerTask {
+    pub async fn shutdown(mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        if let Some(task) = self.task.take() {
+            if let Err(error) = task.await {
+                tracing::error!(%error, "Iroh listener task failed during shutdown");
+            }
+        }
+    }
+}
+
+impl Drop for IrohListenerTask {
+    fn drop(&mut self) {
+        if let Some(task) = &self.task {
+            task.abort();
+        }
+    }
+}
+
+/// Starts an owned Iroh listener task without delaying the HTTP server startup.
+pub fn spawn_iroh_listener(state: AppState, network: NetworkHandle) -> IrohListenerTask {
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let task = tokio::spawn(async move {
+        if let Err(error) = run_iroh_listener(state, network, shutdown_rx).await {
+            tracing::error!(%error, "Iroh listener failed");
+        }
+    });
+    IrohListenerTask {
+        shutdown_tx: Some(shutdown_tx),
+        task: Some(task),
+    }
+}
+
+/// Creates the Iroh endpoint and accepts peer connections until shutdown.
+async fn run_iroh_listener(
+    state: AppState,
+    network: NetworkHandle,
+    mut shutdown_rx: oneshot::Receiver<()>,
+) -> Result<()> {
+    use iroh::SecretKey;
+    use iroh_tickets::{endpoint::EndpointTicket, Ticket};
+
+    let secret_key: SecretKey = load_or_generate_iroh_secret(state.clone()).await;
+    let endpoint = build_iroh_endpoint(secret_key).await?;
+    network
+        .configure_iroh_endpoint(endpoint.clone())
+        .await
+        .context("configuring Iroh endpoint in network supervisor")?;
+
+    tokio::select! {
+        _ = &mut shutdown_rx => {
+            endpoint.close().await;
+            return Ok(());
+        }
+        online = tokio::time::timeout(IROH_CONNECTION_SETUP_TIMEOUT, endpoint.online()) => {
+            match online {
+                Ok(()) => tracing::info!("iroh endpoint is online (relay connected)"),
+                Err(_) => {
+                    tracing::warn!("timeout waiting for iroh endpoint to come online; proceeding anyway")
+                }
+            }
+        }
+    }
+
+    let endpoint_id = endpoint.id();
+    println!("\n\x1b[1;32m=== Iroh Endpoint Ready ===\x1b[0m");
+    println!("\x1b[1mNode ID:\x1b[0m {endpoint_id}");
+    println!("\x1b[1;32m===========================\x1b[0m\n");
+
+    let addr = endpoint.addr();
+    let relay_urls: Vec<_> = addr.relay_urls().collect();
+    tracing::info!(iroh_node_id = %endpoint_id, iroh_addr = ?addr, relay_urls = ?relay_urls);
+
+    let ticket = EndpointTicket::new(addr);
+    println!("{ticket}");
+    tracing::info!(ticket = %ticket);
+    let ticket = ticket.encode_string();
+    *state.ticket.write().await = Some(ticket);
+
+    let public_path = path_for_config(state.config_path.as_deref());
+    match PublicInfo::write_iroh_node_id(&public_path, endpoint_id.to_string()) {
+        Ok(_) => tracing::info!(path = %public_path.display(), "stored iroh node id"),
+        Err(error) => {
+            tracing::warn!(%error, path = %public_path.display(), "failed to persist iroh node id")
+        }
+    }
+
+    tracing::info!(
+        peer_alpn = %std::str::from_utf8(IROH_PEER_ALPN).unwrap_or("mcg/iroh/peer"),
+        frontend_alpn = %std::str::from_utf8(IROH_FRONTEND_ALPN).unwrap_or("mcg/iroh/frontend"),
+        "iroh listener started"
+    );
+    run_iroh_accept_loop(endpoint, network, shutdown_rx).await;
+    Ok(())
+}
+
+async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
+    use getrandom::getrandom;
+    use iroh::SecretKey;
+
+    let generate_new_key = || -> SecretKey {
+        let mut bytes = [0u8; 32];
+        if let Err(error) = getrandom(&mut bytes) {
+            tracing::error!(%error, "failed to get randomness for iroh key");
+        }
+        SecretKey::from_bytes(&bytes)
+    };
+
+    if let Some(config_path) = state.config_path.clone() {
+        let config = state.config.read().await;
+        if let Some(bytes) = config.iroh_key_bytes() {
+            if bytes.len() >= 32 {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&bytes[..32]);
+                return SecretKey::from_bytes(&key);
+            }
+        }
+        drop(config);
+
+        let secret_key = generate_new_key();
+        let mut config = state.config.write().await;
+        if let Some(bytes) = config.iroh_key_bytes() {
+            if bytes.len() >= 32 {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&bytes[..32]);
+                return SecretKey::from_bytes(&key);
+            }
+        }
+
+        if let Err(error) = config.set_iroh_key_bytes_and_save(&config_path, &secret_key.to_bytes())
+        {
+            tracing::error!(%error, "failed to save generated Iroh key to config '{}'", config_path.display());
+        } else {
+            tracing::info!(config_path = %config_path.display(), "saved generated Iroh key into config");
+        }
+        secret_key
+    } else {
+        tracing::warn!(
+            "no server config path provided; generating ephemeral iroh key (not persisted)"
+        );
+        generate_new_key()
+    }
+}
+
+async fn build_iroh_endpoint(secret_key: iroh::SecretKey) -> Result<iroh::endpoint::Endpoint> {
+    use iroh::endpoint::Endpoint;
+
+    Endpoint::builder(iroh::endpoint::presets::N0)
+        .alpns(vec![IROH_PEER_ALPN.to_vec(), IROH_FRONTEND_ALPN.to_vec()])
+        .secret_key(secret_key)
+        .bind()
+        .await
+        .context("binding iroh endpoint")
+}
+
+async fn run_iroh_accept_loop(
+    endpoint: iroh::endpoint::Endpoint,
+    network: NetworkHandle,
+    mut shutdown_rx: oneshot::Receiver<()>,
+) {
+    let mut connection_tasks = JoinSet::new();
+    loop {
+        tokio::select! {
+            _ = &mut shutdown_rx => break,
+            incoming = endpoint.accept() => {
+                let Some(incoming) = incoming else {
+                    break;
+                };
+                let network = network.clone();
+                connection_tasks.spawn(async move {
+                    let setup = async {
+                        let mut accepting = incoming
+                            .accept()
+                            .context("starting incoming Iroh handshake")?;
+                        let alpn = accepting
+                            .alpn()
+                            .await
+                            .context("reading incoming Iroh ALPN")?;
+                        let connection = accepting.await.context("accepting incoming Iroh connection")?;
+                        let remote_id = connection.remote_id();
+                        tracing::info!(peer = %remote_id, alpn = %String::from_utf8_lossy(&alpn), "accepted new Iroh connection");
+                        register_incoming_iroh_connection(network, connection, &alpn)
+                            .await
+                            .with_context(|| format!("registering incoming Iroh connection from {remote_id}"))
+                    };
+                    match tokio::time::timeout(IROH_CONNECTION_SETUP_TIMEOUT, setup).await {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => tracing::error!(%error, "failed to set up incoming Iroh connection"),
+                        Err(_) => tracing::warn!("timed out while setting up incoming Iroh connection"),
+                    }
+                });
+            }
+            task = connection_tasks.join_next(), if !connection_tasks.is_empty() => {
+                if let Some(Err(error)) = task {
+                    tracing::error!(%error, "incoming Iroh connection task failed");
+                }
+            }
+        }
+    }
+
+    endpoint.close().await;
+    connection_tasks.shutdown().await;
+    tracing::info!("Iroh listener stopped");
+}
+
+async fn register_incoming_iroh_connection(
+    network: NetworkHandle,
+    connection: iroh::endpoint::Connection,
+    alpn: &[u8],
+) -> Result<()> {
+    let remote_id = connection.remote_id();
+    let (writer, reader) = connection
+        .accept_bi()
+        .await
+        .context("accepting incoming Iroh bidirectional stream")?;
+    match protocol_role_from_alpn(alpn) {
+        Some(ProtocolRole::Peer) => {
+            let peer_id = PeerId::new(remote_id.to_string());
+            let connection_id = network
+                .register_incoming_iroh_peer(peer_id.clone(), reader, writer)
+                .await
+                .context("registering incoming Iroh peer with network supervisor")?;
+            tracing::info!(%connection_id, %peer_id, "incoming Iroh peer registered");
+            Ok(())
+        }
+        Some(ProtocolRole::Frontend) => {
+            let connection_id = network
+                .register_incoming_iroh_frontend(reader, writer)
+                .await
+                .context("registering incoming Iroh frontend with network supervisor")?;
+            tracing::info!(%connection_id, endpoint_id = %remote_id, "incoming Iroh frontend registered");
+            Ok(())
+        }
+        None => anyhow::bail!("unsupported Iroh ALPN {}", String::from_utf8_lossy(alpn)),
+    }
+}
+
+fn protocol_role_from_alpn(alpn: &[u8]) -> Option<ProtocolRole> {
+    if alpn == IROH_PEER_ALPN {
+        Some(ProtocolRole::Peer)
+    } else if alpn == IROH_FRONTEND_ALPN {
+        Some(ProtocolRole::Frontend)
+    } else {
+        None
     }
 }
 
@@ -252,6 +514,19 @@ mod tests {
     use tokio::io::{duplex, split, AsyncBufReadExt, AsyncWriteExt, BufReader};
 
     use super::*;
+
+    #[test]
+    fn iroh_alpns_select_exactly_one_protocol_role() {
+        assert_eq!(
+            protocol_role_from_alpn(IROH_PEER_ALPN),
+            Some(ProtocolRole::Peer)
+        );
+        assert_eq!(
+            protocol_role_from_alpn(IROH_FRONTEND_ALPN),
+            Some(ProtocolRole::Frontend)
+        );
+        assert_eq!(protocol_role_from_alpn(b"mcg/iroh/unknown"), None);
+    }
 
     #[tokio::test]
     async fn actor_translates_peer_messages_in_both_directions_and_closes() -> Result<()> {

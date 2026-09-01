@@ -43,7 +43,7 @@ The server is started from the **native_mcg** binary. The program entry point is
 
 The backend supports three different types of connections to clients: HTTP, WebSocket, and Iroh.
 
-- **HTTP**: HTTP is the most straightforward connection type as there is no session management. The responding message is directly returned inline as the response to the POST request. Handled by `message_handler` in [native_mcg/src/server/http.rs](../native_mcg/src/server/http.rs).
+- **HTTP**: HTTP is the most straightforward connection type as there is no session management. The responding message is directly returned inline as the response to the POST request. Handled by `ws_handler` in [native_mcg/src/network/axum.rs](../native_mcg/src/network/axum.rs).
 - **WebSocket and Iroh**: Both WebSocket and Iroh are more complicated as they need to manage a long-lived connection/session allowing for full-duplex communication and state push updates.
   - WebSocket connections are upgraded and managed by `manage_websocket` in [native_mcg/src/server/ws.rs](../native_mcg/src/server/ws.rs).
   - Iroh connections are managed by `manage_iroh_connection` in [native_mcg/src/server/iroh.rs](../native_mcg/src/server/iroh.rs).

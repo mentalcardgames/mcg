@@ -3,8 +3,7 @@
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::network::{NetworkCommand, NetworkEvent, NetworkHandle};
-use crate::server::peer_connections::PeerConnectionService;
+use crate::network::{NetworkCommand, NetworkEvent, NetworkHandle, PeerConnectionService};
 
 use super::handle::ControllerHandle;
 use super::types::ControllerCommand;

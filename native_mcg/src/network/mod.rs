@@ -5,13 +5,20 @@
 //! internal typed events instead of accessing application state directly. The
 //! supervisor enriches them into [`NetworkEvent`] values for application code.
 
-mod iroh;
-mod supervisor;
-mod types;
-mod websocket;
+pub mod axum;
+pub mod iroh;
+pub mod supervisor;
+pub mod types;
+pub mod websocket;
 
-pub use iroh::{IROH_FRONTEND_ALPN, IROH_PEER_ALPN};
-pub use supervisor::{NetworkError, NetworkHandle, NetworkSupervisor};
+pub use axum::{
+    build_router, health_handler, http_handler, serve_index, spa_handler, ws_handler, RouterState,
+};
+pub use iroh::{spawn_iroh_listener, IrohListenerTask, IROH_FRONTEND_ALPN, IROH_PEER_ALPN};
+pub use supervisor::{
+    EstablishedPeer, NetworkError, NetworkHandle, NetworkSupervisor, PeerConnectionError,
+    PeerConnectionService,
+};
 pub use types::{
     ConnectionCloseReason, ConnectionId, FrontendConnectionCommand, NetworkCommand, NetworkEvent,
     PeerConnectionCommand, PeerConnectionDirection, PeerId, ProtocolRole, TransportKind,
