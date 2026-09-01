@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fmt;
 
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
@@ -152,7 +153,7 @@ pub enum NetworkEvent {
 
 /// Internal events emitted by connection actors towards the supervisor.
 #[derive(Debug)]
-pub(super) enum ActorEvent {
+pub(crate) enum ActorEvent {
     Ready {
         connection_id: ConnectionId,
     },
@@ -172,6 +173,119 @@ pub(super) enum ActorEvent {
         connection_id: ConnectionId,
         reason: ConnectionCloseReason,
     },
+}
+
+/// Errors returned while interacting with the network supervisor.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NetworkError {
+    SupervisorStopped,
+    ConnectionIdExhausted,
+    ConnectionNotFound(ConnectionId),
+    ProtocolMismatch {
+        connection_id: ConnectionId,
+        expected: ProtocolRole,
+        actual: ProtocolRole,
+    },
+    ConnectionBackpressured(ConnectionId),
+    ConnectionActorStopped(ConnectionId),
+    PeerNotIdentified(ConnectionId),
+    TransportAlreadyConfigured(TransportKind),
+    TransportUnavailable(TransportKind),
+    InvalidPeerTicket(String),
+    ConnectionSetupFailed {
+        transport: TransportKind,
+        message: String,
+    },
+    ConnectionSetupTimedOut(TransportKind),
+}
+
+impl fmt::Display for NetworkError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SupervisorStopped => formatter.write_str("network supervisor stopped"),
+            Self::ConnectionIdExhausted => formatter.write_str("connection ID space exhausted"),
+            Self::ConnectionNotFound(connection_id) => {
+                write!(formatter, "connection {connection_id} not found")
+            }
+            Self::ProtocolMismatch {
+                connection_id,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "connection {connection_id} has role {actual:?}, expected {expected:?}"
+            ),
+            Self::ConnectionBackpressured(connection_id) => {
+                write!(
+                    formatter,
+                    "connection {connection_id} outbound queue is full"
+                )
+            }
+            Self::ConnectionActorStopped(connection_id) => {
+                write!(formatter, "connection actor {connection_id} stopped")
+            }
+            Self::PeerNotIdentified(connection_id) => {
+                write!(
+                    formatter,
+                    "peer connection {connection_id} has not identified itself"
+                )
+            }
+            Self::TransportAlreadyConfigured(transport) => {
+                write!(formatter, "{transport:?} transport is already configured")
+            }
+            Self::TransportUnavailable(transport) => {
+                write!(formatter, "{transport:?} transport is unavailable")
+            }
+            Self::InvalidPeerTicket(message) => write!(formatter, "invalid peer ticket: {message}"),
+            Self::ConnectionSetupFailed { transport, message } => {
+                write!(
+                    formatter,
+                    "failed to establish {transport:?} connection: {message}"
+                )
+            }
+            Self::ConnectionSetupTimedOut(transport) => {
+                write!(
+                    formatter,
+                    "timed out while establishing {transport:?} connection"
+                )
+            }
+        }
+    }
+}
+
+impl Error for NetworkError {}
+
+/// Errors returned while establishing peer connections.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PeerConnectionError {
+    Network(NetworkError),
+    DuplicatePeer(PeerId),
+    LocalEndpoint(PeerId),
+}
+
+impl fmt::Display for PeerConnectionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Network(error) => error.fmt(formatter),
+            Self::DuplicatePeer(peer_id) => {
+                write!(
+                    formatter,
+                    "peer {peer_id} is already connected or connecting"
+                )
+            }
+            Self::LocalEndpoint(peer_id) => {
+                write!(formatter, "cannot connect to local endpoint {peer_id}")
+            }
+        }
+    }
+}
+
+impl Error for PeerConnectionError {}
+
+impl From<NetworkError> for PeerConnectionError {
+    fn from(error: NetworkError) -> Self {
+        Self::Network(error)
+    }
 }
 
 #[cfg(test)]
@@ -223,5 +337,38 @@ mod tests {
                 direction: PeerConnectionDirection::Incoming,
             } if connection_id == ConnectionId::new(9) && peer_id == PeerId::new("peer-9")
         ));
+    }
+
+    #[test]
+    fn network_error_display_formatting() {
+        let err = NetworkError::ConnectionNotFound(ConnectionId::new(12));
+        assert_eq!(err.to_string(), "connection 12 not found");
+
+        let err = NetworkError::ProtocolMismatch {
+            connection_id: ConnectionId::new(12),
+            expected: ProtocolRole::Frontend,
+            actual: ProtocolRole::Peer,
+        };
+        assert_eq!(
+            err.to_string(),
+            "connection 12 has role Peer, expected Frontend"
+        );
+    }
+
+    #[test]
+    fn peer_connection_error_from_network_error() {
+        let net_err = NetworkError::SupervisorStopped;
+        let peer_err: PeerConnectionError = net_err.clone().into();
+        assert_eq!(peer_err, PeerConnectionError::Network(net_err));
+        assert_eq!(peer_err.to_string(), "network supervisor stopped");
+
+        let dup_err = PeerConnectionError::DuplicatePeer(PeerId::new("p1"));
+        assert_eq!(
+            dup_err.to_string(),
+            "peer p1 is already connected or connecting"
+        );
+
+        let local_err = PeerConnectionError::LocalEndpoint(PeerId::new("p1"));
+        assert_eq!(local_err.to_string(), "cannot connect to local endpoint p1");
     }
 }

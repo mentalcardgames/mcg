@@ -18,7 +18,7 @@ const PEER_HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_se
 /// The actor translates WebSocket frames into typed [`ActorEvent`] values
 /// and writes application responses received through its private outbound
 /// channel. It deliberately has no access to application state.
-pub(super) async fn run_websocket_frontend_actor(
+pub(crate) async fn run_websocket_frontend_actor(
     connection_id: ConnectionId,
     socket: WebSocket,
     event_tx: mpsc::Sender<ActorEvent>,
@@ -115,7 +115,7 @@ pub(super) async fn run_websocket_frontend_actor(
 /// connection therefore stays pending until its first text frame claims a
 /// syntactically valid Iroh endpoint ID. The claim is intentionally not
 /// authenticated at this layer.
-pub(super) async fn run_websocket_pending_peer_actor(
+pub(crate) async fn run_websocket_pending_peer_actor(
     connection_id: ConnectionId,
     socket: WebSocket,
     event_tx: mpsc::Sender<ActorEvent>,

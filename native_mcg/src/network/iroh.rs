@@ -27,30 +27,30 @@ pub const IROH_PEER_ALPN: &[u8] = b"mcg/iroh/peer";
 
 const IROH_CONNECTION_SETUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-pub(super) type IrohReader = Box<dyn AsyncRead + Unpin + Send>;
-pub(super) type IrohWriter = Box<dyn AsyncWrite + Unpin + Send>;
+pub(crate) type IrohReader = Box<dyn AsyncRead + Unpin + Send>;
+pub(crate) type IrohWriter = Box<dyn AsyncWrite + Unpin + Send>;
 
 #[derive(Debug)]
-pub(super) enum IrohConnectError {
+pub(crate) enum IrohConnectError {
     InvalidTicket(String),
     Connect(String),
     OpenStream(String),
 }
 
 #[async_trait]
-pub(super) trait IrohConnector: Send + Sync {
+pub(crate) trait IrohConnector: Send + Sync {
     async fn connect(
         &self,
         ticket: String,
     ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError>;
 }
 
-pub(super) struct IrohEndpointConnector {
+pub(crate) struct IrohEndpointConnector {
     endpoint: Endpoint,
 }
 
 impl IrohEndpointConnector {
-    pub(super) fn new(endpoint: Endpoint) -> Self {
+    pub(crate) fn new(endpoint: Endpoint) -> Self {
         Self { endpoint }
     }
 }
@@ -347,7 +347,7 @@ fn protocol_role_from_alpn(alpn: &[u8]) -> Option<ProtocolRole> {
 ///
 /// Iroh frontend connections use the same typed protocol as WebSockets, with
 /// newline-delimited JSON as their transport framing.
-pub(super) async fn run_iroh_frontend_actor<R, W>(
+pub(crate) async fn run_iroh_frontend_actor<R, W>(
     connection_id: ConnectionId,
     reader: R,
     mut writer: W,
@@ -436,7 +436,7 @@ pub(super) async fn run_iroh_frontend_actor<R, W>(
 /// Stream establishment remains the responsibility of the Iroh endpoint
 /// owner. The actor only translates newline-delimited peer messages and has no
 /// access to application state or connection policy.
-pub(super) async fn run_iroh_peer_actor<R, W>(
+pub(crate) async fn run_iroh_peer_actor<R, W>(
     connection_id: ConnectionId,
     reader: R,
     mut writer: W,
