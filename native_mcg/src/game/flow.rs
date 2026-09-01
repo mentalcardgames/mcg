@@ -158,9 +158,7 @@ impl Game {
                 }));
                 println!(
                     "[STAGE] Flop: {} {} {}",
-                    self.community[0].to_string(),
-                    self.community[1].to_string(),
-                    self.community[2].to_string()
+                    self.community[0], self.community[1], self.community[2]
                 );
             }
             Stage::Flop => {
@@ -173,7 +171,7 @@ impl Game {
                 self.log(ActionEvent::game(GameAction::DealtCommunity {
                     cards: self.community.clone(),
                 }));
-                println!("[STAGE] Turn: {}", self.community[3].to_string());
+                println!("[STAGE] Turn: {}", self.community[3]);
             }
             Stage::Turn => {
                 let c = self
@@ -185,7 +183,7 @@ impl Game {
                 self.log(ActionEvent::game(GameAction::DealtCommunity {
                     cards: self.community.clone(),
                 }));
-                println!("[STAGE] River: {}", self.community[4].to_string());
+                println!("[STAGE] River: {}", self.community[4]);
             }
             Stage::River => {
                 self.stage = Stage::Showdown;

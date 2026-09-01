@@ -5,7 +5,6 @@ use native_mcg::{cli, config, server};
 use anyhow::Context;
 use clap::Parser;
 use config::Config;
-use server::AppState;
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
 
@@ -63,9 +62,6 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!(config = %config_path.display(), bots);
 
-    // Initialize shared state for the server and record config path for transports.
-    let state = AppState::new(cfg.clone(), Some(config_path.clone()));
-
     // Find first available port starting from 3000
     let port = find_available_port(3000)
         .map_err(|e| anyhow::anyhow!("Could not find an available port: {}", e))?;
@@ -77,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Run the server
-    server::run_server(addr, state).await?;
+    server::run_server(addr, cfg, Some(config_path)).await?;
     Ok(())
 }
 

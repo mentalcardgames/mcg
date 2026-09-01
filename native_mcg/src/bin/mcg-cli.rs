@@ -25,16 +25,31 @@ async fn main() -> anyhow::Result<()> {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, Frontend2BackendMsg::RequestState, cli.wait_ms, &mut printer)
-                        .await?
+                    cli::run_once_iroh(
+                        peer,
+                        Frontend2BackendMsg::RequestState,
+                        cli.wait_ms,
+                        &mut printer,
+                    )
+                    .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(addr, Frontend2BackendMsg::RequestState, cli.wait_ms, &mut printer)
-                        .await?
+                    cli::run_once_http(
+                        addr,
+                        Frontend2BackendMsg::RequestState,
+                        cli.wait_ms,
+                        &mut printer,
+                    )
+                    .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(addr, Frontend2BackendMsg::RequestState, cli.wait_ms, &mut printer)
-                        .await?
+                    cli::run_once_ws(
+                        addr,
+                        Frontend2BackendMsg::RequestState,
+                        cli.wait_ms,
+                        &mut printer,
+                    )
+                    .await?
                 }
             };
         }
@@ -94,13 +109,31 @@ async fn main() -> anyhow::Result<()> {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, Frontend2BackendMsg::NextHand, cli.wait_ms, &mut printer).await?
+                    cli::run_once_iroh(
+                        peer,
+                        Frontend2BackendMsg::NextHand,
+                        cli.wait_ms,
+                        &mut printer,
+                    )
+                    .await?
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(addr, Frontend2BackendMsg::NextHand, cli.wait_ms, &mut printer).await?
+                    cli::run_once_http(
+                        addr,
+                        Frontend2BackendMsg::NextHand,
+                        cli.wait_ms,
+                        &mut printer,
+                    )
+                    .await?
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(addr, Frontend2BackendMsg::NextHand, cli.wait_ms, &mut printer).await?
+                    cli::run_once_ws(
+                        addr,
+                        Frontend2BackendMsg::NextHand,
+                        cli.wait_ms,
+                        &mut printer,
+                    )
+                    .await?
                 }
             };
         }
@@ -142,13 +175,16 @@ async fn main() -> anyhow::Result<()> {
                     let peer = resolved_iroh_peer
                         .as_ref()
                         .ok_or_else(|| anyhow!("iroh node id unavailable"))?;
-                    cli::run_once_iroh(peer, Frontend2BackendMsg::Ping, cli.wait_ms, &mut printer).await?;
+                    cli::run_once_iroh(peer, Frontend2BackendMsg::Ping, cli.wait_ms, &mut printer)
+                        .await?;
                 }
                 TransportKind::Http(addr) => {
-                    cli::run_once_http(addr, Frontend2BackendMsg::Ping, cli.wait_ms, &mut printer).await?;
+                    cli::run_once_http(addr, Frontend2BackendMsg::Ping, cli.wait_ms, &mut printer)
+                        .await?;
                 }
                 TransportKind::WebSocket(addr) => {
-                    cli::run_once_ws(addr, Frontend2BackendMsg::Ping, cli.wait_ms, &mut printer).await?;
+                    cli::run_once_ws(addr, Frontend2BackendMsg::Ping, cli.wait_ms, &mut printer)
+                        .await?;
                 }
             }
         }

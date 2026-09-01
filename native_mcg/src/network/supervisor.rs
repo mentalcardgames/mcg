@@ -1,17 +1,14 @@
+use axum::extract::ws::WebSocket;
+use iroh::endpoint::Endpoint;
+use iroh_tickets::{endpoint::EndpointTicket, Ticket};
+use mcg_shared::{Backend2FrontendMsg, Peer2PeerMsg};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-
-use crate::server::AppState;
-
-use axum::extract::ws::WebSocket;
-use iroh::endpoint::Endpoint;
-use iroh_tickets::{endpoint::EndpointTicket, Ticket};
-use mcg_shared::{Backend2FrontendMsg, Peer2PeerMsg};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, RwLock};
 use tokio::task::JoinSet;
 
 use super::iroh::{
@@ -1064,15 +1061,15 @@ impl Drop for PendingPeerReservation {
 /// initial peer introduction all pass through this service.
 #[derive(Clone)]
 pub struct PeerConnectionService {
-    state: AppState,
+    local_ticket: Arc<RwLock<Option<String>>>,
     network: NetworkHandle,
     registry: Arc<Mutex<PeerConnectionState>>,
 }
 
 impl PeerConnectionService {
-    pub fn new(state: AppState, network: NetworkHandle) -> Self {
+    pub fn new(local_ticket: Arc<RwLock<Option<String>>>, network: NetworkHandle) -> Self {
         Self {
-            state,
+            local_ticket,
             network,
             registry: Arc::new(Mutex::new(PeerConnectionState::default())),
         }
@@ -1195,8 +1192,7 @@ impl PeerConnectionService {
     }
 
     async fn local_peer_id(&self) -> Option<PeerId> {
-        self.state
-            .ticket
+        self.local_ticket
             .read()
             .await
             .as_deref()
@@ -1204,7 +1200,7 @@ impl PeerConnectionService {
     }
 
     async fn introduce(&self, connection_id: ConnectionId) -> Result<(), NetworkError> {
-        let own_ticket = self.state.ticket.read().await.clone();
+        let own_ticket = self.local_ticket.read().await.clone();
 
         if let Err(error) = self
             .network
@@ -1682,12 +1678,11 @@ mod tests {
 
     #[tokio::test]
     async fn service_introduces_peer_through_network_actor() -> Result<()> {
-        let state = AppState::new(crate::config::Config::default(), None);
-        *state.ticket.write().await = Some("bob-ticket".into());
+        let ticket = Arc::new(RwLock::new(Some("bob-ticket".into())));
         let (event_tx, mut event_rx) = mpsc::channel::<NetworkEvent>(16);
         let (supervisor, network) = NetworkSupervisor::new(event_tx);
         let supervisor_task = tokio::spawn(supervisor.run());
-        let service = PeerConnectionService::new(state, network.clone());
+        let service = PeerConnectionService::new(ticket, network.clone());
         let (actor_stream, remote_stream) = duplex(4096);
         let (actor_reader, actor_writer) = split(actor_stream);
         let (remote_reader, _remote_writer) = split(remote_stream);
@@ -1725,11 +1720,11 @@ mod tests {
 
     #[tokio::test]
     async fn service_deduplicates_connections_for_all_callers() -> Result<()> {
-        let state = AppState::new(crate::config::Config::default(), None);
+        let ticket = Arc::new(RwLock::new(None));
         let (event_tx, _event_rx) = mpsc::channel::<NetworkEvent>(16);
         let (supervisor, network) = NetworkSupervisor::new(event_tx);
         let supervisor_task = tokio::spawn(supervisor.run());
-        let service = PeerConnectionService::new(state, network);
+        let service = PeerConnectionService::new(ticket, network);
         let endpoint_id = iroh::SecretKey::from_bytes(&[10; 32]).public();
         let peer_id = PeerId::new(endpoint_id.to_string());
         let ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
@@ -1775,10 +1770,10 @@ mod tests {
         let (supervisor, network) = NetworkSupervisor::new(event_tx);
         let supervisor_task = tokio::spawn(supervisor.run());
 
-        let lower_state = AppState::new(crate::config::Config::default(), None);
-        *lower_state.ticket.write().await =
-            Some(EndpointTicket::new(iroh::EndpointAddr::new(lower_endpoint)).encode_string());
-        let lower_service = PeerConnectionService::new(lower_state, network.clone());
+        let lower_ticket = Arc::new(RwLock::new(Some(
+            EndpointTicket::new(iroh::EndpointAddr::new(lower_endpoint)).encode_string(),
+        )));
+        let lower_service = PeerConnectionService::new(lower_ticket, network.clone());
         let lower_incoming = ConnectionId::new(51);
         let lower_outgoing = ConnectionId::new(52);
         assert_eq!(
@@ -1802,10 +1797,10 @@ mod tests {
             lower_outgoing
         );
 
-        let higher_state = AppState::new(crate::config::Config::default(), None);
-        *higher_state.ticket.write().await =
-            Some(EndpointTicket::new(iroh::EndpointAddr::new(higher_endpoint)).encode_string());
-        let higher_service = PeerConnectionService::new(higher_state, network);
+        let higher_ticket = Arc::new(RwLock::new(Some(
+            EndpointTicket::new(iroh::EndpointAddr::new(higher_endpoint)).encode_string(),
+        )));
+        let higher_service = PeerConnectionService::new(higher_ticket, network);
         let higher_incoming = ConnectionId::new(61);
         let higher_outgoing = ConnectionId::new(62);
         assert_eq!(

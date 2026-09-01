@@ -1,14 +1,17 @@
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use iroh::endpoint::Endpoint;
 use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, RwLock};
 use tokio::task::{JoinHandle, JoinSet};
 
+use crate::config::Config;
 use crate::public::{path_for_config, PublicInfo};
-use crate::server::AppState;
 use crate::transport::{send_peer_msg_to_writer, send_server_msg_to_writer};
 
 use super::types::ActorEvent;
@@ -103,10 +106,17 @@ impl Drop for IrohListenerTask {
 }
 
 /// Starts an owned Iroh listener task without delaying the HTTP server startup.
-pub fn spawn_iroh_listener(state: AppState, network: NetworkHandle) -> IrohListenerTask {
+pub fn spawn_iroh_listener(
+    config: Config,
+    config_path: Option<PathBuf>,
+    local_ticket: Arc<RwLock<Option<String>>>,
+    network: NetworkHandle,
+) -> IrohListenerTask {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let task = tokio::spawn(async move {
-        if let Err(error) = run_iroh_listener(state, network, shutdown_rx).await {
+        if let Err(error) =
+            run_iroh_listener(config, config_path, local_ticket, network, shutdown_rx).await
+        {
             tracing::error!(%error, "Iroh listener failed");
         }
     });
@@ -118,14 +128,16 @@ pub fn spawn_iroh_listener(state: AppState, network: NetworkHandle) -> IrohListe
 
 /// Creates the Iroh endpoint and accepts peer connections until shutdown.
 async fn run_iroh_listener(
-    state: AppState,
+    config: Config,
+    config_path: Option<PathBuf>,
+    local_ticket: Arc<RwLock<Option<String>>>,
     network: NetworkHandle,
     mut shutdown_rx: oneshot::Receiver<()>,
 ) -> Result<()> {
     use iroh::SecretKey;
     use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 
-    let secret_key: SecretKey = load_or_generate_iroh_secret(state.clone()).await;
+    let secret_key: SecretKey = load_or_generate_iroh_secret(&config, config_path.as_deref()).await;
     let endpoint = build_iroh_endpoint(secret_key).await?;
     network
         .configure_iroh_endpoint(endpoint.clone())
@@ -160,9 +172,9 @@ async fn run_iroh_listener(
     println!("{ticket}");
     tracing::info!(ticket = %ticket);
     let ticket = ticket.encode_string();
-    *state.ticket.write().await = Some(ticket);
+    *local_ticket.write().await = Some(ticket);
 
-    let public_path = path_for_config(state.config_path.as_deref());
+    let public_path = path_for_config(config_path.as_deref());
     match PublicInfo::write_iroh_node_id(&public_path, endpoint_id.to_string()) {
         Ok(_) => tracing::info!(path = %public_path.display(), "stored iroh node id"),
         Err(error) => {
@@ -179,7 +191,10 @@ async fn run_iroh_listener(
     Ok(())
 }
 
-async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
+async fn load_or_generate_iroh_secret(
+    config: &Config,
+    config_path: Option<&Path>,
+) -> iroh::SecretKey {
     use getrandom::getrandom;
     use iroh::SecretKey;
 
@@ -191,8 +206,7 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
         SecretKey::from_bytes(&bytes)
     };
 
-    if let Some(config_path) = state.config_path.clone() {
-        let config = state.config.read().await;
+    if let Some(config_path) = config_path {
         if let Some(bytes) = config.iroh_key_bytes() {
             if bytes.len() >= 32 {
                 let mut key = [0u8; 32];
@@ -200,19 +214,11 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
                 return SecretKey::from_bytes(&key);
             }
         }
-        drop(config);
 
         let secret_key = generate_new_key();
-        let mut config = state.config.write().await;
-        if let Some(bytes) = config.iroh_key_bytes() {
-            if bytes.len() >= 32 {
-                let mut key = [0u8; 32];
-                key.copy_from_slice(&bytes[..32]);
-                return SecretKey::from_bytes(&key);
-            }
-        }
-
-        if let Err(error) = config.set_iroh_key_bytes_and_save(&config_path, &secret_key.to_bytes())
+        let mut updated_config = config.clone();
+        if let Err(error) =
+            updated_config.set_iroh_key_bytes_and_save(config_path, &secret_key.to_bytes())
         {
             tracing::error!(%error, "failed to save generated Iroh key to config '{}'", config_path.display());
         } else {
@@ -220,6 +226,13 @@ async fn load_or_generate_iroh_secret(state: AppState) -> iroh::SecretKey {
         }
         secret_key
     } else {
+        if let Some(bytes) = config.iroh_key_bytes() {
+            if bytes.len() >= 32 {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&bytes[..32]);
+                return SecretKey::from_bytes(&key);
+            }
+        }
         tracing::warn!(
             "no server config path provided; generating ephemeral iroh key (not persisted)"
         );

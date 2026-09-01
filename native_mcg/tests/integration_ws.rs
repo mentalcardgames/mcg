@@ -6,8 +6,7 @@ use std::time::Duration;
 #[tokio::test]
 async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
     // Start an axum server on an OS-assigned port using the same router as the binary.
-    let state = native_mcg::server::AppState::default();
-    let app = native_mcg::server::run::build_router(state.clone());
+    let app = native_mcg::server::run::build_router(native_mcg::config::Config::default(), None);
 
     // Bind to port 0 so the OS chooses an available port.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

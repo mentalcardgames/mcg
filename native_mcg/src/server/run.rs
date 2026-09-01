@@ -1,10 +1,10 @@
-// Run and server orchestration helpers (start_network, run_server).
-
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
 
+use crate::config::Config;
 use crate::controller::{
     spawn_controller_command_forwarder, spawn_network_event_forwarder, start_controller,
     ChannelControllerSink, Controller, ControllerHandle,
@@ -12,9 +12,9 @@ use crate::controller::{
 use crate::network::{
     NetworkEvent, NetworkHandle, NetworkSupervisor, PeerConnectionService, RouterState,
 };
-use crate::server::{bot_driver::spawn_bot_driver, AppState};
+use crate::server::bot_driver::spawn_bot_driver;
 use anyhow::{Context, Result};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 
 const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
 
@@ -123,23 +123,23 @@ impl Drop for NetworkTasks {
     }
 }
 
-fn start_network(
-    app: AppState,
-) -> (
-    ControllerHandle,
-    NetworkHandle,
-    PeerConnectionService,
-    Arc<NetworkTasks>,
-) {
+struct RunningNetwork {
+    controller: ControllerHandle,
+    network: NetworkHandle,
+    peer_connections: PeerConnectionService,
+    local_ticket: Arc<RwLock<Option<String>>>,
+    network_tasks: Arc<NetworkTasks>,
+}
+
+fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork {
+    let local_ticket = Arc::new(RwLock::new(None));
     let (event_tx, event_rx) = mpsc::channel::<NetworkEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
     let (supervisor, network) = NetworkSupervisor::new(event_tx);
-    let peer_connections = PeerConnectionService::new(app.clone(), network.clone());
+    let peer_connections = PeerConnectionService::new(local_ticket.clone(), network.clone());
 
     let (command_tx, command_rx) = mpsc::unbounded_channel();
     let sink = ChannelControllerSink::new(command_tx);
-    let config = app.config.try_read().map(|c| c.clone()).unwrap_or_default();
-    let config_path = app.config_path.clone();
-    let controller = Controller::new(config.clone(), config_path);
+    let controller = Controller::new(config.clone(), config_path.clone());
     let (controller_thread, controller_handle) = start_controller(controller, 256, sink);
 
     let (state_watch_tx, state_watch_rx) = tokio::sync::watch::channel(None);
@@ -163,11 +163,12 @@ fn start_network(
         bot_delay_range,
     );
 
-    (
-        controller_handle.clone(),
+    RunningNetwork {
+        controller: controller_handle.clone(),
         network,
         peer_connections,
-        Arc::new(NetworkTasks {
+        local_ticket,
+        network_tasks: Arc::new(NetworkTasks {
             controller_handle,
             supervisor: Mutex::new(Some(supervisor)),
             event_forwarder: Mutex::new(Some(event_forwarder)),
@@ -175,20 +176,35 @@ fn start_network(
             bot_driver: Mutex::new(Some(bot_driver)),
             controller_thread: Mutex::new(Some(controller_thread)),
         }),
-    )
+    }
 }
 
-pub fn build_router(state: AppState) -> Router {
-    let (controller, network, peer_connections, network_tasks) = start_network(state.clone());
-    let router_state = RouterState::new(state, controller, network, peer_connections)
-        .with_task_guard(network_tasks);
+pub fn build_router(config: Config, config_path: Option<PathBuf>) -> Router {
+    let RunningNetwork {
+        controller,
+        network,
+        peer_connections,
+        network_tasks,
+        ..
+    } = start_network(config, config_path);
+    let router_state =
+        RouterState::new(controller, network, peer_connections).with_task_guard(network_tasks);
     crate::network::build_router(router_state)
 }
 
-pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
-    let (controller, network, peer_connections, network_tasks) = start_network(state.clone());
-    let router_state =
-        RouterState::new(state.clone(), controller, network.clone(), peer_connections);
+pub async fn run_server(
+    addr: SocketAddr,
+    config: Config,
+    config_path: Option<PathBuf>,
+) -> Result<()> {
+    let RunningNetwork {
+        controller,
+        network,
+        peer_connections,
+        local_ticket,
+        network_tasks,
+    } = start_network(config.clone(), config_path.clone());
+    let router_state = RouterState::new(controller, network.clone(), peer_connections);
     let app = crate::network::build_router(router_state);
 
     let display_addr = if addr.ip().is_loopback() {
@@ -213,7 +229,8 @@ pub async fn run_server(addr: SocketAddr, state: AppState) -> Result<()> {
         .await
         .with_context(|| format!("Failed to bind to {}", display_addr))?;
     // The owned task starts Iroh concurrently and is shut down after Axum stops.
-    let iroh_listener = crate::network::spawn_iroh_listener(state, network.clone());
+    let iroh_listener =
+        crate::network::spawn_iroh_listener(config, config_path, local_ticket, network.clone());
     let server_result = axum::serve(listener, app).await;
     iroh_listener.shutdown().await;
     if let Err(error) = network.shutdown().await {

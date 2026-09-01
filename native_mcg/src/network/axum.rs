@@ -14,12 +14,10 @@ use super::{
     NetworkHandle, PeerConnectionService, WEBSOCKET_FRONTEND_PROTOCOL, WEBSOCKET_PEER_PROTOCOL,
 };
 use crate::controller::ControllerHandle;
-use crate::server::AppState;
 
 /// Shared state container for the Axum router and handlers.
 #[derive(Clone)]
 pub struct RouterState {
-    pub app: AppState,
     pub controller: ControllerHandle,
     pub network: NetworkHandle,
     pub peer_connections: PeerConnectionService,
@@ -28,13 +26,11 @@ pub struct RouterState {
 
 impl RouterState {
     pub fn new(
-        app: AppState,
         controller: ControllerHandle,
         network: NetworkHandle,
         peer_connections: PeerConnectionService,
     ) -> Self {
         Self {
-            app,
             controller,
             network,
             peer_connections,
@@ -45,12 +41,6 @@ impl RouterState {
     pub fn with_task_guard(mut self, guard: Arc<dyn std::any::Any + Send + Sync>) -> Self {
         self._task_guard = Some(guard);
         self
-    }
-}
-
-impl FromRef<RouterState> for AppState {
-    fn from_ref(state: &RouterState) -> Self {
-        state.app.clone()
     }
 }
 

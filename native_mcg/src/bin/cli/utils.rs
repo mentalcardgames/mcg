@@ -1,6 +1,6 @@
 use std::io::IsTerminal;
 
-use mcg_shared::{PokerStatePublic, PlayerConfig, Backend2FrontendMsg};
+use mcg_shared::{Backend2FrontendMsg, PlayerConfig, PokerStatePublic};
 
 use native_mcg::pretty::{format_event_human, format_state_human, format_table_header};
 
@@ -38,7 +38,9 @@ impl MessagePrinter {
             }
             Backend2FrontendMsg::Error(e) => eprintln!("Server error: {}", e),
             Backend2FrontendMsg::Pong => println!("Received pong"),
-            Backend2FrontendMsg::TicketValue(ticket) => println!("Received ticket value:{}", ticket),
+            Backend2FrontendMsg::TicketValue(ticket) => {
+                println!("Received ticket value:{}", ticket)
+            }
             Backend2FrontendMsg::IPValue(ip) => println!("Received IP value: {}", ip),
             Backend2FrontendMsg::QrRes(inner) => {
                 println!("Qr Response: {:?}", inner);
@@ -46,7 +48,9 @@ impl MessagePrinter {
             Backend2FrontendMsg::NewPlayer(name) => println!("New player: {}", name),
             Backend2FrontendMsg::OurName(name) => println!("Our name: {}", name),
             Backend2FrontendMsg::RemovePlayer(name) => println!("Removed player: {}", name),
-            Backend2FrontendMsg::PlayerReady(name, ready) => println!("Player {} ready: {}", name, ready),
+            Backend2FrontendMsg::PlayerReady(name, ready) => {
+                println!("Player {} ready: {}", name, ready)
+            }
         }
     }
 

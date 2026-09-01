@@ -1,6 +1,6 @@
 use mcg_shared::{
-    ActionEvent, ActionKind as SharedActionKind, BlindKind, Card, GameAction, PokerStatePublic,
-    PlayerId, PlayerPublic, Stage,
+    ActionEvent, ActionKind as SharedActionKind, BlindKind, Card, GameAction, PlayerId,
+    PlayerPublic, PokerStatePublic, Stage,
 };
 use owo_colors::OwoColorize;
 
