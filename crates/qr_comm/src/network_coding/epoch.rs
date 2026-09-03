@@ -232,19 +232,24 @@ impl Epoch {
             if let Some(Range { start, end }) = self.find_range_of_most_recent_package(participant)
             {
                 let width = end - start;
-                sum_width += width;
+                let allocated_factors = width.div_ceil(2) * 2;
+                sum_width += allocated_factors;
                 if sum_width > CODING_FACTORS_PER_FRAME {
                     return None;
                 }
-                widths[participant] = width.div_ceil(2) as u8;
+                widths[participant] = (allocated_factors / 2) as u8;
                 offsets[participant] = start as u16;
                 // TODO move this after participant loop to fill widths up to maximum
-                for frag in &self.decoded_fragments[participant][start..end] {
+                let p_factor_start = coding_factor_idx;
+                for (offset, frag) in self.decoded_fragments[participant][start..end]
+                    .iter()
+                    .enumerate()
+                {
                     let factor = random::<GaloisField2p4>();
-                    factors[coding_factor_idx] = factor;
-                    coding_factor_idx += 1;
+                    factors[p_factor_start + offset] = factor;
                     fragment += frag.clone() * factor;
                 }
+                coding_factor_idx += allocated_factors;
             }
         }
         let factors = FrameFactor::new(factors, widths, offsets).unwrap();
@@ -393,29 +398,38 @@ mod tests {
                 Equation::new(factor, frag.clone())
             })
             .collect();
-        let mut matrix = Matrix::default();
-        for _ in 0..equations.len() {
-            let eq = equations.iter().cloned().fold(
-                Equation::new(SparseFactor::default(), Fragment::default()),
-                |acc, e| acc + (e * (random::<u8>() & 0xF)),
-            );
-            matrix.inner.push(eq);
+        // Over GF(16), a random NxN matrix has a ~6.6% chance of being singular.
+        // Retry until an invertible matrix is generated to prevent test flakiness.
+        for _ in 0..100 {
+            let mut matrix = Matrix::default();
+            for _ in 0..equations.len() {
+                let eq = equations.iter().cloned().fold(
+                    Equation::new(SparseFactor::default(), Fragment::default()),
+                    |acc, e| acc + (e * (random::<u8>() & 0xF)),
+                );
+                matrix.inner.push(eq);
+            }
+            let mut test_matrix = matrix.clone();
+            test_matrix.matrix_elimination();
+            if test_matrix.inner.iter().all(|eq| eq.factors.is_plain()) {
+                for (idx, eq) in test_matrix.inner.iter().enumerate() {
+                    assert!(eq.factors.is_plain());
+                    assert_eq!(eq.fragment, fragments[idx]);
+                }
+                return;
+            }
         }
-        matrix.matrix_elimination();
-        for (idx, eq) in matrix.inner.iter().enumerate() {
-            assert!(eq.factors.is_plain());
-            assert_eq!(eq.fragment, fragments[idx]);
-        }
+        panic!("Failed to generate an invertible matrix after 100 attempts");
     }
     #[test]
     fn push_frame_test_0() {
         let mut e = Epoch::default();
         let package: Package =
             Package::from_read(File::open("../../media/qr_test/data_0.txt").unwrap());
-        e.write(package);
+        e.write(package.clone());
         assert!(e.get_package(0, 0).is_some());
         let mut frames = Vec::new();
-        for _ in 0..4 {
+        for _ in 0..20 {
             let frame = e.pop_recent_frame();
             assert!(frame.is_some());
             frames.push(frame.unwrap());
@@ -429,13 +443,17 @@ mod tests {
                 assert_eq!(e.equations.len(), idx);
             }
             e.push_frame(frame.clone());
+            if idx > 0 && e.equations.is_empty() {
+                break;
+            }
         }
         assert!(e.equations.is_empty());
+        assert_eq!(e.get_package(0, 0).unwrap(), package);
     }
     #[test]
     fn push_frame_test_1() {
         let mut e_out = Epoch::default();
-        assert_eq!(FILES.len(), 4);
+        assert!(!FILES.is_empty());
         for (idx, file_name) in FILES.iter().enumerate() {
             let ap = Package::from_read(
                 File::open(format!("../../media/qr_test/{}", file_name)).unwrap(),
@@ -465,11 +483,16 @@ mod tests {
             }
         }
         assert!(e_in.equations.is_empty());
+        for (idx, file_name) in FILES.iter().enumerate() {
+            let ap = e_in.get_package(idx, 0).unwrap();
+            let original = std::fs::read(format!("../../media/qr_test/{}", file_name)).unwrap();
+            assert_eq!(ap.data, original);
+        }
     }
     #[test]
     fn push_frame_test_2() {
         let mut e_out = Epoch::default();
-        assert_eq!(FILES.len(), 4);
+        assert!(!FILES.is_empty());
         for (idx, file_name) in FILES.iter().enumerate() {
             let ap = Package::from_read(
                 File::open(format!("../../media/qr_test/{}", file_name)).unwrap(),
@@ -496,13 +519,16 @@ mod tests {
         }
         for (idx, file_name) in FILES.iter().enumerate() {
             let mut ap = e_in.get_package(idx, 0).unwrap();
-            let mut file = File::create(format!("tests/out_dir/{}", file_name)).unwrap();
-            file.write_all(ap.data.as_mut_slice()).unwrap();
+            let original = std::fs::read(format!("../../media/qr_test/{}", file_name)).unwrap();
+            assert_eq!(ap.data, original);
+            if let Ok(mut file) = File::create(format!("tests/out_dir/{}", file_name)) {
+                let _ = file.write_all(ap.data.as_mut_slice());
+            }
         }
     }
     const NUM_FRAMES: usize = 220;
-    const FILES: [&str; 1] = ["data_0.txt"];
-    // const FILES: [&str; 2] = ["data_0.txt", "data_1.txt"];
+    // const FILES: [&str; 1] = ["data_0.txt"];
+    const FILES: [&str; 2] = ["data_0.txt", "data_1.txt"];
     // const FILES: [&str; 4] = [
     //     "data_0.txt",
     //     "data_1.txt",
@@ -555,10 +581,7 @@ mod tests {
         for (participant_idx, file) in FILES.iter().enumerate() {
             let maybe_ap = e.get_package(participant_idx, 0);
             assert!(maybe_ap.is_some());
-            let Package {
-                data,
-                size: _size,
-            } = maybe_ap.unwrap();
+            let Package { data, size: _size } = maybe_ap.unwrap();
             if let Ok(mut file) = File::create(format!("tests/out_dir/{}", file)) {
                 let _ = file.write_all(&data);
             }
@@ -609,8 +632,11 @@ mod tests {
         }
         for (idx, file_name) in FILES.iter().enumerate() {
             let mut ap = e_in.get_package(idx, 0).unwrap();
-            let mut file = File::create(format!("tests/out_dir/{}", file_name)).unwrap();
-            file.write_all(ap.data.as_mut_slice()).unwrap();
+            let original = std::fs::read(format!("../../media/qr_test/{}", file_name)).unwrap();
+            assert_eq!(ap.data, original);
+            if let Ok(mut file) = File::create(format!("tests/out_dir/{}", file_name)) {
+                let _ = file.write_all(ap.data.as_mut_slice());
+            }
         }
     }
 }
