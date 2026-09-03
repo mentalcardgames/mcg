@@ -142,10 +142,6 @@ pub(crate) enum ActorEvent {
         connection_id: ConnectionId,
         message: Frontend2BackendMsg,
     },
-    PeerIdentified {
-        connection_id: ConnectionId,
-        peer_id: PeerId,
-    },
     PeerMessage {
         connection_id: ConnectionId,
         message: Peer2PeerMsg,
@@ -169,7 +165,6 @@ pub enum NetworkError {
     },
     ConnectionBackpressured(ConnectionId),
     ConnectionActorStopped(ConnectionId),
-    PeerNotIdentified(ConnectionId),
     TransportAlreadyConfigured(TransportKind),
     TransportUnavailable(TransportKind),
     InvalidPeerTicket(String),
@@ -204,12 +199,6 @@ impl fmt::Display for NetworkError {
             }
             Self::ConnectionActorStopped(connection_id) => {
                 write!(formatter, "connection actor {connection_id} stopped")
-            }
-            Self::PeerNotIdentified(connection_id) => {
-                write!(
-                    formatter,
-                    "peer connection {connection_id} has not identified itself"
-                )
             }
             Self::TransportAlreadyConfigured(transport) => {
                 write!(formatter, "{transport:?} transport is already configured")

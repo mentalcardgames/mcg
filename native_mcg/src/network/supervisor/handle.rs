@@ -28,10 +28,6 @@ pub(crate) enum SupervisorRequest {
         socket: Box<WebSocket>,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
-    RegisterPendingPeerWebSocket {
-        socket: Box<WebSocket>,
-        response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
-    },
     RegisterIrohPeer {
         peer_id: PeerId,
         reader: Box<dyn AsyncRead + Unpin + Send>,
@@ -145,24 +141,6 @@ impl NetworkHandle {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
             .send(SupervisorRequest::RegisterFrontendWebSocket {
-                socket: Box::new(socket),
-                response_tx,
-            })
-            .await
-            .map_err(|_| NetworkError::SupervisorStopped)?;
-        response_rx
-            .await
-            .map_err(|_| NetworkError::SupervisorStopped)?
-    }
-
-    /// Registers an upgraded peer WebSocket pending its identity handshake.
-    pub async fn register_pending_peer_websocket(
-        &self,
-        socket: WebSocket,
-    ) -> Result<ConnectionId, NetworkError> {
-        let (response_tx, response_rx) = oneshot::channel();
-        self.request_tx
-            .send(SupervisorRequest::RegisterPendingPeerWebSocket {
                 socket: Box::new(socket),
                 response_tx,
             })

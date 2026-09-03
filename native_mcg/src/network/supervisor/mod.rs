@@ -10,13 +10,13 @@ use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinSet;
 
-use self::connections::{ManagedConnection, ManagedTarget};
+use self::connections::ManagedConnection;
 pub use self::handle::NetworkHandle;
 use self::handle::{IrohConnectResult, SupervisorRequest};
 use crate::network::iroh::{IrohConnectError, IrohConnector};
 use crate::network::types::ActorEvent;
 pub use crate::network::types::NetworkError;
-use crate::network::{ConnectionId, NetworkEvent, PeerConnectionDirection, PeerId, TransportKind};
+use crate::network::{ConnectionId, NetworkEvent, PeerConnectionDirection, TransportKind};
 
 const DEFAULT_CONTROL_CHANNEL_CAPACITY: usize = 256;
 const DEFAULT_CONNECTION_CHANNEL_CAPACITY: usize = 64;
@@ -170,13 +170,6 @@ impl NetworkSupervisor {
                 let result = self.register_frontend_websocket(*socket);
                 let _ = response_tx.send(result);
             }
-            SupervisorRequest::RegisterPendingPeerWebSocket {
-                socket,
-                response_tx,
-            } => {
-                let result = self.register_pending_peer_websocket(*socket);
-                let _ = response_tx.send(result);
-            }
             SupervisorRequest::RegisterIrohPeer {
                 peer_id,
                 reader,
@@ -327,10 +320,6 @@ impl NetworkSupervisor {
                 connection_id,
                 message,
             }),
-            ActorEvent::PeerIdentified {
-                connection_id,
-                peer_id,
-            } => self.promote_pending_peer(connection_id, peer_id),
             ActorEvent::PeerMessage {
                 connection_id,
                 message,
@@ -349,32 +338,5 @@ impl NetworkSupervisor {
                 })
             }
         }
-    }
-
-    fn promote_pending_peer(
-        &mut self,
-        connection_id: ConnectionId,
-        peer_id: PeerId,
-    ) -> Option<NetworkEvent> {
-        let Some(connection) = self.connections.get_mut(&connection_id) else {
-            tracing::warn!(%connection_id, %peer_id, "peer identity belongs to an unknown connection");
-            return None;
-        };
-        let ManagedTarget::PendingPeer { command_tx } = &connection.target else {
-            tracing::warn!(%connection_id, %peer_id, actual = ?connection.role(), "peer identity belongs to a non-pending connection");
-            return None;
-        };
-
-        connection.target = ManagedTarget::Peer {
-            peer_id: peer_id.clone(),
-            direction: PeerConnectionDirection::Incoming,
-            command_tx: command_tx.clone(),
-        };
-        Some(NetworkEvent::PeerConnected {
-            connection_id,
-            peer_id,
-            transport: connection.transport,
-            direction: PeerConnectionDirection::Incoming,
-        })
     }
 }

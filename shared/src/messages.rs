@@ -80,16 +80,6 @@ pub enum Backend2FrontendMsg {
     PlayerReady(String, bool),
 }
 
-/// First message sent when opening a peer WebSocket connection.
-///
-/// WebSockets do not authenticate a remote endpoint like Iroh does, so the
-/// initiating backend has to claim its identity before peer messages may flow.
-/// The receiving backend must not treat this claim as proof of identity.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct WebSocketPeerHandshake {
-    pub peer_id: String,
-}
-
 /// Messages that are send between two peers
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]

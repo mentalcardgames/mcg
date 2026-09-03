@@ -23,4 +23,4 @@ pub use types::{
     PeerConnectionCommand, PeerConnectionDirection, PeerConnectionError, PeerId, ProtocolRole,
     TransportKind,
 };
-pub use websocket::{WEBSOCKET_FRONTEND_PROTOCOL, WEBSOCKET_PEER_PROTOCOL};
+pub use websocket::WEBSOCKET_FRONTEND_PROTOCOL;

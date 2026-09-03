@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 use super::NetworkSupervisor;
 use crate::network::iroh::{run_iroh_frontend_actor, run_iroh_peer_actor, IrohReader, IrohWriter};
-use crate::network::websocket::{run_websocket_frontend_actor, run_websocket_pending_peer_actor};
+use crate::network::websocket::run_websocket_frontend_actor;
 use crate::network::{
     ConnectionId, FrontendConnectionCommand, NetworkError, NetworkEvent, PeerConnectionCommand,
     PeerConnectionDirection, PeerId, ProtocolRole, TransportKind,
@@ -21,9 +21,6 @@ pub(crate) enum ManagedTarget {
     Frontend {
         command_tx: mpsc::Sender<FrontendConnectionCommand>,
     },
-    PendingPeer {
-        command_tx: mpsc::Sender<PeerConnectionCommand>,
-    },
     Peer {
         peer_id: PeerId,
         direction: PeerConnectionDirection,
@@ -35,7 +32,6 @@ impl ManagedConnection {
     pub(crate) fn role(&self) -> ProtocolRole {
         match &self.target {
             ManagedTarget::Frontend { .. } => ProtocolRole::Frontend,
-            ManagedTarget::PendingPeer { .. } => ProtocolRole::Peer,
             ManagedTarget::Peer { .. } => ProtocolRole::Peer,
         }
     }
@@ -46,10 +42,6 @@ impl ManagedConnection {
                 connection_id,
                 transport: self.transport,
             }),
-            ManagedTarget::PendingPeer { .. } => {
-                tracing::warn!(%connection_id, "pending peer reported ready before identification");
-                None
-            }
             ManagedTarget::Peer {
                 peer_id, direction, ..
             } => Some(NetworkEvent::PeerConnected {
@@ -89,31 +81,6 @@ impl NetworkSupervisor {
             },
         );
         self.tasks.spawn(run_websocket_frontend_actor(
-            connection_id,
-            socket,
-            actor_event_tx,
-            command_rx,
-        ));
-
-        Ok(connection_id)
-    }
-
-    pub(super) fn register_pending_peer_websocket(
-        &mut self,
-        socket: WebSocket,
-    ) -> Result<ConnectionId, NetworkError> {
-        let connection_id = self.allocate_connection_id()?;
-        let (command_tx, command_rx) = mpsc::channel(self.connection_channel_capacity);
-        let actor_event_tx = self.actor_event_tx.clone();
-
-        self.connections.insert(
-            connection_id,
-            ManagedConnection {
-                transport: TransportKind::WebSocket,
-                target: ManagedTarget::PendingPeer { command_tx },
-            },
-        );
-        self.tasks.spawn(run_websocket_pending_peer_actor(
             connection_id,
             socket,
             actor_event_tx,
@@ -218,7 +185,7 @@ impl NetworkSupervisor {
             .ok_or(NetworkError::ConnectionNotFound(connection_id))?;
         let command_tx = match &connection.target {
             ManagedTarget::Frontend { command_tx } => command_tx.clone(),
-            ManagedTarget::PendingPeer { .. } | ManagedTarget::Peer { .. } => {
+            ManagedTarget::Peer { .. } => {
                 return Err(NetworkError::ProtocolMismatch {
                     connection_id,
                     expected: ProtocolRole::Frontend,
@@ -252,9 +219,6 @@ impl NetworkSupervisor {
                     actual: connection.role(),
                 });
             }
-            ManagedTarget::PendingPeer { .. } => {
-                return Err(NetworkError::PeerNotIdentified(connection_id));
-            }
         };
 
         self.try_send(
@@ -282,11 +246,6 @@ impl NetworkSupervisor {
                 FrontendConnectionCommand::Close { reason },
             ),
             ManagedTarget::Peer { command_tx, .. } => self.try_send(
-                connection_id,
-                command_tx,
-                PeerConnectionCommand::Close { reason },
-            ),
-            ManagedTarget::PendingPeer { command_tx } => self.try_send(
                 connection_id,
                 command_tx,
                 PeerConnectionCommand::Close { reason },
