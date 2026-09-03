@@ -6,8 +6,7 @@ use mcg_shared::Peer2PeerMsg;
 use tokio::sync::RwLock;
 
 use super::{
-    ConnectionId, NetworkCommand, NetworkError, NetworkHandle, PeerConnectionDirection,
-    PeerConnectionError, PeerId,
+    ConnectionId, NetworkError, NetworkHandle, PeerConnectionDirection, PeerConnectionError, PeerId,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -90,7 +89,7 @@ impl PeerConnectionService {
 
         let _pending = PendingPeerReservation::reserve(self.registry.clone(), peer_id.clone())?;
 
-        let result = self.network.connect_iroh_peer(ticket).await;
+        let result = self.network.establish_iroh_peer_connection(ticket).await;
         match result {
             Ok(opened_connection_id) => {
                 let connection_id = self
@@ -177,10 +176,10 @@ impl PeerConnectionService {
             tracing::info!(%peer_id, %winner, %loser, ?preferred_direction, "closing duplicate peer connection");
             if let Err(error) = self
                 .network
-                .send_command(NetworkCommand::CloseConnection {
-                    connection_id: loser,
-                    reason: format!("duplicate peer connection; keeping {winner}"),
-                })
+                .close_connection(
+                    loser,
+                    format!("duplicate peer connection; keeping {winner}"),
+                )
                 .await
             {
                 tracing::warn!(%peer_id, connection_id = %loser, %error, "failed to close duplicate peer connection");
@@ -211,18 +210,15 @@ impl PeerConnectionService {
 
         if let Err(error) = self
             .network
-            .send_command(NetworkCommand::SendPeer {
+            .unicast_peer(
                 connection_id,
-                message: Peer2PeerMsg::Connect(String::new(), own_ticket),
-            })
+                Peer2PeerMsg::Connect(String::new(), own_ticket),
+            )
             .await
         {
             let _ = self
                 .network
-                .send_command(NetworkCommand::CloseConnection {
-                    connection_id,
-                    reason: "failed to send peer introduction".into(),
-                })
+                .close_connection(connection_id, "failed to send peer introduction")
                 .await;
             return Err(error);
         }
@@ -295,7 +291,7 @@ mod tests {
         let mut remote_reader = BufReader::new(remote_reader);
         let peer_id = PeerId::new(iroh::SecretKey::from_bytes(&[9; 32]).public().to_string());
         let connection_id = network
-            .register_incoming_iroh_peer(peer_id, actor_reader, actor_writer)
+            .register_iroh_peer(peer_id, actor_reader, actor_writer)
             .await?;
         let opened = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
             .await?

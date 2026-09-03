@@ -6,7 +6,7 @@ use iroh::endpoint::{Endpoint, RelayMode};
 use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use native_mcg::network::{
-    ConnectionCloseReason, ConnectionId, NetworkCommand, NetworkError, NetworkEvent, NetworkHandle,
+    ConnectionCloseReason, ConnectionId, NetworkError, NetworkEvent, NetworkHandle,
     NetworkSupervisor, PeerConnectionDirection, PeerId, TransportKind, IROH_FRONTEND_ALPN,
     IROH_PEER_ALPN,
 };
@@ -67,7 +67,7 @@ async fn accept_one(endpoint: Endpoint, network: NetworkHandle) -> Result<Connec
         .context("accepting Iroh bidirectional stream")?;
 
     network
-        .register_incoming_iroh_peer(peer_id, reader, writer)
+        .register_iroh_peer(peer_id, reader, writer)
         .await
         .context("registering incoming Iroh stream")
 }
@@ -95,7 +95,7 @@ async fn accept_frontend(endpoint: Endpoint, network: NetworkHandle) -> Result<C
         .context("accepting Iroh frontend stream")?;
 
     network
-        .register_incoming_iroh_frontend(reader, writer)
+        .register_iroh_frontend(reader, writer)
         .await
         .context("registering incoming Iroh frontend stream")
 }
@@ -168,10 +168,7 @@ async fn real_iroh_frontend_uses_the_frontend_protocol() -> Result<()> {
     ));
 
     backend_network
-        .send_command(NetworkCommand::SendFrontend {
-            connection_id,
-            message: Backend2FrontendMsg::Pong,
-        })
+        .unicast_frontend(connection_id, Backend2FrontendMsg::Pong)
         .await?;
     let mut response = String::new();
     tokio::time::timeout(
@@ -186,10 +183,7 @@ async fn real_iroh_frontend_uses_the_frontend_protocol() -> Result<()> {
     ));
 
     backend_network
-        .send_command(NetworkCommand::CloseConnection {
-            connection_id,
-            reason: "frontend integration test complete".into(),
-        })
+        .close_connection(connection_id, "frontend integration test complete")
         .await?;
     assert!(matches!(
         next_event(&mut backend_events).await?,
@@ -224,13 +218,15 @@ async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Resu
 
     assert!(matches!(
         first_network
-            .connect_iroh_peer("not-an-endpoint-ticket")
+            .establish_iroh_peer_connection("not-an-endpoint-ticket")
             .await,
         Err(NetworkError::InvalidPeerTicket(_))
     ));
 
     let incoming = tokio::spawn(accept_one(second_endpoint.clone(), second_network.clone()));
-    let outgoing_id = first_network.connect_iroh_peer(second_ticket).await?;
+    let outgoing_id = first_network
+        .establish_iroh_peer_connection(second_ticket)
+        .await?;
     assert!(matches!(
         next_event(&mut first_events).await?,
         NetworkEvent::PeerConnected {
@@ -242,10 +238,10 @@ async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Resu
     ));
 
     first_network
-        .send_command(NetworkCommand::SendPeer {
-            connection_id: outgoing_id,
-            message: Peer2PeerMsg::Connect("Alice".into(), Some(first_ticket.clone())),
-        })
+        .unicast_peer(
+            outgoing_id,
+            Peer2PeerMsg::Connect("Alice".into(), Some(first_ticket.clone())),
+        )
         .await?;
     let incoming_id = incoming.await??;
     assert!(matches!(
@@ -266,10 +262,7 @@ async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Resu
     ));
 
     second_network
-        .send_command(NetworkCommand::SendPeer {
-            connection_id: incoming_id,
-            message: Peer2PeerMsg::LobbyAccept(2, "Poker".into()),
-        })
+        .unicast_peer(incoming_id, Peer2PeerMsg::LobbyAccept(2, "Poker".into()))
         .await?;
     assert!(matches!(
         next_event(&mut first_events).await?,
@@ -280,10 +273,7 @@ async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Resu
     ));
 
     first_network
-        .send_command(NetworkCommand::CloseConnection {
-            connection_id: outgoing_id,
-            reason: "integration test complete".into(),
-        })
+        .close_connection(outgoing_id, "integration test complete")
         .await?;
     assert!(matches!(
         next_event(&mut first_events).await?,
@@ -327,7 +317,9 @@ async fn real_iroh_transport_drop_closes_both_connection_actors() -> Result<()> 
         .await?;
 
     let incoming = tokio::spawn(accept_one(second_endpoint.clone(), second_network.clone()));
-    let outgoing_id = first_network.connect_iroh_peer(second_ticket).await?;
+    let outgoing_id = first_network
+        .establish_iroh_peer_connection(second_ticket)
+        .await?;
     assert!(matches!(
         next_event(&mut first_events).await?,
         NetworkEvent::PeerConnected {
@@ -337,10 +329,7 @@ async fn real_iroh_transport_drop_closes_both_connection_actors() -> Result<()> 
         } if connection_id == outgoing_id
     ));
     first_network
-        .send_command(NetworkCommand::SendPeer {
-            connection_id: outgoing_id,
-            message: Peer2PeerMsg::Ping,
-        })
+        .unicast_peer(outgoing_id, Peer2PeerMsg::Ping)
         .await?;
     let incoming_id = incoming.await??;
     assert!(matches!(

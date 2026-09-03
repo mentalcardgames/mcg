@@ -9,7 +9,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::network::iroh::{
     IrohConnectError, IrohConnector, IrohEndpointConnector, IrohReader, IrohWriter,
 };
-use crate::network::{ConnectionId, NetworkCommand, NetworkError, PeerId};
+use crate::network::{ConnectionId, NetworkError, PeerId};
 
 /// Internal request contract sent from [`NetworkHandle`] to [`super::NetworkSupervisor`].
 pub(crate) enum SupervisorRequest {
@@ -20,7 +20,7 @@ pub(crate) enum SupervisorRequest {
         connector: Arc<dyn IrohConnector>,
         response_tx: oneshot::Sender<Result<(), NetworkError>>,
     },
-    ConnectIrohPeer {
+    EstablishIrohPeerConnection {
         ticket: String,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
@@ -32,19 +32,38 @@ pub(crate) enum SupervisorRequest {
         socket: Box<WebSocket>,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
-    RegisterIncomingIrohPeer {
+    RegisterIrohPeer {
         peer_id: PeerId,
         reader: Box<dyn AsyncRead + Unpin + Send>,
         writer: Box<dyn AsyncWrite + Unpin + Send>,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
-    RegisterIncomingIrohFrontend {
+    RegisterIrohFrontend {
         reader: Box<dyn AsyncRead + Unpin + Send>,
         writer: Box<dyn AsyncWrite + Unpin + Send>,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
-    Execute {
-        command: NetworkCommand,
+    UnicastFrontend {
+        connection_id: ConnectionId,
+        message: Backend2FrontendMsg,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    UnicastPeer {
+        connection_id: ConnectionId,
+        message: Peer2PeerMsg,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    BroadcastFrontend {
+        message: Backend2FrontendMsg,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    BroadcastPeer {
+        message: Peer2PeerMsg,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    CloseConnection {
+        connection_id: ConnectionId,
+        reason: String,
         response_tx: oneshot::Sender<Result<(), NetworkError>>,
     },
 }
@@ -101,13 +120,13 @@ impl NetworkHandle {
     }
 
     /// Establishes and registers an outgoing Iroh peer connection.
-    pub async fn connect_iroh_peer(
+    pub async fn establish_iroh_peer_connection(
         &self,
         ticket: impl Into<String>,
     ) -> Result<ConnectionId, NetworkError> {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
-            .send(SupervisorRequest::ConnectIrohPeer {
+            .send(SupervisorRequest::EstablishIrohPeerConnection {
                 ticket: ticket.into(),
                 response_tx,
             })
@@ -155,7 +174,7 @@ impl NetworkHandle {
     }
 
     /// Registers an established Iroh peer stream with the supervisor.
-    pub async fn register_incoming_iroh_peer<R, W>(
+    pub async fn register_iroh_peer<R, W>(
         &self,
         peer_id: PeerId,
         reader: R,
@@ -167,7 +186,7 @@ impl NetworkHandle {
     {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
-            .send(SupervisorRequest::RegisterIncomingIrohPeer {
+            .send(SupervisorRequest::RegisterIrohPeer {
                 peer_id,
                 reader: Box::new(reader),
                 writer: Box::new(writer),
@@ -181,7 +200,7 @@ impl NetworkHandle {
     }
 
     /// Registers an established Iroh frontend stream with the supervisor.
-    pub async fn register_incoming_iroh_frontend<R, W>(
+    pub async fn register_iroh_frontend<R, W>(
         &self,
         reader: R,
         writer: W,
@@ -192,7 +211,7 @@ impl NetworkHandle {
     {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
-            .send(SupervisorRequest::RegisterIncomingIrohFrontend {
+            .send(SupervisorRequest::RegisterIrohFrontend {
                 reader: Box::new(reader),
                 writer: Box::new(writer),
                 response_tx,
@@ -204,13 +223,37 @@ impl NetworkHandle {
             .map_err(|_| NetworkError::SupervisorStopped)?
     }
 
-    /// Sends a targeted command to the supervisor and waits until it has been
-    /// accepted by the destination connection queue.
-    pub async fn send_command(&self, command: NetworkCommand) -> Result<(), NetworkError> {
+    /// Sends a targeted message to a single registered frontend connection.
+    pub async fn unicast_frontend(
+        &self,
+        connection_id: ConnectionId,
+        message: Backend2FrontendMsg,
+    ) -> Result<(), NetworkError> {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
-            .send(SupervisorRequest::Execute {
-                command,
+            .send(SupervisorRequest::UnicastFrontend {
+                connection_id,
+                message,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Sends a targeted message to a single registered peer connection.
+    pub async fn unicast_peer(
+        &self,
+        connection_id: ConnectionId,
+        message: Peer2PeerMsg,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::UnicastPeer {
+                connection_id,
+                message,
                 response_tx,
             })
             .await
@@ -225,13 +268,51 @@ impl NetworkHandle {
         &self,
         message: Backend2FrontendMsg,
     ) -> Result<(), NetworkError> {
-        self.send_command(NetworkCommand::BroadcastFrontend(message))
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::BroadcastFrontend {
+                message,
+                response_tx,
+            })
             .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
     }
 
     /// Broadcasts a typed message across all registered peer connections.
     pub async fn broadcast_peer(&self, message: Peer2PeerMsg) -> Result<(), NetworkError> {
-        self.send_command(NetworkCommand::BroadcastPeer(message))
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::BroadcastPeer {
+                message,
+                response_tx,
+            })
             .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Requests closing a concrete connection with a diagnostic reason.
+    pub async fn close_connection(
+        &self,
+        connection_id: ConnectionId,
+        reason: impl Into<String>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::CloseConnection {
+                connection_id,
+                reason: reason.into(),
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
     }
 }

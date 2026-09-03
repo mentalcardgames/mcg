@@ -97,25 +97,6 @@ pub enum PeerConnectionCommand {
     Close { reason: String },
 }
 
-/// Commands sent from application logic to the network supervisor.
-#[derive(Clone, Debug)]
-pub enum NetworkCommand {
-    BroadcastFrontend(Backend2FrontendMsg),
-    BroadcastPeer(Peer2PeerMsg),
-    SendFrontend {
-        connection_id: ConnectionId,
-        message: Backend2FrontendMsg,
-    },
-    SendPeer {
-        connection_id: ConnectionId,
-        message: Peer2PeerMsg,
-    },
-    CloseConnection {
-        connection_id: ConnectionId,
-        reason: String,
-    },
-}
-
 /// Typed events emitted by the network supervisor towards application code.
 ///
 /// Application code consumes these events and decides how to respond. Network

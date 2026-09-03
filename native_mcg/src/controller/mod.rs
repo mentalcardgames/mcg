@@ -124,7 +124,7 @@ mod tests {
         let mut fe_reader = BufReader::new(fe_rem_r);
 
         let _conn_id = network
-            .register_incoming_iroh_frontend(fe_r, fe_w)
+            .register_iroh_frontend(fe_r, fe_w)
             .await
             .expect("frontend registration succeeded");
 

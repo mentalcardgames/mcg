@@ -3,7 +3,7 @@
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::network::{NetworkCommand, NetworkEvent, NetworkHandle, PeerConnectionService};
+use crate::network::{NetworkEvent, NetworkHandle, PeerConnectionService};
 
 use super::handle::ControllerHandle;
 use super::types::ControllerCommand;
@@ -78,13 +78,7 @@ pub fn spawn_controller_command_forwarder(
                     connection_id,
                     message,
                 } => {
-                    if let Err(error) = network
-                        .send_command(NetworkCommand::SendFrontend {
-                            connection_id,
-                            message,
-                        })
-                        .await
-                    {
+                    if let Err(error) = network.unicast_frontend(connection_id, message).await {
                         tracing::warn!(%connection_id, %error, "failed to send frontend message from controller");
                     }
                 }
@@ -92,13 +86,7 @@ pub fn spawn_controller_command_forwarder(
                     connection_id,
                     message,
                 } => {
-                    if let Err(error) = network
-                        .send_command(NetworkCommand::SendPeer {
-                            connection_id,
-                            message,
-                        })
-                        .await
-                    {
+                    if let Err(error) = network.unicast_peer(connection_id, message).await {
                         tracing::warn!(%connection_id, %error, "failed to send peer message from controller");
                     }
                 }
@@ -106,13 +94,7 @@ pub fn spawn_controller_command_forwarder(
                     connection_id,
                     reason,
                 } => {
-                    if let Err(error) = network
-                        .send_command(NetworkCommand::CloseConnection {
-                            connection_id,
-                            reason,
-                        })
-                        .await
-                    {
+                    if let Err(error) = network.close_connection(connection_id, reason).await {
                         tracing::warn!(%connection_id, %error, "failed to close connection from controller");
                     }
                 }
@@ -127,7 +109,8 @@ pub fn spawn_controller_command_forwarder(
                     } else {
                         let network = network.clone();
                         tokio::spawn(async move {
-                            if let Err(error) = network.connect_iroh_peer(ticket).await {
+                            if let Err(error) = network.establish_iroh_peer_connection(ticket).await
+                            {
                                 tracing::warn!(%error, "failed to connect to iroh peer from controller");
                             }
                         });

@@ -6,8 +6,8 @@ use super::NetworkSupervisor;
 use crate::network::iroh::{run_iroh_frontend_actor, run_iroh_peer_actor, IrohReader, IrohWriter};
 use crate::network::websocket::{run_websocket_frontend_actor, run_websocket_pending_peer_actor};
 use crate::network::{
-    ConnectionId, FrontendConnectionCommand, NetworkCommand, NetworkError, NetworkEvent,
-    PeerConnectionCommand, PeerConnectionDirection, PeerId, ProtocolRole, TransportKind,
+    ConnectionId, FrontendConnectionCommand, NetworkError, NetworkEvent, PeerConnectionCommand,
+    PeerConnectionDirection, PeerId, ProtocolRole, TransportKind,
 };
 
 #[derive(Clone)]
@@ -183,31 +183,6 @@ impl NetworkSupervisor {
         Ok(connection_id)
     }
 
-    pub(super) fn execute_command(&mut self, command: NetworkCommand) -> Result<(), NetworkError> {
-        match command {
-            NetworkCommand::BroadcastFrontend(message) => {
-                self.broadcast_frontend(message);
-                Ok(())
-            }
-            NetworkCommand::BroadcastPeer(message) => {
-                self.broadcast_peer(message);
-                Ok(())
-            }
-            NetworkCommand::SendFrontend {
-                connection_id,
-                message,
-            } => self.send_frontend(connection_id, FrontendConnectionCommand::Send(message)),
-            NetworkCommand::SendPeer {
-                connection_id,
-                message,
-            } => self.send_peer(connection_id, PeerConnectionCommand::Send(message)),
-            NetworkCommand::CloseConnection {
-                connection_id,
-                reason,
-            } => self.close_connection(connection_id, reason),
-        }
-    }
-
     pub(super) fn broadcast_frontend(&mut self, message: Backend2FrontendMsg) {
         for (&connection_id, connection) in &self.connections {
             if let ManagedTarget::Frontend { command_tx } = &connection.target {
@@ -232,10 +207,10 @@ impl NetworkSupervisor {
         }
     }
 
-    pub(super) fn send_frontend(
+    pub(super) fn unicast_frontend(
         &mut self,
         connection_id: ConnectionId,
-        command: FrontendConnectionCommand,
+        message: Backend2FrontendMsg,
     ) -> Result<(), NetworkError> {
         let connection = self
             .connections
@@ -252,13 +227,17 @@ impl NetworkSupervisor {
             }
         };
 
-        self.try_send(connection_id, command_tx, command)
+        self.try_send(
+            connection_id,
+            command_tx,
+            FrontendConnectionCommand::Send(message),
+        )
     }
 
-    pub(super) fn send_peer(
+    pub(super) fn unicast_peer(
         &mut self,
         connection_id: ConnectionId,
-        command: PeerConnectionCommand,
+        message: Peer2PeerMsg,
     ) -> Result<(), NetworkError> {
         let connection = self
             .connections
@@ -278,7 +257,11 @@ impl NetworkSupervisor {
             }
         };
 
-        self.try_send(connection_id, command_tx, command)
+        self.try_send(
+            connection_id,
+            command_tx,
+            PeerConnectionCommand::Send(message),
+        )
     }
 
     pub(super) fn close_connection(

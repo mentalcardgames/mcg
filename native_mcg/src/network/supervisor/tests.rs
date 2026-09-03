@@ -17,7 +17,7 @@ use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 
 use super::*;
 use crate::network::iroh::{IrohConnectError, IrohConnector, IrohReader, IrohWriter};
-use crate::network::{ConnectionCloseReason, NetworkCommand, PeerId, ProtocolRole, TransportKind};
+use crate::network::{ConnectionCloseReason, PeerId, ProtocolRole, TransportKind};
 
 struct OneShotIrohConnector {
     peer_id: PeerId,
@@ -122,10 +122,7 @@ async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()
     ));
 
     network
-        .send_command(NetworkCommand::SendFrontend {
-            connection_id,
-            message: Backend2FrontendMsg::Pong,
-        })
+        .unicast_frontend(connection_id, Backend2FrontendMsg::Pong)
         .await?;
     let response = tokio::time::timeout(Duration::from_secs(1), client.next())
         .await?
@@ -139,10 +136,7 @@ async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()
     ));
 
     let mismatch = network
-        .send_command(NetworkCommand::SendPeer {
-            connection_id,
-            message: Peer2PeerMsg::Ping,
-        })
+        .unicast_peer(connection_id, Peer2PeerMsg::Ping)
         .await;
     assert_eq!(
         mismatch,
@@ -154,10 +148,7 @@ async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()
     );
 
     network
-        .send_command(NetworkCommand::CloseConnection {
-            connection_id,
-            reason: "supervisor test shutdown".into(),
-        })
+        .close_connection(connection_id, "supervisor test shutdown")
         .await?;
     let close_frame = tokio::time::timeout(Duration::from_secs(1), client.next())
         .await?
@@ -176,10 +167,7 @@ async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()
     ));
 
     let after_close = network
-        .send_command(NetworkCommand::SendFrontend {
-            connection_id,
-            message: Backend2FrontendMsg::Pong,
-        })
+        .unicast_frontend(connection_id, Backend2FrontendMsg::Pong)
         .await;
     assert_eq!(
         after_close,
@@ -204,7 +192,7 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
     let mut remote_reader = BufReader::new(remote_reader);
     let peer_id = PeerId::new("test-peer-supervisor");
 
-    let unavailable = network.connect_iroh_peer("test-ticket").await;
+    let unavailable = network.establish_iroh_peer_connection("test-ticket").await;
     assert_eq!(
         unavailable,
         Err(NetworkError::TransportUnavailable(TransportKind::Iroh))
@@ -227,7 +215,9 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
             TransportKind::Iroh
         ))
     );
-    let connection_id = network.connect_iroh_peer("test-ticket").await?;
+    let connection_id = network
+        .establish_iroh_peer_connection("test-ticket")
+        .await?;
     let opened = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
         .await?
         .expect("supervisor should forward the open event");
@@ -256,10 +246,7 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
     ));
 
     network
-        .send_command(NetworkCommand::SendPeer {
-            connection_id,
-            message: Peer2PeerMsg::Pong,
-        })
+        .unicast_peer(connection_id, Peer2PeerMsg::Pong)
         .await?;
     let mut line = String::new();
     tokio::time::timeout(Duration::from_secs(1), remote_reader.read_line(&mut line)).await??;
@@ -269,10 +256,7 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
     ));
 
     let mismatch = network
-        .send_command(NetworkCommand::SendFrontend {
-            connection_id,
-            message: Backend2FrontendMsg::Pong,
-        })
+        .unicast_frontend(connection_id, Backend2FrontendMsg::Pong)
         .await;
     assert_eq!(
         mismatch,
@@ -284,10 +268,7 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
     );
 
     network
-        .send_command(NetworkCommand::CloseConnection {
-            connection_id,
-            reason: "supervisor peer test shutdown".into(),
-        })
+        .close_connection(connection_id, "supervisor peer test shutdown")
         .await?;
     let closed = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
         .await?
@@ -301,10 +282,7 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
     ));
 
     let after_close = network
-        .send_command(NetworkCommand::SendPeer {
-            connection_id,
-            message: Peer2PeerMsg::Ping,
-        })
+        .unicast_peer(connection_id, Peer2PeerMsg::Ping)
         .await;
     assert_eq!(
         after_close,
@@ -327,7 +305,7 @@ async fn supervisor_times_out_pending_iroh_connections() -> Result<()> {
         .await?;
 
     assert_eq!(
-        network.connect_iroh_peer("test-ticket").await,
+        network.establish_iroh_peer_connection("test-ticket").await,
         Err(NetworkError::ConnectionSetupTimedOut(TransportKind::Iroh))
     );
 
@@ -349,7 +327,7 @@ async fn supervisor_shutdown_cancels_pending_iroh_connections() -> Result<()> {
         .await?;
     let connect_task = tokio::spawn({
         let network = network.clone();
-        async move { network.connect_iroh_peer("test-ticket").await }
+        async move { network.establish_iroh_peer_connection("test-ticket").await }
     });
     tokio::time::timeout(Duration::from_secs(1), started_rx).await??;
 
@@ -378,10 +356,10 @@ async fn supervisor_broadcasts_to_all_peers_and_frontends() -> Result<()> {
     let mut peer2_reader = BufReader::new(peer2_rem_r);
 
     let _conn1 = network
-        .register_incoming_iroh_peer(PeerId::new("peer-1"), peer1_r, peer1_w)
+        .register_iroh_peer(PeerId::new("peer-1"), peer1_r, peer1_w)
         .await?;
     let _conn2 = network
-        .register_incoming_iroh_peer(PeerId::new("peer-2"), peer2_r, peer2_w)
+        .register_iroh_peer(PeerId::new("peer-2"), peer2_r, peer2_w)
         .await?;
 
     // Drain peer connected events

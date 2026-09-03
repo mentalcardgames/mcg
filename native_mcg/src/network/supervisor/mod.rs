@@ -159,7 +159,7 @@ impl NetworkSupervisor {
                 let result = self.configure_iroh_connector(connector);
                 let _ = response_tx.send(result);
             }
-            SupervisorRequest::ConnectIrohPeer {
+            SupervisorRequest::EstablishIrohPeerConnection {
                 ticket,
                 response_tx,
             } => self.start_iroh_connect(ticket, response_tx),
@@ -177,7 +177,7 @@ impl NetworkSupervisor {
                 let result = self.register_pending_peer_websocket(*socket);
                 let _ = response_tx.send(result);
             }
-            SupervisorRequest::RegisterIncomingIrohPeer {
+            SupervisorRequest::RegisterIrohPeer {
                 peer_id,
                 reader,
                 writer,
@@ -191,7 +191,7 @@ impl NetworkSupervisor {
                 );
                 let _ = response_tx.send(result);
             }
-            SupervisorRequest::RegisterIncomingIrohFrontend {
+            SupervisorRequest::RegisterIrohFrontend {
                 reader,
                 writer,
                 response_tx,
@@ -199,11 +199,42 @@ impl NetworkSupervisor {
                 let result = self.register_iroh_frontend(reader, writer);
                 let _ = response_tx.send(result);
             }
-            SupervisorRequest::Execute {
-                command,
+            SupervisorRequest::UnicastFrontend {
+                connection_id,
+                message,
                 response_tx,
             } => {
-                let result = self.execute_command(command);
+                let result = self.unicast_frontend(connection_id, message);
+                let _ = response_tx.send(result);
+            }
+            SupervisorRequest::UnicastPeer {
+                connection_id,
+                message,
+                response_tx,
+            } => {
+                let result = self.unicast_peer(connection_id, message);
+                let _ = response_tx.send(result);
+            }
+            SupervisorRequest::BroadcastFrontend {
+                message,
+                response_tx,
+            } => {
+                self.broadcast_frontend(message);
+                let _ = response_tx.send(Ok(()));
+            }
+            SupervisorRequest::BroadcastPeer {
+                message,
+                response_tx,
+            } => {
+                self.broadcast_peer(message);
+                let _ = response_tx.send(Ok(()));
+            }
+            SupervisorRequest::CloseConnection {
+                connection_id,
+                reason,
+                response_tx,
+            } => {
+                let result = self.close_connection(connection_id, reason);
                 let _ = response_tx.send(result);
             }
         }

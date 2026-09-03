@@ -19,8 +19,8 @@ pub use iroh::{spawn_iroh_listener, IrohListenerTask, IROH_FRONTEND_ALPN, IROH_P
 pub use peer_service::{EstablishedPeer, PeerConnectionService};
 pub use supervisor::{NetworkHandle, NetworkSupervisor};
 pub use types::{
-    ConnectionCloseReason, ConnectionId, FrontendConnectionCommand, NetworkCommand, NetworkError,
-    NetworkEvent, PeerConnectionCommand, PeerConnectionDirection, PeerConnectionError, PeerId,
-    ProtocolRole, TransportKind,
+    ConnectionCloseReason, ConnectionId, FrontendConnectionCommand, NetworkError, NetworkEvent,
+    PeerConnectionCommand, PeerConnectionDirection, PeerConnectionError, PeerId, ProtocolRole,
+    TransportKind,
 };
 pub use websocket::{WEBSOCKET_FRONTEND_PROTOCOL, WEBSOCKET_PEER_PROTOCOL};

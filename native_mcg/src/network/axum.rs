@@ -204,8 +204,8 @@ mod tests {
 
     use super::*;
     use crate::network::{
-        ConnectionCloseReason, NetworkCommand, NetworkEvent, NetworkSupervisor,
-        PeerConnectionDirection, PeerId, TransportKind,
+        ConnectionCloseReason, NetworkEvent, NetworkSupervisor, PeerConnectionDirection, PeerId,
+        TransportKind,
     };
 
     fn websocket_request(url: String, protocol: &'static str) -> Result<Request<()>> {
@@ -312,10 +312,7 @@ mod tests {
         ));
 
         network
-            .send_command(NetworkCommand::SendPeer {
-                connection_id,
-                message: Peer2PeerMsg::Pong,
-            })
+            .unicast_peer(connection_id, Peer2PeerMsg::Pong)
             .await?;
         let response = tokio::time::timeout(Duration::from_secs(1), client.next())
             .await?
@@ -329,10 +326,7 @@ mod tests {
         ));
 
         network
-            .send_command(NetworkCommand::CloseConnection {
-                connection_id,
-                reason: "peer WebSocket test shutdown".into(),
-            })
+            .close_connection(connection_id, "peer WebSocket test shutdown")
             .await?;
         let close = tokio::time::timeout(Duration::from_secs(1), client.next())
             .await?

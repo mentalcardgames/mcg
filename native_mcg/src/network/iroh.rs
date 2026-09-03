@@ -315,7 +315,7 @@ async fn register_incoming_iroh_connection(
         Some(ProtocolRole::Peer) => {
             let peer_id = PeerId::new(remote_id.to_string());
             let connection_id = network
-                .register_incoming_iroh_peer(peer_id.clone(), reader, writer)
+                .register_iroh_peer(peer_id.clone(), reader, writer)
                 .await
                 .context("registering incoming Iroh peer with network supervisor")?;
             tracing::info!(%connection_id, %peer_id, "incoming Iroh peer registered");
@@ -323,7 +323,7 @@ async fn register_incoming_iroh_connection(
         }
         Some(ProtocolRole::Frontend) => {
             let connection_id = network
-                .register_incoming_iroh_frontend(reader, writer)
+                .register_iroh_frontend(reader, writer)
                 .await
                 .context("registering incoming Iroh frontend with network supervisor")?;
             tracing::info!(%connection_id, endpoint_id = %remote_id, "incoming Iroh frontend registered");
