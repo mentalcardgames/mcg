@@ -96,3 +96,89 @@ impl ControllerSink for ChannelControllerSink {
         }
     }
 }
+
+/// Sink backed directly by [`NetworkHandle`] sending commands synchronously via its blocking API.
+impl ControllerSink for crate::network::NetworkHandle {
+    fn send_command(&mut self, command: ControllerCommand) {
+        match command {
+            ControllerCommand::BroadcastFrontend(message) => {
+                if let Err(error) = self.blocking_broadcast_frontend(message) {
+                    tracing::warn!(%error, "failed to broadcast frontend message from controller");
+                }
+            }
+            ControllerCommand::BroadcastPeer(message) => {
+                if let Err(error) = self.blocking_broadcast_peer(message) {
+                    tracing::warn!(%error, "failed to broadcast peer message from controller");
+                }
+            }
+            ControllerCommand::SendFrontend {
+                connection_id,
+                message,
+            } => {
+                if let Err(error) = self.blocking_unicast_frontend(connection_id, message) {
+                    tracing::warn!(%connection_id, %error, "failed to send frontend message from controller");
+                }
+            }
+            ControllerCommand::SendPeer {
+                connection_id,
+                message,
+            } => {
+                if let Err(error) = self.blocking_unicast_peer(connection_id, message) {
+                    tracing::warn!(%connection_id, %error, "failed to send peer message from controller");
+                }
+            }
+            ControllerCommand::CloseConnection {
+                connection_id,
+                reason,
+            } => {
+                if let Err(error) = self.blocking_close_connection(connection_id, reason) {
+                    tracing::warn!(%connection_id, %error, "failed to close connection from controller");
+                }
+            }
+            ControllerCommand::ConnectPeer { ticket } => {
+                if let Err(error) = self.blocking_establish_iroh_peer_connection(ticket) {
+                    tracing::warn!(%error, "failed to connect to iroh peer from controller");
+                }
+            }
+        }
+    }
+}
+
+/// Controller sink combining a [`crate::network::NetworkHandle`] with an optional public state watch sender for bot observation.
+pub struct NetworkControllerSink {
+    network: crate::network::NetworkHandle,
+    state_watch_tx: Option<tokio::sync::watch::Sender<Option<mcg_shared::PokerStatePublic>>>,
+}
+
+impl NetworkControllerSink {
+    pub fn new(network: crate::network::NetworkHandle) -> Self {
+        Self {
+            network,
+            state_watch_tx: None,
+        }
+    }
+
+    pub fn with_state_watch(
+        network: crate::network::NetworkHandle,
+        state_watch_tx: tokio::sync::watch::Sender<Option<mcg_shared::PokerStatePublic>>,
+    ) -> Self {
+        Self {
+            network,
+            state_watch_tx: Some(state_watch_tx),
+        }
+    }
+}
+
+impl ControllerSink for NetworkControllerSink {
+    fn send_command(&mut self, command: ControllerCommand) {
+        if let ControllerCommand::BroadcastFrontend(
+            mcg_shared::Backend2FrontendMsg::UpdatePokerState(ref gs),
+        ) = command
+        {
+            if let Some(ref tx) = self.state_watch_tx {
+                let _ = tx.send_replace(Some(gs.clone()));
+            }
+        }
+        self.network.send_command(command);
+    }
+}

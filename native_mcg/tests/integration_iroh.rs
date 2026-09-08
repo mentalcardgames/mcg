@@ -46,8 +46,8 @@ fn endpoint_ticket(endpoint: &Endpoint) -> String {
 
 fn start_supervisor() -> (NetworkHandle, mpsc::Receiver<NetworkEvent>, JoinHandle<()>) {
     let (event_tx, event_rx) = mpsc::channel(32);
-    let (supervisor, network) = NetworkSupervisor::new(event_tx);
-    let task = tokio::spawn(supervisor.run());
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, task) = supervisor.start();
     (network, event_rx, task)
 }
 

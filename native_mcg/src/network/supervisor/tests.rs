@@ -84,8 +84,8 @@ async fn test_ws_handler(
 #[tokio::test]
 async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel(16);
-    let (supervisor, network) = NetworkSupervisor::new(event_tx);
-    let supervisor_task = tokio::spawn(supervisor.run());
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
     let app = Router::new()
         .route("/ws", get(test_ws_handler))
         .with_state(network.clone());
@@ -184,8 +184,8 @@ async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()
 #[tokio::test]
 async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel(16);
-    let (supervisor, network) = NetworkSupervisor::new(event_tx);
-    let supervisor_task = tokio::spawn(supervisor.run());
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
     let (actor_stream, remote_stream) = duplex(4096);
     let (actor_reader, actor_writer) = split(actor_stream);
     let (remote_reader, mut remote_writer) = split(remote_stream);
@@ -297,9 +297,9 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
 #[tokio::test]
 async fn supervisor_times_out_pending_iroh_connections() -> Result<()> {
     let (event_tx, _event_rx) = mpsc::channel(16);
-    let (supervisor, network) =
-        NetworkSupervisor::with_settings(event_tx, 16, 8, Duration::from_millis(10));
-    let supervisor_task = tokio::spawn(supervisor.run());
+    let mut supervisor = NetworkSupervisor::new(event_tx);
+    supervisor.set_iroh_connect_timeout(Duration::from_millis(10));
+    let (network, supervisor_task) = supervisor.start();
     network
         .configure_iroh_connector(Arc::new(PendingIrohConnector))
         .await?;
@@ -317,8 +317,8 @@ async fn supervisor_times_out_pending_iroh_connections() -> Result<()> {
 #[tokio::test]
 async fn supervisor_shutdown_cancels_pending_iroh_connections() -> Result<()> {
     let (event_tx, _event_rx) = mpsc::channel(16);
-    let (supervisor, network) = NetworkSupervisor::new(event_tx);
-    let supervisor_task = tokio::spawn(supervisor.run());
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
     let (started_tx, started_rx) = oneshot::channel();
     network
         .configure_iroh_connector(Arc::new(SignalingPendingIrohConnector {
@@ -341,8 +341,8 @@ async fn supervisor_shutdown_cancels_pending_iroh_connections() -> Result<()> {
 #[tokio::test]
 async fn supervisor_broadcasts_to_all_peers_and_frontends() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel(16);
-    let (supervisor, network) = NetworkSupervisor::new(event_tx);
-    let supervisor_task = tokio::spawn(supervisor.run());
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
 
     // Setup 2 peer connections using duplex streams
     let (peer1_stream, peer1_remote) = duplex(4096);
@@ -385,6 +385,66 @@ async fn supervisor_broadcasts_to_all_peers_and_frontends() -> Result<()> {
     assert!(matches!(msg2, Peer2PeerMsg::Ping));
 
     network.shutdown().await?;
+    tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blocking_methods_work_from_synchronous_thread() -> Result<()> {
+    let (event_tx, mut event_rx) = mpsc::channel(16);
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
+
+    // Setup 1 peer connection
+    let (peer_stream, peer_remote) = duplex(4096);
+    let (peer_r, peer_w) = split(peer_stream);
+    let (peer_rem_r, _peer_rem_w) = split(peer_remote);
+    let mut peer_reader = BufReader::new(peer_rem_r);
+
+    let conn_id = network
+        .register_iroh_peer(PeerId::new("sync-peer"), peer_r, peer_w)
+        .await?;
+
+    let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+        .await?
+        .expect("event");
+    assert!(matches!(event, NetworkEvent::PeerConnected { .. }));
+
+    // Run blocking calls on a dedicated OS thread
+    let net = network.clone();
+    let sync_thread = std::thread::spawn(move || -> Result<(), NetworkError> {
+        net.blocking_unicast_peer(conn_id, Peer2PeerMsg::Ping)?;
+        net.blocking_broadcast_peer(Peer2PeerMsg::Pong)?;
+        Ok(())
+    });
+
+    sync_thread.join().expect("thread should join")?;
+
+    // Verify messages received on remote
+    let mut line1 = String::new();
+    peer_reader.read_line(&mut line1).await?;
+    assert!(matches!(
+        serde_json::from_str::<Peer2PeerMsg>(line1.trim())?,
+        Peer2PeerMsg::Ping
+    ));
+
+    let mut line2 = String::new();
+    peer_reader.read_line(&mut line2).await?;
+    assert!(matches!(
+        serde_json::from_str::<Peer2PeerMsg>(line2.trim())?,
+        Peer2PeerMsg::Pong
+    ));
+
+    // Test blocking close and blocking shutdown on a sync thread
+    let net = network.clone();
+    let close_thread = std::thread::spawn(move || -> Result<(), NetworkError> {
+        net.blocking_close_connection(conn_id, "done")?;
+        net.blocking_shutdown()?;
+        Ok(())
+    });
+
+    close_thread.join().expect("close thread should join")?;
+
     tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
     Ok(())
 }

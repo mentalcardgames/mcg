@@ -5,18 +5,18 @@
 //! [`ControllerEvent`] messages and communicates with the async network shell via
 //! [`ControllerCommand`] and the [`ControllerSink`] trait.
 
-pub mod bridge;
 mod core;
 mod handle;
 mod runner;
 mod sink;
 mod types;
 
-pub use self::bridge::{spawn_controller_command_forwarder, spawn_network_event_forwarder};
 pub use self::core::{Controller, Lobby, PeerInfo};
 pub use handle::ControllerHandle;
 pub use runner::{spawn_controller, start_controller};
-pub use sink::{ChannelControllerSink, ControllerSink, InMemoryControllerSink};
+pub use sink::{
+    ChannelControllerSink, ControllerSink, InMemoryControllerSink, NetworkControllerSink,
+};
 pub use types::{ControllerCommand, ControllerError, ControllerEvent};
 
 #[cfg(test)]
@@ -99,23 +99,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bridge_wires_controller_with_network_supervisor() {
+    async fn controller_wires_with_network_supervisor() {
         use crate::network::NetworkSupervisor;
         use tokio::io::{duplex, split, AsyncBufReadExt, BufReader};
 
-        let (network_event_tx, network_event_rx) = mpsc::channel(16);
-        let (supervisor, network) = NetworkSupervisor::new(network_event_tx);
-        let supervisor_task = tokio::spawn(supervisor.run());
+        let (network_event_tx, mut network_event_rx) = mpsc::channel(16);
+        let supervisor = NetworkSupervisor::new(network_event_tx);
+        let (network, supervisor_task) = supervisor.start();
 
-        let (command_tx, command_rx) = mpsc::unbounded_channel();
-        let sink = ChannelControllerSink::new(command_tx);
         let controller = Controller::new(Config::default(), None);
-        let (thread_handle, controller_handle) = start_controller(controller, 16, sink);
+        let (thread_handle, controller_handle) = start_controller(controller, 16, network.clone());
 
-        let _event_forwarder =
-            spawn_network_event_forwarder(network_event_rx, controller_handle.clone(), None);
-        let _command_forwarder =
-            spawn_controller_command_forwarder(command_rx, network.clone(), None, None);
+        let event_forwarder = tokio::spawn({
+            let controller_handle = controller_handle.clone();
+            async move {
+                while let Some(event) = network_event_rx.recv().await {
+                    if controller_handle.send_network_event(event).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        });
 
         // Register a frontend stream
         let (frontend_stream, frontend_remote) = duplex(4096);
@@ -169,5 +173,6 @@ mod tests {
         thread_handle.join().expect("thread join");
         network.shutdown().await.expect("network shutdown");
         let _ = supervisor_task.await;
+        let _ = event_forwarder.await;
     }
 }

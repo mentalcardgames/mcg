@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinSet;
+use tokio::task::{JoinHandle, JoinSet};
 
 use self::connections::ManagedConnection;
 pub use self::handle::NetworkHandle;
@@ -24,6 +24,8 @@ const DEFAULT_IROH_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Owns active connection handles and routes commands and actor events.
 pub struct NetworkSupervisor {
+    /// Sender for supervisor requests, transferred to `NetworkHandle` when the supervisor task is started.
+    request_tx: Option<mpsc::Sender<SupervisorRequest>>,
     /// Output for connection actors to report internal events.
     pub(crate) actor_event_tx: mpsc::Sender<ActorEvent>,
     /// Input of internal connection actor events.
@@ -47,44 +49,14 @@ pub struct NetworkSupervisor {
 }
 
 impl NetworkSupervisor {
-    /// Creates a supervisor and its cloneable external handle.
-    pub fn new(application_event_tx: mpsc::Sender<NetworkEvent>) -> (Self, NetworkHandle) {
-        Self::with_capacities(
-            application_event_tx,
-            DEFAULT_CONTROL_CHANNEL_CAPACITY,
-            DEFAULT_CONNECTION_CHANNEL_CAPACITY,
-        )
-    }
-
-    pub fn with_capacities(
-        application_event_tx: mpsc::Sender<NetworkEvent>,
-        control_channel_capacity: usize,
-        connection_channel_capacity: usize,
-    ) -> (Self, NetworkHandle) {
-        Self::with_settings(
-            application_event_tx,
-            control_channel_capacity,
-            connection_channel_capacity,
-            DEFAULT_IROH_CONNECT_TIMEOUT,
-        )
-    }
-
-    pub fn with_settings(
-        application_event_tx: mpsc::Sender<NetworkEvent>,
-        control_channel_capacity: usize,
-        connection_channel_capacity: usize,
-        iroh_connect_timeout: Duration,
-    ) -> (Self, NetworkHandle) {
-        assert!(control_channel_capacity > 0);
-        assert!(connection_channel_capacity > 0);
-        assert!(!iroh_connect_timeout.is_zero());
-
-        let (request_tx, request_rx) = mpsc::channel(control_channel_capacity);
-        let (actor_event_tx, actor_event_rx) = mpsc::channel(control_channel_capacity);
+    /// Creates a supervisor with the provided application event sender.
+    pub fn new(application_event_tx: mpsc::Sender<NetworkEvent>) -> Self {
+        let (request_tx, request_rx) = mpsc::channel(DEFAULT_CONTROL_CHANNEL_CAPACITY);
+        let (actor_event_tx, actor_event_rx) = mpsc::channel(DEFAULT_CONTROL_CHANNEL_CAPACITY);
         let (iroh_connect_result_tx, iroh_connect_result_rx) =
-            mpsc::channel(control_channel_capacity);
-        let handle = NetworkHandle::new(request_tx);
-        let supervisor = Self {
+            mpsc::channel(DEFAULT_CONTROL_CHANNEL_CAPACITY);
+        Self {
+            request_tx: Some(request_tx),
             request_rx,
             actor_event_tx,
             actor_event_rx,
@@ -95,10 +67,27 @@ impl NetworkSupervisor {
             application_event_tx,
             connections: HashMap::new(),
             next_connection_id: 0,
-            connection_channel_capacity,
-            iroh_connect_timeout,
-        };
-        (supervisor, handle)
+            connection_channel_capacity: DEFAULT_CONNECTION_CHANNEL_CAPACITY,
+            iroh_connect_timeout: DEFAULT_IROH_CONNECT_TIMEOUT,
+        }
+    }
+
+    /// Spawns the supervisor as an asynchronous Tokio task.
+    ///
+    /// Returns the [`NetworkHandle`] for interacting with the supervisor and the task's [`JoinHandle`].
+    pub fn start(mut self) -> (NetworkHandle, JoinHandle<()>) {
+        let request_tx = self
+            .request_tx
+            .take()
+            .expect("network supervisor request sender already taken");
+        let handle = NetworkHandle::new(request_tx);
+        let task = tokio::spawn(self.run());
+        (handle, task)
+    }
+
+    #[cfg(test)]
+    pub fn set_iroh_connect_timeout(&mut self, timeout: Duration) {
+        self.iroh_connect_timeout = timeout;
     }
 
     /// Runs until every [`NetworkHandle`] has been dropped or the application

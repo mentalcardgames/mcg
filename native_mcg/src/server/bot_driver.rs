@@ -157,9 +157,7 @@ fn pick_delay(min_ms: u64, max_ms: u64) -> u64 {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::controller::{
-        spawn_controller_command_forwarder, start_controller, ChannelControllerSink, Controller,
-    };
+    use crate::controller::{start_controller, Controller, NetworkControllerSink};
     use crate::network::NetworkSupervisor;
     use mcg_shared::{Frontend2BackendMsg, PlayerConfig};
     use tokio::sync::mpsc;
@@ -167,21 +165,13 @@ mod tests {
     #[tokio::test]
     async fn bot_driver_drives_bot_turns_automatically() {
         let (network_event_tx, _network_event_rx) = mpsc::channel(16);
-        let (supervisor, network) = NetworkSupervisor::new(network_event_tx);
-        let supervisor_task = tokio::spawn(supervisor.run());
-
-        let (command_tx, command_rx) = mpsc::unbounded_channel();
-        let sink = ChannelControllerSink::new(command_tx);
-        let controller = Controller::new(Config::default(), None);
-        let (thread_handle, controller_handle) = start_controller(controller, 16, sink);
+        let supervisor = NetworkSupervisor::new(network_event_tx);
+        let (network, supervisor_task) = supervisor.start();
 
         let (state_watch_tx, state_watch_rx) = watch::channel(None);
-        let _command_forwarder = spawn_controller_command_forwarder(
-            command_rx,
-            network.clone(),
-            None,
-            Some(state_watch_tx),
-        );
+        let sink = NetworkControllerSink::with_state_watch(network.clone(), state_watch_tx);
+        let controller = Controller::new(Config::default(), None);
+        let (thread_handle, controller_handle) = start_controller(controller, 16, sink);
 
         let bot_driver_task = spawn_bot_driver(
             controller_handle.clone(),
