@@ -158,8 +158,8 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::controller::{start_controller, Controller, NetworkControllerSink};
-    use crate::network::NetworkSupervisor;
-    use mcg_shared::{Frontend2BackendMsg, PlayerConfig};
+    use crate::network::{ConnectionId, NetworkEvent, NetworkSupervisor};
+    use mcg_shared::{Frontend2BackendMsg, PlayerAction, PlayerConfig};
     use tokio::sync::mpsc;
 
     #[tokio::test]
@@ -168,7 +168,7 @@ mod tests {
         let supervisor = NetworkSupervisor::new(network_event_tx);
         let (network, supervisor_task) = supervisor.start();
 
-        let (state_watch_tx, state_watch_rx) = watch::channel(None);
+        let (state_watch_tx, mut state_watch_rx) = watch::channel(None);
         let sink = NetworkControllerSink::with_state_watch(network.clone(), state_watch_tx);
         let controller = Controller::new(Config::default(), None);
         let (thread_handle, controller_handle) = start_controller(controller, 16, sink);
@@ -177,47 +177,57 @@ mod tests {
             controller_handle.clone(),
             state_watch_rx.clone(),
             BotManager::new(),
-            (1, 5),
+            (20, 50),
         );
 
         // Start game with 1 human (Alice) and 1 bot (Bob)
-        let response = controller_handle
-            .send_http_request(Frontend2BackendMsg::NewGame {
-                players: vec![
-                    PlayerConfig {
-                        id: PlayerId(0),
-                        name: "Alice".into(),
-                        is_bot: false,
-                    },
-                    PlayerConfig {
-                        id: PlayerId(1),
-                        name: "Bob".into(),
-                        is_bot: true,
-                    },
-                ],
+        controller_handle
+            .send_network_event(NetworkEvent::FrontendMessage {
+                connection_id: ConnectionId::new(1),
+                message: Frontend2BackendMsg::NewGame {
+                    players: vec![
+                        PlayerConfig {
+                            id: PlayerId(0),
+                            name: "Alice".into(),
+                            is_bot: false,
+                        },
+                        PlayerConfig {
+                            id: PlayerId(1),
+                            name: "Bob".into(),
+                            is_bot: true,
+                        },
+                    ],
+                },
             })
             .await
-            .expect("new game response");
+            .expect("new game event sent");
 
-        let mcg_shared::Backend2FrontendMsg::UpdatePokerState(initial_state) = response else {
-            panic!("expected UpdatePokerState response");
-        };
+        state_watch_rx
+            .changed()
+            .await
+            .expect("initial state published");
+        let initial_state = state_watch_rx
+            .borrow()
+            .clone()
+            .expect("poker state present");
 
         // In 2-player game, Alice (SB / dealer, Player 0) acts first preflop
         assert_eq!(initial_state.to_act, PlayerId(0));
 
         // Alice calls/completes the small blind
-        let response2 = controller_handle
-            .send_http_request(Frontend2BackendMsg::Action {
-                player_id: PlayerId(0),
-                action: PlayerAction::CheckCall,
-            })
+        controller_handle
+            .send_bot_action(PlayerId(0), PlayerAction::CheckCall)
             .await
-            .expect("Alice call response");
+            .expect("Alice call action sent");
 
-        let mcg_shared::Backend2FrontendMsg::UpdatePokerState(alice_after_state) = response2 else {
-            panic!("expected UpdatePokerState response");
-        };
+        state_watch_rx
+            .changed()
+            .await
+            .expect("alice action state published");
+        let alice_after_state = state_watch_rx
+            .borrow()
+            .clone()
+            .expect("poker state present");
 
         // Now it is Bob's (Bot, Player 1) turn
         assert_eq!(alice_after_state.to_act, PlayerId(1));

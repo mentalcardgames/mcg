@@ -1,8 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg, PlayerAction, PlayerId};
-use tokio::sync::oneshot;
+use mcg_shared::{Backend2FrontendMsg, Peer2PeerMsg, PlayerAction, PlayerId};
 
 use crate::network::{ConnectionId, NetworkEvent};
 
@@ -13,8 +12,6 @@ pub enum ControllerError {
     ControllerStopped,
     /// The controller's incoming event queue is full (for bounded channels).
     QueueFull,
-    /// An HTTP or RPC request to the controller timed out or was dropped.
-    ResponseDropped,
 }
 
 impl fmt::Display for ControllerError {
@@ -22,7 +19,6 @@ impl fmt::Display for ControllerError {
         match self {
             Self::ControllerStopped => write!(f, "controller thread has stopped"),
             Self::QueueFull => write!(f, "controller event queue is full"),
-            Self::ResponseDropped => write!(f, "controller dropped the response channel"),
         }
     }
 }
@@ -30,16 +26,11 @@ impl fmt::Display for ControllerError {
 impl Error for ControllerError {}
 
 /// Events received by the synchronous Controller from the async network shell,
-/// HTTP API, bot drivers, or system lifecycle.
+/// bot drivers, or system lifecycle.
 #[derive(Debug)]
 pub enum ControllerEvent {
     /// Network-level event from the NetworkSupervisor (connections, incoming messages, closures).
     Network(NetworkEvent),
-    /// HTTP API message request requiring a synchronous response via a oneshot channel.
-    HttpRequest {
-        message: Frontend2BackendMsg,
-        reply_tx: oneshot::Sender<Backend2FrontendMsg>,
-    },
     /// Bot action dispatched by an external bot driver.
     BotAction {
         player_id: PlayerId,

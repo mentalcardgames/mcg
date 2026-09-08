@@ -16,6 +16,9 @@ pub struct Cli {
     ///   - iroh:<PEER>            (e.g. --transport 'iroh:zb2...peerid...')
     ///
     /// Default: http://localhost:3000
+    // MILESTONE / TODO(refactor): The HTTP API endpoint (/api/message) has been removed from native_mcg.
+    // mcg-cli needs to be updated to use WebSocket (`ws://localhost:3000/ws`) as its default transport
+    // rather than HTTP, and deprecated HTTP client handlers should eventually be cleaned up.
     #[arg(long, default_value = "http://localhost:3000")]
     pub transport: TransportKind,
 

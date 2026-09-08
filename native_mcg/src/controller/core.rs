@@ -111,12 +111,6 @@ impl Controller {
             ControllerEvent::Network(network_event) => {
                 self.handle_network_event(network_event, out);
             }
-            ControllerEvent::HttpRequest { message, reply_tx } => {
-                let response = self
-                    .handle_frontend_message(None, message, out)
-                    .unwrap_or(Backend2FrontendMsg::Pong);
-                let _ = reply_tx.send(response);
-            }
             ControllerEvent::BotAction { player_id, action } => {
                 self.execute_player_action(player_id, action, out);
             }

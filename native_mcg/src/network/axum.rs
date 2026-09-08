@@ -4,32 +4,24 @@ use axum::{
     extract::{ws::WebSocketUpgrade, FromRef, State},
     http::{header::SEC_WEBSOCKET_PROTOCOL, HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
-use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
 use tower_http::services::ServeDir;
 
 use super::{NetworkHandle, PeerConnectionService, WEBSOCKET_FRONTEND_PROTOCOL};
-use crate::controller::ControllerHandle;
 
 /// Shared state container for the Axum router and handlers.
 #[derive(Clone)]
 pub struct RouterState {
-    pub controller: ControllerHandle,
     pub network: NetworkHandle,
     pub peer_connections: PeerConnectionService,
     pub _task_guard: Option<Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 impl RouterState {
-    pub fn new(
-        controller: ControllerHandle,
-        network: NetworkHandle,
-        peer_connections: PeerConnectionService,
-    ) -> Self {
+    pub fn new(network: NetworkHandle, peer_connections: PeerConnectionService) -> Self {
         Self {
-            controller,
             network,
             peer_connections,
             _task_guard: None,
@@ -39,12 +31,6 @@ impl RouterState {
     pub fn with_task_guard(mut self, guard: Arc<dyn std::any::Any + Send + Sync>) -> Self {
         self._task_guard = Some(guard);
         self
-    }
-}
-
-impl FromRef<RouterState> for ControllerHandle {
-    fn from_ref(state: &RouterState) -> Self {
-        state.controller.clone()
     }
 }
 
@@ -110,18 +96,6 @@ fn websocket_role(headers: &HeaderMap) -> Result<WebSocketRole, &'static str> {
     Err("unsupported WebSocket subprotocol")
 }
 
-/// Unified handler for all Frontend2BackendMsg variants. Returns the serialized Backend2FrontendMsg response.
-pub async fn http_handler(
-    State(controller): State<ControllerHandle>,
-    Json(cm): Json<Frontend2BackendMsg>,
-) -> Json<Backend2FrontendMsg> {
-    let response = controller
-        .send_http_request(cm)
-        .await
-        .unwrap_or_else(|error| Backend2FrontendMsg::Error(format!("Controller error: {error}")));
-    Json(response)
-}
-
 /// Health check endpoint responding with `{ "ok": true }`.
 pub async fn health_handler() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "ok": true }))
@@ -163,8 +137,6 @@ pub fn build_router(state: RouterState) -> Router {
         .route("/health", get(health_handler))
         // WebSocket endpoint (WASM GUI remains websocket-only)
         .route("/ws", get(ws_handler))
-        // HTTP API endpoint using unified Frontend2BackendMsg/Backend2FrontendMsg payloads
-        .route("/api/message", post(http_handler))
         .nest_service("/pkg", serve_dir)
         .nest_service("/media", serve_media)
         // Serve index.html for the root route

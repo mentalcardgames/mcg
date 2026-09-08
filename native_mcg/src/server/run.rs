@@ -101,7 +101,6 @@ impl Drop for NetworkTasks {
 }
 
 struct RunningNetwork {
-    controller: ControllerHandle,
     network: NetworkHandle,
     peer_connections: PeerConnectionService,
     local_ticket: Arc<RwLock<Option<String>>>,
@@ -160,7 +159,6 @@ fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork
     );
 
     RunningNetwork {
-        controller: controller_handle.clone(),
         network,
         peer_connections,
         local_ticket,
@@ -176,14 +174,12 @@ fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork
 
 pub fn build_router(config: Config, config_path: Option<PathBuf>) -> Router {
     let RunningNetwork {
-        controller,
         network,
         peer_connections,
         network_tasks,
         ..
     } = start_network(config, config_path);
-    let router_state =
-        RouterState::new(controller, network, peer_connections).with_task_guard(network_tasks);
+    let router_state = RouterState::new(network, peer_connections).with_task_guard(network_tasks);
     crate::network::build_router(router_state)
 }
 
@@ -193,13 +189,13 @@ pub async fn run_server(
     config_path: Option<PathBuf>,
 ) -> Result<()> {
     let RunningNetwork {
-        controller,
         network,
         peer_connections,
         local_ticket,
         network_tasks,
+        ..
     } = start_network(config.clone(), config_path.clone());
-    let router_state = RouterState::new(controller, network.clone(), peer_connections);
+    let router_state = RouterState::new(network.clone(), peer_connections);
     let app = crate::network::build_router(router_state);
 
     let display_addr = if addr.ip().is_loopback() {

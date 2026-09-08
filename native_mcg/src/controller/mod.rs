@@ -65,26 +65,27 @@ mod tests {
 
         let (thread_handle, handle) = start_controller(controller, 16, sink);
 
-        // Send HTTP request to start game
-        let response = handle
-            .send_http_request(Frontend2BackendMsg::NewGame {
-                players: vec![
-                    PlayerConfig {
-                        id: PlayerId(0),
-                        name: "Alice".into(),
-                        is_bot: false,
-                    },
-                    PlayerConfig {
-                        id: PlayerId(1),
-                        name: "Bob".into(),
-                        is_bot: true,
-                    },
-                ],
+        // Send network event to start game
+        handle
+            .send_network_event(crate::network::NetworkEvent::FrontendMessage {
+                connection_id: ConnectionId::new(1),
+                message: Frontend2BackendMsg::NewGame {
+                    players: vec![
+                        PlayerConfig {
+                            id: PlayerId(0),
+                            name: "Alice".into(),
+                            is_bot: false,
+                        },
+                        PlayerConfig {
+                            id: PlayerId(1),
+                            name: "Bob".into(),
+                            is_bot: true,
+                        },
+                    ],
+                },
             })
             .await
-            .expect("should get response");
-
-        assert!(matches!(response, Backend2FrontendMsg::UpdatePokerState(_)));
+            .expect("should send event");
 
         // Expect BroadcastFrontend from the controller command channel
         let command = tokio::time::timeout(Duration::from_secs(1), command_rx.recv())
@@ -101,7 +102,7 @@ mod tests {
     #[tokio::test]
     async fn controller_wires_with_network_supervisor() {
         use crate::network::NetworkSupervisor;
-        use tokio::io::{duplex, split, AsyncBufReadExt, BufReader};
+        use tokio::io::{duplex, split, AsyncBufReadExt, AsyncWriteExt, BufReader};
 
         let (network_event_tx, mut network_event_rx) = mpsc::channel(16);
         let supervisor = NetworkSupervisor::new(network_event_tx);
@@ -124,7 +125,7 @@ mod tests {
         // Register a frontend stream
         let (frontend_stream, frontend_remote) = duplex(4096);
         let (fe_r, fe_w) = split(frontend_stream);
-        let (fe_rem_r, _fe_rem_w) = split(frontend_remote);
+        let (fe_rem_r, mut fe_rem_w) = split(frontend_remote);
         let mut fe_reader = BufReader::new(fe_rem_r);
 
         let _conn_id = network
@@ -132,25 +133,28 @@ mod tests {
             .await
             .expect("frontend registration succeeded");
 
-        // Request a new game from the controller via HTTP
-        let response = controller_handle
-            .send_http_request(Frontend2BackendMsg::NewGame {
-                players: vec![
-                    PlayerConfig {
-                        id: PlayerId(0),
-                        name: "Alice".into(),
-                        is_bot: false,
-                    },
-                    PlayerConfig {
-                        id: PlayerId(1),
-                        name: "Bob".into(),
-                        is_bot: false,
-                    },
-                ],
-            })
+        // Send a new game message through the frontend stream
+        let new_game = Frontend2BackendMsg::NewGame {
+            players: vec![
+                PlayerConfig {
+                    id: PlayerId(0),
+                    name: "Alice".into(),
+                    is_bot: false,
+                },
+                PlayerConfig {
+                    id: PlayerId(1),
+                    name: "Bob".into(),
+                    is_bot: false,
+                },
+            ],
+        };
+        let mut payload = serde_json::to_vec(&new_game).expect("serialize new game");
+        payload.push(b'\n');
+        fe_rem_w
+            .write_all(&payload)
             .await
-            .expect("response received");
-        assert!(matches!(response, Backend2FrontendMsg::UpdatePokerState(_)));
+            .expect("write to frontend stream");
+        fe_rem_w.flush().await.expect("flush frontend stream");
 
         // Read the broadcasted state update on the registered frontend stream
         let mut line = String::new();

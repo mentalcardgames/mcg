@@ -1,11 +1,11 @@
-use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerAction, PlayerId};
-use tokio::sync::{mpsc, oneshot};
+use mcg_shared::{PlayerAction, PlayerId};
+use tokio::sync::mpsc;
 
 use crate::network::NetworkEvent;
 
 use super::types::{ControllerError, ControllerEvent};
 
-/// Cloneable handle used by async tasks (HTTP handlers, network actors, bot drivers)
+/// Cloneable handle used by async tasks (network actors, bot drivers)
 /// to send events to the synchronous Controller thread.
 #[derive(Clone, Debug)]
 pub struct ControllerHandle {
@@ -48,17 +48,6 @@ impl ControllerHandle {
     ) -> Result<(), ControllerError> {
         self.send_event(ControllerEvent::BotAction { player_id, action })
             .await
-    }
-
-    /// Dispatches an HTTP request message to the Controller and awaits the synchronous response.
-    pub async fn send_http_request(
-        &self,
-        message: Frontend2BackendMsg,
-    ) -> Result<Backend2FrontendMsg, ControllerError> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        self.send_event(ControllerEvent::HttpRequest { message, reply_tx })
-            .await?;
-        reply_rx.await.map_err(|_| ControllerError::ResponseDropped)
     }
 
     /// Requests the Controller to cleanly shut down.
