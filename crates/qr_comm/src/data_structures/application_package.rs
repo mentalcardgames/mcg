@@ -31,7 +31,8 @@ impl Package {
         let Package { size, mut data } = self;
         let mut fragments = Vec::new();
         let mut first_fragment = [0u8; FRAGMENT_SIZE_BYTES];
-        first_fragment[..size_of::<u32>()].copy_from_slice(&size.to_le_bytes());
+        first_fragment[..AP_LENGTH_INDEX_SIZE_BYTES]
+            .copy_from_slice(&size.to_le_bytes()[..AP_LENGTH_INDEX_SIZE_BYTES]);
         let end = min(data.len(), FRAGMENT_SIZE_BYTES - AP_LENGTH_INDEX_SIZE_BYTES);
         let first_data: Vec<u8> = data.drain(0..end).collect();
         first_fragment[AP_LENGTH_INDEX_SIZE_BYTES..end + AP_LENGTH_INDEX_SIZE_BYTES]
@@ -104,7 +105,7 @@ mod tests {
     }
     #[test]
     fn into_fragments_test_1() {
-        const DATA_LEN: usize = 1021;
+        const DATA_LEN: usize = FRAGMENT_SIZE_BYTES - AP_LENGTH_INDEX_SIZE_BYTES;
         let data: [u8; DATA_LEN] = from_fn(|x| x as u8);
         let package = Package::new(&data);
         assert_eq!(package.size, DATA_LEN as u32);
@@ -114,14 +115,14 @@ mod tests {
             fragments[0][AP_LENGTH_INDEX_SIZE_BYTES..DATA_LEN + AP_LENGTH_INDEX_SIZE_BYTES],
             data
         );
-        // assert_eq!(
-        //     fragments[0][DATA_LEN + AP_LENGTH_INDEX_SIZE_BYTES..],
-        //     [0; FRAGMENT_SIZE_BYTES - DATA_LEN - AP_LENGTH_INDEX_SIZE_BYTES]
-        // );
+        assert_eq!(
+            fragments[0][DATA_LEN + AP_LENGTH_INDEX_SIZE_BYTES..],
+            [0; FRAGMENT_SIZE_BYTES - DATA_LEN - AP_LENGTH_INDEX_SIZE_BYTES]
+        );
     }
     #[test]
     fn into_fragments_test_2() {
-        const DATA_LEN: usize = 1024;
+        const DATA_LEN: usize = FRAGMENT_SIZE_BYTES;
         let data: [u8; DATA_LEN] = from_fn(|x| x as u8);
         let package = Package::new(&data);
         assert_eq!(package.size, DATA_LEN as u32);
@@ -129,7 +130,7 @@ mod tests {
         assert_eq!(fragments.len(), 2);
         assert_eq!(
             fragments[0][AP_LENGTH_INDEX_SIZE_BYTES..],
-            data[..DATA_LEN - AP_LENGTH_INDEX_SIZE_BYTES]
+            data[..FRAGMENT_SIZE_BYTES - AP_LENGTH_INDEX_SIZE_BYTES]
         );
         assert_eq!(
             fragments[1][..AP_LENGTH_INDEX_SIZE_BYTES],
@@ -147,7 +148,10 @@ mod tests {
         let package = Package::new(&data);
         assert_eq!(package.size, DATA_LEN as u32);
         let fragments = package.into_fragments();
-        assert_eq!(fragments.len(), 9);
+        let expected_num_fragments = 1
+            + (DATA_LEN - (FRAGMENT_SIZE_BYTES - AP_LENGTH_INDEX_SIZE_BYTES))
+                .div_ceil(FRAGMENT_SIZE_BYTES);
+        assert_eq!(fragments.len(), expected_num_fragments);
         let new = Package::from_fragments(fragments.clone().as_ref()).into_fragments();
         for (idx, frag) in fragments.iter().enumerate() {
             assert_eq!(frag, &new[idx]);
