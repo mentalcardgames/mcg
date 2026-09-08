@@ -128,7 +128,15 @@ impl Controller {
                 self.handle_network_event(network_event, network);
             }
             ControllerEvent::BotAction { player_id, action } => {
-                self.execute_player_action(player_id, action, network);
+                match self.validate_and_apply_action(player_id, action.clone()) {
+                    Ok(()) => {
+                        self.print_latest_changes();
+                        self.broadcast_state(network);
+                    }
+                    Err(error) => {
+                        tracing::warn!(%player_id, ?action, %error, "failed to execute bot action");
+                    }
+                }
             }
             ControllerEvent::Shutdown => {
                 tracing::info!("Controller received shutdown event");
@@ -210,7 +218,14 @@ impl Controller {
     ) -> Option<Backend2FrontendMsg> {
         match msg {
             Frontend2BackendMsg::Action { player_id, action } => {
-                Some(self.execute_player_action(player_id, action, network))
+                match self.validate_and_apply_action(player_id, action) {
+                    Ok(()) => {
+                        self.print_latest_changes();
+                        self.broadcast_state(network);
+                        None
+                    }
+                    Err(e) => Some(Backend2FrontendMsg::Error(e)),
+                }
             }
             Frontend2BackendMsg::Subscribe => {
                 // Subscription is deprecated; return the current state to the caller if active.
@@ -219,7 +234,6 @@ impl Controller {
             }
             Frontend2BackendMsg::RequestState => {
                 if let Some(gs) = self.current_state_public() {
-                    self.broadcast_state(network);
                     Some(Backend2FrontendMsg::UpdatePokerState(gs))
                 } else {
                     Some(Backend2FrontendMsg::Error(
@@ -231,13 +245,30 @@ impl Controller {
                 tracing::info!("received ping from client");
                 Some(Backend2FrontendMsg::Pong)
             }
-            Frontend2BackendMsg::NextHand => Some(self.advance_to_next_hand(network)),
-            Frontend2BackendMsg::NewGame { players } => {
-                Some(self.create_game_session(players, network))
-            }
-            Frontend2BackendMsg::PushState { state } => {
-                Some(self.import_game_state(state, network))
-            }
+            Frontend2BackendMsg::NextHand => match self.advance_to_next_hand() {
+                Ok(()) => {
+                    self.print_latest_changes();
+                    self.broadcast_state(network);
+                    None
+                }
+                Err(e) => Some(Backend2FrontendMsg::Error(e)),
+            },
+            Frontend2BackendMsg::NewGame { players } => match self.create_game_session(players) {
+                Ok(()) => {
+                    self.print_latest_changes();
+                    self.broadcast_state(network);
+                    None
+                }
+                Err(e) => Some(Backend2FrontendMsg::Error(e)),
+            },
+            Frontend2BackendMsg::PushState { state } => match self.import_game_state(state) {
+                Ok(()) => {
+                    self.print_latest_changes();
+                    self.broadcast_state(network);
+                    None
+                }
+                Err(e) => Some(Backend2FrontendMsg::Error(e)),
+            },
             Frontend2BackendMsg::QrValue(ticket) => {
                 if let Err(error) = network.blocking_establish_iroh_peer_connection(ticket) {
                     tracing::warn!(%error, "failed to connect to iroh peer from controller");
@@ -585,8 +616,8 @@ impl Controller {
         self.lobby.game.as_ref().map(|game| game.public())
     }
 
-    /// Broadcasts the current game state to all frontends and prints new action logs to console.
-    pub fn broadcast_state(&mut self, network: &NetworkHandle) {
+    /// Prints new action logs to console.
+    pub fn print_latest_changes(&mut self) {
         if let Some(gs) = self.current_state_public() {
             let already = self.lobby.last_printed_log_len;
             let total = gs.action_log.len();
@@ -598,7 +629,12 @@ impl Controller {
                 }
                 self.lobby.last_printed_log_len = total;
             }
+        }
+    }
 
+    /// Broadcasts the current game state to all frontends and updates the state watch channel.
+    pub fn broadcast_state(&self, network: &NetworkHandle) {
+        if let Some(gs) = self.current_state_public() {
             let current_player_name = mcg_shared::PlayerPublic::name_of(&gs.players, gs.to_act);
             tracing::info!(
                 "📡 Broadcasting game state (stage: {:?}, to_act: {})",
@@ -617,26 +653,6 @@ impl Controller {
     }
 
     /// Executes a player action, validating turns and advancing game progression.
-    pub fn execute_player_action(
-        &mut self,
-        player_id: PlayerId,
-        action: PlayerAction,
-        network: &NetworkHandle,
-    ) -> Backend2FrontendMsg {
-        match self.validate_and_apply_action(player_id, action) {
-            Ok(()) => {
-                self.broadcast_state(network);
-                if let Some(gs) = self.current_state_public() {
-                    Backend2FrontendMsg::UpdatePokerState(gs)
-                } else {
-                    Backend2FrontendMsg::Error("No active game after action".into())
-                }
-            }
-            Err(e) => Backend2FrontendMsg::Error(e),
-        }
-    }
-
-    /// Validates that the player is allowed to act and applies the action to the game state.
     pub fn validate_and_apply_action(
         &mut self,
         player_id: PlayerId,
@@ -663,11 +679,9 @@ impl Controller {
     }
 
     /// Advances to the next hand in the current game.
-    pub fn advance_to_next_hand(&mut self, network: &NetworkHandle) -> Backend2FrontendMsg {
+    pub fn advance_to_next_hand(&mut self) -> Result<(), String> {
         let Some(game) = &mut self.lobby.game else {
-            return Backend2FrontendMsg::Error(
-                "No active game. Please start a new game first.".into(),
-            );
+            return Err("No active game. Please start a new game first.".into());
         };
 
         let n = game.players.len();
@@ -676,7 +690,7 @@ impl Controller {
         }
 
         if let Err(e) = game.start_new_hand() {
-            return Backend2FrontendMsg::Error(format!("Failed to start new hand: {e}"));
+            return Err(format!("Failed to start new hand: {e}"));
         }
 
         let sb = game.sb;
@@ -686,20 +700,11 @@ impl Controller {
         let header = pretty::format_table_header(&gs, sb, bb, std::io::stdout().is_terminal());
         tracing::info!("{}", header);
 
-        self.broadcast_state(network);
-        if let Some(gs) = self.current_state_public() {
-            Backend2FrontendMsg::UpdatePokerState(gs)
-        } else {
-            Backend2FrontendMsg::Error("No active game after starting next hand".into())
-        }
+        Ok(())
     }
 
     /// Creates a new game session with the configured player list.
-    pub fn create_game_session(
-        &mut self,
-        players: Vec<PlayerConfig>,
-        network: &NetworkHandle,
-    ) -> Backend2FrontendMsg {
+    pub fn create_game_session(&mut self, players: Vec<PlayerConfig>) -> Result<(), String> {
         let mut game_players = Vec::new();
         let mut bot_ids = Vec::new();
         for config in &players {
@@ -725,38 +730,23 @@ impl Controller {
         match Game::with_players(game_players) {
             Ok(game) => {
                 self.lobby.game = Some(game);
-                self.broadcast_state(network);
-                if let Some(gs) = self.current_state_public() {
-                    Backend2FrontendMsg::UpdatePokerState(gs)
-                } else {
-                    Backend2FrontendMsg::Error(
-                        "Failed to produce initial state after creating game".into(),
-                    )
-                }
+                self.lobby.last_printed_log_len = 0;
+                Ok(())
             }
-            Err(e) => Backend2FrontendMsg::Error(format!("Failed to create new game: {e}")),
+            Err(e) => Err(format!("Failed to create new game: {e}")),
         }
     }
 
     /// Replaces the active game state from an external serialized representation.
-    pub fn import_game_state(
-        &mut self,
-        game_state: serde_json::Value,
-        network: &NetworkHandle,
-    ) -> Backend2FrontendMsg {
+    pub fn import_game_state(&mut self, game_state: serde_json::Value) -> Result<(), String> {
         match serde_json::from_value::<Game>(game_state) {
             Ok(game) => {
                 self.lobby.game = Some(game);
                 self.lobby.last_printed_log_len = 0;
-                self.broadcast_state(network);
-                if let Some(gs) = self.current_state_public() {
-                    tracing::info!("Game state replaced via PushState");
-                    Backend2FrontendMsg::UpdatePokerState(gs)
-                } else {
-                    Backend2FrontendMsg::Error("Failed to produce state after PushState".into())
-                }
+                tracing::info!("Game state replaced via PushState");
+                Ok(())
             }
-            Err(e) => Backend2FrontendMsg::Error(format!("Failed to deserialize game state: {e}")),
+            Err(e) => Err(format!("Failed to deserialize game state: {e}")),
         }
     }
 }
@@ -810,17 +800,16 @@ mod tests {
             let active_player_id = state.to_act;
 
             // Apply valid action
-            let action_resp =
-                controller.execute_player_action(active_player_id, PlayerAction::CheckCall, &net);
-            assert!(matches!(
-                action_resp,
-                Backend2FrontendMsg::UpdatePokerState(_)
-            ));
+            let action_res =
+                controller.validate_and_apply_action(active_player_id, PlayerAction::CheckCall);
+            assert!(action_res.is_ok());
+            controller.print_latest_changes();
+            controller.broadcast_state(&net);
 
             // Invalid turn action from same player should fail
-            let wrong_turn_resp =
-                controller.execute_player_action(active_player_id, PlayerAction::CheckCall, &net);
-            assert!(matches!(wrong_turn_resp, Backend2FrontendMsg::Error(_)));
+            let wrong_turn_res =
+                controller.validate_and_apply_action(active_player_id, PlayerAction::CheckCall);
+            assert!(wrong_turn_res.is_err());
         })
         .await
         .expect("blocking task succeeded");
