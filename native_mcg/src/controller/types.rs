@@ -1,9 +1,9 @@
 use std::error::Error;
 use std::fmt;
 
-use mcg_shared::{Backend2FrontendMsg, Peer2PeerMsg, PlayerAction, PlayerId};
+use mcg_shared::{PlayerAction, PlayerId};
 
-use crate::network::{ConnectionId, NetworkEvent};
+use crate::network::NetworkEvent;
 
 /// Errors that can occur when communicating with the Controller.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -38,30 +38,4 @@ pub enum ControllerEvent {
     },
     /// Request to cleanly shut down the controller event loop.
     Shutdown,
-}
-
-/// Commands emitted by the Controller towards the async network shell.
-#[derive(Clone, Debug)]
-pub enum ControllerCommand {
-    /// Broadcast a message to all active frontend connections.
-    BroadcastFrontend(Backend2FrontendMsg),
-    /// Send a message to a specific frontend connection.
-    SendFrontend {
-        connection_id: ConnectionId,
-        message: Backend2FrontendMsg,
-    },
-    /// Send a message to a specific peer connection.
-    SendPeer {
-        connection_id: ConnectionId,
-        message: Peer2PeerMsg,
-    },
-    /// Broadcast a message to all established peer connections.
-    BroadcastPeer(Peer2PeerMsg),
-    /// Close a network connection with a human-readable reason.
-    CloseConnection {
-        connection_id: ConnectionId,
-        reason: String,
-    },
-    /// Request the network layer to initiate an outgoing peer connection.
-    ConnectPeer { ticket: String },
 }

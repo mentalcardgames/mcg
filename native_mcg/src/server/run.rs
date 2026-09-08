@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 
 use crate::config::Config;
-use crate::controller::{start_controller, Controller, ControllerHandle, NetworkControllerSink};
+use crate::controller::{start_controller, Controller, ControllerHandle};
 use crate::network::{
     NetworkEvent, NetworkHandle, NetworkSupervisor, PeerConnectionService, RouterState,
 };
@@ -115,9 +115,9 @@ fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork
     let peer_connections = PeerConnectionService::new(local_ticket.clone(), network.clone());
 
     let (state_watch_tx, state_watch_rx) = tokio::sync::watch::channel(None);
-    let sink = NetworkControllerSink::with_state_watch(network.clone(), state_watch_tx);
-    let controller = Controller::new(config.clone(), config_path.clone());
-    let (controller_thread, controller_handle) = start_controller(controller, 256, sink);
+    let controller =
+        Controller::new(config.clone(), config_path.clone()).with_state_watch(state_watch_tx);
+    let (controller_thread, controller_handle) = start_controller(controller, 256, network.clone());
 
     let event_forwarder = tokio::spawn({
         let controller_handle = controller_handle.clone();
