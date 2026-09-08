@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use iroh::endpoint::{Endpoint, RelayMode};
 use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
+use native_mcg::controller::ControllerEvent;
 use native_mcg::network::{
     ConnectionCloseReason, ConnectionId, NetworkError, NetworkEvent, NetworkHandle,
     NetworkSupervisor, PeerConnectionDirection, PeerId, TransportKind, IROH_FRONTEND_ALPN,
@@ -44,7 +45,11 @@ fn endpoint_ticket(endpoint: &Endpoint) -> String {
     EndpointTicket::new(endpoint.addr()).encode_string()
 }
 
-fn start_supervisor() -> (NetworkHandle, mpsc::Receiver<NetworkEvent>, JoinHandle<()>) {
+fn start_supervisor() -> (
+    NetworkHandle,
+    mpsc::Receiver<ControllerEvent>,
+    JoinHandle<()>,
+) {
     let (event_tx, event_rx) = mpsc::channel(32);
     let supervisor = NetworkSupervisor::new(event_tx);
     let (network, task) = supervisor.start();
@@ -100,11 +105,15 @@ async fn accept_frontend(endpoint: Endpoint, network: NetworkHandle) -> Result<C
         .context("registering incoming Iroh frontend stream")
 }
 
-async fn next_event(events: &mut mpsc::Receiver<NetworkEvent>) -> Result<NetworkEvent> {
-    tokio::time::timeout(TEST_TIMEOUT, events.recv())
+async fn next_event(events: &mut mpsc::Receiver<ControllerEvent>) -> Result<NetworkEvent> {
+    let event = tokio::time::timeout(TEST_TIMEOUT, events.recv())
         .await
         .context("waiting for network event timed out")?
-        .context("network event channel closed")
+        .context("network event channel closed")?;
+    match event {
+        ControllerEvent::Network(net_event) => Ok(net_event),
+        other => anyhow::bail!("expected network event, got {other:?}"),
+    }
 }
 
 async fn close_endpoint(endpoint: &Endpoint) -> Result<()> {

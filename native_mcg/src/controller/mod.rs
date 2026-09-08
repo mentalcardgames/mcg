@@ -77,23 +77,13 @@ mod tests {
         use crate::network::NetworkSupervisor;
         use tokio::io::{duplex, split, AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-        let (network_event_tx, mut network_event_rx) = mpsc::channel(16);
-        let supervisor = NetworkSupervisor::new(network_event_tx);
+        let (controller_tx, controller_rx) = mpsc::channel(16);
+        let supervisor = NetworkSupervisor::new(controller_tx.clone());
         let (network, supervisor_task) = supervisor.start();
 
         let controller = Controller::new(Config::default(), None);
-        let (thread_handle, controller_handle) = start_controller(controller, 16, network.clone());
-
-        let event_forwarder = tokio::spawn({
-            let controller_handle = controller_handle.clone();
-            async move {
-                while let Some(event) = network_event_rx.recv().await {
-                    if controller_handle.send_network_event(event).await.is_err() {
-                        break;
-                    }
-                }
-            }
-        });
+        let thread_handle = spawn_controller(controller, controller_rx, network.clone());
+        let controller_handle = ControllerHandle::new(controller_tx);
 
         // Register a frontend stream
         let (frontend_stream, frontend_remote) = duplex(4096);
@@ -150,6 +140,5 @@ mod tests {
         thread_handle.join().expect("thread join");
         network.shutdown().await.expect("network shutdown");
         let _ = supervisor_task.await;
-        let _ = event_forwarder.await;
     }
 }

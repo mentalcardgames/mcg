@@ -16,6 +16,7 @@ use tokio::sync::{mpsc, oneshot, Mutex as TokioMutex};
 use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 
 use super::*;
+use crate::controller::ControllerEvent;
 use crate::network::iroh::{IrohConnectError, IrohConnector, IrohReader, IrohWriter};
 use crate::network::{ConnectionCloseReason, PeerId, ProtocolRole, TransportKind};
 
@@ -98,10 +99,10 @@ async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()
         .await?
         .expect("supervisor should forward the open event");
     let connection_id = match opened {
-        NetworkEvent::FrontendConnected {
+        ControllerEvent::Network(NetworkEvent::FrontendConnected {
             connection_id,
             transport: TransportKind::WebSocket,
-        } => connection_id,
+        }) => connection_id,
         other => panic!("unexpected event: {other:?}"),
     };
 
@@ -115,10 +116,10 @@ async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()
         .expect("supervisor should forward the frontend event");
     assert!(matches!(
         incoming,
-        NetworkEvent::FrontendMessage {
+        ControllerEvent::Network(NetworkEvent::FrontendMessage {
             connection_id: source,
             message: Frontend2BackendMsg::Ping,
-        } if source == connection_id
+        }) if source == connection_id
     ));
 
     network
@@ -160,10 +161,10 @@ async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()
         .expect("supervisor should forward the close event");
     assert!(matches!(
         closed,
-        NetworkEvent::ConnectionClosed {
+        ControllerEvent::Network(NetworkEvent::ConnectionClosed {
             connection_id: closed_id,
             reason: ConnectionCloseReason::LocalRequest(reason),
-        } if closed_id == connection_id && reason == "supervisor test shutdown"
+        }) if closed_id == connection_id && reason == "supervisor test shutdown"
     ));
 
     let after_close = network
@@ -223,12 +224,12 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
         .expect("supervisor should forward the open event");
     assert!(matches!(
         opened,
-        NetworkEvent::PeerConnected {
+        ControllerEvent::Network(NetworkEvent::PeerConnected {
             connection_id: opened_id,
             peer_id: opened_peer_id,
             transport: TransportKind::Iroh,
             direction: PeerConnectionDirection::Outgoing,
-        } if opened_id == connection_id && opened_peer_id == peer_id
+        }) if opened_id == connection_id && opened_peer_id == peer_id
     ));
 
     remote_writer
@@ -239,10 +240,10 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
         .expect("supervisor should forward the peer event");
     assert!(matches!(
         incoming,
-        NetworkEvent::PeerMessage {
+        ControllerEvent::Network(NetworkEvent::PeerMessage {
             connection_id: source,
             message: Peer2PeerMsg::Ping,
-        } if source == connection_id
+        }) if source == connection_id
     ));
 
     network
@@ -275,10 +276,10 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
         .expect("supervisor should forward the close event");
     assert!(matches!(
         closed,
-        NetworkEvent::ConnectionClosed {
+        ControllerEvent::Network(NetworkEvent::ConnectionClosed {
             connection_id: closed_id,
             reason: ConnectionCloseReason::LocalRequest(reason),
-        } if closed_id == connection_id && reason == "supervisor peer test shutdown"
+        }) if closed_id == connection_id && reason == "supervisor peer test shutdown"
     ));
 
     let after_close = network
@@ -367,7 +368,10 @@ async fn supervisor_broadcasts_to_all_peers_and_frontends() -> Result<()> {
         let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
             .await?
             .expect("event");
-        assert!(matches!(event, NetworkEvent::PeerConnected { .. }));
+        assert!(matches!(
+            event,
+            ControllerEvent::Network(NetworkEvent::PeerConnected { .. })
+        ));
     }
 
     // Broadcast a peer message
@@ -408,7 +412,10 @@ async fn blocking_methods_work_from_synchronous_thread() -> Result<()> {
     let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
         .await?
         .expect("event");
-    assert!(matches!(event, NetworkEvent::PeerConnected { .. }));
+    assert!(matches!(
+        event,
+        ControllerEvent::Network(NetworkEvent::PeerConnected { .. })
+    ));
 
     // Run blocking calls on a dedicated OS thread
     let net = network.clone();

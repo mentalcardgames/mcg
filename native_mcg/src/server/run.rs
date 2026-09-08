@@ -5,10 +5,8 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 
 use crate::config::Config;
-use crate::controller::{start_controller, Controller, ControllerHandle};
-use crate::network::{
-    NetworkEvent, NetworkHandle, NetworkSupervisor, PeerConnectionService, RouterState,
-};
+use crate::controller::{spawn_controller, Controller, ControllerEvent, ControllerHandle};
+use crate::network::{NetworkHandle, NetworkSupervisor, PeerConnectionService, RouterState};
 use crate::server::bot_driver::spawn_bot_driver;
 use anyhow::{Context, Result};
 use tokio::sync::{mpsc, RwLock};
@@ -18,7 +16,6 @@ const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
 struct NetworkTasks {
     controller_handle: ControllerHandle,
     supervisor: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    event_forwarder: Mutex<Option<tokio::task::JoinHandle<()>>>,
     bot_driver: Mutex<Option<tokio::task::JoinHandle<()>>>,
     controller_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
@@ -44,17 +41,6 @@ impl NetworkTasks {
         if let Some(supervisor) = supervisor {
             if let Err(error) = supervisor.await {
                 tracing::error!(%error, "network supervisor task failed during shutdown");
-            }
-        }
-
-        let event_forwarder = self
-            .event_forwarder
-            .lock()
-            .expect("event forwarder task lock poisoned")
-            .take();
-        if let Some(event_forwarder) = event_forwarder {
-            if let Err(error) = event_forwarder.await {
-                tracing::error!(%error, "network event forwarder failed during shutdown");
             }
         }
 
@@ -89,14 +75,6 @@ impl Drop for NetworkTasks {
         {
             supervisor.abort();
         }
-        if let Some(event_forwarder) = self
-            .event_forwarder
-            .get_mut()
-            .expect("event forwarder task lock poisoned")
-            .take()
-        {
-            event_forwarder.abort();
-        }
     }
 }
 
@@ -109,47 +87,18 @@ struct RunningNetwork {
 
 fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork {
     let local_ticket = Arc::new(RwLock::new(None));
-    let (event_tx, mut event_rx) = mpsc::channel::<NetworkEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
-    let supervisor = NetworkSupervisor::new(event_tx);
+    let (controller_tx, controller_rx) =
+        mpsc::channel::<ControllerEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
+    let supervisor = NetworkSupervisor::new(controller_tx.clone());
     let (network, supervisor_task) = supervisor.start();
     let peer_connections = PeerConnectionService::new(local_ticket.clone(), network.clone());
 
     let (state_watch_tx, state_watch_rx) = tokio::sync::watch::channel(None);
     let controller =
         Controller::new(config.clone(), config_path.clone()).with_state_watch(state_watch_tx);
-    let (controller_thread, controller_handle) = start_controller(controller, 256, network.clone());
+    let controller_thread = spawn_controller(controller, controller_rx, network.clone());
+    let controller_handle = ControllerHandle::new(controller_tx);
 
-    let event_forwarder = tokio::spawn({
-        let controller_handle = controller_handle.clone();
-        let peer_connections = peer_connections.clone();
-        async move {
-            while let Some(event) = event_rx.recv().await {
-                match &event {
-                    NetworkEvent::PeerConnected {
-                        connection_id,
-                        peer_id,
-                        direction,
-                        ..
-                    } => {
-                        peer_connections
-                            .connection_opened(*connection_id, peer_id.clone(), *direction)
-                            .await;
-                    }
-                    NetworkEvent::ConnectionClosed { connection_id, .. } => {
-                        peer_connections.connection_closed(*connection_id).await;
-                    }
-                    _ => {}
-                }
-
-                if controller_handle.send_network_event(event).await.is_err() {
-                    tracing::debug!(
-                        "controller event receiver closed; stopping network event forwarder"
-                    );
-                    break;
-                }
-            }
-        }
-    });
     let bot_delay_range = config.bot_delay_range();
     let bot_driver = spawn_bot_driver(
         controller_handle.clone(),
@@ -165,7 +114,6 @@ fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork
         network_tasks: Arc::new(NetworkTasks {
             controller_handle,
             supervisor: Mutex::new(Some(supervisor_task)),
-            event_forwarder: Mutex::new(Some(event_forwarder)),
             bot_driver: Mutex::new(Some(bot_driver)),
             controller_thread: Mutex::new(Some(controller_thread)),
         }),

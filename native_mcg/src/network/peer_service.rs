@@ -255,6 +255,7 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::*;
+    use crate::controller::ControllerEvent;
     use crate::network::{NetworkEvent, NetworkSupervisor, TransportKind};
 
     #[test]
@@ -281,7 +282,7 @@ mod tests {
     #[tokio::test]
     async fn service_introduces_peer_through_network_actor() -> Result<()> {
         let ticket = Arc::new(RwLock::new(Some("bob-ticket".into())));
-        let (event_tx, mut event_rx) = mpsc::channel::<NetworkEvent>(16);
+        let (event_tx, mut event_rx) = mpsc::channel(16);
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();
         let service = PeerConnectionService::new(ticket, network.clone());
@@ -298,11 +299,11 @@ mod tests {
             .expect("supervisor should publish the incoming peer connection");
         assert!(matches!(
             opened,
-            NetworkEvent::PeerConnected {
+            ControllerEvent::Network(NetworkEvent::PeerConnected {
                 connection_id: opened_id,
                 direction: PeerConnectionDirection::Incoming,
                 ..
-            } if opened_id == connection_id
+            }) if opened_id == connection_id
         ));
 
         service.introduce(connection_id).await?;
@@ -323,7 +324,7 @@ mod tests {
     #[tokio::test]
     async fn service_deduplicates_connections_for_all_callers() -> Result<()> {
         let ticket = Arc::new(RwLock::new(None));
-        let (event_tx, _event_rx) = mpsc::channel::<NetworkEvent>(16);
+        let (event_tx, _event_rx) = mpsc::channel(16);
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();
         let service = PeerConnectionService::new(ticket, network);
@@ -368,7 +369,7 @@ mod tests {
         };
         let lower_peer = PeerId::new(lower_endpoint.to_string());
         let higher_peer = PeerId::new(higher_endpoint.to_string());
-        let (event_tx, _event_rx) = mpsc::channel::<NetworkEvent>(16);
+        let (event_tx, _event_rx) = mpsc::channel(16);
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();
 

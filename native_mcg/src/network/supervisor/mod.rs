@@ -13,6 +13,7 @@ use tokio::task::{JoinHandle, JoinSet};
 use self::connections::ManagedConnection;
 pub use self::handle::NetworkHandle;
 use self::handle::{IrohConnectResult, SupervisorRequest};
+use crate::controller::ControllerEvent;
 use crate::network::iroh::{IrohConnectError, IrohConnector};
 use crate::network::types::ActorEvent;
 pub use crate::network::types::NetworkError;
@@ -31,7 +32,7 @@ pub struct NetworkSupervisor {
     /// Input of internal connection actor events.
     actor_event_rx: mpsc::Receiver<ActorEvent>,
     /// Output for forwarding NetworkEvents from actors towards Controller.
-    application_event_tx: mpsc::Sender<NetworkEvent>,
+    application_event_tx: mpsc::Sender<ControllerEvent>,
     /// Requests from NetworkHandles.
     request_rx: mpsc::Receiver<SupervisorRequest>,
     /// Completed outgoing Iroh connection attempts.
@@ -50,7 +51,7 @@ pub struct NetworkSupervisor {
 
 impl NetworkSupervisor {
     /// Creates a supervisor with the provided application event sender.
-    pub fn new(application_event_tx: mpsc::Sender<NetworkEvent>) -> Self {
+    pub fn new(application_event_tx: mpsc::Sender<ControllerEvent>) -> Self {
         let (request_tx, request_rx) = mpsc::channel(DEFAULT_CONTROL_CHANNEL_CAPACITY);
         let (actor_event_tx, actor_event_rx) = mpsc::channel(DEFAULT_CONTROL_CHANNEL_CAPACITY);
         let (iroh_connect_result_tx, iroh_connect_result_rx) =
@@ -110,7 +111,12 @@ impl NetworkSupervisor {
                         break;
                     };
                     if let Some(event) = self.handle_actor_event(event) {
-                        if self.application_event_tx.send(event).await.is_err() {
+                        if self
+                            .application_event_tx
+                            .send(ControllerEvent::Network(event))
+                            .await
+                            .is_err()
+                        {
                             break;
                         }
                     }
