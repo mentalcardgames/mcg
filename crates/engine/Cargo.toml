@@ -23,3 +23,7 @@ tracing = { version = "0.1", optional = true }
 ratatui = "0.28"
 crossterm = "0.28"
 crossbeam-channel = "0.5"
+
+[[test]]
+name = "setting_up_test"
+path = "tests/setup_test.rs"
