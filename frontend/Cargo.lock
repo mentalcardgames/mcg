@@ -2374,6 +2374,7 @@ name = "mcg-shared"
 version = "0.1.0"
 dependencies = [
  "num-bigint",
+ "owo-colors",
  "serde",
  "serde_json",
 ]
@@ -2998,6 +2999,12 @@ checksum = "36820e9051aca1014ddc75770aab4d68bc1e9e632f0f5627c4086bc216fb583b"
 dependencies = [
  "ttf-parser",
 ]
+
+[[package]]
+name = "owo-colors"
+version = "4.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c45bb4a6ae1280ec0803b1ef9d3455eb50f01efbbe1447ab020f1d54fba9d8"
 
 [[package]]
 name = "parking"

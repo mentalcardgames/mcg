@@ -5,6 +5,5 @@ pub mod controller;
 pub mod game;
 pub mod network;
 pub mod poker;
-pub mod pretty;
 pub mod public;
 pub mod server;

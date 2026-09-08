@@ -11,6 +11,7 @@ pub mod game;
 pub mod hand;
 pub mod messages;
 pub mod player;
+pub mod pretty;
 
 // Re-export all public types for easy access
 pub use cards::*;
@@ -18,3 +19,4 @@ pub use game::*;
 pub use hand::*;
 pub use messages::*;
 pub use player::*;
+pub use pretty::*;

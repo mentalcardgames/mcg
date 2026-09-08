@@ -1,8 +1,7 @@
 use std::io::IsTerminal;
 
+use mcg_shared::pretty::{format_event_human, format_state_human, format_table_header};
 use mcg_shared::{Backend2FrontendMsg, PlayerConfig, PokerStatePublic};
-
-use native_mcg::pretty::{format_event_human, format_state_human, format_table_header};
 
 #[derive(Clone, Copy)]
 pub enum DisplayMode {

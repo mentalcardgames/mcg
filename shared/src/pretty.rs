@@ -1,10 +1,13 @@
-use mcg_shared::{
-    ActionEvent, ActionKind as SharedActionKind, BlindKind, Card, GameAction, PlayerId,
-    PlayerPublic, PokerStatePublic, Stage,
-};
+//! Pretty-printing and string formatting for game types.
+
 use owo_colors::OwoColorize;
 
-fn format_card(c: Card, color: bool) -> String {
+use crate::cards::Card;
+use crate::game::{ActionEvent, ActionKind as SharedActionKind, BlindKind, GameAction, Stage};
+use crate::messages::PokerStatePublic;
+use crate::player::{PlayerId, PlayerPublic};
+
+pub fn format_card(c: Card, color: bool) -> String {
     let mut text = c.to_detailed_string();
     if color && c.is_red() {
         text = text.red().to_string();
@@ -12,8 +15,7 @@ fn format_card(c: Card, color: bool) -> String {
     text
 }
 
-#[allow(dead_code)]
-fn format_cards(cards: &[Card], color: bool) -> String {
+pub fn format_cards(cards: &[Card], color: bool) -> String {
     cards
         .iter()
         .map(|&c| format_card(c, color))
@@ -21,11 +23,11 @@ fn format_cards(cards: &[Card], color: bool) -> String {
         .join(", ")
 }
 
-fn player_name(players: &[PlayerPublic], id: PlayerId) -> String {
+pub fn player_name(players: &[PlayerPublic], id: PlayerId) -> String {
     PlayerPublic::name_of(players, id)
 }
 
-fn format_log_entry(entry: &ActionEvent, players: &[PlayerPublic], color: bool) -> String {
+pub fn format_log_entry(entry: &ActionEvent, players: &[PlayerPublic], color: bool) -> String {
     match entry {
         ActionEvent::PlayerAction { player_id, action } => {
             let who = player_name(players, *player_id);
@@ -170,7 +172,6 @@ pub fn format_table_header(gs: &PokerStatePublic, sb: u32, bb: u32, color: bool)
     out
 }
 
-#[allow(dead_code)]
 pub fn format_state_human(gs: &PokerStatePublic, color: bool) -> String {
     let mut out = String::new();
 

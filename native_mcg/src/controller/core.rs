@@ -14,8 +14,8 @@ use crate::bot::BotManager;
 use crate::config::Config;
 use crate::game::{Game, Player};
 use crate::network::{ConnectionId, NetworkEvent, NetworkHandle, PeerId};
-use crate::pretty;
 use crate::public::{path_for_config, PublicInfo};
+use mcg_shared::pretty;
 
 use super::types::ControllerEvent;
 
@@ -787,16 +787,13 @@ mod tests {
                 Frontend2BackendMsg::NewGame { players },
                 &net,
             );
-
-            assert!(matches!(
-                response,
-                Some(Backend2FrontendMsg::UpdatePokerState(ref state)) if state.players.len() == 2
-            ));
+            assert!(response.is_none());
 
             // Check active game state
             let state = controller
                 .current_state_public()
                 .expect("game should be active");
+            assert_eq!(state.players.len(), 2);
             let active_player_id = state.to_act;
 
             // Apply valid action
