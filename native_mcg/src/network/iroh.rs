@@ -6,13 +6,13 @@ use async_trait::async_trait;
 use iroh::endpoint::Endpoint;
 use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
+use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tokio::task::{JoinHandle, JoinSet};
 
 use crate::config::Config;
 use crate::public::{path_for_config, PublicInfo};
-use crate::transport::{send_peer_msg_to_writer, send_server_msg_to_writer};
 
 use super::types::ActorEvent;
 use super::{
@@ -393,7 +393,7 @@ pub(crate) async fn run_iroh_frontend_actor<R, W>(
                                 let response = Backend2FrontendMsg::Error(
                                     "Malformed Frontend2BackendMsg JSON".into(),
                                 );
-                                if let Err(error) = send_server_msg_to_writer(&mut writer, &response).await {
+                                if let Err(error) = send_msg_to_writer(&mut writer, &response).await {
                                     break ConnectionCloseReason::TransportError(error.to_string());
                                 }
                             }
@@ -406,7 +406,7 @@ pub(crate) async fn run_iroh_frontend_actor<R, W>(
             command = command_rx.recv() => {
                 match command {
                     Some(FrontendConnectionCommand::Send(message)) => {
-                        if let Err(error) = send_server_msg_to_writer(&mut writer, &message).await {
+                        if let Err(error) = send_msg_to_writer(&mut writer, &message).await {
                             break ConnectionCloseReason::TransportError(error.to_string());
                         }
                     }
@@ -493,7 +493,7 @@ pub(crate) async fn run_iroh_peer_actor<R, W>(
             command = command_rx.recv() => {
                 match command {
                     Some(PeerConnectionCommand::Send(message)) => {
-                        if let Err(error) = send_peer_msg_to_writer(&mut writer, &message).await {
+                        if let Err(error) = send_msg_to_writer(&mut writer, &message).await {
                             break ConnectionCloseReason::TransportError(error.to_string());
                         }
                     }
@@ -516,6 +516,19 @@ pub(crate) async fn run_iroh_peer_actor<R, W>(
         })
         .await;
     tracing::info!(%connection_id, "Iroh peer connection actor stopped");
+}
+
+/// Send a serializable message to an AsyncWrite sink as a newline-delimited JSON line.
+async fn send_msg_to_writer<W, M>(writer: &mut W, msg: &M) -> Result<()>
+where
+    W: AsyncWrite + Unpin + Send,
+    M: Serialize + ?Sized,
+{
+    let txt = serde_json::to_string(msg)?;
+    writer.write_all(txt.as_bytes()).await?;
+    writer.write_all(b"\n").await?;
+    writer.flush().await?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -651,6 +664,32 @@ mod tests {
         ));
 
         actor_task.await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn send_msg_to_writer_serializes_newline_delimited_json() -> Result<()> {
+        let (mut writer, reader) = duplex(1024);
+        let mut reader = BufReader::new(reader);
+
+        let server_msg = Backend2FrontendMsg::Error("test error".into());
+        send_msg_to_writer(&mut writer, &server_msg).await?;
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(1), reader.read_line(&mut line)).await??;
+        assert!(matches!(
+            serde_json::from_str::<Backend2FrontendMsg>(line.trim())?,
+            Backend2FrontendMsg::Error(err) if err == "test error"
+        ));
+
+        let peer_msg = Peer2PeerMsg::Ping;
+        send_msg_to_writer(&mut writer, &peer_msg).await?;
+        line.clear();
+        tokio::time::timeout(Duration::from_secs(1), reader.read_line(&mut line)).await??;
+        assert!(matches!(
+            serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
+            Peer2PeerMsg::Ping
+        ));
+
         Ok(())
     }
 }
