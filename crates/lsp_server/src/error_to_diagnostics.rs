@@ -92,16 +92,14 @@ pub fn pest_error_to_diagnostic(pest_err: pest::error::Error<Rule>) -> Diagnosti
                 }
             }
 
-            format!("{}\n{}", format!("{}", pest_err.variant.message()), inside)
+            format!("{}\n{}", pest_err.variant.message(), inside)
         }
-        pest::error::ErrorVariant::CustomError { message } => {
-            format!("{}", message)
-        }
+        pest::error::ErrorVariant::CustomError { message } => message.to_string(),
     };
 
     Diagnostic {
         range,
-        message: message,
+        message,
         severity: Some(tower_lsp::lsp_types::DiagnosticSeverity::ERROR),
         ..Default::default()
     }
@@ -127,7 +125,7 @@ pub fn symbol_error_to_diagnostics(symbol_error: &SymbolError) -> Diagnostic {
         severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
         code: None,
         source: Some("cgdsl-lsp".to_string()),
-        message: message,
+        message,
         related_information: None,
         tags: None,
         data: None,
@@ -159,7 +157,7 @@ pub fn semantic_error_to_diagnostics(semantic_error: &SemanticError) -> Diagnost
         severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
         code: None,
         source: Some("cgdsl-lsp".to_string()),
-        message: message,
+        message,
         related_information: None,
         tags: None,
         data: None,
@@ -173,24 +171,24 @@ pub fn program_error_to_diagnostics(program_error: &GameFlowError) -> Diagnostic
     let message;
     match program_error {
         GameFlowError::Unreachable { span } => {
-            message = format!("Code is unreachable");
+            message = "Code is unreachable".to_string();
             spanned = span;
         }
         GameFlowError::NoStageToEnd { span } => {
-            message = format!("There is no stage to end");
+            message = "There is no stage to end".to_string();
             spanned = span;
         }
         GameFlowError::FlowNotConnected { span } => {
-            message = format!("The Game is not connected");
+            message = "The Game is not connected".to_string();
             spanned = span;
         }
         GameFlowError::FlowNotConnectedWithControl => {
-            message = format!("The Game is heavily not connected");
+            message = "The Game is heavily not connected".to_string();
             return Diagnostic {
                 severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
                 code: None,
                 source: Some("cgdsl-lsp".to_string()),
-                message: message,
+                message,
                 related_information: None,
                 tags: None,
                 data: None,
@@ -201,11 +199,11 @@ pub fn program_error_to_diagnostics(program_error: &GameFlowError) -> Diagnostic
     }
 
     Diagnostic {
-        range: to_range(&spanned),
+        range: to_range(spanned),
         severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
         code: None,
         source: Some("cgdsl-lsp".to_string()),
-        message: message,
+        message,
         related_information: None,
         tags: None,
         data: None,
@@ -217,13 +215,13 @@ pub fn program_error_to_diagnostics(program_error: &GameFlowError) -> Diagnostic
 pub fn to_range(span: &OwnedSpan) -> Range {
     // pest position starts at 1!
     let start_pos = Position {
-        line: (span.start_pos.0.clone() - 1) as u32,
-        character: (span.start_pos.1.clone() - 1) as u32,
+        line: (span.start_pos.0 - 1) as u32,
+        character: (span.start_pos.1 - 1) as u32,
     };
     // pest position starts at 1!
     let end_pos = Position {
-        line: (span.end_pos.0.clone() - 1) as u32,
-        character: (span.end_pos.1.clone() - 1) as u32,
+        line: (span.end_pos.0 - 1) as u32,
+        character: (span.end_pos.1 - 1) as u32,
     };
 
     Range {

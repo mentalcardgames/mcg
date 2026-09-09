@@ -32,7 +32,7 @@ pub fn symbol_validation(
     game.walk(&mut symbols);
 
     match symbols.check_game_type() {
-        Some(err) => return Err(err),
+        Some(err) => Err(err),
         None => Ok(symbols.type_to_variable()),
     }
 }
@@ -41,7 +41,7 @@ pub fn semantic_validation(game: &SGame) -> Option<Vec<SemanticError>> {
     let mut semantic = SemanticVisitor::new();
     game.walk(&mut semantic);
 
-    return semantic.semantic_check();
+    semantic.semantic_check()
 }
 
 pub fn program_validation(game: &SGame) -> Option<Vec<GameFlowError>> {
@@ -63,5 +63,5 @@ pub fn program_validation(game: &SGame) -> Option<Vec<GameFlowError>> {
         return None;
     }
 
-    return Some(result);
+    Some(result)
 }

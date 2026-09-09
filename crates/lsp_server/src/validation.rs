@@ -20,26 +20,18 @@ use tower_lsp::lsp_types::Diagnostic;
 /// * `Err(Vec<Diagnostic>)`: A collection of LSP-compatible errors found
 ///   during either stage.
 pub fn validate_document(ast: &SGame) -> Result<HashMap<GameType, Vec<String>>, Vec<Diagnostic>> {
-    let symbol_table;
-
-    match symbol_validation(&ast) {
+    let symbol_table = match symbol_validation(ast) {
         Err(errs) => {
-            return Err(errs
-                .iter()
-                .map(|s| symbol_error_to_diagnostics(s))
-                .collect());
+            return Err(errs.iter().map(symbol_error_to_diagnostics).collect());
         }
-        Ok(table) => symbol_table = table,
+        Ok(table) => table,
+    };
+
+    if let Some(errs) = semantic_validation(ast) {
+        return Err(errs.iter().map(semantic_error_to_diagnostics).collect());
     }
 
-    if let Some(errs) = semantic_validation(&ast) {
-        return Err(errs
-            .iter()
-            .map(|s| semantic_error_to_diagnostics(s))
-            .collect());
-    }
-
-    return Ok(symbol_table);
+    Ok(symbol_table)
 }
 
 /// Runs high-level program/game-logic validation on the AST.
@@ -51,15 +43,7 @@ pub fn validate_document(ast: &SGame) -> Result<HashMap<GameType, Vec<String>>, 
 /// * `Some(Vec<Diagnostic>)` if errors are found.
 /// * `None` if the game logic is valid.
 pub fn validate_game(ast: &SGame) -> Option<Vec<Diagnostic>> {
-    if let Some(errs) = program_validation(&ast) {
-        return Some(
-            errs.iter()
-                .map(|g| program_error_to_diagnostics(g))
-                .collect(),
-        );
-    }
-
-    return None;
+    program_validation(ast).map(|errs| errs.iter().map(program_error_to_diagnostics).collect())
 }
 
 /// Converts a [`Rope`] to a string and attempts to parse it into an [`SGame`] AST.
@@ -71,10 +55,5 @@ pub fn validate_game(ast: &SGame) -> Option<Vec<Diagnostic>> {
 /// Returns a `Vec<Diagnostic>` containing the location and description of
 /// syntax errors if the grammar rules are violated.
 pub fn validate_parsing(doc: &Rope) -> Result<SGame, Vec<Diagnostic>> {
-    let result = parse_document(&doc.to_string());
-    if let Err(err) = result {
-        return Err(vec![pest_error_to_diagnostic(err)]);
-    }
-
-    return Ok(result.unwrap());
+    parse_document(&doc.to_string()).map_err(|err| vec![pest_error_to_diagnostic(err)])
 }

@@ -1,12 +1,14 @@
-///  Transforming the AST to an IR is done here.
-///
-///  For someone doing the SimStage:
-///  - We need a new Type of State (right now only state-id is used).
-///  => Just declare a new State-enum:
-///    enum State {
-///      seq: usize,
-///      sim: /* Your Custom SimStage Logic */
-///    }
+//! Transforming the AST to an IR is done here.
+//!
+//! For someone doing the SimStage:
+//! - We need a new Type of State (right now only state-id is used).
+//!   => Just declare a new State-enum:
+//! ```text
+//! enum State {
+//!   seq: usize,
+//!   sim: /* Your Custom SimStage Logic */
+//! }
+//! ```
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -25,7 +27,7 @@ impl SGame {
         let mut builder: IrBuilder<SpannedPayload> = IrBuilder::default();
         builder.build_ir(self);
 
-        return builder.fsm;
+        builder.fsm
     }
 
     pub fn to_lowered_graph(&self) -> Ir<LoweredPayLoad> {
@@ -101,11 +103,7 @@ impl<T: Serialize + DeserializeOwned> Default for Ir<T> {
 impl<T: Serialize + DeserializeOwned> Ir<T> {
     /// Both States need to be added before the edge can be added.
     pub fn add_edge(&mut self, from: StateID, to: StateID, payload: T, meta: Option<Vec<Meta>>) {
-        let edge = Edge {
-            to: to,
-            payload: payload,
-            meta,
-        };
+        let edge = Edge { to, payload, meta };
         let vec = self
             .states
             .get_mut(&from)
@@ -221,7 +219,7 @@ impl Ir<SpannedPayload> {
             return Some(errs);
         }
 
-        return None;
+        None
     }
 }
 
@@ -231,6 +229,7 @@ impl Ir<SpannedPayload> {
 /// There are certain Rules that alter the flow of the game:
 /// - End Stage
 /// - End Game
+///
 /// There might be added more rules that alter the flow of the game.
 /// These rules need careful handling for constructing the IR.
 #[derive(Debug, Serialize, Deserialize)]
@@ -273,14 +272,14 @@ pub enum Payload<Ctx: AstContext> {
     Trigger,
 }
 
-impl<Ctx: AstContext> Payload<Ctx> {
-    pub fn to_string(&self) -> String {
-        match &self {
+impl<Ctx: AstContext> std::fmt::Display for Payload<Ctx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
             Payload::Condition { expr: _, negated } => {
                 if *negated {
-                    String::from("Not Condition")
+                    write!(f, "Not Condition")
                 } else {
-                    String::from("Condition")
+                    write!(f, "Condition")
                 }
             }
             Payload::EndCondition {
@@ -290,17 +289,17 @@ impl<Ctx: AstContext> Payload<Ctx> {
             } => {
                 let stage_name = format!("{:?}", stage);
                 if *negated {
-                    format!("Not EndCondition ({})", stage_name)
+                    write!(f, "Not EndCondition ({})", stage_name)
                 } else {
-                    format!("EndCondition ({})", stage_name)
+                    write!(f, "EndCondition ({})", stage_name)
                 }
             }
-            Payload::Action(_) => String::from("Action"),
-            Payload::StageRoundCounter(_) => format!("Stage Round Counter"),
-            Payload::EndStage(_) => format!("End Counter"),
-            Payload::Choice => String::from("Choice"),
-            Payload::Optional => String::from("Optional"),
-            Payload::Trigger => String::from("Trigger"),
+            Payload::Action(_) => write!(f, "Action"),
+            Payload::StageRoundCounter(_) => write!(f, "Stage Round Counter"),
+            Payload::EndStage(_) => write!(f, "End Counter"),
+            Payload::Choice => write!(f, "Choice"),
+            Payload::Optional => write!(f, "Optional"),
+            Payload::Trigger => write!(f, "Trigger"),
         }
     }
 }
@@ -343,10 +342,7 @@ pub enum GameFlowError {
 // ===========================================================================
 impl From<Ir<SpannedPayload>> for Ir<LoweredPayLoad> {
     fn from(value: Ir<SpannedPayload>) -> Self {
-        let mut lowered_ir: Ir<LoweredPayLoad> = Ir::default();
-        lowered_ir.entry = value.entry;
-        lowered_ir.goal = value.goal;
-        lowered_ir.states = value
+        let states = value
             .states
             .into_iter()
             .map(|(s, es)| {
@@ -385,7 +381,11 @@ impl From<Ir<SpannedPayload>> for Ir<LoweredPayLoad> {
             })
             .collect();
 
-        return lowered_ir;
+        Ir {
+            entry: value.entry,
+            goal: value.goal,
+            states,
+        }
     }
 }
 
@@ -423,7 +423,7 @@ impl IrBuilder<SpannedPayload> {
         self.state_counter += 1;
         self.fsm.add_state(StateID(self.state_counter));
 
-        return self.state_counter;
+        self.state_counter
     }
 
     /// Decrements the state_counter.
@@ -432,7 +432,7 @@ impl IrBuilder<SpannedPayload> {
         self.state_counter -= 1;
         self.fsm.remove_state(StateID(state));
 
-        return state;
+        state
     }
 
     /// Adds edge to the FSM.
@@ -467,12 +467,7 @@ impl IrBuilder<SpannedPayload> {
 
     /// Takes a Vector of FlowComponent's and extends the FSM with them.
     /// Returns a GameFlowChangeType because it needs to be handled by certain components.
-    fn build_flows(
-        &mut self,
-        flows: &Vec<SFlowComponent>,
-        entry: u32,
-        exit: u32,
-    ) -> GameFlowChange {
+    fn build_flows(&mut self, flows: &[SFlowComponent], entry: u32, exit: u32) -> GameFlowChange {
         let mut next_entry = entry;
         let mut flow_exit;
         for i in 0..flows.len() {
@@ -520,7 +515,7 @@ impl IrBuilder<SpannedPayload> {
             }
         }
 
-        return GameFlowChange::None(exit);
+        GameFlowChange::None(exit)
     }
 
     /// Builds a singular FlowComponent.
@@ -547,7 +542,7 @@ impl IrBuilder<SpannedPayload> {
             }
         };
 
-        return GameFlowChange::None(exit);
+        GameFlowChange::None(exit)
     }
 
     fn build_choice_rule(&mut self, choice_rule: &ChoiceRule, entry: u32, exit: u32) -> u32 {
@@ -583,22 +578,19 @@ impl IrBuilder<SpannedPayload> {
             EndCondition::UntilEnd => {
                 let flows_exit = self.new_state();
                 // Dont do a split with EndCondition and NotEndCondition
-                match self.build_flows(&stage.flows, entry, flows_exit) {
-                    GameFlowChange::None(_) => {
-                        self.new_edge(
-                            flows_exit,
-                            entry,
-                            Payload::StageRoundCounter(stage_id.clone()),
-                            None,
-                        );
-                    }
-                    _ => {}
+                if let GameFlowChange::None(_) = self.build_flows(&stage.flows, entry, flows_exit) {
+                    self.new_edge(
+                        flows_exit,
+                        entry,
+                        Payload::StageRoundCounter(stage_id.clone()),
+                        None,
+                    );
                 }
 
                 // Remove current Stage
                 self.stage_exits.pop();
 
-                return exit;
+                exit
             }
             _ => {
                 // Do a split with EndCondition and NotEndCondition
@@ -627,22 +619,21 @@ impl IrBuilder<SpannedPayload> {
                 );
 
                 let flows_exit = self.new_state();
-                match self.build_flows(&stage.flows, else_state, flows_exit) {
-                    GameFlowChange::None(_) => {
-                        self.new_edge(
-                            flows_exit,
-                            entry,
-                            Payload::StageRoundCounter(stage_id.clone()),
-                            None,
-                        );
-                    }
-                    _ => {}
+                if let GameFlowChange::None(_) =
+                    self.build_flows(&stage.flows, else_state, flows_exit)
+                {
+                    self.new_edge(
+                        flows_exit,
+                        entry,
+                        Payload::StageRoundCounter(stage_id.clone()),
+                        None,
+                    );
                 }
 
                 // Remove current Stage
                 self.stage_exits.pop();
 
-                return exit;
+                exit
             }
         }
     }
@@ -672,22 +663,19 @@ impl IrBuilder<SpannedPayload> {
             EndCondition::UntilEnd => {
                 let flows_exit = self.new_state();
                 // Dont do a split with EndCondition and NotEndCondition
-                match self.build_flows(&stage.flows, entry, flows_exit) {
-                    GameFlowChange::None(_) => {
-                        self.new_edge(
-                            flows_exit,
-                            entry,
-                            Payload::StageRoundCounter(stage_id.clone()),
-                            None,
-                        );
-                    }
-                    _ => {}
+                if let GameFlowChange::None(_) = self.build_flows(&stage.flows, entry, flows_exit) {
+                    self.new_edge(
+                        flows_exit,
+                        entry,
+                        Payload::StageRoundCounter(stage_id.clone()),
+                        None,
+                    );
                 }
 
                 // Remove current Stage
                 self.stage_exits.pop();
 
-                return exit;
+                exit
             }
             _ => {
                 // Do a split with EndCondition and NotEndCondition
@@ -716,22 +704,21 @@ impl IrBuilder<SpannedPayload> {
                 );
 
                 let flows_exit = self.new_state();
-                match self.build_flows(&stage.flows, else_state, flows_exit) {
-                    GameFlowChange::None(_) => {
-                        self.new_edge(
-                            flows_exit,
-                            entry,
-                            Payload::StageRoundCounter(stage_id.clone()),
-                            None,
-                        );
-                    }
-                    _ => {}
+                if let GameFlowChange::None(_) =
+                    self.build_flows(&stage.flows, else_state, flows_exit)
+                {
+                    self.new_edge(
+                        flows_exit,
+                        entry,
+                        Payload::StageRoundCounter(stage_id.clone()),
+                        None,
+                    );
                 }
 
                 // Remove current Stage
                 self.stage_exits.pop();
 
-                return exit;
+                exit
             }
         }
     }
@@ -760,14 +747,14 @@ impl IrBuilder<SpannedPayload> {
                                     );
 
                                     // Nothing after end stage will be evaluated!
-                                    return GameFlowChange::EndCurrentStage(last_stage_exit);
+                                    GameFlowChange::EndCurrentStage(last_stage_exit)
                                 } else {
                                     // No stage found to end
                                     self.diagnostics.push(GameFlowError::NoStageToEnd {
                                         span: spanned.span.clone(),
                                     });
 
-                                    return GameFlowChange::None(exit);
+                                    GameFlowChange::None(exit)
                                 }
                             }
                             EndType::Stage { stage } => {
@@ -782,14 +769,14 @@ impl IrBuilder<SpannedPayload> {
                                     );
 
                                     // Nothing after end stage will be evaluated!
-                                    return GameFlowChange::EndStage(specific_exit);
+                                    GameFlowChange::EndStage(specific_exit)
                                 } else {
                                     // No stage found to end
                                     self.diagnostics.push(GameFlowError::NoStageToEnd {
                                         span: spanned.span.clone(),
                                     });
 
-                                    return GameFlowChange::None(exit);
+                                    GameFlowChange::None(exit)
                                 }
                             }
                             EndType::GameWithWinner { players: _ } => {
@@ -798,13 +785,13 @@ impl IrBuilder<SpannedPayload> {
                                 self.new_edge(entry, goal, Payload::Action(rule.clone()), None);
 
                                 // Nothing after end game will be evaluated!
-                                return GameFlowChange::EndGame(goal);
+                                GameFlowChange::EndGame(goal)
                             }
                             EndType::Turn => {
                                 // Normal action with no GameFlowChange
                                 self.new_edge(entry, exit, Payload::Action(rule.clone()), None);
 
-                                return GameFlowChange::None(exit);
+                                GameFlowChange::None(exit)
                             }
                         }
                     }
@@ -812,7 +799,7 @@ impl IrBuilder<SpannedPayload> {
                         // Normal action with no GameFlowChange
                         self.new_edge(entry, exit, Payload::Action(rule.clone()), None);
 
-                        return GameFlowChange::None(exit);
+                        GameFlowChange::None(exit)
                     }
                 }
             }
@@ -820,13 +807,13 @@ impl IrBuilder<SpannedPayload> {
                 // Normal action with no GameFlowChange
                 self.new_edge(entry, exit, Payload::Action(rule.clone()), None);
 
-                return GameFlowChange::None(exit);
+                GameFlowChange::None(exit)
             }
             GameRule::Scoring { scoring: _ } => {
                 // Normal action with no GameFlowChange
                 self.new_edge(entry, exit, Payload::Action(rule.clone()), None);
 
-                return GameFlowChange::None(exit);
+                GameFlowChange::None(exit)
             }
         }
     }
@@ -858,7 +845,7 @@ impl IrBuilder<SpannedPayload> {
 
         self.build_flows(&if_rule.flows, if_body, exit);
 
-        return exit;
+        exit
     }
 
     /// GameFlowChanges are handled separately. build_cond_rule does not need to worry!
@@ -871,7 +858,7 @@ impl IrBuilder<SpannedPayload> {
             case_exit = if i == _len { exit } else { self.new_state() };
             match &cond_rule.cases[i].node {
                 Case::NoBool { flows: spanneds } => {
-                    self.build_flows(&spanneds, next_entry, exit);
+                    self.build_flows(spanneds, next_entry, exit);
                     for j in i + 1..cond_rule.cases.len() {
                         self.diagnostics.push(GameFlowError::Unreachable {
                             span: cond_rule.cases[j].span.clone(),
@@ -904,14 +891,14 @@ impl IrBuilder<SpannedPayload> {
                         None,
                     );
 
-                    self.build_flows(&spanneds, body, exit);
+                    self.build_flows(spanneds, body, exit);
                 }
             }
 
             next_entry = case_exit;
         }
 
-        return case_exit;
+        case_exit
     }
 
     /// GameFlowChanges are handled separately. build_optional_rule does not need to worry!
@@ -921,7 +908,7 @@ impl IrBuilder<SpannedPayload> {
         self.build_flows(&optional_rule.flows, optional_body, exit);
         self.new_edge(entry, exit, Payload::Optional, None);
 
-        return exit;
+        exit
     }
 
     /// GameFlowChanges are handled separately. build_optional_rule does not need to worry!
@@ -929,7 +916,8 @@ impl IrBuilder<SpannedPayload> {
         let trigger_body = self.new_state();
         self.new_edge(entry, trigger_body, Payload::Trigger, None);
         self.build_flows(&trigger_rule.flows, trigger_body, exit);
+        self.new_edge(entry, exit, Payload::Trigger, None);
 
-        return exit;
+        exit
     }
 }

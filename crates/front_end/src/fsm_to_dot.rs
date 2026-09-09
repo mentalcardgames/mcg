@@ -20,12 +20,12 @@ use layout::core::base::Orientation;
 use layout::std_shapes::shapes::{Arrow, Element, ShapeKind};
 use layout::topo::layout::VisualGraph;
 
-pub fn fsm_to_svg<Ctx: AstContext>(
+pub fn fsm_to_svg<Ctx>(
     fsm: &Ir<Payload<Ctx>>,
     path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    Ctx: Serialize + DeserializeOwned,
+    Ctx: AstContext + Serialize + DeserializeOwned,
 {
     // 1. Create visual graph
     let mut vg = VisualGraph::new(Orientation::TopToBottom);
@@ -84,8 +84,10 @@ where
         let &source_handle = nodes.get(&state_id.raw()).unwrap();
         for edge in edges.iter() {
             if let Some(&target_handle) = nodes.get(&edge.to.raw()) {
-                let mut arrow = Arrow::default();
-                arrow.text = edge.payload.to_string();
+                let arrow = Arrow {
+                    text: edge.payload.to_string(),
+                    ..Default::default()
+                };
                 vg.add_edge(arrow, source_handle, target_handle);
             }
         }
@@ -107,12 +109,12 @@ where
 
 /// Generates a standard .dot file.
 /// Useful if the user HAS Graphviz or for use in the VS Code Webview.
-pub fn fsm_to_dot<Ctx: AstContext>(
+pub fn fsm_to_dot<Ctx>(
     fsm: &Ir<Payload<Ctx>>,
     path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    Ctx: Serialize + DeserializeOwned,
+    Ctx: AstContext + Serialize + DeserializeOwned,
 {
     let mut file = File::create(path)?;
 

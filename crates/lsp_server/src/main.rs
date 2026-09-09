@@ -49,7 +49,7 @@ async fn main() {
 
                 // Clear out any "stale" requests for the same URI that arrived
                 // while we were sleeping.
-                while let Ok(_) = rx.try_recv() {
+                while rx.try_recv().is_ok() {
                     /* Just draining the pipe to get to the freshest state */
                 }
 

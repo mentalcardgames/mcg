@@ -56,6 +56,7 @@ pub enum SymbolError {
     DefinedMultipleTimes { var: Var },
 }
 
+#[derive(Default)]
 pub struct SymbolVisitor {
     symbols: HashMap<SID, GameType>,
 }
@@ -153,8 +154,8 @@ impl SymbolVisitor {
             .collect();
 
         self.symbols
-            .iter()
-            .map(|(k, _)| {
+            .keys()
+            .map(|k| {
                 let ty = string_to_type
                     .get(&k.node)
                     .cloned()
@@ -171,7 +172,7 @@ impl SymbolVisitor {
 
         for (var, game_type) in typed_vars {
             // .entry() handles the case where the GameType isn't in the map yet
-            map.entry(game_type).or_insert_with(Vec::new).push(var.id); // Assuming var is the String name
+            map.entry(game_type).or_default().push(var.id); // Assuming var is the String name
         }
 
         map
@@ -179,6 +180,11 @@ impl SymbolVisitor {
 }
 
 /// Gathering the information needed to do Symbol-Checking.
+#[allow(
+    clippy::single_match,
+    clippy::needless_borrow,
+    clippy::collapsible_match
+)]
 impl AstPass for SymbolVisitor {
     fn enter_node<T: Walker>(&mut self, node: &T)
     where

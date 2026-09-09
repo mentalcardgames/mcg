@@ -56,7 +56,7 @@ impl Backend {
     pub fn get_diagnostics(&self, rope: &Rope) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
 
-        match validate_parsing(&rope) {
+        match validate_parsing(rope) {
             Ok(ast) => {
                 // Run semantic validation
                 match validate_document(&ast) {
@@ -90,7 +90,7 @@ impl Backend {
     pub fn get_did_save_diagnostics(&self, rope: &Rope) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
 
-        match validate_parsing(&rope) {
+        match validate_parsing(rope) {
             Ok(ast) => {
                 // Run semantic validation
                 match validate_document(&ast) {
@@ -126,7 +126,7 @@ impl Backend {
     pub async fn get_rope(&self, uri: &Url) -> Rope {
         let mut docs = self.documents.lock().await;
 
-        let doc = docs.get_mut(&uri).expect("didSave before didOpen");
+        let doc = docs.get_mut(uri).expect("didSave before didOpen");
 
         // Materialize full text ONCE
         doc.rope.clone()
@@ -140,11 +140,11 @@ impl Backend {
     ) -> Rope {
         let mut docs = self.documents.lock().await;
 
-        let doc = docs.get_mut(&uri).expect("didChange before didOpen");
+        let doc = docs.get_mut(uri).expect("didChange before didOpen");
 
         // Apply *all* changes
         for change in params.content_changes.iter() {
-            apply_change(&mut doc.rope, &change);
+            apply_change(&mut doc.rope, change);
         }
 
         // Materialize full text ONCE
@@ -344,7 +344,7 @@ impl LanguageServer for Backend {
                 // 1. Get the base path from TS arguments
                 let base_path_str = params
                     .arguments
-                    .get(0)
+                    .first()
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| jsonrpc::Error::invalid_params("Missing path"))?;
 

@@ -81,6 +81,7 @@ impl CorrespondanceType {
     }
 }
 
+#[derive(Default)]
 pub struct SemanticVisitor {
     init_corr: HashMap<CorrespondanceType, (String, OwnedSpan)>,
     used_corr: Vec<UsedCorrespondence>,
@@ -139,7 +140,7 @@ impl SemanticVisitor {
             return None;
         }
 
-        return Some(err);
+        Some(err)
     }
 
     /// Finding Memory Mismatches is more complicated.
@@ -195,11 +196,16 @@ impl SemanticVisitor {
             }
         }
 
-        return errs;
+        errs
     }
 }
 
 /// Gathers the information needed for the Semantic Check and Memory Check.
+#[allow(
+    clippy::single_match,
+    clippy::needless_borrow,
+    clippy::collapsible_match
+)]
 impl AstPass for SemanticVisitor {
     fn enter_node<T: crate::walker::Walker>(&mut self, node: &T)
     where

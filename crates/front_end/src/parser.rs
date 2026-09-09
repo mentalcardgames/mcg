@@ -68,7 +68,7 @@ impl CGDSLParser {
                 [cond_rule(k)] => FlowComponent::Conditional { conditional: k },
         );
 
-        Ok(SFlowComponent { node: node, span })
+        Ok(SFlowComponent { node, span })
     }
 
     pub(crate) fn seq_stage(input: Node) -> Result<SSeqStage> {
@@ -82,7 +82,7 @@ impl CGDSLParser {
             },
         );
 
-        Ok(SSeqStage { node: node, span })
+        Ok(SSeqStage { node, span })
     }
 
     pub(crate) fn sim_stage(input: Node) -> Result<SSimStage> {
@@ -96,7 +96,7 @@ impl CGDSLParser {
             },
         );
 
-        Ok(SSimStage { node: node, span })
+        Ok(SSimStage { node, span })
     }
 
     pub(crate) fn kw_case(input: Node) -> Result<()> {
@@ -114,7 +114,7 @@ impl CGDSLParser {
             [kw_case(_), flow_component(f)..] => Case::NoBool { flows: f.collect() },
         );
 
-        Ok(SCase { node: node, span })
+        Ok(SCase { node, span })
     }
 
     pub(crate) fn kw_else(input: Node) -> Result<()> {
@@ -127,7 +127,7 @@ impl CGDSLParser {
             [kw_case(_), kw_else(_), flow_component(f)..] => Case::NoBool { flows: f.collect() },
         );
 
-        Ok(SCase { node: node, span })
+        Ok(SCase { node, span })
     }
 
     pub(crate) fn cond_rule(input: Node) -> Result<SConditional> {
@@ -141,7 +141,7 @@ impl CGDSLParser {
             [kw_conditional(_), case(c)..] => Conditional { cases: c.collect() },
         );
 
-        Ok(SConditional { node: node, span })
+        Ok(SConditional { node, span })
     }
 
     pub(crate) fn if_rule(input: Node) -> Result<SIfRule> {
@@ -153,7 +153,7 @@ impl CGDSLParser {
             }
         );
 
-        Ok(SIfRule { node: node, span })
+        Ok(SIfRule { node, span })
     }
 
     pub(crate) fn choice_rule(input: Node) -> Result<SChoiceRule> {
@@ -167,10 +167,8 @@ impl CGDSLParser {
         for child in input.into_children() {
             match child.as_rule() {
                 Rule::flow_component => current.push(CGDSLParser::flow_component(child)?),
-                Rule::kw_or => {
-                    if !current.is_empty() {
-                        options.push(std::mem::take(&mut current));
-                    }
+                Rule::kw_or if !current.is_empty() => {
+                    options.push(std::mem::take(&mut current));
                 }
                 _ => {}
             }
@@ -197,7 +195,7 @@ impl CGDSLParser {
             }
         );
 
-        Ok(STriggerRule { node: node, span })
+        Ok(STriggerRule { node, span })
     }
 
     pub(crate) fn optional_rule(input: Node) -> Result<SOptionalRule> {
@@ -208,7 +206,7 @@ impl CGDSLParser {
             }
         );
 
-        Ok(SOptionalRule { node: node, span })
+        Ok(SOptionalRule { node, span })
     }
 
     pub(crate) fn kw_choose(input: Node) -> Result<()> {
@@ -233,7 +231,7 @@ impl CGDSLParser {
             [int_expr(n), kw_times(_)] => Repititions { times: n},
         );
 
-        Ok(SRepititions { node: node, span })
+        Ok(SRepititions { node, span })
     }
 
     pub(crate) fn kw_until(input: Node) -> Result<()> {
@@ -250,7 +248,7 @@ impl CGDSLParser {
             [kw_until(_), bool_expr(b)] => EndCondition::UntilBool { bool_expr: b },
         );
 
-        Ok(SEndCondition { node: node, span })
+        Ok(SEndCondition { node, span })
     }
 
     pub(crate) fn until_bool_repetitions(input: Node) -> Result<SEndCondition> {
@@ -259,7 +257,7 @@ impl CGDSLParser {
             [kw_until(_), bool_expr(b), bool_op(l), repetitions(r)] => EndCondition::UntilBoolRep { bool_expr: b, logic: l, reps: r},
         );
 
-        Ok(SEndCondition { node: node, span })
+        Ok(SEndCondition { node, span })
     }
 
     pub(crate) fn until_repetitions(input: Node) -> Result<SEndCondition> {
@@ -268,7 +266,7 @@ impl CGDSLParser {
             [repetitions(r)] => EndCondition::UntilRep { reps: r},
         );
 
-        Ok(SEndCondition { node: node, span })
+        Ok(SEndCondition { node, span })
     }
 
     pub(crate) fn until_end(input: Node) -> Result<SEndCondition> {
@@ -277,7 +275,7 @@ impl CGDSLParser {
             [kw_until(_), kw_end(_)] => EndCondition::UntilEnd,
         );
 
-        Ok(SEndCondition { node: node, span })
+        Ok(SEndCondition { node, span })
     }
 
     pub(crate) fn end_condition(input: Node) -> Result<SEndCondition> {
@@ -427,7 +425,7 @@ impl CGDSLParser {
                 [kw_highest(_)] => Extrema::Max,
         );
 
-        Ok(SExtrema { node: node, span })
+        Ok(SExtrema { node, span })
     }
 
     pub(crate) fn kw_for(input: Node) -> Result<()> {
@@ -534,7 +532,7 @@ impl CGDSLParser {
             [modulo(_)] => IntOp::Mod,
         );
 
-        Ok(SIntOp { node: node, span })
+        Ok(SIntOp { node, span })
     }
 
     pub(crate) fn gt(input: Node) -> Result<()> {
@@ -564,7 +562,7 @@ impl CGDSLParser {
             [le(_)] =>  IntCompare::Le,
         );
 
-        Ok(SIntCompare { node: node, span })
+        Ok(SIntCompare { node, span })
     }
 
     pub(crate) fn bin_int_op(input: Node) -> Result<SIntExpr> {
@@ -573,7 +571,7 @@ impl CGDSLParser {
             [int_expr(n), int_op(s), int_expr(t)] => IntExpr::Binary { int: Box::new(n), op: s, int1: Box::new(t) }
         );
 
-        Ok(SIntExpr { node: node, span })
+        Ok(SIntExpr { node, span })
     }
 
     pub(crate) fn int_collection_at(input: Node) -> Result<SIntExpr> {
@@ -694,7 +692,7 @@ impl CGDSLParser {
         Ok(match_nodes!(input.into_children();
             [key_of_card_position(n)] => n,
             [string_collection_at(n)] => n,
-            [value(v)] => SStringExpr { node: StringExpr::Literal { value: v }, span: span },
+            [value(v)] => SStringExpr { node: StringExpr::Literal { value: v }, span },
             [string_memory(m)] => SStringExpr { node: StringExpr::Memory { memory: m }, span },
         ))
     }
@@ -727,7 +725,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), multi_owner(o)] => IntCollection::AggregateMemory { memory: m, multi: o },
         );
 
-        Ok(SIntCollection { node: node, span })
+        Ok(SIntCollection { node, span })
     }
 
     pub(crate) fn string_collection(input: Node) -> Result<SStringCollection> {
@@ -738,7 +736,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), multi_owner(o)] => StringCollection::AggregateMemory { memory: m, multi: o },
         );
 
-        Ok(SStringCollection { node: node, span })
+        Ok(SStringCollection { node, span })
     }
 
     pub(crate) fn eq(input: Node) -> Result<OwnedSpan> {
@@ -768,7 +766,7 @@ impl CGDSLParser {
             [neq(_)] => CardSetCompare::Neq,
         );
 
-        Ok(SCardSetCompare { node: node, span })
+        Ok(SCardSetCompare { node, span })
     }
 
     pub(crate) fn player_expr_compare(input: Node) -> Result<SPlayerCompare> {
@@ -778,7 +776,7 @@ impl CGDSLParser {
             [neq(_)] => PlayerCompare::Neq,
         );
 
-        Ok(SPlayerCompare { node: node, span })
+        Ok(SPlayerCompare { node, span })
     }
 
     pub(crate) fn team_expr_compare(input: Node) -> Result<STeamCompare> {
@@ -788,7 +786,7 @@ impl CGDSLParser {
             [neq(_)] => TeamCompare::Neq,
         );
 
-        Ok(STeamCompare { node: node, span })
+        Ok(STeamCompare { node, span })
     }
 
     pub(crate) fn string_expr_compare(input: Node) -> Result<SStringCompare> {
@@ -798,7 +796,7 @@ impl CGDSLParser {
             [neq(_)] => StringCompare::Neq,
         );
 
-        Ok(SStringCompare { node: node, span })
+        Ok(SStringCompare { node, span })
     }
 
     pub(crate) fn bool_op(input: Node) -> Result<SBoolOp> {
@@ -808,7 +806,7 @@ impl CGDSLParser {
             [kw_or(_)] => BoolOp::Or,
         );
 
-        Ok(SBoolOp { node: node, span })
+        Ok(SBoolOp { node, span })
     }
 
     pub(crate) fn unary_op(input: Node) -> Result<SUnaryOp> {
@@ -817,7 +815,7 @@ impl CGDSLParser {
             [kw_not(_)] => UnaryOp::Not,
         );
 
-        Ok(SUnaryOp { node: node, span })
+        Ok(SUnaryOp { node, span })
     }
 
     pub(crate) fn card_set_bool(input: Node) -> Result<SBoolExpr> {
@@ -914,7 +912,7 @@ impl CGDSLParser {
             [kw_any(_)] => Quantifier::Any,
         );
 
-        Ok(SQuantifier { node: node, span })
+        Ok(SQuantifier { node, span })
     }
 
     pub(crate) fn player_expr_collection(input: Node) -> Result<SPlayerCollection> {
@@ -984,7 +982,7 @@ impl CGDSLParser {
             [kw_game(_)] => OutOf::Game,
         );
 
-        Ok(SOutOf { node: node, span })
+        Ok(SOutOf { node, span })
     }
 
     pub(crate) fn players_out_of(input: Node) -> Result<SBoolExpr> {
@@ -1037,7 +1035,7 @@ impl CGDSLParser {
     pub(crate) fn key_distinct(input: Node) -> Result<SFilterExpr> {
         let span = OwnedSpan::from(input.as_span());
         Ok(match_nodes!(input.children();
-            [kw_distinct(_), key(key)] => saggregate_filter(AggregateFilter::Same { key: key }, span),
+            [kw_distinct(_), key(key)] => saggregate_filter(AggregateFilter::Same { key }, span),
         ))
     }
 
@@ -1052,7 +1050,7 @@ impl CGDSLParser {
     pub(crate) fn key_adjacent(input: Node) -> Result<SFilterExpr> {
         let span = OwnedSpan::from(input.as_span());
         Ok(match_nodes!(input.children();
-            [kw_adjacent(_), key(key), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Adjacent { key: key, precedence: prec } , span),
+            [kw_adjacent(_), key(key), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Adjacent { key, precedence: prec } , span),
         ))
     }
 
@@ -1063,7 +1061,7 @@ impl CGDSLParser {
     pub(crate) fn key_higher(input: Node) -> Result<SFilterExpr> {
         let span = OwnedSpan::from(input.as_span());
         Ok(match_nodes!(input.children();
-            [key(key), kw_higher(_), kw_than(_), string_expr(s), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Higher{ key: key, value: s, precedence: prec }, span),
+            [key(key), kw_higher(_), kw_than(_), string_expr(s), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Higher{ key, value: s, precedence: prec }, span),
         ))
     }
 
@@ -1075,7 +1073,7 @@ impl CGDSLParser {
             [kw_table(_)] => SingleOwner::Table,
         );
 
-        Ok(SSingleOwner { node: node, span })
+        Ok(SSingleOwner { node, span })
     }
 
     pub(crate) fn multi_owner(input: Node) -> Result<SMultiOwner> {
@@ -1085,7 +1083,7 @@ impl CGDSLParser {
             [team_collection(t)] => MultiOwner::TeamCollection { team_collection: Box::new(t) },
         );
 
-        Ok(SMultiOwner { node: node, span })
+        Ok(SMultiOwner { node, span })
     }
 
     pub(crate) fn player_memory(input: Node) -> Result<SUseSingleMemory> {
@@ -1095,7 +1093,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), single_owner(o)] => UseSingleMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseSingleMemory { node: node, span })
+        Ok(SUseSingleMemory { node, span })
     }
 
     pub(crate) fn team_memory(input: Node) -> Result<SUseSingleMemory> {
@@ -1105,7 +1103,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), single_owner(o)] => UseSingleMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseSingleMemory { node: node, span })
+        Ok(SUseSingleMemory { node, span })
     }
 
     pub(crate) fn int_memory(input: Node) -> Result<SUseSingleMemory> {
@@ -1115,7 +1113,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), single_owner(o)] => UseSingleMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseSingleMemory { node: node, span })
+        Ok(SUseSingleMemory { node, span })
     }
 
     pub(crate) fn string_memory(input: Node) -> Result<SUseSingleMemory> {
@@ -1125,7 +1123,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), single_owner(o)] => UseSingleMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseSingleMemory { node: node, span })
+        Ok(SUseSingleMemory { node, span })
     }
 
     pub(crate) fn player_collection_memory(input: Node) -> Result<SUseMemory> {
@@ -1135,7 +1133,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), owner(o)] => UseMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseMemory { node: node, span })
+        Ok(SUseMemory { node, span })
     }
 
     pub(crate) fn team_collection_memory(input: Node) -> Result<SUseMemory> {
@@ -1145,7 +1143,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), owner(o)] => UseMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseMemory { node: node, span })
+        Ok(SUseMemory { node, span })
     }
 
     pub(crate) fn string_collection_memory(input: Node) -> Result<SUseMemory> {
@@ -1155,7 +1153,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), owner(o)] => UseMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseMemory { node: node, span })
+        Ok(SUseMemory { node, span })
     }
 
     pub(crate) fn int_collection_memory(input: Node) -> Result<SUseMemory> {
@@ -1165,7 +1163,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), owner(o)] => UseMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseMemory { node: node, span })
+        Ok(SUseMemory { node, span })
     }
 
     pub(crate) fn location_collection_memory(input: Node) -> Result<SUseMemory> {
@@ -1175,7 +1173,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), owner(o)] => UseMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseMemory { node: node, span })
+        Ok(SUseMemory { node, span })
     }
 
     pub(crate) fn card_set_memory(input: Node) -> Result<SUseMemory> {
@@ -1185,7 +1183,7 @@ impl CGDSLParser {
             [memory(m), kw_of(_), owner(o)] => UseMemory::WithOwner { memory: m, owner: Box::new(o) },
         );
 
-        Ok(SUseMemory { node: node, span })
+        Ok(SUseMemory { node, span })
     }
 
     pub(crate) fn kw_lower(input: Node) -> Result<()> {
@@ -1199,14 +1197,14 @@ impl CGDSLParser {
     pub(crate) fn key_lower(input: Node) -> Result<SFilterExpr> {
         let span = OwnedSpan::from(input.as_span());
         Ok(match_nodes!(input.children();
-            [key(key), kw_lower(_), kw_than(_), string_expr(s), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Lower{ key: key, value: s, precedence: prec }, span),
+            [key(key), kw_lower(_), kw_than(_), string_expr(s), kw_using(_), precedence(prec)] => saggregate_filter(AggregateFilter::Lower{ key, value: s, precedence: prec }, span),
         ))
     }
 
     pub(crate) fn key_same(input: Node) -> Result<SFilterExpr> {
         let span = OwnedSpan::from(input.as_span());
         Ok(match_nodes!(input.children();
-            [kw_same(_), key(key)] => saggregate_filter(AggregateFilter::Same { key: key }, span),
+            [kw_same(_), key(key)] => saggregate_filter(AggregateFilter::Same { key }, span),
         ))
     }
 
@@ -1220,16 +1218,16 @@ impl CGDSLParser {
     pub(crate) fn key_string(input: Node) -> Result<SFilterExpr> {
         let span = OwnedSpan::from(input.as_span());
         Ok(match_nodes!(input.children();
-            [key(key), kw_is(_), string_expr(s)] => saggregate_filter(AggregateFilter::KeyIsString { key: key, string: Box::new(s) }, span),
-            [key(key), kw_is(_), kw_not(_), string_expr(s)] => saggregate_filter(AggregateFilter::KeyIsNotString { key: key, string: Box::new(s) }, span),
+            [key(key), kw_is(_), string_expr(s)] => saggregate_filter(AggregateFilter::KeyIsString { key, string: Box::new(s) }, span),
+            [key(key), kw_is(_), kw_not(_), string_expr(s)] => saggregate_filter(AggregateFilter::KeyIsNotString { key, string: Box::new(s) }, span),
         ))
     }
 
     pub(crate) fn filter_combo(input: Node) -> Result<SFilterExpr> {
         let span = OwnedSpan::from(input.as_span());
         Ok(match_nodes!(input.children();
-            [kw_not(_), combo(combo)] => saggregate_filter(AggregateFilter::NotCombo { combo: combo } , span),
-            [combo(combo)] => saggregate_filter(AggregateFilter::Combo { combo: combo }, span),
+            [kw_not(_), combo(combo)] => saggregate_filter(AggregateFilter::NotCombo { combo } , span),
+            [combo(combo)] => saggregate_filter(AggregateFilter::Combo { combo }, span),
         ))
     }
 
@@ -1240,7 +1238,7 @@ impl CGDSLParser {
             [kw_or(_)] => FilterOp::Or,
         );
 
-        Ok(SFilterOp { node: node, span })
+        Ok(SFilterOp { node, span })
     }
 
     pub(crate) fn filter_bin_op(input: Node) -> Result<SFilterExpr> {
@@ -1249,7 +1247,7 @@ impl CGDSLParser {
             [filter_expr(n), filter_op(s), filter_expr(t)] => FilterExpr::Binary { filter: Box::new(n), op: s, filter1: Box::new(t) },
         );
 
-        Ok(SFilterExpr { node: node, span })
+        Ok(SFilterExpr { node, span })
     }
 
     pub(crate) fn filter_expr(input: Node) -> Result<SFilterExpr> {
@@ -1286,7 +1284,7 @@ impl CGDSLParser {
             [private(_)] => Status::Private,
         );
 
-        Ok(SStatus { node: node, span })
+        Ok(SStatus { node, span })
     }
 
     pub(crate) fn int_range_logic(input: Node) -> Result<SIntRangeOperator> {
@@ -1296,7 +1294,7 @@ impl CGDSLParser {
             [kw_or(_)] => IntRangeOperator::Or,
         );
 
-        Ok(SIntRangeOperator { node: node, span })
+        Ok(SIntRangeOperator { node, span })
     }
 
     pub(crate) fn int_range_helper(
@@ -1315,7 +1313,7 @@ impl CGDSLParser {
                 IntRange { start: (n, s), op_int: irhs.collect() },
         );
 
-        Ok(SIntRange { node: node, span })
+        Ok(SIntRange { node, span })
     }
 
     pub(crate) fn quantity(input: Node) -> Result<SQuantity> {
@@ -1326,7 +1324,7 @@ impl CGDSLParser {
             [int_range(n)] => Quantity::IntRange {int_range: n },
         );
 
-        Ok(SQuantity { node: node, span })
+        Ok(SQuantity { node, span })
     }
 
     pub(crate) fn kw_where(input: Node) -> Result<()> {
@@ -1340,7 +1338,7 @@ impl CGDSLParser {
             [location(n)] => Groupable::Location { name: n },
         );
 
-        Ok(SGroupable { node: node, span })
+        Ok(SGroupable { node, span })
     }
 
     pub(crate) fn groupable_where_filter(input: Node) -> Result<SGroup> {
@@ -1349,7 +1347,7 @@ impl CGDSLParser {
             [groupable(n), kw_where(_), filter_expr(s)] => Group::Where { groupable: n, filter: s },
         );
 
-        Ok(SGroup { node: node, span })
+        Ok(SGroup { node, span })
     }
 
     pub(crate) fn kw_in(input: Node) -> Result<()> {
@@ -1359,11 +1357,11 @@ impl CGDSLParser {
     pub(crate) fn combo_in_groupable(input: Node) -> Result<SGroup> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [combo(combo), kw_in(_), groupable(s)] => Group::Combo { combo: combo, groupable: s },
-            [kw_not(_), combo(combo), kw_in(_), groupable(s)] => Group::NotCombo { combo: combo, groupable: s },
+            [combo(combo), kw_in(_), groupable(s)] => Group::Combo { combo, groupable: s },
+            [kw_not(_), combo(combo), kw_in(_), groupable(s)] => Group::NotCombo { combo, groupable: s },
         );
 
-        Ok(SGroup { node: node, span })
+        Ok(SGroup { node, span })
     }
 
     pub(crate) fn group(input: Node) -> Result<SGroup> {
@@ -1390,7 +1388,7 @@ impl CGDSLParser {
             [kw_table(_)] => Owner::Table,
         );
 
-        Ok(SOwner { node: node, span })
+        Ok(SOwner { node, span })
     }
 
     pub(crate) fn group_of_owner(input: Node) -> Result<SCardSet> {
@@ -1399,7 +1397,7 @@ impl CGDSLParser {
             [group(n), kw_of(_), owner(s)] => CardSet::GroupOwner { group: n, owner: s },
         );
 
-        Ok(SCardSet { node: node, span })
+        Ok(SCardSet { node, span })
     }
 
     pub(crate) fn kw_cards(input: Node) -> Result<()> {
@@ -1438,7 +1436,7 @@ impl CGDSLParser {
                 [location_collection_memory(m)] => LocationCollection::Memory { memory: m },
         );
 
-        Ok(SLocationCollection { node: node, span })
+        Ok(SLocationCollection { node, span })
     }
 
     pub(crate) fn team_expr_collection(input: Node) -> Result<STeamCollection> {
@@ -1477,7 +1475,7 @@ impl CGDSLParser {
             [scoring_rule(s)] => GameRule::Scoring { scoring: s },
         );
 
-        Ok(SGameRule { node: node, span })
+        Ok(SGameRule { node, span })
     }
 
     pub(crate) fn setup_rule(input: Node) -> Result<SSetUpRule> {
@@ -1525,7 +1523,7 @@ impl CGDSLParser {
             [kw_player(_), create_player_names(p)] => SetUpRule::CreatePlayer { players: p },
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn create_team(input: Node) -> Result<SSetUpRule> {
@@ -1534,7 +1532,7 @@ impl CGDSLParser {
             [kw_team(_), team_name_with_player_collection(twps)..] => SetUpRule::CreateTeams { teams: twps.collect() },
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn kw_turnorder(input: Node) -> Result<()> {
@@ -1552,7 +1550,7 @@ impl CGDSLParser {
             [kw_turnorder(_), player_collection(p)] => SetUpRule::CreateTurnorder {player_collection: p},
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn kw_location(input: Node) -> Result<()> {
@@ -1595,7 +1593,7 @@ impl CGDSLParser {
             [kw_location(_), location_list(l), kw_on(_), owner(o)] => SetUpRule::CreateLocation { locations: l, owner: o },
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn values(input: Node) -> Result<Vec<SID>> {
@@ -1614,16 +1612,16 @@ impl CGDSLParser {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
             [key(key), values(vs), for_key_values(kvs)..] => {
-                let types = vec![vec![(key, vs)], kvs.collect()].concat();
-                Types { types: types }
+                let types = [vec![(key, vs)], kvs.collect()].concat();
+                Types { types }
             },
             [key(key), values(vs)] => {
                 let types = vec![(key, vs)];
-                Types { types: types }
+                Types { types }
             },
         );
 
-        Ok(STypes { node: node, span })
+        Ok(STypes { node, span })
     }
 
     pub(crate) fn cards(input: Node) -> Result<Vec<STypes>> {
@@ -1635,19 +1633,19 @@ impl CGDSLParser {
     pub(crate) fn create_card(input: Node) -> Result<SSetUpRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_card(_), kw_on(_), location(location), cards(t)] => SetUpRule::CreateCardOnLocation { location: location, cards: t },
+            [kw_card(_), kw_on(_), location(location), cards(t)] => SetUpRule::CreateCardOnLocation { location, cards: t },
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn create_token(input: Node) -> Result<SSetUpRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_token(_), int_expr(i), token(token), kw_on(_), location(location)] => SetUpRule::CreateTokenOnLocation { int: i, token: token, location: location },
+            [kw_token(_), int_expr(i), token(token), kw_on(_), location(location)] => SetUpRule::CreateTokenOnLocation { int: i, token, location },
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn key_value(input: Node) -> Result<(SID, SID)> {
@@ -1671,33 +1669,33 @@ impl CGDSLParser {
         let node = match_nodes!(input.into_children();
             [kw_precedence(_), precedence(precedence), kw_on(_), key(key), values(vs)] => {
                 let key_value: Vec<(SID, SID)> = vs.into_iter().map(|v| (key.clone(), v)).collect();
-                SetUpRule::CreatePrecedence { precedence: precedence, kvs: key_value }
+                SetUpRule::CreatePrecedence { precedence, kvs: key_value }
             },
             [kw_precedence(_), precedence(precedence), key_value_list(kvs)] => {
-                SetUpRule::CreatePrecedence { precedence: precedence, kvs: kvs }
+                SetUpRule::CreatePrecedence { precedence, kvs }
             },
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn create_combo(input: Node) -> Result<SSetUpRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_combo(_), combo(combo), kw_where(_), filter_expr(f)] => SetUpRule::CreateCombo { combo: combo, filter: f },
+            [kw_combo(_), combo(combo), kw_where(_), filter_expr(f)] => SetUpRule::CreateCombo { combo, filter: f },
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn create_memory(input: Node) -> Result<SSetUpRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_memory(_), memory(memory), memory_type(mt), kw_on(_), owner(o)] => SetUpRule::CreateMemoryWithMemoryType { memory: memory, memory_type: mt, owner: o },
-            [kw_memory(_), memory(memory), kw_on(_), owner(o)] => SetUpRule::CreateMemory { memory: memory, owner: o },
+            [kw_memory(_), memory(memory), memory_type(mt), kw_on(_), owner(o)] => SetUpRule::CreateMemoryWithMemoryType { memory, memory_type: mt, owner: o },
+            [kw_memory(_), memory(memory), kw_on(_), owner(o)] => SetUpRule::CreateMemory { memory, owner: o },
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn value_int(input: Node) -> Result<(SID, SIntExpr)> {
@@ -1729,20 +1727,20 @@ impl CGDSLParser {
         let node = match_nodes!(input.into_children();
             [kw_points(_), pointmap(pointmap), kw_on(_), key(key), value_int_list(vis)] => {
                 let key_value_int: Vec<(SID, SID, SIntExpr)> = vis.into_iter().map(|(v, i)| (key.clone(), v, i)).collect();
-                SetUpRule::CreatePointMap { pointmap: pointmap, kvis: key_value_int }
+                SetUpRule::CreatePointMap { pointmap, kvis: key_value_int }
             },
             [kw_points(_), pointmap(pointmap), key_value_int_list(kvis)] => {
-                SetUpRule::CreatePointMap { pointmap: pointmap, kvis: kvis }
+                SetUpRule::CreatePointMap { pointmap, kvis }
             },
         );
 
-        Ok(SSetUpRule { node: node, span })
+        Ok(SSetUpRule { node, span })
     }
 
     pub(crate) fn action_rule(input: Node) -> Result<SActionRule> {
         let span = OwnedSpan::from(input.as_span());
         Ok(match_nodes!(input.into_children();
-            [move_action(a)] => SActionRule { node: ActionRule::Move { move_type: a }, span: span },
+            [move_action(a)] => SActionRule { node: ActionRule::Move { move_type: a }, span },
             [flip_action(b)] => b,
             [shuffle_action(c)] => c,
             [out_action(d)] => d,
@@ -1765,7 +1763,7 @@ impl CGDSLParser {
             [kw_flip(_), card_set(c), kw_to(_), status(s)] => ActionRule::FlipAction { card_set: c, status: s },
         );
 
-        Ok(SActionRule { node: node, span })
+        Ok(SActionRule { node, span })
     }
 
     pub(crate) fn kw_shuffle(input: Node) -> Result<()> {
@@ -1778,7 +1776,7 @@ impl CGDSLParser {
             [kw_shuffle(_), card_set(c)] => ActionRule::ShuffleAction { card_set: c },
         );
 
-        Ok(SActionRule { node: node, span })
+        Ok(SActionRule { node, span })
     }
 
     pub(crate) fn kw_set(input: Node) -> Result<()> {
@@ -1816,7 +1814,7 @@ impl CGDSLParser {
             },
         );
 
-        Ok(SMemoryType { node: node, span })
+        Ok(SMemoryType { node, span })
     }
 
     pub(crate) fn out_action(input: Node) -> Result<SActionRule> {
@@ -1825,25 +1823,25 @@ impl CGDSLParser {
             [kw_set(_), players(p), kw_out(_), kw_of(_), out_of(o)] => ActionRule::OutAction { players: p, out_of: o },
         );
 
-        Ok(SActionRule { node: node, span })
+        Ok(SActionRule { node, span })
     }
 
     pub(crate) fn set_memory(input: Node) -> Result<SActionRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [memory(memory), kw_is(_), memory_type(m)] => ActionRule::SetMemory { memory: memory, memory_type: m },
+            [memory(memory), kw_is(_), memory_type(m)] => ActionRule::SetMemory { memory, memory_type: m },
         );
 
-        Ok(SActionRule { node: node, span })
+        Ok(SActionRule { node, span })
     }
 
     pub(crate) fn reset_memory(input: Node) -> Result<SActionRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_reset(_), memory(memory)] => ActionRule::ResetMemory { memory: memory },
+            [kw_reset(_), memory(memory)] => ActionRule::ResetMemory { memory },
         );
 
-        Ok(SActionRule { node: node, span })
+        Ok(SActionRule { node, span })
     }
 
     pub(crate) fn kw_cycle(input: Node) -> Result<()> {
@@ -1856,7 +1854,7 @@ impl CGDSLParser {
             [kw_cycle(_), kw_to(_), player_expr(p)] => ActionRule::CycleAction { player: p },
         );
 
-        Ok(SActionRule { node: node, span })
+        Ok(SActionRule { node, span })
     }
 
     pub(crate) fn kw_bid(input: Node) -> Result<()> {
@@ -1878,11 +1876,11 @@ impl CGDSLParser {
     pub(crate) fn bid_action(input: Node) -> Result<SActionRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_bid(_), quantity(q), kw_on(_), memory(memory), kw_of(_), owner(o)] => ActionRule::BidMemoryAction { memory: memory, quantity: q, owner: o },
+            [kw_bid(_), quantity(q), kw_on(_), memory(memory), kw_of(_), owner(o)] => ActionRule::BidMemoryAction { memory, quantity: q, owner: o },
             [kw_bid(_), quantity(q)] => ActionRule::BidAction { quantitiy: q },
         );
 
-        Ok(SActionRule { node: node, span })
+        Ok(SActionRule { node, span })
     }
 
     pub(crate) fn end_type(input: Node) -> Result<SEndType> {
@@ -1895,7 +1893,7 @@ impl CGDSLParser {
 
         );
 
-        Ok(SEndType { node: node, span })
+        Ok(SEndType { node, span })
     }
 
     pub(crate) fn end_action(input: Node) -> Result<SActionRule> {
@@ -1904,7 +1902,7 @@ impl CGDSLParser {
             [kw_end(_), end_type(e)] => ActionRule::EndAction { end_type: e },
         );
 
-        Ok(SActionRule { node: node, span })
+        Ok(SActionRule { node, span })
     }
 
     pub(crate) fn kw_demand(input: Node) -> Result<()> {
@@ -1923,17 +1921,17 @@ impl CGDSLParser {
             [int_expr(i)] => DemandType::Int { int: i },
         );
 
-        Ok(SDemandType { node: node, span })
+        Ok(SDemandType { node, span })
     }
 
     pub(crate) fn demand_action(input: Node) -> Result<SActionRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
             [kw_demand(_), demand_type(d)] => ActionRule::DemandAction { demand_type: d },
-            [kw_demand(_), demand_type(d), kw_as(_), memory(memory)] => ActionRule::DemandMemoryAction {demand_type: d, memory: memory },
+            [kw_demand(_), demand_type(d), kw_as(_), memory(memory)] => ActionRule::DemandMemoryAction {demand_type: d, memory },
         );
 
-        Ok(SActionRule { node: node, span })
+        Ok(SActionRule { node, span })
     }
 
     pub(crate) fn kw_from(input: Node) -> Result<()> {
@@ -1947,7 +1945,7 @@ impl CGDSLParser {
             [card_set(c1), status(s), kw_to(_), card_set(c2)] => MoveCardSet::Move { from: c1, status: s, to: c2 },
         );
 
-        Ok(SMoveCardSet { node: node, span })
+        Ok(SMoveCardSet { node, span })
     }
 
     pub(crate) fn kw_move(input: Node) -> Result<()> {
@@ -1960,7 +1958,7 @@ impl CGDSLParser {
             [kw_move(_), card_set_to_card_set(m)] => ClassicMove::MoveCardSet { move_cs: m },
         );
 
-        Ok(SClassicMove { node: node, span })
+        Ok(SClassicMove { node, span })
     }
 
     pub(crate) fn kw_deal(input: Node) -> Result<()> {
@@ -1973,7 +1971,7 @@ impl CGDSLParser {
             [kw_deal(_), card_set_to_card_set(m)] => DealMove::MoveCardSet { deal_cs: m },
         );
 
-        Ok(SDealMove { node: node, span })
+        Ok(SDealMove { node, span })
     }
 
     pub(crate) fn kw_exchange(input: Node) -> Result<()> {
@@ -1986,7 +1984,7 @@ impl CGDSLParser {
             [kw_exchange(_), card_set_to_card_set(m)] => ExchangeMove::MoveCardSet { exchange_cs: m },
         );
 
-        Ok(SExchangeMove { node: node, span })
+        Ok(SExchangeMove { node, span })
     }
 
     pub(crate) fn token_loc(input: Node) -> Result<STokenLocExpr> {
@@ -1996,7 +1994,7 @@ impl CGDSLParser {
             [groupable(g), kw_of(_), players(p)] => TokenLocExpr::GroupablePlayers { groupable: g, players: p },
         );
 
-        Ok(STokenLocExpr { node: node, span })
+        Ok(STokenLocExpr { node, span })
     }
 
     pub(crate) fn kw_place(input: Node) -> Result<()> {
@@ -2006,11 +2004,11 @@ impl CGDSLParser {
     pub(crate) fn token_move(input: Node) -> Result<STokenMove> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_place(_), quantity(q), token(token), kw_from(_), token_loc(c1), kw_to(_), token_loc(c2)] => TokenMove::PlaceQuantity {quantity: q, token: token, from_loc: c1, to_loc: c2 },
-            [kw_place(_), token(token), kw_from(_), token_loc(c1), kw_to(_), token_loc(c2)] => TokenMove::Place { token: token, from_loc: c1, to_loc: c2 },
+            [kw_place(_), quantity(q), token(token), kw_from(_), token_loc(c1), kw_to(_), token_loc(c2)] => TokenMove::PlaceQuantity {quantity: q, token, from_loc: c1, to_loc: c2 },
+            [kw_place(_), token(token), kw_from(_), token_loc(c1), kw_to(_), token_loc(c2)] => TokenMove::Place { token, from_loc: c1, to_loc: c2 },
         );
 
-        Ok(STokenMove { node: node, span })
+        Ok(STokenMove { node, span })
     }
 
     pub(crate) fn move_action(input: Node) -> Result<SMoveType> {
@@ -2022,7 +2020,7 @@ impl CGDSLParser {
             [token_move(t)] => MoveType::Place { token: t },
         );
 
-        Ok(SMoveType { node: node, span })
+        Ok(SMoveType { node, span })
     }
 
     pub(crate) fn scoring_rule(input: Node) -> Result<SScoringRule> {
@@ -2032,7 +2030,7 @@ impl CGDSLParser {
             [winner_rule(w)] => ScoringRule::WinnerRule { winner_rule: w },
         );
 
-        Ok(SScoringRule { node: node, span })
+        Ok(SScoringRule { node, span })
     }
 
     pub(crate) fn kw_score(input: Node) -> Result<()> {
@@ -2055,17 +2053,17 @@ impl CGDSLParser {
             [kw_score(_)] => WinnerType::Score,
         );
 
-        Ok(SWinnerType { node: node, span })
+        Ok(SWinnerType { node, span })
     }
 
     pub(crate) fn score_rule(input: Node) -> Result<SScoreRule> {
         let span = OwnedSpan::from(input.as_span());
         let node = match_nodes!(input.into_children();
-            [kw_score(_), int_expr(n), kw_to(_), memory(memory), kw_of(_), players(o)] => ScoreRule::ScoreMemory { int: n, memory: memory, players: o },
+            [kw_score(_), int_expr(n), kw_to(_), memory(memory), kw_of(_), players(o)] => ScoreRule::ScoreMemory { int: n, memory, players: o },
             [kw_score(_), int_expr(n), kw_to(_), players(o)] => ScoreRule::Score{int: n, players: o},
         );
 
-        Ok(SScoreRule { node: node, span })
+        Ok(SScoreRule { node, span })
     }
 
     pub(crate) fn kw_winner(input: Node) -> Result<()> {
@@ -2079,7 +2077,7 @@ impl CGDSLParser {
             [kw_winner(_), kw_is(_), players(p)] => WinnerRule::Winner { players: p },
         );
 
-        Ok(SWinnerRule { node: node, span })
+        Ok(SWinnerRule { node, span })
     }
 }
 

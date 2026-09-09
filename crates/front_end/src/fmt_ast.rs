@@ -190,7 +190,7 @@ impl fmt::Display for EndType {
         let s = match self {
             EndType::Turn => "turn",
             EndType::CurrentStage => "stage",
-            EndType::Stage { stage } => &format!("{}", stage),
+            EndType::Stage { stage } => &stage.to_string(),
             EndType::GameWithWinner { players } => &format!("game with winner {}", players),
         };
         f.write_str(s)
@@ -276,7 +276,7 @@ impl fmt::Display for SingleOwner {
         let s = match self {
             SingleOwner::Player { player } => &format!("{}", player),
             SingleOwner::Team { team } => &format!("{}", team),
-            SingleOwner::Table => &format!("table"),
+            SingleOwner::Table => &"table".to_string(),
         };
         f.write_str(s)
     }
@@ -680,7 +680,7 @@ impl fmt::Display for AggregateFilter {
                 key,
                 string: string_expr,
             } => &format!("{} is not {}", key, string_expr),
-            AggregateFilter::Combo { combo } => &format!("{}", combo),
+            AggregateFilter::Combo { combo } => &combo.to_string(),
             AggregateFilter::NotCombo { combo } => &format!("not {}", combo),
         };
         f.write_str(s)
@@ -1036,7 +1036,7 @@ impl fmt::Display for ActionRule {
 impl fmt::Display for UseMemory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            UseMemory::Memory { memory } => &format!("{}", memory),
+            UseMemory::Memory { memory } => &memory.to_string(),
             UseMemory::WithOwner { memory, owner } => &format!("{} of {}", memory, owner),
         };
         f.write_str(s)
@@ -1380,7 +1380,7 @@ impl fmt::Display for Game {
             .collect::<Vec<_>>() // collect into Vec<String>
             .join("\n");
 
-        let s = &format!("{}", fs);
+        let s = &fs.to_string();
         f.write_str(s)
     }
 }

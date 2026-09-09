@@ -6,13 +6,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-/// Manually writing repetitive logic for a walker or lowering-logic or even a mirrored spanned version of the original AST is very annoying.
-/// This crate allows to generate all of it.
-///
-/// We can specify:
-/// #[spanned_ast] over a module and it will generate a sub-module with the Spanned-version, walker-logic and lowering-logic with it.
-///
-/// If you have trouble with declaring the AST then change by your liking.
+//! Manually writing repetitive logic for a walker or lowering-logic or even a mirrored spanned version of the original AST is very annoying.
+//! This crate allows to generate all of it.
+//!
+//! We can specify:
+//! #[spanned_ast] over a module and it will generate a sub-module with the Spanned-version, walker-logic and lowering-logic with it.
+//!
+//! If you have trouble with declaring the AST then change by your liking.
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
@@ -121,7 +121,7 @@ pub fn spanned_ast(_: TokenStream, item: TokenStream) -> TokenStream {
     let mut node_kinds = Vec::new();
     let mut walker_impls = Vec::new();
     // all items and adding the types
-    let all_items = vec![spanned_items.clone(), type_items.clone()].concat();
+    let all_items = [spanned_items.clone(), type_items.clone()].concat();
 
     // Debug
     // println!("Total items found in module: {}", items.len());
@@ -408,24 +408,24 @@ fn generate_enum_walk(
 // ===========================================================================
 fn scrub_arbitrary_derive(attrs: &mut Vec<syn::Attribute>) {
     attrs.retain_mut(|attr| {
-        if attr.path().is_ident("derive") {
-            if let Ok(nested) = attr.parse_args_with(
+        if attr.path().is_ident("derive")
+            && let Ok(nested) = attr.parse_args_with(
                 syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
-            ) {
-                let filtered: Vec<_> = nested
-                    .into_iter()
-                    .filter(|path| !path.is_ident("Arbitrary"))
-                    .collect();
+            )
+        {
+            let filtered: Vec<_> = nested
+                .into_iter()
+                .filter(|path| !path.is_ident("Arbitrary"))
+                .collect();
 
-                if filtered.is_empty() {
-                    return false; // Drop the whole attribute
-                }
-
-                // Rewrite the attribute without Arbitrary
-                let new_path = &attr.path();
-                *attr = syn::parse_quote! { #[#new_path(#(#filtered),*)] };
-                return true;
+            if filtered.is_empty() {
+                return false; // Drop the whole attribute
             }
+
+            // Rewrite the attribute without Arbitrary
+            let new_path = &attr.path();
+            *attr = syn::parse_quote! { #[#new_path(#(#filtered),*)] };
+            return true;
         }
 
         // Drop any other arbitrary-specific helper attributes

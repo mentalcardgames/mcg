@@ -1,15 +1,15 @@
-/// The testing consists of two types of testing:
-/// - Unit-Tests -> for special cases
-/// - Generated-Tests -> Arbitrary-style tests (Proptests)
-///
-/// We need a lot of generated tests because pest is a recursive descent Parser.
-///
-/// In addition to this:
-/// - Each AST-struct/-enum must have a fmt::Display trait that is the corresponding
-/// Rule in the grammar.pest (e.g. PlayerExpr::Current => "current").
-///
-/// This way we can check for mistakes in the AST-declaration and further Parsing errors
-/// by doing: Generate AST -> String-Represenation -> Parse -> assert_eq Generated-AST and Parse-Output
+//! The testing consists of two types of testing:
+//! - Unit-Tests -> for special cases
+//! - Generated-Tests -> Arbitrary-style tests (Proptests)
+//!
+//! We need a lot of generated tests because pest is a recursive descent Parser.
+//!
+//! In addition to this:
+//! - Each AST-struct/-enum must have a fmt::Display trait that is the corresponding
+//!   Rule in the grammar.pest (e.g. PlayerExpr::Current => "current").
+//!
+//! This way we can check for mistakes in the AST-declaration and further Parsing errors
+//! by doing: Generate AST -> String-Represenation -> Parse -> assert_eq Generated-AST and Parse-Output
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -104,7 +104,7 @@ fn show_graph(fsm: &Ir<SpannedPayload>, name: &str) {
     let png_path = out_dir.join(format!("{}.png", name));
 
     // Generate .dot file
-    fsm_to_dot(&fsm, &dot_path).unwrap();
+    fsm_to_dot(fsm, &dot_path).unwrap();
 
     // Call Graphviz to generate PNG
     let status = Command::new("dot")
@@ -150,7 +150,7 @@ fn test_rule_ir() {
     ",
     );
 
-    assert_eq!(true, fsm.is_connected());
+    assert!(fsm.is_connected());
 
     show_graph(&fsm, "rule");
 }
@@ -167,7 +167,7 @@ fn test_optional_ir() {
     ",
     );
 
-    assert_eq!(true, fsm.is_connected());
+    assert!(fsm.is_connected());
 
     show_graph(&fsm, "optional");
 }
@@ -184,7 +184,7 @@ fn test_if_ir() {
     ",
     );
 
-    assert_eq!(true, fsm.is_connected());
+    assert!(fsm.is_connected());
 
     show_graph(&fsm, "if");
 }
@@ -207,7 +207,7 @@ fn test_stage_ir() {
     ",
     );
 
-    assert_eq!(true, fsm.is_connected());
+    assert!(fsm.is_connected());
 
     show_graph(&fsm, "stage");
 }
@@ -226,7 +226,7 @@ fn test_choose_ir() {
     ",
     );
 
-    assert_eq!(true, fsm.is_connected());
+    assert!(fsm.is_connected());
 
     show_graph(&fsm, "choose");
 }
@@ -248,7 +248,7 @@ fn test_conditional_ir() {
     ",
     );
 
-    assert_eq!(true, fsm.is_connected());
+    assert!(fsm.is_connected());
 
     show_graph(&fsm, "conditional");
 }
@@ -319,7 +319,7 @@ fn test_game_ir() {
       "
   );
 
-    assert_eq!(true, fsm.is_connected());
+    assert!(fsm.is_connected());
 
     show_graph(&fsm, "game");
 }
@@ -525,7 +525,7 @@ fn test_reparse_game() {
 #[test]
 fn test_specific_rule() {
     let input = "(&IC:Id608 of (&T:Id100 of playersin))";
-    let _ = match test_rule_consume(input, Rule::int_collection, CGDSLParser::int_collection) {
+    match test_rule_consume(input, Rule::int_collection, CGDSLParser::int_collection) {
         Ok(a) => {
             println!("{:?}", a);
         }
