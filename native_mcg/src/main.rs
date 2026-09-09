@@ -1,12 +1,10 @@
 //! Main entry point for the MCG poker server.
 
-use native_mcg::{cli, config, server};
+use native_mcg::{config, server};
 
-use anyhow::Context;
 use clap::Parser;
-use config::Config;
+use config::ServerCli;
 use std::net::{SocketAddr, TcpListener};
-use std::path::PathBuf;
 
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///
@@ -15,8 +13,7 @@ use std::path::PathBuf;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Use clap-based CLI for parsing
-    // TODO extract config init into utility function
-    let cli = cli::ServerCli::parse();
+    let cli = ServerCli::parse();
 
     // Initialize tracing subscriber for logging
     // If debug is on: show everything at DEBUG level
@@ -41,22 +38,8 @@ async fn main() -> anyhow::Result<()> {
         .with_line_number(cli.debug)
         .init();
 
-    let config_path: PathBuf = cli.config.clone();
-
-    // Load or create config file (creates file if missing).
-    let mut cfg = Config::load_or_create(&config_path)
-        .with_context(|| format!("loading or creating config '{}'", config_path.display()))?;
-
-    // Apply CLI overrides in-memory (non-persistent by default)
-    if let Some(k) = cli.iroh_key {
-        cfg.iroh_key = Some(k);
-    }
-
-    // Persist overrides only if requested
-    if cli.persist {
-        cfg.save(&config_path)
-            .with_context(|| format!("saving updated config '{}'", config_path.display()))?;
-    }
+    // Load configuration and apply CLI overrides
+    let (cfg, config_path) = config::init_server_config(&cli)?;
 
     let bots = cfg.bots;
 

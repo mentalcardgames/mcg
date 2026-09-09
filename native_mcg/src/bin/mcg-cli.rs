@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use clap::Parser;
 use cli::{generate_demo_players, Cli, Commands, DisplayMode, MessagePrinter, TransportKind};
 use mcg_shared::{Frontend2BackendMsg, PlayerAction};
-use native_mcg::public::PublicInfo;
+use native_mcg::config::PublicInfo;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

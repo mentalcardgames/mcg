@@ -11,8 +11,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tokio::task::{JoinHandle, JoinSet};
 
-use crate::config::Config;
-use crate::public::{path_for_config, PublicInfo};
+use crate::config::{path_for_config, Config, PublicInfo};
 
 use super::types::ActorEvent;
 use super::{
