@@ -226,11 +226,6 @@ impl Controller {
                     Err(e) => Some(Backend2FrontendMsg::Error(e)),
                 }
             }
-            Frontend2BackendMsg::Subscribe => {
-                // Subscription is deprecated; return the current state to the caller if active.
-                self.current_state_public()
-                    .map(Backend2FrontendMsg::UpdatePokerState)
-            }
             Frontend2BackendMsg::RequestState => {
                 if let Some(gs) = self.current_state_public() {
                     Some(Backend2FrontendMsg::UpdatePokerState(gs))
@@ -762,7 +757,7 @@ mod tests {
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();
 
-        let (state_watch_tx, state_watch_rx) = tokio::sync::watch::channel(None);
+        let (state_watch_tx, state_watch_rx) = watch::channel(None);
         let net = network.clone();
         tokio::task::spawn_blocking(move || {
             let mut controller =

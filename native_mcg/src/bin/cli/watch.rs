@@ -1,5 +1,5 @@
 use anyhow::Context;
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg};
@@ -20,10 +20,7 @@ fn announce_connection(json: bool, message: &str) {
 pub async fn watch_ws(ws_addr: &str, json: bool) -> anyhow::Result<()> {
     let ws_url = super::transport::build_ws_url(ws_addr)?;
     let (ws_stream, _resp) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
-    let (mut write, mut read) = ws_stream.split();
-
-    let subscribe_txt = serde_json::to_string(&Frontend2BackendMsg::Subscribe)?;
-    write.send(Message::Text(subscribe_txt)).await?;
+    let (_write, mut read) = ws_stream.split();
 
     announce_connection(json, &format!("Connected to WebSocket {}", ws_url));
 
@@ -109,15 +106,6 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
         .open_bi()
         .await
         .context("opening bidirectional stream")?;
-
-    // Subscribe to broadcast updates
-    {
-        use tokio::io::AsyncWriteExt;
-        let txt = serde_json::to_string(&Frontend2BackendMsg::Subscribe)?;
-        send.write_all(txt.as_bytes()).await?;
-        send.write_all(b"\n").await?;
-        send.flush().await?;
-    }
 
     announce_connection(json, &format!("Connected to Iroh peer {}", peer_uri));
 

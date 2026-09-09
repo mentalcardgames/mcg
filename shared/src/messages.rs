@@ -40,7 +40,6 @@ pub enum Frontend2BackendMsg {
         action: PlayerAction,
     },
     QrReq(String),
-    Subscribe,
     RequestState,
     Ping,
     NextHand,

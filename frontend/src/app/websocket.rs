@@ -50,22 +50,6 @@ impl WebSocketConnection {
         let ws_url = format!("ws://{}/ws", server_address);
         match WebSocket::new(&ws_url) {
             Ok(ws) => {
-                let subscribe_json = match serde_json::to_string(&Frontend2BackendMsg::Subscribe) {
-                    Ok(payload) => payload,
-                    Err(error) => {
-                        web_sys::console::error_1(
-                            &format!("Failed to serialize Subscribe message: {error:?}").into(),
-                        );
-                        return;
-                    }
-                };
-
-                let ws_clone_for_open = ws.clone();
-                let onopen = Closure::<dyn FnMut(Event)>::new(move |_event: Event| {
-                    let _ = ws_clone_for_open.send_with_str(&subscribe_json);
-                });
-                ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
-
                 let message_sender = self.message_sender.clone();
                 let ctx_clone = self.egui_ctx.clone();
                 let onmessage =
@@ -97,7 +81,6 @@ impl WebSocketConnection {
                 });
                 ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
 
-                self._onopen = Some(onopen);
                 self._onmessage = Some(onmessage);
                 self._onerror = Some(onerror);
                 self._onclose = Some(onclose);
