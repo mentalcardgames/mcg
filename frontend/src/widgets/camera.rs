@@ -1,6 +1,6 @@
+use eframe::epaint::TextureHandle;
 use std::cell::RefCell;
 use std::rc::Rc;
-use eframe::epaint::TextureHandle;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{
     CanvasRenderingContext2d, HtmlCanvasElement, HtmlVideoElement, MediaStreamConstraints,
@@ -103,9 +103,7 @@ impl CameraSession {
 impl Camera {
     pub fn start(&mut self) {
         let token = Rc::new(());
-        let previous_state = self
-            .state
-            .replace(CameraState::Initializing(token.clone()));
+        let previous_state = self.state.replace(CameraState::Initializing(token.clone()));
         if let CameraState::Active(session) = previous_state {
             session.stop();
         }
@@ -199,7 +197,8 @@ impl Camera {
                 canvas_height as f64,
             )?;
             Ok(Some((canvas_width, canvas_height, image_data.data())))
-        })? else {
+        })?
+        else {
             return Ok(None);
         };
 

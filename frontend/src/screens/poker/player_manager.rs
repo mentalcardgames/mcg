@@ -24,13 +24,11 @@ impl Default for PlayerManager {
 impl PlayerManager {
     pub fn new() -> Self {
         Self {
-            players: vec![
-                PlayerConfig {
-                    id: mcg_shared::PlayerId(0),
-                    name: " ".to_string(),
-                    is_bot: false,
-                },
-            ],
+            players: vec![PlayerConfig {
+                id: mcg_shared::PlayerId(0),
+                name: " ".to_string(),
+                is_bot: false,
+            }],
             next_player_id: 1,
             new_player_name: String::new(),
             preferred_player: PlayerId(0),
@@ -181,7 +179,7 @@ impl PlayerManager {
     /// Logic for when we get a remote player connected to our lobby
     pub fn handle_named_player(&mut self, player_name: String) {
         let mut name = player_name.clone();
-        if self.get_existing_names().contains(name.as_str()){
+        if self.get_existing_names().contains(name.as_str()) {
             for i in 2..100 {
                 let candidate = format!("{} {}", player_name, i);
                 if !self.get_existing_names().contains(candidate.as_str()) {

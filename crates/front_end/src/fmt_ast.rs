@@ -1,5 +1,4 @@
 /// Has all format-logic of the AST.
-
 use core::fmt;
 
 use crate::ast::*;
@@ -83,7 +82,9 @@ impl fmt::Display for Quantity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             Quantity::Int { int } => &format!("{}", int),
-            Quantity::Quantifier { quantifier: qunatifier } => &format!("{}", qunatifier),
+            Quantity::Quantifier {
+                quantifier: qunatifier,
+            } => &format!("{}", qunatifier),
             Quantity::IntRange { int_range } => &format!("{}", int_range),
         };
         f.write_str(s)
@@ -273,15 +274,9 @@ impl fmt::Display for AggregatePlayer {
 impl fmt::Display for SingleOwner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            SingleOwner::Player { player } => {
-                &format!("{}", player)
-            }
-            SingleOwner::Team { team } => {
-                &format!("{}", team)
-            }
-            SingleOwner::Table => {
-                &format!("table")
-            }
+            SingleOwner::Player { player } => &format!("{}", player),
+            SingleOwner::Team { team } => &format!("{}", team),
+            SingleOwner::Table => &format!("table"),
         };
         f.write_str(s)
     }
@@ -290,12 +285,8 @@ impl fmt::Display for SingleOwner {
 impl fmt::Display for MultiOwner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            MultiOwner::PlayerCollection { player_collection } => {
-                &format!("{}", player_collection)
-            }
-            MultiOwner::TeamCollection { team_collection } => {
-                &format!("{}", team_collection)
-            }
+            MultiOwner::PlayerCollection { player_collection } => &format!("{}", player_collection),
+            MultiOwner::TeamCollection { team_collection } => &format!("{}", team_collection),
         };
         f.write_str(s)
     }
@@ -308,14 +299,10 @@ impl fmt::Display for PlayerExpr {
             PlayerExpr::Runtime { runtime } => &format!("{}", runtime),
             PlayerExpr::Aggregate { aggregate } => &format!("{}", aggregate),
             PlayerExpr::Query { query } => &format!("{}", query),
-            PlayerExpr::Memory { memory } => {
-                match memory {
-                    UseSingleMemory::Memory { memory } => {
-                        &format!("&P:{}", memory)
-                    },
-                    UseSingleMemory::WithOwner { memory, owner } => {
-                        &format!("(&P:{} of {})", memory, owner)
-                    },
+            PlayerExpr::Memory { memory } => match memory {
+                UseSingleMemory::Memory { memory } => &format!("&P:{}", memory),
+                UseSingleMemory::WithOwner { memory, owner } => {
+                    &format!("(&P:{} of {})", memory, owner)
                 }
             },
         };
@@ -386,13 +373,11 @@ impl fmt::Display for IntExpr {
                 runtime: runtime_int,
             } => &format!("{}", runtime_int),
             IntExpr::Memory { memory } => match memory {
-                    UseSingleMemory::Memory { memory } => {
-                        &format!("&I:{}", memory)
-                    },
-                    UseSingleMemory::WithOwner { memory, owner } => {
-                        &format!("(&I:{} of {})", memory, owner)
-                    },
-                },
+                UseSingleMemory::Memory { memory } => &format!("&I:{}", memory),
+                UseSingleMemory::WithOwner { memory, owner } => {
+                    &format!("(&I:{} of {})", memory, owner)
+                }
+            },
         };
         f.write_str(s)
     }
@@ -419,13 +404,11 @@ impl fmt::Display for StringExpr {
                 query: query_string,
             } => &format!("{}", query_string),
             StringExpr::Memory { memory } => match memory {
-                    UseSingleMemory::Memory { memory } => {
-                        &format!("&S:{}", memory)
-                    },
-                    UseSingleMemory::WithOwner { memory, owner } => {
-                        &format!("(&S:{} of {})", memory, owner)
-                    },
-                },
+                UseSingleMemory::Memory { memory } => &format!("&S:{}", memory),
+                UseSingleMemory::WithOwner { memory, owner } => {
+                    &format!("(&S:{} of {})", memory, owner)
+                }
+            },
         };
         f.write_str(s)
     }
@@ -583,14 +566,10 @@ impl fmt::Display for TeamExpr {
             TeamExpr::Aggregate {
                 aggregate: aggregate_team,
             } => &format!("{}", aggregate_team),
-            TeamExpr::Memory { memory } => {
-                match memory {
-                    UseSingleMemory::Memory { memory } => {
-                        &format!("&T:{}", memory)
-                    },
-                    UseSingleMemory::WithOwner { memory, owner } => {
-                        &format!("(&T:{} of {})", memory, owner)
-                    },
+            TeamExpr::Memory { memory } => match memory {
+                UseSingleMemory::Memory { memory } => &format!("&T:{}", memory),
+                UseSingleMemory::WithOwner { memory, owner } => {
+                    &format!("(&T:{} of {})", memory, owner)
                 }
             },
         };
@@ -647,13 +626,9 @@ impl fmt::Display for CardSet {
             CardSet::Group { group } => &format!("{}", group),
             CardSet::GroupOwner { group, owner } => &format!("{} of {}", group, owner),
             CardSet::Memory { memory } => match memory {
-                    UseMemory::Memory { memory } => {
-                        &format!("&CS:{}", memory)
-                    },
-                    UseMemory::WithOwner { memory, owner } => {
-                        &format!("(&CS:{} of {})", memory, owner)
-                    },
-                },
+                UseMemory::Memory { memory } => &format!("&CS:{}", memory),
+                UseMemory::WithOwner { memory, owner } => &format!("(&CS:{} of {})", memory, owner),
+            },
         };
         f.write_str(s)
     }
@@ -773,18 +748,18 @@ impl fmt::Display for IntCollection {
                     .join(", "); // join with commas
 
                 write!(f, "( {} )", s)
-            },
+            }
             IntCollection::Memory { memory } => match memory {
                 UseMemory::Memory { memory } => {
                     write!(f, "&IC:{}", memory)
-                },
+                }
                 UseMemory::WithOwner { memory, owner } => {
                     write!(f, "(&IC:{} of {})", memory, owner)
-                },
+                }
             },
             IntCollection::AggregateMemory { memory, multi } => {
                 write!(f, "(&I:{} of {})", memory, multi)
-            },
+            }
         }
     }
 }
@@ -802,13 +777,13 @@ impl fmt::Display for LocationCollection {
                 write!(f, "( {} )", s)
             }
             LocationCollection::Memory { memory } => match memory {
-                    UseMemory::Memory { memory } => {
-                        write!(f, "&LC:{}", memory)
-                    },
-                    UseMemory::WithOwner { memory, owner } => {
-                        write!(f, "(&LC:{} of {})", memory, owner)
-                    },
-                },
+                UseMemory::Memory { memory } => {
+                    write!(f, "&LC:{}", memory)
+                }
+                UseMemory::WithOwner { memory, owner } => {
+                    write!(f, "(&LC:{} of {})", memory, owner)
+                }
+            },
         }
     }
 }
@@ -827,14 +802,14 @@ impl fmt::Display for StringCollection {
             StringCollection::Memory { memory } => match memory {
                 UseMemory::Memory { memory } => {
                     write!(f, "&SC:{}", memory)
-                },
+                }
                 UseMemory::WithOwner { memory, owner } => {
                     write!(f, "(&SC:{} of {})", memory, owner)
-                },
+                }
             },
             StringCollection::AggregateMemory { memory, multi } => {
                 write!(f, "(&S:{} of {})", memory, multi)
-            },
+            }
         }
     }
 }
@@ -878,16 +853,12 @@ impl fmt::Display for PlayerCollection {
                 runtime: runtime_player_collection,
             } => &format!("{}", runtime_player_collection),
             PlayerCollection::Memory { memory } => match memory {
-                UseMemory::Memory { memory } => {
-                    &format!("&PC:{}", memory)
-                },
-                UseMemory::WithOwner { memory, owner } => {
-                    &format!("(&PC:{} of {})", memory, owner)
-                },
+                UseMemory::Memory { memory } => &format!("&PC:{}", memory),
+                UseMemory::WithOwner { memory, owner } => &format!("(&PC:{} of {})", memory, owner),
             },
             PlayerCollection::AggregateMemory { memory, multi } => {
                 &format!("(&P:{} of {})", memory, multi)
-            },
+            }
         };
         f.write_str(s)
     }
@@ -918,16 +889,12 @@ impl fmt::Display for TeamCollection {
                 runtime: runtime_team_collection,
             } => &format!("{}", runtime_team_collection),
             TeamCollection::Memory { memory } => match memory {
-                UseMemory::Memory { memory } => {
-                    &format!("&TC:{}", memory)
-                },
-                UseMemory::WithOwner { memory, owner } => {
-                    &format!("(&TC:{} of {})", memory, owner)
-                },
+                UseMemory::Memory { memory } => &format!("&TC:{}", memory),
+                UseMemory::WithOwner { memory, owner } => &format!("(&TC:{} of {})", memory, owner),
             },
             TeamCollection::AggregateMemory { memory, multi } => {
                 &format!("(&T:{} of {})", memory, multi)
-            },
+            }
         };
         f.write_str(s)
     }
@@ -1360,16 +1327,15 @@ impl fmt::Display for Case {
                     .join("\n");
 
                 &format!("case:\n {}", case_flows)
-            }
-            // Case::Else{flows} => {
-            //   let case_flows = flows
-            //         .iter()
-            //         .map(|f| format!("{}", f)) // convert each int to string
-            //         .collect::<Vec<_>>()    // collect into Vec<String>
-            //         .join("\n");
+            } // Case::Else{flows} => {
+              //   let case_flows = flows
+              //         .iter()
+              //         .map(|f| format!("{}", f)) // convert each int to string
+              //         .collect::<Vec<_>>()    // collect into Vec<String>
+              //         .join("\n");
 
-            //   &format!("case else:\n {}", case_flows)
-            // },
+              //   &format!("case else:\n {}", case_flows)
+              // },
         };
         f.write_str(s)
     }

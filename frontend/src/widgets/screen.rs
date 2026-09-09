@@ -1,7 +1,10 @@
-use crate::screens::{ArticlesScreen, ExampleScreen, Game, GameSetupScreen, LobbyScreen, LobbySelectionScreen, MainMenu, PairingScreen, PokerOnlineScreen, QrScreen};
 use crate::app::FrontendInterface;
 use crate::screens::qr_test_receive::QrTestReceive;
 use crate::screens::qr_test_transmit::QrTestTransmit;
+use crate::screens::{
+    ArticlesScreen, ExampleScreen, Game, GameSetupScreen, LobbyScreen, LobbySelectionScreen,
+    MainMenu, PairingScreen, PokerOnlineScreen, QrScreen,
+};
 use crate::widgets::card::DirectoryCardType;
 use downcast_rs::{impl_downcast, Downcast};
 use eframe::Frame;

@@ -1,18 +1,18 @@
-pub mod websocket;
 pub mod state;
+pub mod websocket;
 
+use crate::app::state::FrontendState;
 use crate::app::websocket::{MessageSender, WebSocketConnection};
 use crate::router::Router;
 use crate::screens::game::GameState;
 use crate::screens::{Game, LobbySelectionScreen, MainMenu};
+use crate::sprintln;
 use crate::widgets::card::DirectoryCardType;
 use crate::widgets::screen::{ScreenDef, ScreenId, ScreenRegistry, ScreenWidget};
 use crate::widgets::theme::*;
-use crate::sprintln;
 use egui::Context;
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig};
 use std::sync::mpsc::{self, Receiver};
-use crate::app::state::FrontendState;
 
 /// Events that can be sent between screens
 #[derive(Debug, Clone)]
@@ -49,8 +49,7 @@ impl<'a> FrontendInterface<'a> {
         self.change_screen_id(ScreenId::of::<T>());
     }
     pub(crate) fn change_screen_id(&mut self, screen: ScreenId) {
-        self.events
-            .push(FrontendEvent::ChangeScreen(screen));
+        self.events.push(FrontendEvent::ChangeScreen(screen));
     }
     pub fn send_msg(&mut self, msg: Frontend2BackendMsg) {
         self.ws.send_msg(msg);
@@ -150,7 +149,10 @@ impl FrontendApp {
         if let Some(ref mut router) = self.router {
             if let Ok(changed) = router.check_for_url_changes() {
                 if changed {
-                    if let Some(screen_id) = self.app_state.screen_registry.id_by_path(router.current_path())
+                    if let Some(screen_id) = self
+                        .app_state
+                        .screen_registry
+                        .id_by_path(router.current_path())
                     {
                         if screen_id != self.current_screen_id {
                             self.current_screen_id = screen_id;
@@ -174,7 +176,11 @@ impl FrontendApp {
             return;
         }
 
-        if let Some(factory) = self.app_state.screen_registry.factory_by_id(self.current_screen_id) {
+        if let Some(factory) = self
+            .app_state
+            .screen_registry
+            .factory_by_id(self.current_screen_id)
+        {
             self.screens.insert(self.current_screen_id, factory());
         }
     }
@@ -235,11 +241,13 @@ impl FrontendApp {
                             ui.add_space(MARGIN_SM);
                             if ui.button("⬅ Back").on_hover_text("Go back").clicked() {
                                 if self.current_path().starts_with("/lobbyselect/") {
-                                    let lobby_selection =
-                                        ScreenId::of::<LobbySelectionScreen>();
+                                    let lobby_selection = ScreenId::of::<LobbySelectionScreen>();
                                     events.push(FrontendEvent::ChangeScreen(lobby_selection));
                                 } else {
-                                    events.push(FrontendEvent::ChangeScreen(ScreenId::of::<MainMenu>()));
+                                    events
+                                        .push(FrontendEvent::ChangeScreen(
+                                            ScreenId::of::<MainMenu>(),
+                                        ));
                                 }
                             }
                         },
@@ -249,8 +257,10 @@ impl FrontendApp {
                         egui::vec2(center_w, row_h),
                         egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
                         |ui| {
-                            if let Some(meta) =
-                                self.app_state.screen_registry.meta_by_id(self.current_screen_id)
+                            if let Some(meta) = self
+                                .app_state
+                                .screen_registry
+                                .meta_by_id(self.current_screen_id)
                             {
                                 ui.strong(meta.display_name);
                             }
@@ -357,7 +367,12 @@ impl eframe::App for FrontendApp {
         for event in events {
             match event {
                 FrontendEvent::ChangeScreen(screen_id) => {
-                    if self.app_state.screen_registry.meta_by_id(screen_id).is_none() {
+                    if self
+                        .app_state
+                        .screen_registry
+                        .meta_by_id(screen_id)
+                        .is_none()
+                    {
                         continue;
                     }
                     // Call on_exit for the current screen before changing routes
@@ -375,7 +390,8 @@ impl eframe::App for FrontendApp {
                 FrontendEvent::StartGame(config) => {
                     let game_id = ScreenId::of::<Game<DirectoryCardType>>();
                     if !self.screens.contains_key(&game_id) {
-                        if let Some(factory) = self.app_state.screen_registry.factory_by_id(game_id) {
+                        if let Some(factory) = self.app_state.screen_registry.factory_by_id(game_id)
+                        {
                             let boxed = factory();
                             self.screens.insert(game_id, boxed);
                         }

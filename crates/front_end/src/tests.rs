@@ -1,16 +1,15 @@
 /// The testing consists of two types of testing:
 /// - Unit-Tests -> for special cases
 /// - Generated-Tests -> Arbitrary-style tests (Proptests)
-/// 
+///
 /// We need a lot of generated tests because pest is a recursive descent Parser.
-/// 
+///
 /// In addition to this:
 /// - Each AST-struct/-enum must have a fmt::Display trait that is the corresponding
 /// Rule in the grammar.pest (e.g. PlayerExpr::Current => "current").
-/// 
+///
 /// This way we can check for mistakes in the AST-declaration and further Parsing errors
 /// by doing: Generate AST -> String-Represenation -> Parse -> assert_eq Generated-AST and Parse-Output
-
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -42,11 +41,7 @@ where
     Ok(parsed_ast)
 }
 
-pub fn test_rule_consume_with_table<T, F>(
-    input: &str,
-    rule: Rule,
-    mapper: F,
-) -> Result<T>
+pub fn test_rule_consume_with_table<T, F>(input: &str, rule: Rule, mapper: F) -> Result<T>
 // Returns pest_consume::Result
 where
     F: FnOnce(Node) -> Result<T>,
@@ -429,9 +424,18 @@ fn not_combo_empty_parses_as_boolean_negation() {
     let parsed = test_rule_consume(dsl, Rule::bool_expr, CGDSLParser::bool_expr)
         .expect("bool_expr must parse");
     let debug = format!("{:?}", parsed.node);
-    assert!(debug.contains("Unary"), "`not` must bind to the boolean: {debug}");
-    assert!(!debug.contains("NotCombo"), "must not bind to the combo: {debug}");
-    assert!(debug.contains("CardSetEmpty"), "inner bool must be the empty check: {debug}");
+    assert!(
+        debug.contains("Unary"),
+        "`not` must bind to the boolean: {debug}"
+    );
+    assert!(
+        !debug.contains("NotCombo"),
+        "must not bind to the combo: {debug}"
+    );
+    assert!(
+        debug.contains("CardSetEmpty"),
+        "inner bool must be the empty check: {debug}"
+    );
 }
 
 #[test]
@@ -442,7 +446,10 @@ fn combo_not_empty_parses_as_card_set_not_empty() {
     let parsed = test_rule_consume(dsl, Rule::bool_expr, CGDSLParser::bool_expr)
         .expect("bool_expr must parse");
     let debug = format!("{:?}", parsed.node);
-    assert!(debug.contains("CardSetNotEmpty"), "expected CardSetNotEmpty: {debug}");
+    assert!(
+        debug.contains("CardSetNotEmpty"),
+        "expected CardSetNotEmpty: {debug}"
+    );
     assert!(!debug.contains("NotCombo"), "no stray NotCombo: {debug}");
 }
 

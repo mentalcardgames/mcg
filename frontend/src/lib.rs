@@ -1,13 +1,13 @@
 //! Client-side (WASM) library for the MCG app.
 
 pub mod app;
-pub mod widgets;
-pub mod screens;
 pub mod router;
+pub mod screens;
 pub mod utils;
+pub mod widgets;
 
-use eframe::AppCreator;
 use app::FrontendApp;
+use eframe::AppCreator;
 use eframe::{WebOptions, WebRunner};
 use egui_extras::install_image_loaders;
 use wasm_bindgen::prelude::*;
@@ -29,10 +29,7 @@ macro_rules! sprintln {
     }};
 }
 
-pub fn start_game(
-    canvas: HtmlCanvasElement,
-    init: AppCreator<'static>,
-) -> Result<(), JsValue> {
+pub fn start_game(canvas: HtmlCanvasElement, init: AppCreator<'static>) -> Result<(), JsValue> {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 

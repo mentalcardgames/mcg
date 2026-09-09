@@ -207,284 +207,237 @@ impl AstPass for SemanticVisitor {
     {
         if let Some(unwrapped_node) = node.kind() {
             match unwrapped_node {
-                NodeKind::SetUpRule(s) => {
-                    match s {
-                        SetUpRule::CreateMemoryWithMemoryType {
-                            memory,
-                            memory_type,
+                NodeKind::SetUpRule(s) => match s {
+                    SetUpRule::CreateMemoryWithMemoryType {
+                        memory,
+                        memory_type,
+                        owner: _,
+                    } => {
+                        self.memories.push((
+                            memory.node.clone(),
+                            (
+                                memory_type_to_mem_type(&memory_type.node),
+                                memory.span.clone(),
+                            ),
+                        ));
+                    }
+                    SetUpRule::CreatePrecedence {
+                        precedence,
+                        kvs: key_value_pairs,
+                    } => {
+                        for (k, v) in key_value_pairs.iter() {
+                            self.init_corr.insert(
+                                CorrespondanceType::Precedence {
+                                    node: precedence.node.clone(),
+                                },
+                                (k.node.clone(), precedence.span.clone()),
+                            );
+                            self.used_corr.push(UsedCorrespondence {
+                                ty: CorrespondanceType::Value {
+                                    node: v.node.clone(),
+                                },
+                                key: k.node.clone(),
+                                span: v.span.clone(),
+                            });
+                        }
+                    }
+                    SetUpRule::CreatePointMap {
+                        pointmap,
+                        kvis: key_value_int_triples,
+                    } => {
+                        for (k, v, _) in key_value_int_triples.iter() {
+                            self.init_corr.insert(
+                                CorrespondanceType::PointMap {
+                                    node: pointmap.node.clone(),
+                                },
+                                (k.node.clone(), pointmap.span.clone()),
+                            );
+                            self.used_corr.push(UsedCorrespondence {
+                                ty: CorrespondanceType::Value {
+                                    node: v.node.clone(),
+                                },
+                                key: k.node.clone(),
+                                span: v.span.clone(),
+                            });
+                        }
+                    }
+                    SetUpRule::CreateCardOnLocation { location: _, cards } => {
+                        for types in cards.iter() {
+                            for (k, vs) in types.node.types.iter() {
+                                for v in vs.iter() {
+                                    self.init_corr.insert(
+                                        CorrespondanceType::Value {
+                                            node: v.node.clone(),
+                                        },
+                                        (k.node.clone(), v.span.clone()),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                },
+                NodeKind::StringExpr(s) => match s {
+                    StringExpr::Memory { memory } => match &memory.node {
+                        UseSingleMemory::Memory { memory: mem } => {
+                            self.memories
+                                .push((mem.node.clone(), (MemType::String, mem.span.clone())));
+                        }
+                        UseSingleMemory::WithOwner {
+                            memory: mem,
+                            owner: _,
+                        } => {
+                            self.memories
+                                .push((mem.node.clone(), (MemType::String, mem.span.clone())));
+                        }
+                    },
+                    _ => {}
+                },
+                NodeKind::IntExpr(s) => match s {
+                    IntExpr::Memory { memory } => match &memory.node {
+                        UseSingleMemory::Memory { memory: mem } => {
+                            self.memories
+                                .push((mem.node.clone(), (MemType::Int, mem.span.clone())));
+                        }
+                        UseSingleMemory::WithOwner {
+                            memory: mem,
+                            owner: _,
+                        } => {
+                            self.memories
+                                .push((mem.node.clone(), (MemType::Int, mem.span.clone())));
+                        }
+                    },
+                    _ => {}
+                },
+                NodeKind::IntCollection(s) => match s {
+                    IntCollection::Memory { memory } => match &memory.node {
+                        UseMemory::Memory { memory: mem } => {
+                            self.memories.push((
+                                mem.node.clone(),
+                                (MemType::IntCollection, mem.span.clone()),
+                            ));
+                        }
+                        UseMemory::WithOwner { memory, owner: _ } => {
+                            self.memories.push((
+                                memory.node.clone(),
+                                (MemType::IntCollection, memory.span.clone()),
+                            ));
+                        }
+                    },
+                    IntCollection::AggregateMemory { memory, multi: _ } => {
+                        self.memories
+                            .push((memory.node.clone(), (MemType::Int, memory.span.clone())));
+                    }
+                    _ => {}
+                },
+                NodeKind::StringCollection(s) => match s {
+                    StringCollection::Memory { memory } => match &memory.node {
+                        UseMemory::Memory { memory: mem } => {
+                            self.memories.push((
+                                mem.node.clone(),
+                                (MemType::StringCollection, mem.span.clone()),
+                            ));
+                        }
+                        UseMemory::WithOwner {
+                            memory: mem,
                             owner: _,
                         } => {
                             self.memories.push((
-                                memory.node.clone(),
-                                (
-                                    memory_type_to_mem_type(&memory_type.node),
-                                    memory.span.clone(),
-                                ),
+                                mem.node.clone(),
+                                (MemType::StringCollection, mem.span.clone()),
                             ));
                         }
-                        SetUpRule::CreatePrecedence {
-                            precedence,
-                            kvs: key_value_pairs,
+                    },
+                    StringCollection::AggregateMemory { memory, multi: _ } => {
+                        self.memories
+                            .push((memory.node.clone(), (MemType::String, memory.span.clone())));
+                    }
+                    _ => {}
+                },
+                NodeKind::LocationCollection(s) => match s {
+                    LocationCollection::Memory { memory } => match &memory.node {
+                        UseMemory::Memory { memory: mem } => {
+                            self.memories.push((
+                                mem.node.clone(),
+                                (MemType::LocationCollection, mem.span.clone()),
+                            ));
+                        }
+                        UseMemory::WithOwner {
+                            memory: mem,
+                            owner: _,
                         } => {
-                            for (k, v) in key_value_pairs.iter() {
-                                self.init_corr.insert(
-                                    CorrespondanceType::Precedence {
-                                        node: precedence.node.clone(),
-                                    },
-                                    (k.node.clone(), precedence.span.clone()),
-                                );
-                                self.used_corr.push(UsedCorrespondence {
-                                    ty: CorrespondanceType::Value {
-                                        node: v.node.clone(),
-                                    },
-                                    key: k.node.clone(),
-                                    span: v.span.clone(),
-                                });
-                            }
+                            self.memories.push((
+                                mem.node.clone(),
+                                (MemType::LocationCollection, mem.span.clone()),
+                            ));
                         }
-                        SetUpRule::CreatePointMap {
-                            pointmap,
-                            kvis: key_value_int_triples,
+                    },
+                    _ => {}
+                },
+                NodeKind::PlayerCollection(s) => match s {
+                    PlayerCollection::Memory { memory } => match &memory.node {
+                        UseMemory::Memory { memory: mem } => {
+                            self.memories.push((
+                                mem.node.clone(),
+                                (MemType::PlayerCollection, mem.span.clone()),
+                            ));
+                        }
+                        UseMemory::WithOwner {
+                            memory: mem,
+                            owner: _,
                         } => {
-                            for (k, v, _) in key_value_int_triples.iter() {
-                                self.init_corr.insert(
-                                    CorrespondanceType::PointMap {
-                                        node: pointmap.node.clone(),
-                                    },
-                                    (k.node.clone(), pointmap.span.clone()),
-                                );
-                                self.used_corr.push(UsedCorrespondence {
-                                    ty: CorrespondanceType::Value {
-                                        node: v.node.clone(),
-                                    },
-                                    key: k.node.clone(),
-                                    span: v.span.clone(),
-                                });
-                            }
-                        }
-                        SetUpRule::CreateCardOnLocation { location: _, cards } => {
-                            for types in cards.iter() {
-                                for (k, vs) in types.node.types.iter() {
-                                    for v in vs.iter() {
-                                        self.init_corr.insert(
-                                            CorrespondanceType::Value {
-                                                node: v.node.clone(),
-                                            },
-                                            (k.node.clone(), v.span.clone()),
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                NodeKind::StringExpr(s) => {
-                    match s {
-                        StringExpr::Memory { memory } => {
-                            match &memory.node {
-                                UseSingleMemory::Memory { memory: mem } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::String, mem.span.clone()),
-                                    ));
-                                }
-                                UseSingleMemory::WithOwner {
-                                    memory: mem,
-                                    owner: _,
-                                } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::String, mem.span.clone()),
-                                    ));
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                NodeKind::IntExpr(s) => {
-                    match s {
-                        IntExpr::Memory { memory } => {
-                            match &memory.node {
-                                UseSingleMemory::Memory { memory: mem } => {
-                                    self.memories
-                                        .push((mem.node.clone(), (MemType::Int, mem.span.clone())));
-                                }
-                                UseSingleMemory::WithOwner {
-                                    memory: mem,
-                                    owner: _,
-                                } => {
-                                    self.memories
-                                        .push((mem.node.clone(), (MemType::Int, mem.span.clone())));
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                NodeKind::IntCollection(s) => {
-                    match s {
-                        IntCollection::Memory { memory } => {
-                            match &memory.node {
-                                UseMemory::Memory { memory: mem } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::IntCollection, mem.span.clone()),
-                                    ));
-                                }
-                                UseMemory::WithOwner { memory, owner: _ } => {
-                                    self.memories.push((
-                                        memory.node.clone(),
-                                        (MemType::IntCollection, memory.span.clone()),
-                                    ));
-                                }
-                            }
-                        },
-                        IntCollection::AggregateMemory { memory, multi: _ } => {
                             self.memories.push((
-                                memory.node.clone(),
-                                (MemType::Int, memory.span.clone()),
+                                mem.node.clone(),
+                                (MemType::PlayerCollection, mem.span.clone()),
                             ));
-                        },
-                        _ => {}
-                    }
-                }
-                NodeKind::StringCollection(s) => {
-                    match s {
-                        StringCollection::Memory { memory } => {
-                            match &memory.node {
-                                UseMemory::Memory { memory: mem } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::StringCollection, mem.span.clone()),
-                                    ));
-                                }
-                                UseMemory::WithOwner { memory: mem, owner: _ } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::StringCollection, mem.span.clone()),
-                                    ));
-                                }
-                            }
-                        },
-                        StringCollection::AggregateMemory { memory, multi: _ } => {
-                            self.memories.push((
-                                memory.node.clone(),
-                                (MemType::String, memory.span.clone()),
-                            ));
-                        },
-                        _ => {}
-                    }
-                }
-                NodeKind::LocationCollection(s) => {
-                    match s {
-                        LocationCollection::Memory { memory } => {
-                            match &memory.node {
-                                UseMemory::Memory { memory: mem } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::LocationCollection, mem.span.clone()),
-                                    ));
-                                }
-                                UseMemory::WithOwner {
-                                    memory: mem,
-                                    owner: _,
-                                } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::LocationCollection, mem.span.clone()),
-                                    ));
-                                }
-                            }
                         }
-                        _ => {}
+                    },
+                    PlayerCollection::AggregateMemory { memory, multi: _ } => {
+                        self.memories
+                            .push((memory.node.clone(), (MemType::Player, memory.span.clone())));
                     }
-                }
-                NodeKind::PlayerCollection(s) => {
-                    match s {
-                        PlayerCollection::Memory { memory } => {
-                            match &memory.node {
-                                UseMemory::Memory { memory: mem } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::PlayerCollection, mem.span.clone()),
-                                    ));
-                                }
-                                UseMemory::WithOwner {
-                                    memory: mem,
-                                    owner: _,
-                                } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::PlayerCollection, mem.span.clone()),
-                                    ));
-                                }
-                            }
-                        },
-                        PlayerCollection::AggregateMemory { memory, multi: _ } => {
+                    _ => {}
+                },
+                NodeKind::TeamCollection(s) => match s {
+                    TeamCollection::Memory { memory } => match &memory.node {
+                        UseMemory::Memory { memory: mem } => {
                             self.memories.push((
-                                memory.node.clone(),
-                                (MemType::Player, memory.span.clone()),
+                                mem.node.clone(),
+                                (MemType::TeamCollection, mem.span.clone()),
                             ));
-                        },
-                        _ => {}
-                    }
-                }
-                NodeKind::TeamCollection(s) => {
-                    match s {
-                        TeamCollection::Memory { memory } => {
-                            match &memory.node {
-                                UseMemory::Memory { memory: mem } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::TeamCollection, mem.span.clone()),
-                                    ));
-                                }
-                                UseMemory::WithOwner {
-                                    memory: mem,
-                                    owner: _,
-                                } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::TeamCollection, mem.span.clone()),
-                                    ));
-                                }
-                            }
-                        },
-                        TeamCollection::AggregateMemory { memory, multi: _ } => {
-                            self.memories.push((
-                                memory.node.clone(),
-                                (MemType::Team, memory.span.clone()),
-                            ));
-                        },
-                        _ => {}
-                    }
-                }
-                NodeKind::CardSet(s) => {
-                    match s {
-                        CardSet::Memory { memory } => {
-                            match &memory.node {
-                                UseMemory::Memory { memory: mem } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::CardSet, mem.span.clone()),
-                                    ));
-                                }
-                                UseMemory::WithOwner {
-                                    memory: mem,
-                                    owner: _,
-                                } => {
-                                    self.memories.push((
-                                        mem.node.clone(),
-                                        (MemType::CardSet, mem.span.clone()),
-                                    ));
-                                }
-                            }
                         }
-                        _ => {}
+                        UseMemory::WithOwner {
+                            memory: mem,
+                            owner: _,
+                        } => {
+                            self.memories.push((
+                                mem.node.clone(),
+                                (MemType::TeamCollection, mem.span.clone()),
+                            ));
+                        }
+                    },
+                    TeamCollection::AggregateMemory { memory, multi: _ } => {
+                        self.memories
+                            .push((memory.node.clone(), (MemType::Team, memory.span.clone())));
                     }
-                }
+                    _ => {}
+                },
+                NodeKind::CardSet(s) => match s {
+                    CardSet::Memory { memory } => match &memory.node {
+                        UseMemory::Memory { memory: mem } => {
+                            self.memories
+                                .push((mem.node.clone(), (MemType::CardSet, mem.span.clone())));
+                        }
+                        UseMemory::WithOwner {
+                            memory: mem,
+                            owner: _,
+                        } => {
+                            self.memories
+                                .push((mem.node.clone(), (MemType::CardSet, mem.span.clone())));
+                        }
+                    },
+                    _ => {}
+                },
                 NodeKind::AggregateFilter(a) => match a {
                     AggregateFilter::Adjacent { key, precedence } => {
                         self.used_corr.push(UsedCorrespondence {

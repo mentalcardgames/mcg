@@ -11,8 +11,6 @@
 ///    > ...
 ///
 ///    This would make the parsing very dumb and easy to extend.
-
-
 use pest_consume::{Parser, match_nodes};
 
 use crate::ast::ast_spanned::*;
@@ -313,19 +311,15 @@ impl CGDSLParser {
     }
 
     pub(crate) fn playername(input: Node) -> Result<SID> {
-        Ok(
-            match_nodes!(input.children();
-                [ident(i)] => i,
-            )
-        )
+        Ok(match_nodes!(input.children();
+            [ident(i)] => i,
+        ))
     }
 
     pub(crate) fn teamname(input: Node) -> Result<SID> {
-        Ok(
-            match_nodes!(input.children();
-                [ident(i)] => i,
-            )
-        )
+        Ok(match_nodes!(input.children();
+            [ident(i)] => i,
+        ))
     }
 
     pub(crate) fn precedence(input: Node) -> Result<SID> {
@@ -1512,21 +1506,17 @@ impl CGDSLParser {
     }
 
     pub(crate) fn create_player_names(input: Node) -> Result<Vec<SID>> {
-        Ok(
-            match_nodes!(input.into_children();
-                [ident(players)..] => players.collect(),
-            ),
-        )
+        Ok(match_nodes!(input.into_children();
+            [ident(players)..] => players.collect(),
+        ))
     }
 
     pub(crate) fn team_name_with_player_collection(
         input: Node,
     ) -> Result<(SID, SPlayerCollection)> {
-        Ok(
-            match_nodes!(input.into_children();
-                [ident(teamname), kw_with(_), player_collection(p)] => (teamname, p),
-            ),
-        )
+        Ok(match_nodes!(input.into_children();
+            [ident(teamname), kw_with(_), player_collection(p)] => (teamname, p),
+        ))
     }
 
     pub(crate) fn create_player(input: Node) -> Result<SSetUpRule> {

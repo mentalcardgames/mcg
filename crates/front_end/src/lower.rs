@@ -9,8 +9,6 @@
 ///    Lowering-Logic is automatically generated in code_gen.
 ///    In this file is the Lower trait defined and certain Lowering-Logic
 ///    for specific types.
-
-
 use crate::spans::*;
 
 pub trait Lower<T> {

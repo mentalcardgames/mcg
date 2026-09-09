@@ -21,57 +21,83 @@ pub fn pest_error_to_diagnostic(pest_err: pest::error::Error<Rule>) -> Diagnosti
 
     // Give hints about PlayerExpr, TeamExpr and all Memory-Types
     let message = match &pest_err.variant {
-        pest::error::ErrorVariant::ParsingError { positives, negatives: _ } => {
+        pest::error::ErrorVariant::ParsingError {
+            positives,
+            negatives: _,
+        } => {
             let mut inside = "".to_string();
             if let Some(rule) = positives.first() {
                 match rule {
                     Rule::playername => {
-                        inside = String::from("Hint: Player-Names start with 'P:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Player-Names start with 'P:' except when they are initialized",
+                        )
+                    }
                     Rule::teamname => {
-                        inside = String::from("Hint: Team-Names start with 'T:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Team-Names start with 'T:' except when they are initialized",
+                        )
+                    }
                     Rule::player_expr => {
-                        inside = String::from("Hint: Player-Expr start with '&P:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Player-Expr start with '&P:' except when they are initialized",
+                        )
+                    }
                     Rule::team_expr => {
-                        inside = String::from("Hint: Team-Expr start with '&T:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Team-Expr start with '&T:' except when they are initialized",
+                        )
+                    }
                     Rule::int_expr => {
-                        inside = String::from("Hint: Int-Expr start with '&I:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Int-Expr start with '&I:' except when they are initialized",
+                        )
+                    }
                     Rule::string_expr => {
-                        inside = String::from("Hint: String-Expr start with '&S:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: String-Expr start with '&S:' except when they are initialized",
+                        )
+                    }
                     Rule::int_collection => {
-                        inside = String::from("Hint: Int-Collection Memories start with '&IC:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Int-Collection Memories start with '&IC:' except when they are initialized",
+                        )
+                    }
                     Rule::player_collection => {
-                        inside = String::from("Hint: Player-Collection Memories start with '&PC:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Player-Collection Memories start with '&PC:' except when they are initialized",
+                        )
+                    }
                     Rule::team_collection => {
-                        inside = String::from("Hint: Team-Collection Memories start with '&TC:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Team-Collection Memories start with '&TC:' except when they are initialized",
+                        )
+                    }
                     Rule::string_collection => {
-                        inside = String::from("Hint: String-Collection Memories start with '&SC:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: String-Collection Memories start with '&SC:' except when they are initialized",
+                        )
+                    }
                     Rule::location_collection => {
-                        inside = String::from("Hint: Location-Collection Memories start with '&LC:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Location-Collection Memories start with '&LC:' except when they are initialized",
+                        )
+                    }
                     Rule::card_set => {
-                        inside = String::from("Hint: Card-Set Memories start with '&CS:' except when they are initialized")
-                    },
+                        inside = String::from(
+                            "Hint: Card-Set Memories start with '&CS:' except when they are initialized",
+                        )
+                    }
                     _ => {}
                 }
             }
 
             format!("{}\n{}", format!("{}", pest_err.variant.message()), inside)
-        },
+        }
         pest::error::ErrorVariant::CustomError { message } => {
             format!("{}", message)
-        },
+        }
     };
-
 
     Diagnostic {
         range,

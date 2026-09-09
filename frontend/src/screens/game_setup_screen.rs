@@ -92,8 +92,9 @@ impl ScreenWidget for GameSetupScreen {
                                 crate::widgets::hardcoded_cards::AVAILABLE_THEMES[self.theme_index],
                             )
                             .show_ui(ui, |ui| {
-                                for (i, theme) in
-                                    crate::widgets::hardcoded_cards::AVAILABLE_THEMES.iter().enumerate()
+                                for (i, theme) in crate::widgets::hardcoded_cards::AVAILABLE_THEMES
+                                    .iter()
+                                    .enumerate()
                                 {
                                     let theme_name = match *theme {
                                         "img_cards" => "Standard Cards",
@@ -105,8 +106,9 @@ impl ScreenWidget for GameSetupScreen {
                                         .clicked()
                                     {
                                         self.theme_index = i;
-                                        let theme_str = crate::widgets::hardcoded_cards::AVAILABLE_THEMES
-                                            [self.theme_index];
+                                        let theme_str =
+                                            crate::widgets::hardcoded_cards::AVAILABLE_THEMES
+                                                [self.theme_index];
                                         crate::widgets::hardcoded_cards::set_deck_by_theme(
                                             &mut self.card_config,
                                             theme_str,

@@ -3,8 +3,6 @@
 ///    then we give it the specific initialization Type (e.g. GameType::Player).
 ///    We can catch if a Symbol is never initialized and/or if it is defined
 ///    multiple times.
-
-
 use std::collections::HashMap;
 
 use crate::ast::ast_spanned::NodeKind;
@@ -502,23 +500,23 @@ impl AstPass for SymbolVisitor {
                 },
                 NodeKind::IntCollection(ic) => match ic {
                     IntCollection::AggregateMemory { memory, multi: _ } => self.use_id(&memory),
-                    _ => {},
+                    _ => {}
                 },
                 NodeKind::StringCollection(sc) => match sc {
                     StringCollection::AggregateMemory { memory, multi: _ } => self.use_id(&memory),
-                    _ => {},
+                    _ => {}
                 },
                 NodeKind::TeamCollection(tc) => match tc {
                     TeamCollection::AggregateMemory { memory, multi: _ } => self.use_id(&memory),
-                    _ => {},
+                    _ => {}
                 },
                 NodeKind::PlayerCollection(pc) => match pc {
                     PlayerCollection::AggregateMemory { memory, multi: _ } => self.use_id(&memory),
-                    _ => {},
+                    _ => {}
                 },
                 NodeKind::RuntimeInt(ri) => match ri {
                     RuntimeInt::StageRoundCounter { stage } => self.use_id(stage),
-                    _ => {},
+                    _ => {}
                 },
                 _ => {}
             }

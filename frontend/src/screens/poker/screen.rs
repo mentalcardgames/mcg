@@ -405,13 +405,7 @@ impl ScreenWidget for PokerOnlineScreen {
             let sender = app_interface.message_sender();
             self.draw_error_popup(&ctx);
 
-            self.render_header_with_controls(
-                ui,
-                &ctx,
-                &mut connection_actions,
-                sender,
-                connected,
-            );
+            self.render_header_with_controls(ui, &ctx, &mut connection_actions, sender, connected);
 
             if let Some(state) = self.game_state.take() {
                 super::game_rendering::render_showdown_banner(
@@ -454,7 +448,6 @@ impl ScreenWidget for PokerOnlineScreen {
             }
             _ => {}
         }
-
     }
 }
 

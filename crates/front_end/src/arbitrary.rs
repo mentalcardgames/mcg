@@ -1,6 +1,5 @@
 ///    Some Types are deeply recursive and need extra handling for generating Arbitrary ASTs.
 ///    Additional helper functions for not-empty Vector, etc. are implemented here.
-
 use crate::ast::*;
 use arbitrary::{Arbitrary, Result, Unstructured};
 
@@ -221,7 +220,8 @@ pub fn gen_options_safe(
     Ok(options)
 }
 
-pub fn gen_flows_safe(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<FlowComponent>> {    let remaining = u.len();
+pub fn gen_flows_safe(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Vec<FlowComponent>> {
+    let remaining = u.len();
 
     // 1. Hard Fallback (The Dead End)
     // If we have very little gas, return a single, simple action.
@@ -301,15 +301,11 @@ impl<'a> Arbitrary<'a> for IntExpr {
             0..=20 => Ok(IntExpr::Literal {
                 int: u.arbitrary()?,
             }),
-            21..=30 => {
-                Ok(
-                    IntExpr::Memory {
-                        memory: UseSingleMemory::Memory {
-                            memory: gen_ident(u)?,
-                        },
-                    }
-                )
-            },
+            21..=30 => Ok(IntExpr::Memory {
+                memory: UseSingleMemory::Memory {
+                    memory: gen_ident(u)?,
+                },
+            }),
             41..=55 => Ok(IntExpr::Runtime {
                 runtime: u.arbitrary()?,
             }),
@@ -348,7 +344,9 @@ impl<'a> Arbitrary<'a> for PlayerExpr {
             }),
             // 30% chance for simple runtime (Current, Next, etc.)
             31..=39 => Ok(PlayerExpr::Memory {
-                memory: UseSingleMemory::Memory { memory: gen_ident(u)? }
+                memory: UseSingleMemory::Memory {
+                    memory: gen_ident(u)?,
+                },
             }),
             // 30% chance for simple runtime (Current, Next, etc.)
             40..=69 => Ok(PlayerExpr::Runtime {
@@ -531,12 +529,10 @@ impl<'a> Arbitrary<'a> for PlayerCollection {
                     memory: gen_ident(u)?,
                 },
             }),
-            31..=39 => Ok(
-                PlayerCollection::AggregateMemory {
-                    memory: gen_ident(u)?,
-                    multi: u.arbitrary()?,
-                }
-            ),
+            31..=39 => Ok(PlayerCollection::AggregateMemory {
+                memory: gen_ident(u)?,
+                multi: u.arbitrary()?,
+            }),
             // 40% chance for Literal (Uses our safe vec generator)
             40..=79 => Ok(PlayerCollection::Literal {
                 players: gen_vec_min_1_players(u)?,
@@ -592,12 +588,10 @@ impl<'a> Arbitrary<'a> for TeamCollection {
                     memory: gen_ident(u)?,
                 },
             }),
-            31..=39 => Ok(
-                TeamCollection::AggregateMemory {
-                    memory: gen_ident(u)?,
-                    multi: u.arbitrary()?,
-                }
-            ),
+            31..=39 => Ok(TeamCollection::AggregateMemory {
+                memory: gen_ident(u)?,
+                multi: u.arbitrary()?,
+            }),
 
             // 60% chance for Literal (Uses our safe vec generator)
             _ => Ok(TeamCollection::Literal {

@@ -65,12 +65,7 @@ impl ArticlesScreen {
         ui.add_space(20.0);
     }
 
-    fn render_posts_list(
-        &mut self,
-        ui: &mut egui::Ui,
-        posts: &[Post],
-        _ctx: &egui::Context,
-    ) {
+    fn render_posts_list(&mut self, ui: &mut egui::Ui, posts: &[Post], _ctx: &egui::Context) {
         if ui
             .add_sized(vec2(150.0, 30.0), egui::Button::new("Refresh"))
             .clicked()
@@ -117,11 +112,15 @@ impl ArticlesScreen {
             on_done(result);
         });
     }
-
 }
 
 impl ScreenWidget for ArticlesScreen {
-    fn ui(&mut self, _app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(
+        &mut self,
+        _app_interface: &mut FrontendInterface,
+        ui: &mut egui::Ui,
+        _frame: &mut Frame,
+    ) {
         let ctx = ui.ctx().clone();
         if let Some(result) = self.pending_result.borrow_mut().take() {
             match result {

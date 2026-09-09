@@ -1,5 +1,6 @@
 use crate::app::FrontendInterface;
 use crate::sprintln;
+use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 use egui::{vec2, ColorImage, Context, Image, TextureHandle, TextureOptions};
 use image::{ImageBuffer, Luma};
 use js_sys::Date;
@@ -12,7 +13,6 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::time::Duration;
-use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 
 #[derive(Default)]
 pub struct QrTestTransmit {

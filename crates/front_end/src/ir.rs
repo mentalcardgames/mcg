@@ -7,7 +7,6 @@
 ///      seq: usize,
 ///      sim: /* Your Custom SimStage Logic */
 ///    }
-
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::{HashMap, HashSet, VecDeque},

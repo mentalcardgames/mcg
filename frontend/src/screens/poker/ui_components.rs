@@ -1,7 +1,7 @@
 use egui::{Color32, RichText, Ui, WidgetText};
 use mcg_shared::{
-    ActionEvent, ActionKind, BlindKind, Card, GameAction, PokerStatePublic, HandResult, PlayerId,
-    PlayerPublic, Stage,
+    ActionEvent, ActionKind, BlindKind, Card, GameAction, HandResult, PlayerId, PlayerPublic,
+    PokerStatePublic, Stage,
 };
 
 pub fn card_chip(ui: &mut Ui, c: Card) {

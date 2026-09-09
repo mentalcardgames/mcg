@@ -8,13 +8,11 @@
 
 /// Manually writing repetitive logic for a walker or lowering-logic or even a mirrored spanned version of the original AST is very annoying.
 /// This crate allows to generate all of it.
-/// 
+///
 /// We can specify:
 /// #[spanned_ast] over a module and it will generate a sub-module with the Spanned-version, walker-logic and lowering-logic with it.
-/// 
+///
 /// If you have trouble with declaring the AST then change by your liking.
-
-
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{

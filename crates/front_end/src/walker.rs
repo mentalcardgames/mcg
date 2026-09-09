@@ -11,8 +11,6 @@
 ///
 ///    The type NodeKind is also generated in code_gen.
 ///    How NodeKind is used: Look at symbol.rs or semantic.rs.
-
-
 use crate::spans::*;
 
 use crate::ast::ast_spanned::NodeKind;

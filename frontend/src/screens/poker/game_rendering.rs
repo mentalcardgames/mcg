@@ -1,6 +1,6 @@
 use crate::app::websocket::MessageSender;
 use egui::{Color32, Ui};
-use mcg_shared::{PokerStatePublic, PlayerId, PlayerPublic};
+use mcg_shared::{PlayerId, PlayerPublic, PokerStatePublic};
 
 pub fn render_showdown_banner(ui: &mut Ui, state: &PokerStatePublic, preferred_player: PlayerId) {
     if state.stage == mcg_shared::Stage::Showdown {

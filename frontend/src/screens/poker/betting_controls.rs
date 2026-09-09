@@ -2,7 +2,7 @@
 
 use crate::app::websocket::MessageSender;
 use egui::{RichText, Ui};
-use mcg_shared::{Frontend2BackendMsg, PokerStatePublic, PlayerAction, PlayerId, PlayerPublic};
+use mcg_shared::{Frontend2BackendMsg, PlayerAction, PlayerId, PlayerPublic, PokerStatePublic};
 
 /// Manages betting controls state for the poker interface
 #[derive(Clone, Debug, Default)]

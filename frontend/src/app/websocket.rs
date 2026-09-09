@@ -1,6 +1,6 @@
+use egui::Context;
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, PlayerConfig};
 use std::sync::mpsc::Sender;
-use egui::Context;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};

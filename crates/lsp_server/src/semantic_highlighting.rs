@@ -15,17 +15,17 @@ pub struct AbsoluteToken {
 
 /// Converts a list of absolute semantic tokens into a relative integer array (deltas).
 ///
-/// This implements the LSP [Semantic Tokens] specification, transforming absolute 
+/// This implements the LSP [Semantic Tokens] specification, transforming absolute
 /// positions into a flattened `Vec<u32>` where each token is represented by 5 values:
 /// 1. `deltaLine`: Line relative to the previous token.
-/// 2. `deltaStart`: Start character relative to the previous token (if on the same line) 
+/// 2. `deltaStart`: Start character relative to the previous token (if on the same line)
 ///    or absolute start character (if on a new line).
 /// 3. `length`: The length of the token.
 /// 4. `tokenType`: The integer index of the token type.
 /// 5. `tokenModifiers`: A bitmask of modifiers.
 ///
 /// ### Important
-/// Tokens **must** be sorted by line and then by start character for the delta 
+/// Tokens **must** be sorted by line and then by start character for the delta
 /// calculation to be valid. This function performs that sort internally.
 ///
 /// [Semantic Tokens]: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.16/specification/#textDocument_semanticTokens
@@ -60,20 +60,20 @@ pub fn calculate_deltas(mut tokens: Vec<AbsoluteToken>) -> Vec<u32> {
 /// Transforms an AST (`SGame`) into a flat list of [`AbsoluteToken`]s for semantic highlighting.
 ///
 /// ### Process
-/// 1. **Symbol Collection:** Uses a `SymbolVisitor` to walk the AST and collect all 
+/// 1. **Symbol Collection:** Uses a `SymbolVisitor` to walk the AST and collect all
 ///    relevant identifiers and symbols.
-/// 2. **Name Resolution:** Resolves the collected symbols to determine their 
+/// 2. **Name Resolution:** Resolves the collected symbols to determine their
 ///    specific types (e.g., Variable, Function, Constant).
-/// 3. **LSP Mapping:** Maps the resolved symbols and their source spans into 
+/// 3. **LSP Mapping:** Maps the resolved symbols and their source spans into
 ///    [`AbsoluteToken`] structures, translating spans into 0-indexed line and character offsets.
 ///
 /// ### Token Length Handling
-/// This function calculates the token length based on its span. If a token appears 
-/// to span multiple lines, it currently uses the raw span difference as a fallback, 
+/// This function calculates the token length based on its span. If a token appears
+/// to span multiple lines, it currently uses the raw span difference as a fallback,
 /// though most identifiers are expected to be single-line.
 ///
 /// ### Future Enhancements
-/// * **Modifiers:** Currently defaults to `0`. Can be updated to include bitmasks 
+/// * **Modifiers:** Currently defaults to `0`. Can be updated to include bitmasks
 ///   for `readonly`, `static`, or `deprecated` status based on the `g_type`.
 pub fn tokenize_ast(ast: &SGame) -> Vec<AbsoluteToken> {
     let mut symbols = SymbolVisitor::new();

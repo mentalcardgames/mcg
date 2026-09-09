@@ -17,8 +17,8 @@ use crate::ir::*;
 // Layout crate imports for pure-rust SVG generation
 use layout::backends::svg::SVGWriter;
 use layout::core::base::Orientation;
-use layout::topo::layout::VisualGraph;
 use layout::std_shapes::shapes::{Arrow, Element, ShapeKind};
+use layout::topo::layout::VisualGraph;
 
 pub fn fsm_to_svg<Ctx: AstContext>(
     fsm: &Ir<Payload<Ctx>>,
@@ -105,7 +105,7 @@ where
     Ok(())
 }
 
-/// Generates a standard .dot file. 
+/// Generates a standard .dot file.
 /// Useful if the user HAS Graphviz or for use in the VS Code Webview.
 pub fn fsm_to_dot<Ctx: AstContext>(
     fsm: &Ir<Payload<Ctx>>,
@@ -117,9 +117,18 @@ where
     let mut file = File::create(path)?;
 
     writeln!(file, "digraph CFG {{")?;
-    writeln!(file, "  graph [splines=ortho, nodesep=1.0, ranksep=1.0, concentrate=true];")?;
-    writeln!(file, "  node [shape=box, fontname=\"Arial\", style=filled, fillcolor=\"#ffffff\", color=\"#333333\"];")?;
-    writeln!(file, "  edge [fontname=\"Arial\", fontsize=9, arrowsize=0.8];")?;
+    writeln!(
+        file,
+        "  graph [splines=ortho, nodesep=1.0, ranksep=1.0, concentrate=true];"
+    )?;
+    writeln!(
+        file,
+        "  node [shape=box, fontname=\"Arial\", style=filled, fillcolor=\"#ffffff\", color=\"#333333\"];"
+    )?;
+    writeln!(
+        file,
+        "  edge [fontname=\"Arial\", fontsize=9, arrowsize=0.8];"
+    )?;
 
     writeln!(file, "  entry [shape=point];")?;
     writeln!(file, "  entry -> {:?};", fsm.entry.raw())?;

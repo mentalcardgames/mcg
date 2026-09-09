@@ -2,16 +2,15 @@ use dashmap::DashMap;
 use front_end::{get_all_snippets, parser::Rule, symbols::GameType};
 use pest::error;
 use pest_consume::Error;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 use tower_lsp::lsp_types::{
     CompletionItem, CompletionItemKind, CompletionResponse, InsertTextFormat,
 };
-use std::collections::HashMap;
-use std::sync::LazyLock;
 
 /// Generated Snippet completion rules
 static SNIPPET_LOOKUP: LazyLock<HashMap<&'static str, Vec<&'static str>>> =
     LazyLock::new(|| get_all_snippets());
-
 
 /// If the parser throws a parser error then we can try to use auto-completion logic.
 /// Pest returns a set of positives (rules that are expected). We check the postive rule

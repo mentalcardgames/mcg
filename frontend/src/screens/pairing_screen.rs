@@ -62,7 +62,12 @@ impl PairingScreen {
 }
 
 impl ScreenWidget for PairingScreen {
-    fn ui(&mut self, _app_interface: &mut FrontendInterface, ui: &mut egui::Ui, _frame: &mut Frame) {
+    fn ui(
+        &mut self,
+        _app_interface: &mut FrontendInterface,
+        ui: &mut egui::Ui,
+        _frame: &mut Frame,
+    ) {
         ui.heading("Player Pairing");
         ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
             // Global Back button is provided by the layout

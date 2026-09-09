@@ -37,7 +37,8 @@ fn main() {
         let variants = get_first_terminals(&rule.expr, &rule_map, &mut visited);
 
         // Use a HashSet to filter out duplicates like "(" appearing multiple times
-        let unique_variants: HashSet<String> = variants.into_iter()
+        let unique_variants: HashSet<String> = variants
+            .into_iter()
             .filter(|s| !s.trim().is_empty())
             .collect();
 
@@ -163,15 +164,17 @@ fn get_first_terminals(
                 return vec![name.replace("kw_", "")];
             }
 
-            // 2. If it's a known placeholder (int, ident, etc.), 
+            // 2. If it's a known placeholder (int, ident, etc.),
             // you might want to return the name or nothing.
             if is_ident(name) || is_infrastructure(name) {
                 // Return name as a hint, or return empty vec![] if you only want strings
-                return vec![name.clone()]; 
+                return vec![name.clone()];
             }
 
             // 3. Recurse into the rule definition
-            if !visited.contains(name) && let Some(sub_expr) = rule_map.get(name) {
+            if !visited.contains(name)
+                && let Some(sub_expr) = rule_map.get(name)
+            {
                 visited.push(name.clone());
                 let res = get_first_terminals(sub_expr, rule_map, visited);
                 visited.pop();
@@ -183,7 +186,7 @@ fn get_first_terminals(
         // We only care about the first part of a sequence
         Expr::Seq(lhs, rhs) => {
             let mut results = get_first_terminals(lhs, rule_map, visited);
-            // If the LHS could be empty (like an Optional rule), 
+            // If the LHS could be empty (like an Optional rule),
             // the "first" terminal could actually be the start of the RHS.
             if can_be_empty(lhs, rule_map, &mut Vec::new()) {
                 results.extend(get_first_terminals(rhs, rule_map, visited));
@@ -214,14 +217,18 @@ fn can_be_empty(expr: &Expr, rule_map: &HashMap<String, &Expr>, visited: &mut Ve
     match expr {
         Expr::Opt(_) | Expr::Rep(_) => true,
         Expr::Ident(name) => {
-            if !visited.contains(name) && let Some(sub_expr) = rule_map.get(name) {
+            if !visited.contains(name)
+                && let Some(sub_expr) = rule_map.get(name)
+            {
                 visited.push(name.clone());
                 return can_be_empty(sub_expr, rule_map, visited);
             }
             false
-        },
+        }
         Expr::Seq(a, b) => can_be_empty(a, rule_map, visited) && can_be_empty(b, rule_map, visited),
-        Expr::Choice(a, b) => can_be_empty(a, rule_map, visited) || can_be_empty(b, rule_map, visited),
+        Expr::Choice(a, b) => {
+            can_be_empty(a, rule_map, visited) || can_be_empty(b, rule_map, visited)
+        }
         _ => false,
     }
 }

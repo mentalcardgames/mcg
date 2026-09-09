@@ -84,8 +84,8 @@ impl Backend {
     /// Makes multiple checks until one fails:
     /// - Check if there are any parsing errors
     /// - Check if there are any symbol errors and semantic errors
-    /// - if everything is fine then update the symbol_table 
-    /// 
+    /// - if everything is fine then update the symbol_table
+    ///
     /// Additionally check the ControlFlow/GameFlow errors (e.g. reachability) in the graph/FSM.
     pub fn get_did_save_diagnostics(&self, rope: &Rope) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
@@ -356,23 +356,21 @@ impl LanguageServer for Backend {
                 let svg_path = base_path.with_extension("svg");
 
                 // 3. Write the DOT file
-                front_end::fsm_to_dot::fsm_to_dot(&graph, &dot_path)
-                    .map_err(|e| {
-                        eprintln!("DOT Error: {}", e);
-                        jsonrpc::Error::internal_error()
-                    })?;
+                front_end::fsm_to_dot::fsm_to_dot(&graph, &dot_path).map_err(|e| {
+                    eprintln!("DOT Error: {}", e);
+                    jsonrpc::Error::internal_error()
+                })?;
 
                 // 4. Write the SVG file (Pure Rust version)
-                front_end::fsm_to_dot::fsm_to_svg(&graph, &svg_path)
-                    .map_err(|e| {
-                        eprintln!("SVG Error: {}", e);
-                        jsonrpc::Error::internal_error()
-                    })?;
+                front_end::fsm_to_dot::fsm_to_svg(&graph, &svg_path).map_err(|e| {
+                    eprintln!("SVG Error: {}", e);
+                    jsonrpc::Error::internal_error()
+                })?;
 
-                // 5. Return the graph data to the extension 
+                // 5. Return the graph data to the extension
                 // (The extension can then use this to open the SVG automatically)
-                let json_value = serde_json::to_value(&graph)
-                    .map_err(|_| jsonrpc::Error::internal_error())?;
+                let json_value =
+                    serde_json::to_value(&graph).map_err(|_| jsonrpc::Error::internal_error())?;
 
                 return Ok(Some(json_value));
             }
@@ -392,7 +390,10 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
-    async fn goto_definition(&self, _params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>> {
+    async fn goto_definition(
+        &self,
+        _params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
         // Returning Ok(None) is the standard way to say "No definition available"
         // without triggering an error in the editor.
         Ok(None)

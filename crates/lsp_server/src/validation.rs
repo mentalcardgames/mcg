@@ -12,12 +12,12 @@ use tower_lsp::lsp_types::Diagnostic;
 ///
 /// This function acts as the primary gatekeeper for code correctness:
 /// 1. **Symbol Validation:** Ensures identifiers are declared and unique.
-/// 2. **Semantic Validation:** Checks for logic errors, type mismatches, or 
+/// 2. **Semantic Validation:** Checks for logic errors, type mismatches, or
 ///    invalid game state transitions.
 ///
 /// ### Returns
 /// * `Ok(HashMap<GameType, Vec<String>>)`: A mapped symbol table if valid.
-/// * `Err(Vec<Diagnostic>)`: A collection of LSP-compatible errors found 
+/// * `Err(Vec<Diagnostic>)`: A collection of LSP-compatible errors found
 ///   during either stage.
 pub fn validate_document(ast: &SGame) -> Result<HashMap<GameType, Vec<String>>, Vec<Diagnostic>> {
     let symbol_table;
@@ -44,7 +44,7 @@ pub fn validate_document(ast: &SGame) -> Result<HashMap<GameType, Vec<String>>, 
 
 /// Runs high-level program/game-logic validation on the AST.
 ///
-/// Unlike `validate_document`, which focuses on symbols and semantics, this 
+/// Unlike `validate_document`, which focuses on symbols and semantics, this
 /// checks for structural or "game-rule" violations defined in `program_validation`.
 ///
 /// ### Returns
@@ -64,11 +64,11 @@ pub fn validate_game(ast: &SGame) -> Option<Vec<Diagnostic>> {
 
 /// Converts a [`Rope`] to a string and attempts to parse it into an [`SGame`] AST.
 ///
-/// This is the first line of defense in the validation pipeline. It maps raw 
+/// This is the first line of defense in the validation pipeline. It maps raw
 /// [Pest](https://pest.rs/) parser errors into LSP [`Diagnostic`] objects.
 ///
 /// ### Errors
-/// Returns a `Vec<Diagnostic>` containing the location and description of 
+/// Returns a `Vec<Diagnostic>` containing the location and description of
 /// syntax errors if the grammar rules are violated.
 pub fn validate_parsing(doc: &Rope) -> Result<SGame, Vec<Diagnostic>> {
     let result = parse_document(&doc.to_string());
