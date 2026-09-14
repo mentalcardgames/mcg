@@ -129,47 +129,13 @@ impl PeerConnectionService {
                 .registry
                 .lock()
                 .expect("peer connection registry poisoned");
-            registry.pending.remove(&peer_id);
-
-            if registry.active.contains_key(&connection_id) {
-                return connection_id;
-            }
-
-            let existing = registry
-                .active
-                .iter()
-                .find(|(_, connection)| connection.peer_id == peer_id)
-                .map(|(connection_id, connection)| (*connection_id, connection.clone()));
-
-            match existing {
-                None => {
-                    registry.active.insert(
-                        connection_id,
-                        ActivePeerConnection {
-                            peer_id: peer_id.clone(),
-                            direction,
-                        },
-                    );
-                    (connection_id, None)
-                }
-                Some((existing_id, existing_connection)) => {
-                    let new_is_preferred = preferred_direction == Some(direction)
-                        && preferred_direction != Some(existing_connection.direction);
-                    if new_is_preferred {
-                        registry.active.remove(&existing_id);
-                        registry.active.insert(
-                            connection_id,
-                            ActivePeerConnection {
-                                peer_id: peer_id.clone(),
-                                direction,
-                            },
-                        );
-                        (connection_id, Some(existing_id))
-                    } else {
-                        (existing_id, Some(connection_id))
-                    }
-                }
-            }
+            resolve_connection_in_registry(
+                &mut registry,
+                connection_id,
+                &peer_id,
+                direction,
+                preferred_direction,
+            )
         };
 
         if let Some(loser) = loser {
@@ -189,7 +155,47 @@ impl PeerConnectionService {
         winner
     }
 
+    pub fn blocking_connection_opened(
+        &self,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
+        direction: PeerConnectionDirection,
+    ) -> ConnectionId {
+        let preferred_direction = self
+            .blocking_local_peer_id()
+            .and_then(|local_peer_id| preferred_direction(&local_peer_id, &peer_id));
+        let (winner, loser) = {
+            let mut registry = self
+                .registry
+                .lock()
+                .expect("peer connection registry poisoned");
+            resolve_connection_in_registry(
+                &mut registry,
+                connection_id,
+                &peer_id,
+                direction,
+                preferred_direction,
+            )
+        };
+
+        if let Some(loser) = loser {
+            tracing::info!(%peer_id, %winner, %loser, ?preferred_direction, "closing duplicate peer connection");
+            if let Err(error) = self.network.blocking_close_connection(
+                loser,
+                format!("duplicate peer connection; keeping {winner}"),
+            ) {
+                tracing::warn!(%peer_id, connection_id = %loser, %error, "failed to close duplicate peer connection");
+            }
+        }
+
+        winner
+    }
+
     pub async fn connection_closed(&self, connection_id: ConnectionId) {
+        self.blocking_connection_closed(connection_id);
+    }
+
+    pub fn blocking_connection_closed(&self, connection_id: ConnectionId) {
         self.registry
             .lock()
             .expect("peer connection registry poisoned")
@@ -197,10 +203,48 @@ impl PeerConnectionService {
             .remove(&connection_id);
     }
 
+    pub fn blocking_connect(&self, ticket: String) -> Result<EstablishedPeer, PeerConnectionError> {
+        let peer_id = peer_id_from_ticket(&ticket)?;
+        if self.blocking_local_peer_id().as_ref() == Some(&peer_id) {
+            return Err(PeerConnectionError::LocalEndpoint(peer_id));
+        }
+
+        let _pending = PendingPeerReservation::reserve(self.registry.clone(), peer_id.clone())?;
+
+        let result = self.network.blocking_establish_iroh_peer_connection(ticket);
+        match result {
+            Ok(opened_connection_id) => {
+                let connection_id = self.blocking_connection_opened(
+                    opened_connection_id,
+                    peer_id.clone(),
+                    PeerConnectionDirection::Outgoing,
+                );
+                if connection_id == opened_connection_id {
+                    if let Err(error) = self.blocking_introduce(connection_id) {
+                        self.blocking_connection_closed(connection_id);
+                        return Err(error.into());
+                    }
+                }
+                Ok(EstablishedPeer {
+                    connection_id,
+                    peer_id,
+                })
+            }
+            Err(error) => Err(error.into()),
+        }
+    }
+
     async fn local_peer_id(&self) -> Option<PeerId> {
         self.local_ticket
             .read()
             .await
+            .as_deref()
+            .and_then(|ticket| peer_id_from_ticket(ticket).ok())
+    }
+
+    fn blocking_local_peer_id(&self) -> Option<PeerId> {
+        self.local_ticket
+            .blocking_read()
             .as_deref()
             .and_then(|ticket| peer_id_from_ticket(ticket).ok())
     }
@@ -224,6 +268,72 @@ impl PeerConnectionService {
         }
 
         Ok(())
+    }
+
+    fn blocking_introduce(&self, connection_id: ConnectionId) -> Result<(), NetworkError> {
+        let own_ticket = self.local_ticket.blocking_read().clone();
+
+        if let Err(error) = self.network.blocking_unicast_peer(
+            connection_id,
+            Peer2PeerMsg::Connect(String::new(), own_ticket),
+        ) {
+            let _ = self
+                .network
+                .blocking_close_connection(connection_id, "failed to send peer introduction");
+            return Err(error);
+        }
+
+        Ok(())
+    }
+}
+
+fn resolve_connection_in_registry(
+    registry: &mut PeerConnectionState,
+    connection_id: ConnectionId,
+    peer_id: &PeerId,
+    direction: PeerConnectionDirection,
+    preferred_direction: Option<PeerConnectionDirection>,
+) -> (ConnectionId, Option<ConnectionId>) {
+    registry.pending.remove(peer_id);
+
+    if registry.active.contains_key(&connection_id) {
+        return (connection_id, None);
+    }
+
+    let existing = registry
+        .active
+        .iter()
+        .find(|(_, connection)| connection.peer_id == *peer_id)
+        .map(|(connection_id, connection)| (*connection_id, connection.clone()));
+
+    match existing {
+        None => {
+            registry.active.insert(
+                connection_id,
+                ActivePeerConnection {
+                    peer_id: peer_id.clone(),
+                    direction,
+                },
+            );
+            (connection_id, None)
+        }
+        Some((existing_id, existing_connection)) => {
+            let new_is_preferred = preferred_direction == Some(direction)
+                && preferred_direction != Some(existing_connection.direction);
+            if new_is_preferred {
+                registry.active.remove(&existing_id);
+                registry.active.insert(
+                    connection_id,
+                    ActivePeerConnection {
+                        peer_id: peer_id.clone(),
+                        direction,
+                    },
+                );
+                (connection_id, Some(existing_id))
+            } else {
+                (existing_id, Some(connection_id))
+            }
+        }
     }
 }
 
@@ -355,6 +465,46 @@ mod tests {
 
         supervisor_task.abort();
         let _ = supervisor_task.await;
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn blocking_service_deduplicates_connections_from_sync_thread() -> Result<()> {
+        let ticket = Arc::new(RwLock::new(None));
+        let (event_tx, _event_rx) = mpsc::channel(16);
+        let supervisor = NetworkSupervisor::new(event_tx);
+        let (network, supervisor_task) = supervisor.start();
+        let service = PeerConnectionService::new(ticket, network);
+        let endpoint_id = iroh::SecretKey::from_bytes(&[10; 32]).public();
+        let peer_id = PeerId::new(endpoint_id.to_string());
+        let ticket_str = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
+        let connection_id = ConnectionId::new(42);
+
+        tokio::task::spawn_blocking(move || {
+            let opened_winner = service.blocking_connection_opened(
+                connection_id,
+                peer_id.clone(),
+                PeerConnectionDirection::Incoming,
+            );
+            assert_eq!(opened_winner, connection_id);
+
+            assert_eq!(
+                service.blocking_connect(ticket_str.clone()),
+                Err(PeerConnectionError::DuplicatePeer(peer_id))
+            );
+
+            service.blocking_connection_closed(connection_id);
+            assert_eq!(
+                service.blocking_connect(ticket_str),
+                Err(PeerConnectionError::Network(
+                    NetworkError::TransportUnavailable(TransportKind::Iroh)
+                ))
+            );
+        })
+        .await
+        .expect("blocking task ok");
+
+        supervisor_task.abort();
         Ok(())
     }
 

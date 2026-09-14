@@ -13,7 +13,7 @@ use tokio::sync::watch;
 use crate::bot::BotManager;
 use crate::config::{path_for_config, Config, PublicInfo};
 use crate::game::{Game, Player};
-use crate::network::{ConnectionId, NetworkEvent, NetworkHandle, PeerId};
+use crate::network::{ConnectionId, NetworkEvent, NetworkHandle, PeerConnectionService, PeerId};
 use mcg_shared::pretty;
 
 use super::types::ControllerEvent;
@@ -46,7 +46,7 @@ impl Default for Lobby {
             game: None,
             last_printed_log_len: 0,
             bots: Vec::new(),
-            bot_manager: BotManager::default(),
+            bot_manager: BotManager::new(),
             max_players: 2,
             lobby_open: false,
             our_name: String::new(),
@@ -71,6 +71,7 @@ pub struct Controller {
     peers: HashMap<iroh::EndpointId, PeerInfo>,
     peer_connections: HashMap<PeerId, ConnectionId>,
     connection_peers: HashMap<ConnectionId, PeerId>,
+    peer_service: Option<PeerConnectionService>,
     state_watch_tx: Option<watch::Sender<Option<PokerStatePublic>>>,
 }
 
@@ -85,8 +86,15 @@ impl Controller {
             peers: HashMap::new(),
             peer_connections: HashMap::new(),
             connection_peers: HashMap::new(),
+            peer_service: None,
             state_watch_tx: None,
         }
+    }
+
+    /// Attaches a peer connection service for coordinated outgoing connections and deduplication.
+    pub fn with_peer_connections(mut self, peer_service: PeerConnectionService) -> Self {
+        self.peer_service = Some(peer_service);
+        self
     }
 
     /// Attaches a public state watch sender for bot observation.
@@ -168,6 +176,17 @@ impl Controller {
                 direction,
             } => {
                 tracing::debug!(%connection_id, %peer_id, ?transport, ?direction, "peer connection registered in controller");
+                if let Some(peer_service) = &self.peer_service {
+                    let winner = peer_service.blocking_connection_opened(
+                        connection_id,
+                        peer_id.clone(),
+                        direction,
+                    );
+                    if winner != connection_id {
+                        tracing::info!(%connection_id, %winner, "peer connection was superseded by duplicate resolution");
+                        return;
+                    }
+                }
                 self.peer_connections.insert(peer_id.clone(), connection_id);
                 self.connection_peers.insert(connection_id, peer_id);
             }
@@ -264,7 +283,15 @@ impl Controller {
                 Err(e) => Some(Backend2FrontendMsg::Error(e)),
             },
             Frontend2BackendMsg::QrValue(ticket) => {
-                if let Err(error) = network.blocking_establish_iroh_peer_connection(ticket) {
+                let result = if let Some(peer_service) = &self.peer_service {
+                    peer_service.blocking_connect(ticket).map(|_| ())
+                } else {
+                    network
+                        .blocking_establish_iroh_peer_connection(ticket)
+                        .map(|_| ())
+                        .map_err(crate::network::PeerConnectionError::from)
+                };
+                if let Err(error) = result {
                     tracing::warn!(%error, "failed to connect to iroh peer from controller");
                 }
                 Some(Backend2FrontendMsg::Pong)
@@ -576,6 +603,9 @@ impl Controller {
 
     /// Removes an open connection and cleans up peer mappings if necessary.
     fn remove_connection(&mut self, connection_id: ConnectionId, network: &NetworkHandle) {
+        if let Some(peer_service) = &self.peer_service {
+            peer_service.blocking_connection_closed(connection_id);
+        }
         if let Some(peer_id) = self.connection_peers.remove(&connection_id) {
             self.peer_connections.remove(&peer_id);
             if let Some(peer) = self.remove_peer_from_table(&peer_id) {
@@ -933,6 +963,45 @@ mod tests {
             msg,
             Peer2PeerMsg::Reject(ref reason) if reason == "Lobby is closed"
         ));
+
+        network.shutdown().await.expect("network shutdown");
+        supervisor_task.await.expect("supervisor task ok");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn controller_handles_qr_value_through_peer_service() {
+        use iroh_tickets::Ticket;
+        use std::sync::Arc;
+
+        let (event_tx, _event_rx) = mpsc::channel(16);
+        let supervisor = NetworkSupervisor::new(event_tx);
+        let (network, supervisor_task) = supervisor.start();
+
+        let endpoint_id = iroh::SecretKey::from_bytes(&[3; 32]).public();
+        let local_ticket = Arc::new(tokio::sync::RwLock::new(Some(
+            iroh_tickets::endpoint::EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id))
+                .encode_string(),
+        )));
+        let peer_service = PeerConnectionService::new(local_ticket, network.clone());
+
+        let net = network.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut controller =
+                Controller::new(Config::default(), None).with_peer_connections(peer_service);
+
+            // Self-ticket should be rejected cleanly with Pong returned to frontend
+            let self_ticket =
+                iroh_tickets::endpoint::EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id))
+                    .encode_string();
+            let response = controller.handle_frontend_message(
+                None,
+                Frontend2BackendMsg::QrValue(self_ticket),
+                &net,
+            );
+            assert!(matches!(response, Some(Backend2FrontendMsg::Pong)));
+        })
+        .await
+        .expect("blocking task ok");
 
         network.shutdown().await.expect("network shutdown");
         supervisor_task.await.expect("supervisor task ok");

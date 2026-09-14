@@ -80,7 +80,6 @@ impl Drop for NetworkTasks {
 
 struct RunningNetwork {
     network: NetworkHandle,
-    peer_connections: PeerConnectionService,
     local_ticket: Arc<RwLock<Option<String>>>,
     network_tasks: Arc<NetworkTasks>,
 }
@@ -94,8 +93,9 @@ fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork
     let peer_connections = PeerConnectionService::new(local_ticket.clone(), network.clone());
 
     let (state_watch_tx, state_watch_rx) = tokio::sync::watch::channel(None);
-    let controller =
-        Controller::new(config.clone(), config_path.clone()).with_state_watch(state_watch_tx);
+    let controller = Controller::new(config.clone(), config_path.clone())
+        .with_state_watch(state_watch_tx)
+        .with_peer_connections(peer_connections);
     let controller_thread = spawn_controller(controller, controller_rx, network.clone());
     let controller_handle = ControllerHandle::new(controller_tx);
 
@@ -109,7 +109,6 @@ fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork
 
     RunningNetwork {
         network,
-        peer_connections,
         local_ticket,
         network_tasks: Arc::new(NetworkTasks {
             controller_handle,
@@ -123,11 +122,10 @@ fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork
 pub fn build_router(config: Config, config_path: Option<PathBuf>) -> Router {
     let RunningNetwork {
         network,
-        peer_connections,
         network_tasks,
         ..
     } = start_network(config, config_path);
-    let router_state = RouterState::new(network, peer_connections).with_task_guard(network_tasks);
+    let router_state = RouterState::new(network).with_task_guard(network_tasks);
     crate::network::build_router(router_state)
 }
 
@@ -138,12 +136,11 @@ pub async fn run_server(
 ) -> Result<()> {
     let RunningNetwork {
         network,
-        peer_connections,
         local_ticket,
         network_tasks,
         ..
     } = start_network(config.clone(), config_path.clone());
-    let router_state = RouterState::new(network.clone(), peer_connections);
+    let router_state = RouterState::new(network.clone());
     let app = crate::network::build_router(router_state);
 
     let display_addr = if addr.ip().is_loopback() {

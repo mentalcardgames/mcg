@@ -9,21 +9,19 @@ use axum::{
 };
 use tower_http::services::ServeDir;
 
-use super::{NetworkHandle, PeerConnectionService, WEBSOCKET_FRONTEND_PROTOCOL};
+use super::{NetworkHandle, WEBSOCKET_FRONTEND_PROTOCOL};
 
 /// Shared state container for the Axum router and handlers.
 #[derive(Clone)]
 pub struct RouterState {
     pub network: NetworkHandle,
-    pub peer_connections: PeerConnectionService,
     pub _task_guard: Option<Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 impl RouterState {
-    pub fn new(network: NetworkHandle, peer_connections: PeerConnectionService) -> Self {
+    pub fn new(network: NetworkHandle) -> Self {
         Self {
             network,
-            peer_connections,
             _task_guard: None,
         }
     }
@@ -37,12 +35,6 @@ impl RouterState {
 impl FromRef<RouterState> for NetworkHandle {
     fn from_ref(state: &RouterState) -> Self {
         state.network.clone()
-    }
-}
-
-impl FromRef<RouterState> for PeerConnectionService {
-    fn from_ref(state: &RouterState) -> Self {
-        state.peer_connections.clone()
     }
 }
 
