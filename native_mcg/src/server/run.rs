@@ -9,6 +9,7 @@ use crate::controller::{spawn_controller, Controller, ControllerEvent, Controlle
 use crate::network::{NetworkHandle, NetworkSupervisor, PeerConnectionService, RouterState};
 use crate::server::bot_driver::spawn_bot_driver;
 use anyhow::{Context, Result};
+use iroh_tickets::endpoint::EndpointTicket;
 use tokio::sync::{mpsc, RwLock};
 
 const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
@@ -80,7 +81,7 @@ impl Drop for NetworkTasks {
 
 struct RunningNetwork {
     network: NetworkHandle,
-    local_ticket: Arc<RwLock<Option<String>>>,
+    local_ticket: Arc<RwLock<Option<EndpointTicket>>>,
     network_tasks: Arc<NetworkTasks>,
 }
 

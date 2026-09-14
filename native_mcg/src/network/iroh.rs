@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use iroh::endpoint::Endpoint;
-use iroh_tickets::{endpoint::EndpointTicket, Ticket};
+use iroh_tickets::endpoint::EndpointTicket;
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
@@ -31,7 +31,6 @@ pub(crate) type IrohWriter = Box<dyn AsyncWrite + Unpin + Send>;
 
 #[derive(Debug)]
 pub(crate) enum IrohConnectError {
-    InvalidTicket(String),
     Connect(String),
     OpenStream(String),
 }
@@ -40,7 +39,7 @@ pub(crate) enum IrohConnectError {
 pub(crate) trait IrohConnector: Send + Sync {
     async fn connect(
         &self,
-        ticket: String,
+        ticket: EndpointTicket,
     ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError>;
 }
 
@@ -58,10 +57,8 @@ impl IrohEndpointConnector {
 impl IrohConnector for IrohEndpointConnector {
     async fn connect(
         &self,
-        ticket: String,
+        ticket: EndpointTicket,
     ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError> {
-        let ticket = EndpointTicket::decode_string(&ticket)
-            .map_err(|error| IrohConnectError::InvalidTicket(error.to_string()))?;
         let connection = self
             .endpoint
             .connect(ticket.endpoint_addr().clone(), IROH_PEER_ALPN)
@@ -108,7 +105,7 @@ impl Drop for IrohListenerTask {
 pub fn spawn_iroh_listener(
     config: Config,
     config_path: Option<PathBuf>,
-    local_ticket: Arc<RwLock<Option<String>>>,
+    local_ticket: Arc<RwLock<Option<EndpointTicket>>>,
     network: NetworkHandle,
 ) -> IrohListenerTask {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -129,12 +126,12 @@ pub fn spawn_iroh_listener(
 async fn run_iroh_listener(
     config: Config,
     config_path: Option<PathBuf>,
-    local_ticket: Arc<RwLock<Option<String>>>,
+    local_ticket: Arc<RwLock<Option<EndpointTicket>>>,
     network: NetworkHandle,
     mut shutdown_rx: oneshot::Receiver<()>,
 ) -> Result<()> {
     use iroh::SecretKey;
-    use iroh_tickets::{endpoint::EndpointTicket, Ticket};
+    use iroh_tickets::endpoint::EndpointTicket;
 
     let secret_key: SecretKey = load_or_generate_iroh_secret(&config, config_path.as_deref()).await;
     let endpoint = build_iroh_endpoint(secret_key).await?;
@@ -170,7 +167,6 @@ async fn run_iroh_listener(
     let ticket = EndpointTicket::new(addr);
     println!("{ticket}");
     tracing::info!(ticket = %ticket);
-    let ticket = ticket.encode_string();
     *local_ticket.write().await = Some(ticket);
 
     let public_path = path_for_config(config_path.as_deref());

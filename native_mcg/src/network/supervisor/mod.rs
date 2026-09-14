@@ -12,6 +12,8 @@ use tokio::task::{JoinHandle, JoinSet};
 
 use self::connections::ManagedConnection;
 pub use self::handle::NetworkHandle;
+use iroh_tickets::endpoint::EndpointTicket;
+
 use self::handle::{IrohConnectResult, SupervisorRequest};
 use crate::controller::ControllerEvent;
 use crate::network::iroh::{IrohConnectError, IrohConnector};
@@ -244,7 +246,7 @@ impl NetworkSupervisor {
 
     fn start_iroh_connect(
         &mut self,
-        ticket: String,
+        ticket: EndpointTicket,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     ) {
         let Some(connector) = self.iroh_connector.clone() else {
@@ -281,9 +283,6 @@ impl NetworkSupervisor {
         let connection = match result.result {
             Ok((peer_id, reader, writer)) => {
                 self.register_iroh_peer(peer_id, PeerConnectionDirection::Outgoing, reader, writer)
-            }
-            Err(IrohConnectError::InvalidTicket(message)) => {
-                Err(NetworkError::InvalidPeerTicket(message))
             }
             Err(IrohConnectError::Connect(message)) => Err(NetworkError::ConnectionSetupFailed {
                 transport: TransportKind::Iroh,

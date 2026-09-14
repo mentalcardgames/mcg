@@ -17,8 +17,15 @@ use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 
 use super::*;
 use crate::controller::ControllerEvent;
+use iroh_tickets::endpoint::EndpointTicket;
+
 use crate::network::iroh::{IrohConnectError, IrohConnector, IrohReader, IrohWriter};
 use crate::network::{ConnectionCloseReason, PeerId, ProtocolRole, TransportKind};
+
+fn test_ticket() -> EndpointTicket {
+    let secret = iroh::SecretKey::from_bytes(&[7; 32]);
+    EndpointTicket::new(iroh::EndpointAddr::new(secret.public()))
+}
 
 struct OneShotIrohConnector {
     peer_id: PeerId,
@@ -35,7 +42,7 @@ struct SignalingPendingIrohConnector {
 impl IrohConnector for OneShotIrohConnector {
     async fn connect(
         &self,
-        _ticket: String,
+        _ticket: EndpointTicket,
     ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError> {
         let (reader, writer) = self
             .stream
@@ -51,7 +58,7 @@ impl IrohConnector for OneShotIrohConnector {
 impl IrohConnector for PendingIrohConnector {
     async fn connect(
         &self,
-        _ticket: String,
+        _ticket: EndpointTicket,
     ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError> {
         std::future::pending().await
     }
@@ -61,7 +68,7 @@ impl IrohConnector for PendingIrohConnector {
 impl IrohConnector for SignalingPendingIrohConnector {
     async fn connect(
         &self,
-        _ticket: String,
+        _ticket: EndpointTicket,
     ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError> {
         if let Some(started_tx) = self.started_tx.lock().await.take() {
             let _ = started_tx.send(());
@@ -193,7 +200,7 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
     let mut remote_reader = BufReader::new(remote_reader);
     let peer_id = PeerId::new("test-peer-supervisor");
 
-    let unavailable = network.establish_iroh_peer_connection("test-ticket").await;
+    let unavailable = network.establish_iroh_peer_connection(test_ticket()).await;
     assert_eq!(
         unavailable,
         Err(NetworkError::TransportUnavailable(TransportKind::Iroh))
@@ -217,7 +224,7 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
         ))
     );
     let connection_id = network
-        .establish_iroh_peer_connection("test-ticket")
+        .establish_iroh_peer_connection(test_ticket())
         .await?;
     let opened = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
         .await?
@@ -306,7 +313,7 @@ async fn supervisor_times_out_pending_iroh_connections() -> Result<()> {
         .await?;
 
     assert_eq!(
-        network.establish_iroh_peer_connection("test-ticket").await,
+        network.establish_iroh_peer_connection(test_ticket()).await,
         Err(NetworkError::ConnectionSetupTimedOut(TransportKind::Iroh))
     );
 
@@ -328,7 +335,7 @@ async fn supervisor_shutdown_cancels_pending_iroh_connections() -> Result<()> {
         .await?;
     let connect_task = tokio::spawn({
         let network = network.clone();
-        async move { network.establish_iroh_peer_connection("test-ticket").await }
+        async move { network.establish_iroh_peer_connection(test_ticket()).await }
     });
     tokio::time::timeout(Duration::from_secs(1), started_rx).await??;
 

@@ -7,9 +7,8 @@ use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use native_mcg::controller::ControllerEvent;
 use native_mcg::network::{
-    ConnectionCloseReason, ConnectionId, NetworkError, NetworkEvent, NetworkHandle,
-    NetworkSupervisor, PeerConnectionDirection, PeerId, TransportKind, IROH_FRONTEND_ALPN,
-    IROH_PEER_ALPN,
+    ConnectionCloseReason, ConnectionId, NetworkEvent, NetworkHandle, NetworkSupervisor,
+    PeerConnectionDirection, PeerId, TransportKind, IROH_FRONTEND_ALPN, IROH_PEER_ALPN,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
@@ -41,8 +40,8 @@ async fn local_frontend_endpoint() -> Result<Endpoint> {
         .context("binding local Iroh frontend test endpoint")
 }
 
-fn endpoint_ticket(endpoint: &Endpoint) -> String {
-    EndpointTicket::new(endpoint.addr()).encode_string()
+fn endpoint_ticket(endpoint: &Endpoint) -> EndpointTicket {
+    EndpointTicket::new(endpoint.addr())
 }
 
 fn start_supervisor() -> (
@@ -225,12 +224,7 @@ async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Resu
         .configure_iroh_endpoint(second_endpoint.clone())
         .await?;
 
-    assert!(matches!(
-        first_network
-            .establish_iroh_peer_connection("not-an-endpoint-ticket")
-            .await,
-        Err(NetworkError::InvalidPeerTicket(_))
-    ));
+    assert!(EndpointTicket::decode_string("not-an-endpoint-ticket").is_err());
 
     let incoming = tokio::spawn(accept_one(second_endpoint.clone(), second_network.clone()));
     let outgoing_id = first_network
@@ -249,7 +243,7 @@ async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Resu
     first_network
         .unicast_peer(
             outgoing_id,
-            Peer2PeerMsg::Connect("Alice".into(), Some(first_ticket.clone())),
+            Peer2PeerMsg::Connect("Alice".into(), Some(first_ticket.encode_string())),
         )
         .await?;
     let incoming_id = incoming.await??;
@@ -267,7 +261,7 @@ async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Resu
         NetworkEvent::PeerMessage {
             connection_id,
             message: Peer2PeerMsg::Connect(name, Some(ticket)),
-        } if connection_id == incoming_id && name == "Alice" && ticket == first_ticket
+        } if connection_id == incoming_id && name == "Alice" && ticket == first_ticket.encode_string()
     ));
 
     second_network

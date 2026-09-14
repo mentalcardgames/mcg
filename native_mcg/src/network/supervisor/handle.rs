@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use axum::extract::ws::WebSocket;
 use iroh::endpoint::Endpoint;
+use iroh_tickets::endpoint::EndpointTicket;
 use mcg_shared::{Backend2FrontendMsg, Peer2PeerMsg};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
@@ -21,7 +22,7 @@ pub(crate) enum SupervisorRequest {
         response_tx: oneshot::Sender<Result<(), NetworkError>>,
     },
     EstablishIrohPeerConnection {
-        ticket: String,
+        ticket: EndpointTicket,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     },
     RegisterFrontendWebSocket {
@@ -150,12 +151,12 @@ impl NetworkHandle {
     /// Establishes and registers an outgoing Iroh peer connection.
     pub async fn establish_iroh_peer_connection(
         &self,
-        ticket: impl Into<String>,
+        ticket: EndpointTicket,
     ) -> Result<ConnectionId, NetworkError> {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
             .send(SupervisorRequest::EstablishIrohPeerConnection {
-                ticket: ticket.into(),
+                ticket,
                 response_tx,
             })
             .await
@@ -168,12 +169,12 @@ impl NetworkHandle {
     /// Synchronously establishes and registers an outgoing Iroh peer connection.
     pub fn blocking_establish_iroh_peer_connection(
         &self,
-        ticket: impl Into<String>,
+        ticket: EndpointTicket,
     ) -> Result<ConnectionId, NetworkError> {
         let (response_tx, response_rx) = oneshot::channel();
         self.request_tx
             .blocking_send(SupervisorRequest::EstablishIrohPeerConnection {
-                ticket: ticket.into(),
+                ticket,
                 response_tx,
             })
             .map_err(|_| NetworkError::SupervisorStopped)?;

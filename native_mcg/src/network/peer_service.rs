@@ -67,13 +67,13 @@ impl Drop for PendingPeerReservation {
 /// initial peer introduction all pass through this service.
 #[derive(Clone)]
 pub struct PeerConnectionService {
-    local_ticket: Arc<RwLock<Option<String>>>,
+    local_ticket: Arc<RwLock<Option<EndpointTicket>>>,
     network: NetworkHandle,
     registry: Arc<Mutex<PeerConnectionState>>,
 }
 
 impl PeerConnectionService {
-    pub fn new(local_ticket: Arc<RwLock<Option<String>>>, network: NetworkHandle) -> Self {
+    pub fn new(local_ticket: Arc<RwLock<Option<EndpointTicket>>>, network: NetworkHandle) -> Self {
         Self {
             local_ticket,
             network,
@@ -81,8 +81,11 @@ impl PeerConnectionService {
         }
     }
 
-    pub async fn connect(&self, ticket: String) -> Result<EstablishedPeer, PeerConnectionError> {
-        let peer_id = peer_id_from_ticket(&ticket)?;
+    pub async fn connect(
+        &self,
+        ticket: EndpointTicket,
+    ) -> Result<EstablishedPeer, PeerConnectionError> {
+        let peer_id = peer_id_from_ticket(&ticket);
         if self.local_peer_id().await.as_ref() == Some(&peer_id) {
             return Err(PeerConnectionError::LocalEndpoint(peer_id));
         }
@@ -203,8 +206,11 @@ impl PeerConnectionService {
             .remove(&connection_id);
     }
 
-    pub fn blocking_connect(&self, ticket: String) -> Result<EstablishedPeer, PeerConnectionError> {
-        let peer_id = peer_id_from_ticket(&ticket)?;
+    pub fn blocking_connect(
+        &self,
+        ticket: EndpointTicket,
+    ) -> Result<EstablishedPeer, PeerConnectionError> {
+        let peer_id = peer_id_from_ticket(&ticket);
         if self.blocking_local_peer_id().as_ref() == Some(&peer_id) {
             return Err(PeerConnectionError::LocalEndpoint(peer_id));
         }
@@ -238,19 +244,24 @@ impl PeerConnectionService {
         self.local_ticket
             .read()
             .await
-            .as_deref()
-            .and_then(|ticket| peer_id_from_ticket(ticket).ok())
+            .as_ref()
+            .map(peer_id_from_ticket)
     }
 
     fn blocking_local_peer_id(&self) -> Option<PeerId> {
         self.local_ticket
             .blocking_read()
-            .as_deref()
-            .and_then(|ticket| peer_id_from_ticket(ticket).ok())
+            .as_ref()
+            .map(peer_id_from_ticket)
     }
 
     async fn introduce(&self, connection_id: ConnectionId) -> Result<(), NetworkError> {
-        let own_ticket = self.local_ticket.read().await.clone();
+        let own_ticket = self
+            .local_ticket
+            .read()
+            .await
+            .as_ref()
+            .map(|ticket| ticket.encode_string());
 
         if let Err(error) = self
             .network
@@ -271,7 +282,11 @@ impl PeerConnectionService {
     }
 
     fn blocking_introduce(&self, connection_id: ConnectionId) -> Result<(), NetworkError> {
-        let own_ticket = self.local_ticket.blocking_read().clone();
+        let own_ticket = self
+            .local_ticket
+            .blocking_read()
+            .as_ref()
+            .map(|ticket| ticket.encode_string());
 
         if let Err(error) = self.network.blocking_unicast_peer(
             connection_id,
@@ -350,10 +365,8 @@ fn preferred_direction(
     }
 }
 
-pub(crate) fn peer_id_from_ticket(ticket: &str) -> Result<PeerId, NetworkError> {
-    let ticket = EndpointTicket::decode_string(ticket)
-        .map_err(|error| NetworkError::InvalidPeerTicket(error.to_string()))?;
-    Ok(PeerId::new(ticket.endpoint_addr().id.to_string()))
+pub(crate) fn peer_id_from_ticket(ticket: &EndpointTicket) -> PeerId {
+    PeerId::new(ticket.endpoint_addr().id.to_string())
 }
 
 #[cfg(test)]
@@ -391,7 +404,9 @@ mod tests {
 
     #[tokio::test]
     async fn service_introduces_peer_through_network_actor() -> Result<()> {
-        let ticket = Arc::new(RwLock::new(Some("bob-ticket".into())));
+        let secret_key = iroh::SecretKey::from_bytes(&[99; 32]);
+        let bob_ticket = EndpointTicket::new(iroh::EndpointAddr::new(secret_key.public()));
+        let ticket = Arc::new(RwLock::new(Some(bob_ticket.clone())));
         let (event_tx, mut event_rx) = mpsc::channel(16);
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();
@@ -423,7 +438,7 @@ mod tests {
         assert!(matches!(
             serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
             Peer2PeerMsg::Connect(name, Some(ticket))
-                if name.is_empty() && ticket == "bob-ticket"
+                if name.is_empty() && ticket == bob_ticket.encode_string()
         ));
 
         supervisor_task.abort();
@@ -440,7 +455,7 @@ mod tests {
         let service = PeerConnectionService::new(ticket, network);
         let endpoint_id = iroh::SecretKey::from_bytes(&[10; 32]).public();
         let peer_id = PeerId::new(endpoint_id.to_string());
-        let ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
+        let ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id));
         let connection_id = ConnectionId::new(41);
         service
             .connection_opened(
@@ -477,7 +492,7 @@ mod tests {
         let service = PeerConnectionService::new(ticket, network);
         let endpoint_id = iroh::SecretKey::from_bytes(&[10; 32]).public();
         let peer_id = PeerId::new(endpoint_id.to_string());
-        let ticket_str = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
+        let ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id));
         let connection_id = ConnectionId::new(42);
 
         tokio::task::spawn_blocking(move || {
@@ -489,13 +504,13 @@ mod tests {
             assert_eq!(opened_winner, connection_id);
 
             assert_eq!(
-                service.blocking_connect(ticket_str.clone()),
+                service.blocking_connect(ticket.clone()),
                 Err(PeerConnectionError::DuplicatePeer(peer_id))
             );
 
             service.blocking_connection_closed(connection_id);
             assert_eq!(
-                service.blocking_connect(ticket_str),
+                service.blocking_connect(ticket),
                 Err(PeerConnectionError::Network(
                     NetworkError::TransportUnavailable(TransportKind::Iroh)
                 ))
@@ -523,9 +538,9 @@ mod tests {
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();
 
-        let lower_ticket = Arc::new(RwLock::new(Some(
-            EndpointTicket::new(iroh::EndpointAddr::new(lower_endpoint)).encode_string(),
-        )));
+        let lower_ticket = Arc::new(RwLock::new(Some(EndpointTicket::new(
+            iroh::EndpointAddr::new(lower_endpoint),
+        ))));
         let lower_service = PeerConnectionService::new(lower_ticket, network.clone());
         let lower_incoming = ConnectionId::new(51);
         let lower_outgoing = ConnectionId::new(52);
@@ -550,9 +565,9 @@ mod tests {
             lower_outgoing
         );
 
-        let higher_ticket = Arc::new(RwLock::new(Some(
-            EndpointTicket::new(iroh::EndpointAddr::new(higher_endpoint)).encode_string(),
-        )));
+        let higher_ticket = Arc::new(RwLock::new(Some(EndpointTicket::new(
+            iroh::EndpointAddr::new(higher_endpoint),
+        ))));
         let higher_service = PeerConnectionService::new(higher_ticket, network);
         let higher_incoming = ConnectionId::new(61);
         let higher_outgoing = ConnectionId::new(62);
