@@ -6,7 +6,7 @@ use axum::Router;
 
 use crate::config::Config;
 use crate::controller::{spawn_controller, Controller, ControllerEvent, ControllerHandle};
-use crate::network::{NetworkHandle, NetworkSupervisor, PeerConnectionService, RouterState};
+use crate::network::{NetworkHandle, NetworkSupervisor, RouterState};
 use crate::server::bot_driver::spawn_bot_driver;
 use anyhow::{Context, Result};
 use iroh_tickets::endpoint::EndpointTicket;
@@ -91,12 +91,10 @@ fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork
         mpsc::channel::<ControllerEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
     let supervisor = NetworkSupervisor::new(controller_tx.clone());
     let (network, supervisor_task) = supervisor.start();
-    let peer_connections = PeerConnectionService::new(local_ticket.clone(), network.clone());
 
     let (state_watch_tx, state_watch_rx) = tokio::sync::watch::channel(None);
-    let controller = Controller::new(config.clone(), config_path.clone())
-        .with_state_watch(state_watch_tx)
-        .with_peer_connections(peer_connections);
+    let controller =
+        Controller::new(config.clone(), config_path.clone()).with_state_watch(state_watch_tx);
     let controller_thread = spawn_controller(controller, controller_rx, network.clone());
     let controller_handle = ControllerHandle::new(controller_tx);
 

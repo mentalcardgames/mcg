@@ -4,6 +4,8 @@ use std::fmt;
 use iroh::EndpointId;
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 
+use iroh_tickets::endpoint::EndpointTicket;
+
 /// Process-local identifier for an open network connection.
 ///
 /// A connection ID identifies a concrete transport connection. It is not part
@@ -84,6 +86,8 @@ pub enum PeerConnectionCommand {
 /// actors do not access the lobby, game, or other application state directly.
 #[derive(Clone, Debug)]
 pub enum NetworkEvent {
+    /// The local Iroh endpoint is ready and its ticket is available.
+    LocalTicketReady(EndpointTicket),
     /// A frontend connection actor is ready to exchange typed messages.
     FrontendConnected {
         connection_id: ConnectionId,
@@ -154,6 +158,8 @@ pub enum NetworkError {
         message: String,
     },
     ConnectionSetupTimedOut(TransportKind),
+    DuplicatePeer(PeerId),
+    LocalEndpoint(PeerId),
 }
 
 impl fmt::Display for NetworkError {
@@ -200,24 +206,6 @@ impl fmt::Display for NetworkError {
                     "timed out while establishing {transport:?} connection"
                 )
             }
-        }
-    }
-}
-
-impl Error for NetworkError {}
-
-/// Errors returned while establishing peer connections.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PeerConnectionError {
-    Network(NetworkError),
-    DuplicatePeer(PeerId),
-    LocalEndpoint(PeerId),
-}
-
-impl fmt::Display for PeerConnectionError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Network(error) => error.fmt(formatter),
             Self::DuplicatePeer(peer_id) => {
                 write!(
                     formatter,
@@ -231,13 +219,7 @@ impl fmt::Display for PeerConnectionError {
     }
 }
 
-impl Error for PeerConnectionError {}
-
-impl From<NetworkError> for PeerConnectionError {
-    fn from(error: NetworkError) -> Self {
-        Self::Network(error)
-    }
-}
+impl Error for NetworkError {}
 
 #[cfg(test)]
 mod tests {
@@ -308,20 +290,18 @@ mod tests {
     }
 
     #[test]
-    fn peer_connection_error_from_network_error() {
+    fn peer_connection_error_display() {
         let net_err = NetworkError::SupervisorStopped;
-        let peer_err: PeerConnectionError = net_err.clone().into();
-        assert_eq!(peer_err, PeerConnectionError::Network(net_err));
-        assert_eq!(peer_err.to_string(), "network supervisor stopped");
+        assert_eq!(net_err.to_string(), "network supervisor stopped");
 
         let peer_id = iroh::SecretKey::from_bytes(&[1; 32]).public();
-        let dup_err = PeerConnectionError::DuplicatePeer(peer_id);
+        let dup_err = NetworkError::DuplicatePeer(peer_id);
         assert_eq!(
             dup_err.to_string(),
             format!("peer {peer_id} is already connected or connecting")
         );
 
-        let local_err = PeerConnectionError::LocalEndpoint(peer_id);
+        let local_err = NetworkError::LocalEndpoint(peer_id);
         assert_eq!(
             local_err.to_string(),
             format!("cannot connect to local endpoint {peer_id}")

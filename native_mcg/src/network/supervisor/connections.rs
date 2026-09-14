@@ -14,6 +14,7 @@ use crate::network::{
 pub(crate) struct ManagedConnection {
     pub(crate) transport: TransportKind,
     pub(crate) target: ManagedTarget,
+    pub(crate) reported: bool,
 }
 
 #[derive(Clone)]
@@ -54,6 +55,19 @@ impl ManagedConnection {
     }
 }
 
+pub(crate) fn preferred_direction(
+    local_peer_id: &Option<PeerId>,
+    remote_peer_id: &PeerId,
+) -> Option<PeerConnectionDirection> {
+    use std::cmp::Ordering;
+    let local = local_peer_id.as_ref()?;
+    match local.cmp(remote_peer_id) {
+        Ordering::Less => Some(PeerConnectionDirection::Outgoing),
+        Ordering::Greater => Some(PeerConnectionDirection::Incoming),
+        Ordering::Equal => None,
+    }
+}
+
 impl NetworkSupervisor {
     pub(super) fn allocate_connection_id(&mut self) -> Result<ConnectionId, NetworkError> {
         let next = self
@@ -78,6 +92,7 @@ impl NetworkSupervisor {
             ManagedConnection {
                 transport: TransportKind::WebSocket,
                 target: ManagedTarget::Frontend { command_tx },
+                reported: false,
             },
         );
         self.tasks.spawn(run_websocket_frontend_actor(
@@ -110,6 +125,7 @@ impl NetworkSupervisor {
                     direction,
                     command_tx,
                 },
+                reported: false,
             },
         );
         self.tasks.spawn(run_iroh_peer_actor(
@@ -137,6 +153,7 @@ impl NetworkSupervisor {
             ManagedConnection {
                 transport: TransportKind::Iroh,
                 target: ManagedTarget::Frontend { command_tx },
+                reported: false,
             },
         );
         self.tasks.spawn(run_iroh_frontend_actor(

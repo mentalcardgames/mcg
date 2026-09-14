@@ -3,14 +3,14 @@ mod handle;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::{JoinHandle, JoinSet};
 
-use self::connections::ManagedConnection;
+use self::connections::{preferred_direction, ManagedConnection, ManagedTarget};
 pub use self::handle::NetworkHandle;
 use iroh_tickets::endpoint::EndpointTicket;
 
@@ -19,7 +19,7 @@ use crate::controller::ControllerEvent;
 use crate::network::iroh::{IrohConnectError, IrohConnector};
 use crate::network::types::ActorEvent;
 pub use crate::network::types::NetworkError;
-use crate::network::{ConnectionId, NetworkEvent, PeerConnectionDirection, TransportKind};
+use crate::network::{ConnectionId, NetworkEvent, PeerConnectionDirection, PeerId, TransportKind};
 
 const DEFAULT_CONTROL_CHANNEL_CAPACITY: usize = 256;
 const DEFAULT_CONNECTION_CHANNEL_CAPACITY: usize = 64;
@@ -49,6 +49,9 @@ pub struct NetworkSupervisor {
     pub(crate) next_connection_id: u64,
     pub(crate) connection_channel_capacity: usize,
     iroh_connect_timeout: Duration,
+    pub(crate) local_peer_id: Option<PeerId>,
+    pub(crate) peers: HashMap<PeerId, ConnectionId>,
+    pub(crate) pending_outgoing: HashSet<PeerId>,
 }
 
 impl NetworkSupervisor {
@@ -72,7 +75,15 @@ impl NetworkSupervisor {
             next_connection_id: 0,
             connection_channel_capacity: DEFAULT_CONNECTION_CHANNEL_CAPACITY,
             iroh_connect_timeout: DEFAULT_IROH_CONNECT_TIMEOUT,
+            local_peer_id: None,
+            peers: HashMap::new(),
+            pending_outgoing: HashSet::new(),
         }
+    }
+
+    /// Explicitly sets the local peer identity for deduplication and testing.
+    pub fn set_local_peer_id(&mut self, peer_id: PeerId) {
+        self.local_peer_id = Some(peer_id);
     }
 
     /// Spawns the supervisor as an asynchronous Tokio task.
@@ -103,7 +114,7 @@ impl NetworkSupervisor {
                     let Some(request) = request else {
                         break;
                     };
-                    if !self.handle_request(request) {
+                    if !self.handle_request(request).await {
                         break;
                     }
                 }
@@ -143,7 +154,7 @@ impl NetworkSupervisor {
         );
     }
 
-    fn handle_request(&mut self, request: SupervisorRequest) -> bool {
+    async fn handle_request(&mut self, request: SupervisorRequest) -> bool {
         match request {
             SupervisorRequest::Shutdown { response_tx } => {
                 let _ = response_tx.send(());
@@ -227,6 +238,19 @@ impl NetworkSupervisor {
                 let result = self.close_connection(connection_id, reason);
                 let _ = response_tx.send(result);
             }
+            SupervisorRequest::PublishLocalTicket {
+                ticket,
+                response_tx,
+            } => {
+                self.local_peer_id = Some(ticket.endpoint_addr().id);
+                let send_res = self
+                    .application_event_tx
+                    .send(ControllerEvent::Network(NetworkEvent::LocalTicketReady(
+                        ticket,
+                    )))
+                    .await;
+                let _ = response_tx.send(send_res.map_err(|_| NetworkError::SupervisorStopped));
+            }
         }
         true
     }
@@ -240,6 +264,9 @@ impl NetworkSupervisor {
                 TransportKind::Iroh,
             ));
         }
+        if let Some(peer_id) = connector.local_peer_id() {
+            self.local_peer_id = Some(peer_id);
+        }
         self.iroh_connector = Some(connector);
         Ok(())
     }
@@ -249,10 +276,23 @@ impl NetworkSupervisor {
         ticket: EndpointTicket,
         response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
     ) {
+        let peer_id = ticket.endpoint_addr().id;
+        if let Some(local_id) = self.local_peer_id {
+            if local_id == peer_id {
+                let _ = response_tx.send(Err(NetworkError::LocalEndpoint(peer_id)));
+                return;
+            }
+        }
+        if self.pending_outgoing.contains(&peer_id) || self.peers.contains_key(&peer_id) {
+            let _ = response_tx.send(Err(NetworkError::DuplicatePeer(peer_id)));
+            return;
+        }
+
         let Some(connector) = self.iroh_connector.clone() else {
             let _ = response_tx.send(Err(NetworkError::TransportUnavailable(TransportKind::Iroh)));
             return;
         };
+        self.pending_outgoing.insert(peer_id);
         let result_tx = self.iroh_connect_result_tx.clone();
         let timeout = self.iroh_connect_timeout;
 
@@ -263,10 +303,20 @@ impl NetworkSupervisor {
                     let _ = response_tx.send(Err(NetworkError::ConnectionSetupTimedOut(
                         TransportKind::Iroh,
                     )));
+                    let _ = result_tx
+                        .send(IrohConnectResult {
+                            peer_id,
+                            result: Err(IrohConnectError::Connect(
+                                "connection setup timed out".into(),
+                            )),
+                            response_tx: oneshot::channel().0,
+                        })
+                        .await;
                     return;
                 }
             };
             let completion = IrohConnectResult {
+                peer_id,
                 result,
                 response_tx,
             };
@@ -280,6 +330,7 @@ impl NetworkSupervisor {
     }
 
     fn handle_iroh_connect_result(&mut self, result: IrohConnectResult) {
+        self.pending_outgoing.remove(&result.peer_id);
         let connection = match result.result {
             Ok((peer_id, reader, writer)) => {
                 self.register_iroh_peer(peer_id, PeerConnectionDirection::Outgoing, reader, writer)
@@ -301,11 +352,88 @@ impl NetworkSupervisor {
     fn handle_actor_event(&mut self, event: ActorEvent) -> Option<NetworkEvent> {
         match event {
             ActorEvent::Ready { connection_id } => {
-                let Some(connection) = self.connections.get(&connection_id) else {
+                let Some(connection) = self.connections.get_mut(&connection_id) else {
                     tracing::warn!(%connection_id, "ready event belongs to an unknown connection");
                     return None;
                 };
-                connection.connected_event(connection_id)
+                match &connection.target {
+                    ManagedTarget::Frontend { .. } => {
+                        connection.reported = true;
+                        connection.connected_event(connection_id)
+                    }
+                    ManagedTarget::Peer {
+                        peer_id, direction, ..
+                    } => {
+                        let peer_id = *peer_id;
+                        let direction = *direction;
+
+                        if let Some(local_id) = self.local_peer_id {
+                            if local_id == peer_id {
+                                tracing::warn!(%peer_id, %connection_id, "closing self-connection to local endpoint");
+                                let _ = self.close_connection(
+                                    connection_id,
+                                    "cannot connect to local endpoint".into(),
+                                );
+                                return None;
+                            }
+                        }
+
+                        if let Some(&existing_id) = self.peers.get(&peer_id) {
+                            if existing_id == connection_id {
+                                return None;
+                            }
+                            let existing_direction =
+                                self.connections.get(&existing_id).and_then(|c| {
+                                    if let ManagedTarget::Peer { direction, .. } = c.target {
+                                        Some(direction)
+                                    } else {
+                                        None
+                                    }
+                                });
+
+                            let preferred = preferred_direction(&self.local_peer_id, &peer_id);
+                            let new_is_preferred = existing_direction.is_some_and(|ex_dir| {
+                                preferred == Some(direction) && preferred != Some(ex_dir)
+                            });
+
+                            if new_is_preferred {
+                                tracing::info!(
+                                    %peer_id,
+                                    winner = %connection_id,
+                                    loser = %existing_id,
+                                    ?preferred,
+                                    "replacing duplicate peer connection with preferred winner"
+                                );
+                                let _ = self.close_connection(
+                                    existing_id,
+                                    format!("duplicate peer connection; keeping {connection_id}"),
+                                );
+                                self.peers.insert(peer_id, connection_id);
+                                let connection = self.connections.get_mut(&connection_id)?;
+                                connection.reported = true;
+                                connection.connected_event(connection_id)
+                            } else {
+                                tracing::info!(
+                                    %peer_id,
+                                    winner = %existing_id,
+                                    loser = %connection_id,
+                                    ?preferred,
+                                    "closing duplicate peer connection; keeping winner"
+                                );
+                                let _ = self.close_connection(
+                                    connection_id,
+                                    format!("duplicate peer connection; keeping {existing_id}"),
+                                );
+                                None
+                            }
+                        } else {
+                            self.peers.insert(peer_id, connection_id);
+                            let connection = self.connections.get_mut(&connection_id)?;
+                            connection.reported = true;
+                            connection.connected_event(connection_id)
+                        }
+                    }
+                }
             }
             ActorEvent::FrontendMessage {
                 connection_id,
@@ -325,11 +453,23 @@ impl NetworkSupervisor {
                 connection_id,
                 reason,
             } => {
-                self.connections.remove(&connection_id);
-                Some(NetworkEvent::ConnectionClosed {
-                    connection_id,
-                    reason,
-                })
+                let connection = self.connections.remove(&connection_id);
+                let was_reported = connection.as_ref().is_some_and(|c| c.reported);
+                if let Some(connection) = &connection {
+                    if let ManagedTarget::Peer { peer_id, .. } = &connection.target {
+                        if self.peers.get(peer_id) == Some(&connection_id) {
+                            self.peers.remove(peer_id);
+                        }
+                    }
+                }
+                if was_reported {
+                    Some(NetworkEvent::ConnectionClosed {
+                        connection_id,
+                        reason,
+                    })
+                } else {
+                    None
+                }
             }
         }
     }

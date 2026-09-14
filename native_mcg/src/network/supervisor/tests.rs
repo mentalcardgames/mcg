@@ -466,3 +466,158 @@ async fn blocking_methods_work_from_synchronous_thread() -> Result<()> {
     tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
     Ok(())
 }
+
+#[tokio::test]
+async fn supervisor_rejects_self_connection_and_duplicate_connect() -> Result<()> {
+    let local_id = test_peer_id(1);
+    let local_ticket = EndpointTicket::new(iroh::EndpointAddr::new(local_id));
+
+    let (event_tx, _event_rx) = mpsc::channel(16);
+    let mut supervisor = NetworkSupervisor::new(event_tx);
+    supervisor.set_local_peer_id(local_id);
+    let (network, supervisor_task) = supervisor.start();
+
+    // 1. Connecting to own ticket must be rejected immediately
+    assert_eq!(
+        network.establish_iroh_peer_connection(local_ticket).await,
+        Err(NetworkError::LocalEndpoint(local_id))
+    );
+
+    // 2. Configure connector for remote peer
+    let remote_id = test_peer_id(2);
+    let remote_ticket = EndpointTicket::new(iroh::EndpointAddr::new(remote_id));
+    let (actor_stream, _remote_stream) = duplex(4096);
+    let (actor_reader, actor_writer) = split(actor_stream);
+    network
+        .configure_iroh_connector(Arc::new(OneShotIrohConnector {
+            peer_id: remote_id,
+            stream: TokioMutex::new(Some((Box::new(actor_reader), Box::new(actor_writer)))),
+        }))
+        .await?;
+
+    // First outgoing connection succeeds
+    let conn_id = network
+        .establish_iroh_peer_connection(remote_ticket.clone())
+        .await?;
+
+    // Second connection attempt to same peer while active must fail with DuplicatePeer
+    assert_eq!(
+        network
+            .establish_iroh_peer_connection(remote_ticket.clone())
+            .await,
+        Err(NetworkError::DuplicatePeer(remote_id))
+    );
+
+    // After closing the connection, connecting to that peer is no longer blocked by DuplicatePeer
+    network.close_connection(conn_id, "test done").await?;
+
+    supervisor_task.abort();
+    let _ = supervisor_task.await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn supervisor_resolves_simultaneous_connections_deterministically() -> Result<()> {
+    let first_id = test_peer_id(10);
+    let second_id = test_peer_id(20);
+    let (lower_id, higher_id) = if first_id < second_id {
+        (first_id, second_id)
+    } else {
+        (second_id, first_id)
+    };
+
+    // Node 1 (lower peer id): Outgoing direction is preferred
+    let (lower_tx, mut lower_rx) = mpsc::channel(16);
+    let mut lower_sup = NetworkSupervisor::new(lower_tx);
+    lower_sup.set_local_peer_id(lower_id);
+    let (lower_net, lower_task) = lower_sup.start();
+
+    let (in_s1, _in_r1) = duplex(4096);
+    let (in_r, in_w) = split(in_s1);
+    let incoming_id = lower_net.register_iroh_peer(higher_id, in_r, in_w).await?;
+
+    let (out_s1, _out_r1) = duplex(4096);
+    let (out_r, out_w) = split(out_s1);
+    // Directly invoke supervisor register for outgoing to simulate concurrent completion
+    let (resp_tx, resp_rx) = oneshot::channel();
+    lower_net
+        .request_tx
+        .send(SupervisorRequest::RegisterIrohPeer {
+            peer_id: higher_id,
+            reader: Box::new(out_r),
+            writer: Box::new(out_w),
+            response_tx: resp_tx,
+        })
+        .await
+        .expect("send request");
+    // Wait for incoming event first
+    let ev1 = lower_rx.recv().await.expect("ev1");
+    assert!(matches!(
+        ev1,
+        ControllerEvent::Network(NetworkEvent::PeerConnected {
+            connection_id,
+            direction: PeerConnectionDirection::Incoming,
+            ..
+        }) if connection_id == incoming_id
+    ));
+
+    // When outgoing completes, lower node prefers Outgoing, so outgoing supersedes incoming
+    let _outgoing_id = resp_rx.await.expect("resp")?;
+    // We should receive closed for incoming and peer_connected for outgoing
+    let mut events = Vec::new();
+    for _ in 0..2 {
+        if let Ok(Some(ev)) = tokio::time::timeout(Duration::from_secs(1), lower_rx.recv()).await {
+            events.push(ev);
+        }
+    }
+
+    // Node 2 (higher peer id): Incoming direction is preferred
+    let (higher_tx, mut higher_rx) = mpsc::channel(16);
+    let mut higher_sup = NetworkSupervisor::new(higher_tx);
+    higher_sup.set_local_peer_id(higher_id);
+    let (higher_net, higher_task) = higher_sup.start();
+
+    let (in_s2, _in_r2) = duplex(4096);
+    let (in_r2, in_w2) = split(in_s2);
+    let higher_incoming = higher_net
+        .register_iroh_peer(lower_id, in_r2, in_w2)
+        .await?;
+
+    let ev_higher = higher_rx.recv().await.expect("ev higher incoming");
+    assert!(matches!(
+        ev_higher,
+        ControllerEvent::Network(NetworkEvent::PeerConnected {
+            connection_id,
+            direction: PeerConnectionDirection::Incoming,
+            ..
+        }) if connection_id == higher_incoming
+    ));
+
+    lower_task.abort();
+    higher_task.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn supervisor_publishes_local_ticket_as_network_event() -> Result<()> {
+    let (event_tx, mut event_rx) = mpsc::channel(16);
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
+
+    let local_id = test_peer_id(42);
+    let ticket = EndpointTicket::new(iroh::EndpointAddr::new(local_id));
+
+    network.publish_local_ticket(ticket.clone()).await?;
+
+    let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+        .await?
+        .expect("ticket event");
+    assert!(matches!(
+        event,
+        ControllerEvent::Network(NetworkEvent::LocalTicketReady(t)) if t == ticket
+    ));
+
+    supervisor_task.abort();
+    let _ = supervisor_task.await;
+    Ok(())
+}

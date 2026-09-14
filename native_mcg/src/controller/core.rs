@@ -15,7 +15,7 @@ use tokio::sync::watch;
 use crate::bot::BotManager;
 use crate::config::{path_for_config, Config, PublicInfo};
 use crate::game::{Game, Player};
-use crate::network::{ConnectionId, NetworkEvent, NetworkHandle, PeerConnectionService, PeerId};
+use crate::network::{ConnectionId, NetworkEvent, NetworkHandle, PeerConnectionDirection, PeerId};
 use mcg_shared::pretty;
 
 use super::types::ControllerEvent;
@@ -73,7 +73,6 @@ pub struct Controller {
     peers: HashMap<PeerId, PeerInfo>,
     peer_connections: HashMap<PeerId, ConnectionId>,
     connection_peers: HashMap<ConnectionId, PeerId>,
-    peer_service: Option<PeerConnectionService>,
     state_watch_tx: Option<watch::Sender<Option<PokerStatePublic>>>,
 }
 
@@ -88,15 +87,8 @@ impl Controller {
             peers: HashMap::new(),
             peer_connections: HashMap::new(),
             connection_peers: HashMap::new(),
-            peer_service: None,
             state_watch_tx: None,
         }
-    }
-
-    /// Attaches a peer connection service for coordinated outgoing connections and deduplication.
-    pub fn with_peer_connections(mut self, peer_service: PeerConnectionService) -> Self {
-        self.peer_service = Some(peer_service);
-        self
     }
 
     /// Attaches a public state watch sender for bot observation.
@@ -156,6 +148,10 @@ impl Controller {
     /// Handles network-level events from the network supervisor.
     fn handle_network_event(&mut self, event: NetworkEvent, network: &NetworkHandle) {
         match event {
+            NetworkEvent::LocalTicketReady(ticket) => {
+                let endpoint_id = ticket.endpoint_addr().id;
+                self.set_local_ticket(endpoint_id, ticket);
+            }
             NetworkEvent::FrontendConnected {
                 connection_id,
                 transport,
@@ -178,16 +174,20 @@ impl Controller {
                 direction,
             } => {
                 tracing::debug!(%connection_id, %peer_id, ?transport, ?direction, "peer connection registered in controller");
-                if let Some(peer_service) = &self.peer_service {
-                    let winner =
-                        peer_service.blocking_connection_opened(connection_id, peer_id, direction);
-                    if winner != connection_id {
-                        tracing::info!(%connection_id, %winner, "peer connection was superseded by duplicate resolution");
-                        return;
-                    }
-                }
                 self.peer_connections.insert(peer_id, connection_id);
                 self.connection_peers.insert(connection_id, peer_id);
+
+                if direction == PeerConnectionDirection::Outgoing {
+                    if let Some(ticket) = &self.ticket {
+                        let msg = Peer2PeerMsg::Connect(
+                            self.lobby.our_name.clone(),
+                            ticket.encode_string(),
+                        );
+                        if let Err(error) = network.blocking_unicast_peer(connection_id, msg) {
+                            tracing::warn!(%connection_id, %error, "failed to send connect handshake from controller");
+                        }
+                    }
+                }
             }
             NetworkEvent::ConnectionClosed {
                 connection_id,
@@ -290,14 +290,7 @@ impl Controller {
                     }
                 };
                 if let Some(ticket) = ticket {
-                    let result = if let Some(peer_service) = &self.peer_service {
-                        peer_service.blocking_connect(ticket).map(|_| ())
-                    } else {
-                        network
-                            .blocking_establish_iroh_peer_connection(ticket)
-                            .map(|_| ())
-                            .map_err(crate::network::PeerConnectionError::from)
-                    };
+                    let result = network.blocking_establish_iroh_peer_connection(ticket);
                     if let Err(error) = result {
                         tracing::warn!(%error, "failed to connect to iroh peer from controller");
                     }
@@ -628,17 +621,16 @@ impl Controller {
 
     /// Removes an open connection and cleans up peer mappings if necessary.
     fn remove_connection(&mut self, connection_id: ConnectionId, network: &NetworkHandle) {
-        if let Some(peer_service) = &self.peer_service {
-            peer_service.blocking_connection_closed(connection_id);
-        }
         if let Some(peer_id) = self.connection_peers.remove(&connection_id) {
-            self.peer_connections.remove(&peer_id);
-            if let Some(peer) = self.peers.remove(&peer_id) {
-                if !peer.name.is_empty() {
-                    if let Err(error) = network
-                        .blocking_broadcast_frontend(Backend2FrontendMsg::RemovePlayer(peer.name))
-                    {
-                        tracing::warn!(%error, "failed to broadcast frontend message from controller");
+            if self.peer_connections.get(&peer_id) == Some(&connection_id) {
+                self.peer_connections.remove(&peer_id);
+                if let Some(peer) = self.peers.remove(&peer_id) {
+                    if !peer.name.is_empty() {
+                        if let Err(error) = network.blocking_broadcast_frontend(
+                            Backend2FrontendMsg::RemovePlayer(peer.name),
+                        ) {
+                            tracing::warn!(%error, "failed to broadcast frontend message from controller");
+                        }
                     }
                 }
             }
@@ -982,29 +974,27 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn controller_handles_qr_value_through_peer_service() {
+    async fn controller_handles_qr_value_through_network_supervisor() {
         use iroh_tickets::Ticket;
-        use std::sync::Arc;
 
         let (event_tx, _event_rx) = mpsc::channel(16);
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();
 
         let endpoint_id = iroh::SecretKey::from_bytes(&[3; 32]).public();
-        let local_ticket = Arc::new(tokio::sync::RwLock::new(Some(
-            iroh_tickets::endpoint::EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)),
-        )));
-        let peer_service = PeerConnectionService::new(local_ticket, network.clone());
+        let local_ticket =
+            iroh_tickets::endpoint::EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id));
+        network
+            .publish_local_ticket(local_ticket.clone())
+            .await
+            .expect("publish ticket");
 
         let net = network.clone();
         tokio::task::spawn_blocking(move || {
-            let mut controller =
-                Controller::new(Config::default(), None).with_peer_connections(peer_service);
+            let mut controller = Controller::new(Config::default(), None);
 
             // Self-ticket should be rejected cleanly with Pong returned to frontend
-            let self_ticket =
-                iroh_tickets::endpoint::EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id))
-                    .encode_string();
+            let self_ticket = local_ticket.encode_string();
             let response = controller.handle_frontend_message(
                 None,
                 Frontend2BackendMsg::QrValue(self_ticket),

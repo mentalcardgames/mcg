@@ -63,9 +63,14 @@ pub(crate) enum SupervisorRequest {
         reason: String,
         response_tx: oneshot::Sender<Result<(), NetworkError>>,
     },
+    PublishLocalTicket {
+        ticket: EndpointTicket,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
 }
 
 pub(crate) struct IrohConnectResult {
+    pub(crate) peer_id: PeerId,
     pub(crate) result: Result<(PeerId, IrohReader, IrohWriter), IrohConnectError>,
     pub(crate) response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
 }
@@ -140,6 +145,38 @@ impl NetworkHandle {
         self.request_tx
             .blocking_send(SupervisorRequest::ConfigureIroh {
                 connector,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Publishes the local ticket to the supervisor and the controller.
+    pub async fn publish_local_ticket(&self, ticket: EndpointTicket) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::PublishLocalTicket {
+                ticket,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously publishes the local ticket to the supervisor and the controller.
+    pub fn blocking_publish_local_ticket(
+        &self,
+        ticket: EndpointTicket,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::PublishLocalTicket {
+                ticket,
                 response_tx,
             })
             .map_err(|_| NetworkError::SupervisorStopped)?;

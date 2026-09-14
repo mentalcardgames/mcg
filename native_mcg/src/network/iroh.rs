@@ -41,6 +41,10 @@ pub(crate) trait IrohConnector: Send + Sync {
         &self,
         ticket: EndpointTicket,
     ) -> Result<(PeerId, IrohReader, IrohWriter), IrohConnectError>;
+
+    fn local_peer_id(&self) -> Option<PeerId> {
+        None
+    }
 }
 
 pub(crate) struct IrohEndpointConnector {
@@ -70,6 +74,10 @@ impl IrohConnector for IrohEndpointConnector {
             .map_err(|error| IrohConnectError::OpenStream(error.to_string()))?;
 
         Ok((connection.remote_id(), Box::new(reader), Box::new(writer)))
+    }
+
+    fn local_peer_id(&self) -> Option<PeerId> {
+        Some(self.endpoint.id())
     }
 }
 
@@ -166,7 +174,10 @@ async fn run_iroh_listener(
     let ticket = EndpointTicket::new(addr);
     println!("{ticket}");
     tracing::info!(ticket = %ticket);
-    *local_ticket.write().await = Some(ticket);
+    *local_ticket.write().await = Some(ticket.clone());
+    if let Err(error) = network.publish_local_ticket(ticket).await {
+        tracing::warn!(%error, "failed to publish local ticket to network supervisor");
+    }
 
     let public_path = path_for_config(config_path.as_deref());
     match PublicInfo::write_iroh_node_id(&public_path, endpoint_id.to_string()) {
