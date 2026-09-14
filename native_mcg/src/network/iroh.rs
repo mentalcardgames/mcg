@@ -64,13 +64,12 @@ impl IrohConnector for IrohEndpointConnector {
             .connect(ticket.endpoint_addr().clone(), IROH_PEER_ALPN)
             .await
             .map_err(|error| IrohConnectError::Connect(error.to_string()))?;
-        let peer_id = PeerId::new(connection.remote_id().to_string());
         let (writer, reader) = connection
             .open_bi()
             .await
             .map_err(|error| IrohConnectError::OpenStream(error.to_string()))?;
 
-        Ok((peer_id, Box::new(reader), Box::new(writer)))
+        Ok((connection.remote_id(), Box::new(reader), Box::new(writer)))
     }
 }
 
@@ -308,12 +307,11 @@ async fn register_incoming_iroh_connection(
         .context("accepting incoming Iroh bidirectional stream")?;
     match protocol_role_from_alpn(alpn) {
         Some(ProtocolRole::Peer) => {
-            let peer_id = PeerId::new(remote_id.to_string());
             let connection_id = network
-                .register_iroh_peer(peer_id.clone(), reader, writer)
+                .register_iroh_peer(remote_id, reader, writer)
                 .await
                 .context("registering incoming Iroh peer with network supervisor")?;
-            tracing::info!(%connection_id, %peer_id, "incoming Iroh peer registered");
+            tracing::info!(%connection_id, %remote_id, "incoming Iroh peer registered");
             Ok(())
         }
         Some(ProtocolRole::Frontend) => {

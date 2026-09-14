@@ -8,7 +8,7 @@ use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use native_mcg::controller::ControllerEvent;
 use native_mcg::network::{
     ConnectionCloseReason, ConnectionId, NetworkEvent, NetworkHandle, NetworkSupervisor,
-    PeerConnectionDirection, PeerId, TransportKind, IROH_FRONTEND_ALPN, IROH_PEER_ALPN,
+    PeerConnectionDirection, TransportKind, IROH_FRONTEND_ALPN, IROH_PEER_ALPN,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
@@ -64,7 +64,7 @@ async fn accept_one(endpoint: Endpoint, network: NetworkHandle) -> Result<Connec
         .await
         .context("accepting Iroh connection timed out")?
         .context("accepting Iroh connection")?;
-    let peer_id = PeerId::new(connection.remote_id().to_string());
+    let peer_id = connection.remote_id();
     let (writer, reader) = tokio::time::timeout(TEST_TIMEOUT, connection.accept_bi())
         .await
         .context("accepting Iroh bidirectional stream timed out")?
@@ -211,8 +211,8 @@ async fn real_iroh_frontend_uses_the_frontend_protocol() -> Result<()> {
 async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Result<()> {
     let first_endpoint = local_endpoint().await?;
     let second_endpoint = local_endpoint().await?;
-    let first_peer_id = PeerId::new(first_endpoint.id().to_string());
-    let second_peer_id = PeerId::new(second_endpoint.id().to_string());
+    let first_peer_id = first_endpoint.id();
+    let second_peer_id = second_endpoint.id();
     let first_ticket = endpoint_ticket(&first_endpoint);
     let second_ticket = endpoint_ticket(&second_endpoint);
     let (first_network, mut first_events, first_supervisor) = start_supervisor();

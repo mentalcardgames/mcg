@@ -45,7 +45,7 @@ impl PendingPeerReservation {
             {
                 return Err(PeerConnectionError::DuplicatePeer(peer_id));
             }
-            state.pending.insert(peer_id.clone());
+            state.pending.insert(peer_id);
         }
 
         Ok(Self { registry, peer_id })
@@ -86,13 +86,13 @@ impl PeerConnectionService {
         &self,
         ticket: EndpointTicket,
     ) -> Result<EstablishedPeer, PeerConnectionError> {
-        let peer_id = peer_id_from_ticket(&ticket);
+        let peer_id = ticket.endpoint_addr().id;
         let own_ticket = self.wait_for_local_ticket().await?;
-        if peer_id_from_ticket(&own_ticket) == peer_id {
+        if own_ticket.endpoint_addr().id == peer_id {
             return Err(PeerConnectionError::LocalEndpoint(peer_id));
         }
 
-        let _pending = PendingPeerReservation::reserve(self.registry.clone(), peer_id.clone())?;
+        let _pending = PendingPeerReservation::reserve(self.registry.clone(), peer_id)?;
 
         let result = self.network.establish_iroh_peer_connection(ticket).await;
         match result {
@@ -100,7 +100,7 @@ impl PeerConnectionService {
                 let connection_id = self
                     .connection_opened(
                         opened_connection_id,
-                        peer_id.clone(),
+                        peer_id,
                         PeerConnectionDirection::Outgoing,
                     )
                     .await;
@@ -212,20 +212,20 @@ impl PeerConnectionService {
         &self,
         ticket: EndpointTicket,
     ) -> Result<EstablishedPeer, PeerConnectionError> {
-        let peer_id = peer_id_from_ticket(&ticket);
+        let peer_id = ticket.endpoint_addr().id;
         let own_ticket = self.blocking_wait_for_local_ticket()?;
-        if peer_id_from_ticket(&own_ticket) == peer_id {
+        if own_ticket.endpoint_addr().id == peer_id {
             return Err(PeerConnectionError::LocalEndpoint(peer_id));
         }
 
-        let _pending = PendingPeerReservation::reserve(self.registry.clone(), peer_id.clone())?;
+        let _pending = PendingPeerReservation::reserve(self.registry.clone(), peer_id)?;
 
         let result = self.network.blocking_establish_iroh_peer_connection(ticket);
         match result {
             Ok(opened_connection_id) => {
                 let connection_id = self.blocking_connection_opened(
                     opened_connection_id,
-                    peer_id.clone(),
+                    peer_id,
                     PeerConnectionDirection::Outgoing,
                 );
                 if connection_id == opened_connection_id {
@@ -248,14 +248,14 @@ impl PeerConnectionService {
             .read()
             .await
             .as_ref()
-            .map(peer_id_from_ticket)
+            .map(|ticket| ticket.endpoint_addr().id)
     }
 
     fn blocking_local_peer_id(&self) -> Option<PeerId> {
         self.local_ticket
             .blocking_read()
             .as_ref()
-            .map(peer_id_from_ticket)
+            .map(|ticket| ticket.endpoint_addr().id)
     }
 
     async fn wait_for_local_ticket(&self) -> Result<EndpointTicket, NetworkError> {
@@ -348,7 +348,7 @@ fn resolve_connection_in_registry(
             registry.active.insert(
                 connection_id,
                 ActivePeerConnection {
-                    peer_id: peer_id.clone(),
+                    peer_id: *peer_id,
                     direction,
                 },
             );
@@ -362,7 +362,7 @@ fn resolve_connection_in_registry(
                 registry.active.insert(
                     connection_id,
                     ActivePeerConnection {
-                        peer_id: peer_id.clone(),
+                        peer_id: *peer_id,
                         direction,
                     },
                 );
@@ -387,10 +387,6 @@ fn preferred_direction(
     }
 }
 
-pub(crate) fn peer_id_from_ticket(ticket: &EndpointTicket) -> PeerId {
-    PeerId::new(ticket.endpoint_addr().id.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -406,8 +402,8 @@ mod tests {
     #[test]
     fn pending_peer_reservation_is_removed_when_connect_future_is_dropped() {
         let registry = Arc::new(Mutex::new(PeerConnectionState::default()));
-        let peer_id = PeerId::new("test-peer-reservation");
-        let reservation = PendingPeerReservation::reserve(registry.clone(), peer_id.clone())
+        let peer_id = iroh::SecretKey::from_bytes(&[1; 32]).public();
+        let reservation = PendingPeerReservation::reserve(registry.clone(), peer_id)
             .expect("first reservation succeeds");
         assert!(registry
             .lock()
@@ -437,7 +433,7 @@ mod tests {
         let (actor_reader, actor_writer) = split(actor_stream);
         let (remote_reader, _remote_writer) = split(remote_stream);
         let mut remote_reader = BufReader::new(remote_reader);
-        let peer_id = PeerId::new(iroh::SecretKey::from_bytes(&[9; 32]).public().to_string());
+        let peer_id = iroh::SecretKey::from_bytes(&[9; 32]).public();
         let connection_id = network
             .register_iroh_peer(peer_id, actor_reader, actor_writer)
             .await?;
@@ -479,15 +475,11 @@ mod tests {
         let (network, supervisor_task) = supervisor.start();
         let service = PeerConnectionService::new(ticket, network);
         let endpoint_id = iroh::SecretKey::from_bytes(&[10; 32]).public();
-        let peer_id = PeerId::new(endpoint_id.to_string());
+        let peer_id = endpoint_id;
         let ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id));
         let connection_id = ConnectionId::new(41);
         service
-            .connection_opened(
-                connection_id,
-                peer_id.clone(),
-                PeerConnectionDirection::Incoming,
-            )
+            .connection_opened(connection_id, peer_id, PeerConnectionDirection::Incoming)
             .await;
 
         assert_eq!(
@@ -519,14 +511,14 @@ mod tests {
         let (network, supervisor_task) = supervisor.start();
         let service = PeerConnectionService::new(ticket, network);
         let endpoint_id = iroh::SecretKey::from_bytes(&[10; 32]).public();
-        let peer_id = PeerId::new(endpoint_id.to_string());
+        let peer_id = endpoint_id;
         let ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id));
         let connection_id = ConnectionId::new(42);
 
         tokio::task::spawn_blocking(move || {
             let opened_winner = service.blocking_connection_opened(
                 connection_id,
-                peer_id.clone(),
+                peer_id,
                 PeerConnectionDirection::Incoming,
             );
             assert_eq!(opened_winner, connection_id);
@@ -560,8 +552,8 @@ mod tests {
         } else {
             (second_endpoint, first_endpoint)
         };
-        let lower_peer = PeerId::new(lower_endpoint.to_string());
-        let higher_peer = PeerId::new(higher_endpoint.to_string());
+        let lower_peer = lower_endpoint;
+        let higher_peer = higher_endpoint;
         let (event_tx, _event_rx) = mpsc::channel(16);
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();
@@ -576,7 +568,7 @@ mod tests {
             lower_service
                 .connection_opened(
                     lower_incoming,
-                    higher_peer.clone(),
+                    higher_peer,
                     PeerConnectionDirection::Incoming,
                 )
                 .await,
@@ -586,7 +578,7 @@ mod tests {
             lower_service
                 .connection_opened(
                     lower_outgoing,
-                    higher_peer.clone(),
+                    higher_peer,
                     PeerConnectionDirection::Outgoing,
                 )
                 .await,
@@ -603,7 +595,7 @@ mod tests {
             higher_service
                 .connection_opened(
                     higher_incoming,
-                    lower_peer.clone(),
+                    lower_peer,
                     PeerConnectionDirection::Incoming,
                 )
                 .await,

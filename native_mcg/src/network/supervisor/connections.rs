@@ -46,7 +46,7 @@ impl ManagedConnection {
                 peer_id, direction, ..
             } => Some(NetworkEvent::PeerConnected {
                 connection_id,
-                peer_id: peer_id.clone(),
+                peer_id: *peer_id,
                 transport: self.transport,
                 direction: *direction,
             }),

@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
+use iroh::EndpointId;
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 
 /// Process-local identifier for an open network connection.
@@ -28,28 +29,8 @@ impl fmt::Display for ConnectionId {
     }
 }
 
-/// Transport-independent identity of a remote peer.
-///
-/// Unlike [`ConnectionId`], a peer ID may remain stable across multiple
-/// transport connections. Iroh connections use the remote endpoint ID.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PeerId(String);
-
-impl PeerId {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for PeerId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(formatter)
-    }
-}
+/// Identity of an Iroh endpoint peer.
+pub type PeerId = EndpointId;
 
 /// Application protocol spoken by a connection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -291,9 +272,10 @@ mod tests {
 
     #[test]
     fn peer_connected_event_requires_a_peer_id() {
+        let peer_id = iroh::SecretKey::from_bytes(&[9; 32]).public();
         let event = NetworkEvent::PeerConnected {
             connection_id: ConnectionId::new(9),
-            peer_id: PeerId::new("peer-9"),
+            peer_id,
             transport: TransportKind::Iroh,
             direction: PeerConnectionDirection::Incoming,
         };
@@ -302,10 +284,10 @@ mod tests {
             event,
             NetworkEvent::PeerConnected {
                 connection_id,
-                peer_id,
+                peer_id: id,
                 transport: TransportKind::Iroh,
                 direction: PeerConnectionDirection::Incoming,
-            } if connection_id == ConnectionId::new(9) && peer_id == PeerId::new("peer-9")
+            } if connection_id == ConnectionId::new(9) && id == peer_id
         ));
     }
 
@@ -332,13 +314,17 @@ mod tests {
         assert_eq!(peer_err, PeerConnectionError::Network(net_err));
         assert_eq!(peer_err.to_string(), "network supervisor stopped");
 
-        let dup_err = PeerConnectionError::DuplicatePeer(PeerId::new("p1"));
+        let peer_id = iroh::SecretKey::from_bytes(&[1; 32]).public();
+        let dup_err = PeerConnectionError::DuplicatePeer(peer_id);
         assert_eq!(
             dup_err.to_string(),
-            "peer p1 is already connected or connecting"
+            format!("peer {peer_id} is already connected or connecting")
         );
 
-        let local_err = PeerConnectionError::LocalEndpoint(PeerId::new("p1"));
-        assert_eq!(local_err.to_string(), "cannot connect to local endpoint p1");
+        let local_err = PeerConnectionError::LocalEndpoint(peer_id);
+        assert_eq!(
+            local_err.to_string(),
+            format!("cannot connect to local endpoint {peer_id}")
+        );
     }
 }

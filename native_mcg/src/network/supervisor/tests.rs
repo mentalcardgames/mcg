@@ -27,6 +27,10 @@ fn test_ticket() -> EndpointTicket {
     EndpointTicket::new(iroh::EndpointAddr::new(secret.public()))
 }
 
+fn test_peer_id(seed: u8) -> PeerId {
+    iroh::SecretKey::from_bytes(&[seed; 32]).public()
+}
+
 struct OneShotIrohConnector {
     peer_id: PeerId,
     stream: TokioMutex<Option<(IrohReader, IrohWriter)>>,
@@ -50,7 +54,7 @@ impl IrohConnector for OneShotIrohConnector {
             .await
             .take()
             .ok_or_else(|| IrohConnectError::Connect("test stream already consumed".into()))?;
-        Ok((self.peer_id.clone(), reader, writer))
+        Ok((self.peer_id, reader, writer))
     }
 }
 
@@ -198,7 +202,7 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
     let (actor_reader, actor_writer) = split(actor_stream);
     let (remote_reader, mut remote_writer) = split(remote_stream);
     let mut remote_reader = BufReader::new(remote_reader);
-    let peer_id = PeerId::new("test-peer-supervisor");
+    let peer_id = test_peer_id(1);
 
     let unavailable = network.establish_iroh_peer_connection(test_ticket()).await;
     assert_eq!(
@@ -207,13 +211,13 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
     );
     network
         .configure_iroh_connector(Arc::new(OneShotIrohConnector {
-            peer_id: peer_id.clone(),
+            peer_id,
             stream: TokioMutex::new(Some((Box::new(actor_reader), Box::new(actor_writer)))),
         }))
         .await?;
     let duplicate_configuration = network
         .configure_iroh_connector(Arc::new(OneShotIrohConnector {
-            peer_id: PeerId::new("unused-test-peer"),
+            peer_id: test_peer_id(2),
             stream: TokioMutex::new(None),
         }))
         .await;
@@ -364,10 +368,10 @@ async fn supervisor_broadcasts_to_all_peers_and_frontends() -> Result<()> {
     let mut peer2_reader = BufReader::new(peer2_rem_r);
 
     let _conn1 = network
-        .register_iroh_peer(PeerId::new("peer-1"), peer1_r, peer1_w)
+        .register_iroh_peer(test_peer_id(3), peer1_r, peer1_w)
         .await?;
     let _conn2 = network
-        .register_iroh_peer(PeerId::new("peer-2"), peer2_r, peer2_w)
+        .register_iroh_peer(test_peer_id(4), peer2_r, peer2_w)
         .await?;
 
     // Drain peer connected events
@@ -413,7 +417,7 @@ async fn blocking_methods_work_from_synchronous_thread() -> Result<()> {
     let mut peer_reader = BufReader::new(peer_rem_r);
 
     let conn_id = network
-        .register_iroh_peer(PeerId::new("sync-peer"), peer_r, peer_w)
+        .register_iroh_peer(test_peer_id(5), peer_r, peer_w)
         .await?;
 
     let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())

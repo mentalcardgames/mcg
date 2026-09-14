@@ -70,7 +70,7 @@ pub struct Controller {
     #[allow(dead_code)]
     config_path: Option<PathBuf>,
     ticket: Option<EndpointTicket>,
-    peers: HashMap<iroh::EndpointId, PeerInfo>,
+    peers: HashMap<PeerId, PeerInfo>,
     peer_connections: HashMap<PeerId, ConnectionId>,
     connection_peers: HashMap<ConnectionId, PeerId>,
     peer_service: Option<PeerConnectionService>,
@@ -179,17 +179,14 @@ impl Controller {
             } => {
                 tracing::debug!(%connection_id, %peer_id, ?transport, ?direction, "peer connection registered in controller");
                 if let Some(peer_service) = &self.peer_service {
-                    let winner = peer_service.blocking_connection_opened(
-                        connection_id,
-                        peer_id.clone(),
-                        direction,
-                    );
+                    let winner =
+                        peer_service.blocking_connection_opened(connection_id, peer_id, direction);
                     if winner != connection_id {
                         tracing::info!(%connection_id, %winner, "peer connection was superseded by duplicate resolution");
                         return;
                     }
                 }
-                self.peer_connections.insert(peer_id.clone(), connection_id);
+                self.peer_connections.insert(peer_id, connection_id);
                 self.connection_peers.insert(connection_id, peer_id);
             }
             NetworkEvent::ConnectionClosed {
@@ -463,15 +460,6 @@ impl Controller {
                     }
                 };
 
-                let Some(endpoint_id) = Self::parse_peer_endpoint_id(&peer_id) else {
-                    if let Err(error) =
-                        network.blocking_close_connection(connection_id, "invalid peer identity")
-                    {
-                        tracing::warn!(%connection_id, %error, "failed to close connection from controller");
-                    }
-                    return;
-                };
-
                 let max_players = self.lobby.max_players;
                 let game_type = self.lobby.game_type.clone();
                 if let Err(error) = network.blocking_unicast_peer(
@@ -520,7 +508,7 @@ impl Controller {
                 }
 
                 self.peers.insert(
-                    endpoint_id,
+                    peer_id,
                     PeerInfo {
                         name: assigned_name.clone(),
                         ticket,
@@ -533,7 +521,7 @@ impl Controller {
                 }
             }
             Peer2PeerMsg::Disconnect(name) => {
-                self.remove_peer_from_table(&peer_id);
+                self.peers.remove(&peer_id);
                 if let Err(error) =
                     network.blocking_broadcast_frontend(Backend2FrontendMsg::RemovePlayer(name))
                 {
@@ -572,7 +560,7 @@ impl Controller {
                     {
                         tracing::warn!(%error, "failed to broadcast frontend message from controller");
                     }
-                    if id != peer_id.as_str() {
+                    if endpoint_id != peer_id {
                         discovered_tickets.push(ticket);
                     }
                 }
@@ -645,7 +633,7 @@ impl Controller {
         }
         if let Some(peer_id) = self.connection_peers.remove(&connection_id) {
             self.peer_connections.remove(&peer_id);
-            if let Some(peer) = self.remove_peer_from_table(&peer_id) {
+            if let Some(peer) = self.peers.remove(&peer_id) {
                 if !peer.name.is_empty() {
                     if let Err(error) = network
                         .blocking_broadcast_frontend(Backend2FrontendMsg::RemovePlayer(peer.name))
@@ -653,21 +641,6 @@ impl Controller {
                         tracing::warn!(%error, "failed to broadcast frontend message from controller");
                     }
                 }
-            }
-        }
-    }
-
-    fn remove_peer_from_table(&mut self, peer_id: &PeerId) -> Option<PeerInfo> {
-        let endpoint_id = Self::parse_peer_endpoint_id(peer_id)?;
-        self.peers.remove(&endpoint_id)
-    }
-
-    fn parse_peer_endpoint_id(peer_id: &PeerId) -> Option<iroh::EndpointId> {
-        match peer_id.as_str().parse() {
-            Ok(endpoint_id) => Some(endpoint_id),
-            Err(error) => {
-                tracing::error!(%peer_id, %error, "peer identity is not a valid Iroh endpoint ID");
-                None
             }
         }
     }
@@ -892,17 +865,17 @@ mod tests {
         let mut peer_reader = BufReader::new(peer_rem_r);
 
         let endpoint_id = iroh::SecretKey::from_bytes(&[1; 32]).public();
-        let peer_id = PeerId::new(endpoint_id.to_string());
+        let peer_id = endpoint_id;
         let alice_ticket =
             EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
 
         let connection_id = network
-            .register_iroh_peer(peer_id.clone(), peer_r, peer_w)
+            .register_iroh_peer(peer_id, peer_r, peer_w)
             .await
             .expect("peer registered");
 
         let net = network.clone();
-        let p_id = peer_id.clone();
+        let p_id = peer_id;
         tokio::task::spawn_blocking(move || {
             let mut controller = Controller::new(Config::default(), None);
 
@@ -915,7 +888,7 @@ mod tests {
             controller.handle_event(
                 ControllerEvent::Network(NetworkEvent::PeerConnected {
                     connection_id,
-                    peer_id: p_id.clone(),
+                    peer_id: p_id,
                     transport: TransportKind::Iroh,
                     direction: PeerConnectionDirection::Incoming,
                 }),
@@ -925,7 +898,7 @@ mod tests {
             // Simulate peer connect message
             controller.handle_peer_message(
                 connection_id,
-                p_id.clone(),
+                p_id,
                 Peer2PeerMsg::Connect("Alice".into(), alice_ticket),
                 &net,
             );
@@ -972,16 +945,16 @@ mod tests {
         let mut peer_reader = BufReader::new(peer_rem_r);
 
         let endpoint_id = iroh::SecretKey::from_bytes(&[2; 32]).public();
-        let peer_id = PeerId::new(endpoint_id.to_string());
+        let peer_id = endpoint_id;
         let bob_ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
 
         let connection_id = network
-            .register_iroh_peer(peer_id.clone(), peer_r, peer_w)
+            .register_iroh_peer(peer_id, peer_r, peer_w)
             .await
             .expect("peer registered");
 
         let net = network.clone();
-        let p_id = peer_id.clone();
+        let p_id = peer_id;
         tokio::task::spawn_blocking(move || {
             let mut controller = Controller::new(Config::default(), None);
             controller.lobby.lobby_open = false;
