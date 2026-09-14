@@ -85,7 +85,7 @@ pub enum Backend2FrontendMsg {
 pub enum Peer2PeerMsg {
     Ping,
     Pong,
-    Connect(String, Option<String>), // Send our name and our endpointticket (if we have one) to the peer we're connecting to
+    Connect(String, String), // Send our name and our endpoint ticket to the peer we're connecting to
     Disconnect(String), // Send our name to the peer we're disconnecting from (so they can remove us from their peer list)
     Reject(String),     // Send a reason for rejecting the connection to the peer we're rejecting
     Payload(String),

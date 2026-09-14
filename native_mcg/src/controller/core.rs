@@ -24,7 +24,7 @@ use super::types::ControllerEvent;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PeerInfo {
     pub name: String,
-    pub ticket: Option<EndpointTicket>,
+    pub ticket: EndpointTicket,
 }
 
 /// Lobby and game session state owned exclusively by the Controller.
@@ -120,7 +120,7 @@ impl Controller {
             endpoint_id,
             PeerInfo {
                 name: self.lobby.our_name.clone(),
-                ticket: Some(ticket),
+                ticket,
             },
         );
 
@@ -424,7 +424,7 @@ impl Controller {
         network: &NetworkHandle,
     ) {
         match msg {
-            Peer2PeerMsg::Connect(name, ticket) => {
+            Peer2PeerMsg::Connect(name, ticket_str) => {
                 let rejection = if !self.lobby.lobby_open {
                     Some("Lobby is closed")
                 } else if self.lobby.game_running {
@@ -448,6 +448,20 @@ impl Controller {
                     }
                     return;
                 }
+
+                let ticket = match EndpointTicket::decode_string(&ticket_str) {
+                    Ok(ticket) => ticket,
+                    Err(error) => {
+                        tracing::warn!(%peer_id, %error, "rejecting peer connection with invalid endpoint ticket");
+                        let _ = network.blocking_unicast_peer(
+                            connection_id,
+                            Peer2PeerMsg::Reject("Invalid endpoint ticket".into()),
+                        );
+                        let _ = network
+                            .blocking_close_connection(connection_id, "invalid endpoint ticket");
+                        return;
+                    }
+                };
 
                 let Some(endpoint_id) = Self::parse_peer_endpoint_id(&peer_id) else {
                     if let Err(error) =
@@ -495,14 +509,7 @@ impl Controller {
                     .map(|(id, info)| {
                         (
                             id.to_string(),
-                            (
-                                info.name.clone(),
-                                if let Some(ticket) = &info.ticket {
-                                    ticket.encode_string()
-                                } else {
-                                    String::new()
-                                },
-                            ),
+                            (info.name.clone(), info.ticket.encode_string()),
                         )
                     })
                     .collect();
@@ -512,11 +519,6 @@ impl Controller {
                     tracing::warn!(%connection_id, %error, "failed to send peer message from controller");
                 }
 
-                let ticket = if let Some(ticket_str) = ticket {
-                    EndpointTicket::decode_string(&ticket_str).ok()
-                } else {
-                    None
-                };
                 self.peers.insert(
                     endpoint_id,
                     PeerInfo {
@@ -545,7 +547,7 @@ impl Controller {
             }
             Peer2PeerMsg::Peers(advertised_peers) => {
                 let mut discovered_tickets = Vec::new();
-                for (id, (name, ticket)) in advertised_peers {
+                for (id, (name, ticket_str)) in advertised_peers {
                     let Ok(endpoint_id) = id.parse::<iroh::EndpointId>() else {
                         tracing::warn!(peer_id = %id, "received invalid advertised peer identity");
                         continue;
@@ -554,10 +556,9 @@ impl Controller {
                         continue;
                     }
 
-                    let ticket = if ticket.is_empty() {
-                        None
-                    } else {
-                        EndpointTicket::decode_string(&ticket).ok()
+                    let Ok(ticket) = EndpointTicket::decode_string(&ticket_str) else {
+                        tracing::warn!(peer_id = %id, "skipping advertised peer with invalid ticket");
+                        continue;
                     };
                     self.peers.insert(
                         endpoint_id,
@@ -572,9 +573,7 @@ impl Controller {
                         tracing::warn!(%error, "failed to broadcast frontend message from controller");
                     }
                     if id != peer_id.as_str() {
-                        if let Some(ticket) = ticket {
-                            discovered_tickets.push(ticket);
-                        }
+                        discovered_tickets.push(ticket);
                     }
                 }
 
@@ -587,10 +586,8 @@ impl Controller {
             Peer2PeerMsg::NewName(name) => {
                 self.lobby.our_name = name.clone();
                 if let Some(own_ticket) = &self.ticket {
-                    if let Some(own_peer) = self
-                        .peers
-                        .values_mut()
-                        .find(|p| p.ticket.as_ref() == Some(own_ticket))
+                    if let Some(own_peer) =
+                        self.peers.values_mut().find(|p| &p.ticket == own_ticket)
                     {
                         own_peer.name = name.clone();
                     }
@@ -896,6 +893,8 @@ mod tests {
 
         let endpoint_id = iroh::SecretKey::from_bytes(&[1; 32]).public();
         let peer_id = PeerId::new(endpoint_id.to_string());
+        let alice_ticket =
+            EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
 
         let connection_id = network
             .register_iroh_peer(peer_id.clone(), peer_r, peer_w)
@@ -927,7 +926,7 @@ mod tests {
             controller.handle_peer_message(
                 connection_id,
                 p_id.clone(),
-                Peer2PeerMsg::Connect("Alice".into(), Some("alice-ticket".into())),
+                Peer2PeerMsg::Connect("Alice".into(), alice_ticket),
                 &net,
             );
 
@@ -974,6 +973,7 @@ mod tests {
 
         let endpoint_id = iroh::SecretKey::from_bytes(&[2; 32]).public();
         let peer_id = PeerId::new(endpoint_id.to_string());
+        let bob_ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
 
         let connection_id = network
             .register_iroh_peer(peer_id.clone(), peer_r, peer_w)
@@ -989,7 +989,7 @@ mod tests {
             controller.handle_peer_message(
                 connection_id,
                 p_id,
-                Peer2PeerMsg::Connect("Bob".into(), None),
+                Peer2PeerMsg::Connect("Bob".into(), bob_ticket),
                 &net,
             );
         })

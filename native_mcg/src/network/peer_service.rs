@@ -6,7 +6,8 @@ use mcg_shared::Peer2PeerMsg;
 use tokio::sync::RwLock;
 
 use super::{
-    ConnectionId, NetworkError, NetworkHandle, PeerConnectionDirection, PeerConnectionError, PeerId,
+    ConnectionId, NetworkError, NetworkHandle, PeerConnectionDirection, PeerConnectionError,
+    PeerId, TransportKind,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -86,7 +87,8 @@ impl PeerConnectionService {
         ticket: EndpointTicket,
     ) -> Result<EstablishedPeer, PeerConnectionError> {
         let peer_id = peer_id_from_ticket(&ticket);
-        if self.local_peer_id().await.as_ref() == Some(&peer_id) {
+        let own_ticket = self.wait_for_local_ticket().await?;
+        if peer_id_from_ticket(&own_ticket) == peer_id {
             return Err(PeerConnectionError::LocalEndpoint(peer_id));
         }
 
@@ -211,7 +213,8 @@ impl PeerConnectionService {
         ticket: EndpointTicket,
     ) -> Result<EstablishedPeer, PeerConnectionError> {
         let peer_id = peer_id_from_ticket(&ticket);
-        if self.blocking_local_peer_id().as_ref() == Some(&peer_id) {
+        let own_ticket = self.blocking_wait_for_local_ticket()?;
+        if peer_id_from_ticket(&own_ticket) == peer_id {
             return Err(PeerConnectionError::LocalEndpoint(peer_id));
         }
 
@@ -255,19 +258,42 @@ impl PeerConnectionService {
             .map(peer_id_from_ticket)
     }
 
+    async fn wait_for_local_ticket(&self) -> Result<EndpointTicket, NetworkError> {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(10);
+        loop {
+            if let Some(ticket) = self.local_ticket.read().await.clone() {
+                return Ok(ticket);
+            }
+            if start.elapsed() > timeout {
+                return Err(NetworkError::TransportUnavailable(TransportKind::Iroh));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }
+
+    fn blocking_wait_for_local_ticket(&self) -> Result<EndpointTicket, NetworkError> {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(10);
+        loop {
+            if let Some(ticket) = self.local_ticket.blocking_read().clone() {
+                return Ok(ticket);
+            }
+            if start.elapsed() > timeout {
+                return Err(NetworkError::TransportUnavailable(TransportKind::Iroh));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
     async fn introduce(&self, connection_id: ConnectionId) -> Result<(), NetworkError> {
-        let own_ticket = self
-            .local_ticket
-            .read()
-            .await
-            .as_ref()
-            .map(|ticket| ticket.encode_string());
+        let own_ticket = self.wait_for_local_ticket().await?;
 
         if let Err(error) = self
             .network
             .unicast_peer(
                 connection_id,
-                Peer2PeerMsg::Connect(String::new(), own_ticket),
+                Peer2PeerMsg::Connect(String::new(), own_ticket.encode_string()),
             )
             .await
         {
@@ -282,15 +308,11 @@ impl PeerConnectionService {
     }
 
     fn blocking_introduce(&self, connection_id: ConnectionId) -> Result<(), NetworkError> {
-        let own_ticket = self
-            .local_ticket
-            .blocking_read()
-            .as_ref()
-            .map(|ticket| ticket.encode_string());
+        let own_ticket = self.blocking_wait_for_local_ticket()?;
 
         if let Err(error) = self.network.blocking_unicast_peer(
             connection_id,
-            Peer2PeerMsg::Connect(String::new(), own_ticket),
+            Peer2PeerMsg::Connect(String::new(), own_ticket.encode_string()),
         ) {
             let _ = self
                 .network
@@ -437,7 +459,7 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(1), remote_reader.read_line(&mut line)).await??;
         assert!(matches!(
             serde_json::from_str::<Peer2PeerMsg>(line.trim())?,
-            Peer2PeerMsg::Connect(name, Some(ticket))
+            Peer2PeerMsg::Connect(name, ticket)
                 if name.is_empty() && ticket == bob_ticket.encode_string()
         ));
 
@@ -448,7 +470,10 @@ mod tests {
 
     #[tokio::test]
     async fn service_deduplicates_connections_for_all_callers() -> Result<()> {
-        let ticket = Arc::new(RwLock::new(None));
+        let local_endpoint_id = iroh::SecretKey::from_bytes(&[20; 32]).public();
+        let ticket = Arc::new(RwLock::new(Some(EndpointTicket::new(
+            iroh::EndpointAddr::new(local_endpoint_id),
+        ))));
         let (event_tx, _event_rx) = mpsc::channel(16);
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();
@@ -485,7 +510,10 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn blocking_service_deduplicates_connections_from_sync_thread() -> Result<()> {
-        let ticket = Arc::new(RwLock::new(None));
+        let local_endpoint_id = iroh::SecretKey::from_bytes(&[21; 32]).public();
+        let ticket = Arc::new(RwLock::new(Some(EndpointTicket::new(
+            iroh::EndpointAddr::new(local_endpoint_id),
+        ))));
         let (event_tx, _event_rx) = mpsc::channel(16);
         let supervisor = NetworkSupervisor::new(event_tx);
         let (network, supervisor_task) = supervisor.start();

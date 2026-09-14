@@ -243,7 +243,7 @@ async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Resu
     first_network
         .unicast_peer(
             outgoing_id,
-            Peer2PeerMsg::Connect("Alice".into(), Some(first_ticket.encode_string())),
+            Peer2PeerMsg::Connect("Alice".into(), first_ticket.encode_string()),
         )
         .await?;
     let incoming_id = incoming.await??;
@@ -260,7 +260,7 @@ async fn real_iroh_endpoints_exchange_typed_messages_and_close_cleanly() -> Resu
         next_event(&mut second_events).await?,
         NetworkEvent::PeerMessage {
             connection_id,
-            message: Peer2PeerMsg::Connect(name, Some(ticket)),
+            message: Peer2PeerMsg::Connect(name, ticket),
         } if connection_id == incoming_id && name == "Alice" && ticket == first_ticket.encode_string()
     ));
 
