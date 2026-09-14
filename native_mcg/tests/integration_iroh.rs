@@ -373,3 +373,72 @@ async fn real_iroh_transport_drop_closes_both_connection_actors() -> Result<()> 
     shutdown_supervisor(second_network, second_supervisor).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn integrated_iroh_listener_accepts_and_shuts_down_cleanly() -> Result<()> {
+    let backend_endpoint = local_endpoint().await?;
+    let client_endpoint = local_endpoint().await?;
+    let (backend_network, mut backend_events, backend_supervisor) = start_supervisor();
+    let (client_network, mut client_events, client_supervisor) = start_supervisor();
+
+    backend_network
+        .start_iroh_endpoint_listener(backend_endpoint.clone())
+        .await?;
+    client_network
+        .configure_iroh_endpoint(client_endpoint.clone())
+        .await?;
+
+    let ticket_event = next_event(&mut backend_events).await?;
+    assert!(matches!(ticket_event, NetworkEvent::LocalTicketReady(_)));
+
+    let backend_ticket = endpoint_ticket(&backend_endpoint);
+    let outgoing_id = client_network
+        .establish_iroh_peer_connection(backend_ticket)
+        .await?;
+
+    let client_connected = next_event(&mut client_events).await?;
+    assert!(matches!(
+        client_connected,
+        NetworkEvent::PeerConnected {
+            connection_id,
+            direction: PeerConnectionDirection::Outgoing,
+            ..
+        } if connection_id == outgoing_id
+    ));
+
+    client_network
+        .unicast_peer(outgoing_id, Peer2PeerMsg::Ping)
+        .await?;
+
+    let backend_connected = next_event(&mut backend_events).await?;
+    let incoming_id = match backend_connected {
+        NetworkEvent::PeerConnected {
+            connection_id,
+            direction: PeerConnectionDirection::Incoming,
+            ..
+        } => connection_id,
+        other => anyhow::bail!("expected incoming peer connected, got {other:?}"),
+    };
+
+    let backend_msg = next_event(&mut backend_events).await?;
+    assert!(matches!(
+        backend_msg,
+        NetworkEvent::PeerMessage {
+            connection_id,
+            message: Peer2PeerMsg::Ping,
+        } if connection_id == incoming_id
+    ));
+
+    backend_network.shutdown().await?;
+    tokio::time::timeout(TEST_TIMEOUT, backend_supervisor)
+        .await
+        .context("backend supervisor shutdown timed out")??;
+
+    client_network.shutdown().await?;
+    tokio::time::timeout(TEST_TIMEOUT, client_supervisor)
+        .await
+        .context("client supervisor shutdown timed out")??;
+
+    close_endpoint(&client_endpoint).await?;
+    Ok(())
+}

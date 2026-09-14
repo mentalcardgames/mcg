@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -8,8 +7,8 @@ use iroh_tickets::endpoint::EndpointTicket;
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
 use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, oneshot, RwLock};
-use tokio::task::{JoinHandle, JoinSet};
+use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinSet;
 
 use crate::config::{path_for_config, Config, PublicInfo};
 
@@ -81,76 +80,21 @@ impl IrohConnector for IrohEndpointConnector {
     }
 }
 
-/// Owned background task for the Iroh endpoint and its incoming connections.
-pub struct IrohListenerTask {
-    shutdown_tx: Option<oneshot::Sender<()>>,
-    task: Option<JoinHandle<()>>,
-}
-
-impl IrohListenerTask {
-    pub async fn shutdown(mut self) {
-        if let Some(shutdown_tx) = self.shutdown_tx.take() {
-            let _ = shutdown_tx.send(());
-        }
-        if let Some(task) = self.task.take() {
-            if let Err(error) = task.await {
-                tracing::error!(%error, "Iroh listener task failed during shutdown");
-            }
-        }
-    }
-}
-
-impl Drop for IrohListenerTask {
-    fn drop(&mut self) {
-        if let Some(task) = &self.task {
-            task.abort();
-        }
-    }
-}
-
-/// Starts an owned Iroh listener task without delaying the HTTP server startup.
-pub fn spawn_iroh_listener(
-    config: Config,
+/// Background task for an initialized Iroh endpoint, awaiting online status and running the accept loop.
+pub(crate) async fn run_iroh_listener_task(
+    endpoint: iroh::endpoint::Endpoint,
     config_path: Option<PathBuf>,
-    local_ticket: Arc<RwLock<Option<EndpointTicket>>>,
-    network: NetworkHandle,
-) -> IrohListenerTask {
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
-    let task = tokio::spawn(async move {
-        if let Err(error) =
-            run_iroh_listener(config, config_path, local_ticket, network, shutdown_rx).await
-        {
-            tracing::error!(%error, "Iroh listener failed");
-        }
-    });
-    IrohListenerTask {
-        shutdown_tx: Some(shutdown_tx),
-        task: Some(task),
-    }
-}
-
-/// Creates the Iroh endpoint and accepts peer connections until shutdown.
-async fn run_iroh_listener(
-    config: Config,
-    config_path: Option<PathBuf>,
-    local_ticket: Arc<RwLock<Option<EndpointTicket>>>,
     network: NetworkHandle,
     mut shutdown_rx: oneshot::Receiver<()>,
-) -> Result<()> {
-    use iroh::SecretKey;
-    use iroh_tickets::endpoint::EndpointTicket;
-
-    let secret_key: SecretKey = load_or_generate_iroh_secret(&config, config_path.as_deref()).await;
-    let endpoint = build_iroh_endpoint(secret_key).await?;
-    network
-        .configure_iroh_endpoint(endpoint.clone())
-        .await
-        .context("configuring Iroh endpoint in network supervisor")?;
-
+    stopped_tx: Option<oneshot::Sender<()>>,
+) {
     tokio::select! {
         _ = &mut shutdown_rx => {
             endpoint.close().await;
-            return Ok(());
+            if let Some(tx) = stopped_tx {
+                let _ = tx.send(());
+            }
+            return;
         }
         online = tokio::time::timeout(IROH_CONNECTION_SETUP_TIMEOUT, endpoint.online()) => {
             match online {
@@ -174,7 +118,6 @@ async fn run_iroh_listener(
     let ticket = EndpointTicket::new(addr);
     println!("{ticket}");
     tracing::info!(ticket = %ticket);
-    *local_ticket.write().await = Some(ticket.clone());
     if let Err(error) = network.publish_local_ticket(ticket).await {
         tracing::warn!(%error, "failed to publish local ticket to network supervisor");
     }
@@ -192,11 +135,10 @@ async fn run_iroh_listener(
         frontend_alpn = %std::str::from_utf8(IROH_FRONTEND_ALPN).unwrap_or("mcg/iroh/frontend"),
         "iroh listener started"
     );
-    run_iroh_accept_loop(endpoint, network, shutdown_rx).await;
-    Ok(())
+    run_iroh_accept_loop(endpoint, network, shutdown_rx, stopped_tx).await;
 }
 
-async fn load_or_generate_iroh_secret(
+pub(crate) async fn load_or_generate_iroh_secret(
     config: &Config,
     config_path: Option<&Path>,
 ) -> iroh::SecretKey {
@@ -245,7 +187,9 @@ async fn load_or_generate_iroh_secret(
     }
 }
 
-async fn build_iroh_endpoint(secret_key: iroh::SecretKey) -> Result<iroh::endpoint::Endpoint> {
+pub(crate) async fn build_iroh_endpoint(
+    secret_key: iroh::SecretKey,
+) -> Result<iroh::endpoint::Endpoint> {
     use iroh::endpoint::Endpoint;
 
     Endpoint::builder(iroh::endpoint::presets::N0)
@@ -256,15 +200,20 @@ async fn build_iroh_endpoint(secret_key: iroh::SecretKey) -> Result<iroh::endpoi
         .context("binding iroh endpoint")
 }
 
-async fn run_iroh_accept_loop(
+pub(crate) async fn run_iroh_accept_loop(
     endpoint: iroh::endpoint::Endpoint,
     network: NetworkHandle,
     mut shutdown_rx: oneshot::Receiver<()>,
+    stopped_tx: Option<oneshot::Sender<()>>,
 ) {
     let mut connection_tasks = JoinSet::new();
+    let mut stopped_cleanly = false;
     loop {
         tokio::select! {
-            _ = &mut shutdown_rx => break,
+            _ = &mut shutdown_rx => {
+                stopped_cleanly = true;
+                break;
+            }
             incoming = endpoint.accept() => {
                 let Some(incoming) = incoming else {
                     break;
@@ -301,8 +250,15 @@ async fn run_iroh_accept_loop(
         }
     }
 
+    if !stopped_cleanly {
+        tracing::error!("Iroh listener accept loop terminated unexpectedly");
+    }
+
     endpoint.close().await;
     connection_tasks.shutdown().await;
+    if let Some(tx) = stopped_tx {
+        let _ = tx.send(());
+    }
     tracing::info!("Iroh listener stopped");
 }
 

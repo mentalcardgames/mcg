@@ -621,3 +621,143 @@ async fn supervisor_publishes_local_ticket_as_network_event() -> Result<()> {
     let _ = supervisor_task.await;
     Ok(())
 }
+
+async fn test_local_endpoint() -> Result<iroh::endpoint::Endpoint> {
+    use crate::network::{IROH_FRONTEND_ALPN, IROH_PEER_ALPN};
+    use iroh::endpoint::RelayMode;
+    use std::net::{Ipv4Addr, SocketAddrV4};
+
+    Endpoint::builder(iroh::endpoint::presets::Minimal)
+        .relay_mode(RelayMode::Disabled)
+        .clear_address_lookup()
+        .clear_ip_transports()
+        .bind_addr(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))?
+        .alpns(vec![IROH_PEER_ALPN.to_vec(), IROH_FRONTEND_ALPN.to_vec()])
+        .bind()
+        .await
+        .map_err(Into::into)
+}
+
+#[tokio::test]
+async fn supervisor_starts_and_supervises_iroh_endpoint_listener() -> Result<()> {
+    use crate::network::IROH_FRONTEND_ALPN;
+
+    let (event_tx, mut event_rx) = mpsc::channel(16);
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
+
+    let listener_endpoint = test_local_endpoint().await?;
+    let listener_addr = listener_endpoint.addr();
+
+    network
+        .start_iroh_endpoint_listener(listener_endpoint)
+        .await?;
+
+    let ticket_event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+        .await?
+        .expect("ticket event");
+    assert!(matches!(
+        ticket_event,
+        ControllerEvent::Network(NetworkEvent::LocalTicketReady(_))
+    ));
+
+    let client_endpoint = test_local_endpoint().await?;
+    let connection = client_endpoint
+        .connect(listener_addr, IROH_FRONTEND_ALPN)
+        .await?;
+    let (mut writer, _reader) = connection.open_bi().await?;
+    writer
+        .write_all(format!("{}\n", serde_json::to_string(&Frontend2BackendMsg::Ping)?).as_bytes())
+        .await?;
+    writer.flush().await?;
+
+    let connected_event = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
+        .await?
+        .expect("connected event");
+    assert!(matches!(
+        connected_event,
+        ControllerEvent::Network(NetworkEvent::FrontendConnected {
+            transport: TransportKind::Iroh,
+            ..
+        })
+    ));
+
+    network.stop_iroh_listener().await?;
+
+    let second_endpoint = test_local_endpoint().await?;
+    network
+        .start_iroh_endpoint_listener(second_endpoint)
+        .await?;
+
+    network.shutdown().await?;
+    tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn supervisor_rejects_duplicate_iroh_listener_and_invalid_stops() -> Result<()> {
+    let (event_tx, _event_rx) = mpsc::channel(16);
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
+
+    assert_eq!(
+        network.stop_iroh_listener().await,
+        Err(NetworkError::ListenerNotRunning(TransportKind::Iroh))
+    );
+
+    let endpoint = test_local_endpoint().await?;
+    network
+        .start_iroh_endpoint_listener(endpoint.clone())
+        .await?;
+
+    assert_eq!(
+        network.start_iroh_endpoint_listener(endpoint).await,
+        Err(NetworkError::ListenerAlreadyRunning(TransportKind::Iroh))
+    );
+
+    network.stop_iroh_listener().await?;
+    assert_eq!(
+        network.stop_iroh_listener().await,
+        Err(NetworkError::ListenerNotRunning(TransportKind::Iroh))
+    );
+
+    network.shutdown().await?;
+    tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blocking_listener_methods_work_from_sync_thread() -> Result<()> {
+    let (event_tx, _event_rx) = mpsc::channel(16);
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
+
+    let endpoint = test_local_endpoint().await?;
+
+    let thread_network = network.clone();
+    let thread = std::thread::spawn(move || -> Result<(), NetworkError> {
+        thread_network.blocking_start_iroh_endpoint_listener(endpoint)?;
+        thread_network.blocking_stop_iroh_listener()?;
+        Ok(())
+    });
+
+    thread.join().expect("thread join")?;
+
+    network.shutdown().await?;
+    tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn supervisor_cascading_shutdown_aborts_active_listeners() -> Result<()> {
+    let (event_tx, _event_rx) = mpsc::channel(16);
+    let supervisor = NetworkSupervisor::new(event_tx);
+    let (network, supervisor_task) = supervisor.start();
+
+    let endpoint = test_local_endpoint().await?;
+    network.start_iroh_endpoint_listener(endpoint).await?;
+
+    network.shutdown().await?;
+    tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+    Ok(())
+}

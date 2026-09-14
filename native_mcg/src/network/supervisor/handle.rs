@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::ws::WebSocket;
@@ -7,15 +8,29 @@ use mcg_shared::{Backend2FrontendMsg, Peer2PeerMsg};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
 
+use crate::config::Config;
 use crate::network::iroh::{
     IrohConnectError, IrohConnector, IrohEndpointConnector, IrohReader, IrohWriter,
 };
-use crate::network::{ConnectionId, NetworkError, PeerId};
+use crate::network::{ConnectionId, NetworkError, PeerId, TransportKind};
 
 /// Internal request contract sent from [`NetworkHandle`] to [`super::NetworkSupervisor`].
 pub(crate) enum SupervisorRequest {
     Shutdown {
         response_tx: oneshot::Sender<()>,
+    },
+    StartIrohListener {
+        config: Config,
+        config_path: Option<PathBuf>,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    StartIrohEndpointListener {
+        endpoint: Endpoint,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    StopListener {
+        transport: TransportKind,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
     },
     ConfigureIroh {
         connector: Arc<dyn IrohConnector>,
@@ -107,6 +122,119 @@ impl NetworkHandle {
         response_rx
             .blocking_recv()
             .map_err(|_| NetworkError::SupervisorStopped)
+    }
+
+    /// Starts an Iroh QUIC listener supervised by the network subsystem.
+    pub async fn start_iroh_listener(
+        &self,
+        config: Config,
+        config_path: Option<PathBuf>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::StartIrohListener {
+                config,
+                config_path,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously starts an Iroh QUIC listener supervised by the network subsystem.
+    pub fn blocking_start_iroh_listener(
+        &self,
+        config: Config,
+        config_path: Option<PathBuf>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::StartIrohListener {
+                config,
+                config_path,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Starts a listener for an already-instantiated Iroh endpoint, supervised by the network subsystem.
+    pub async fn start_iroh_endpoint_listener(
+        &self,
+        endpoint: Endpoint,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::StartIrohEndpointListener {
+                endpoint,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously starts a listener for an already-instantiated Iroh endpoint.
+    pub fn blocking_start_iroh_endpoint_listener(
+        &self,
+        endpoint: Endpoint,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::StartIrohEndpointListener {
+                endpoint,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Stops the Iroh listener if one is currently running.
+    pub async fn stop_iroh_listener(&self) -> Result<(), NetworkError> {
+        self.stop_listener(TransportKind::Iroh).await
+    }
+
+    /// Synchronously stops the Iroh listener if one is currently running.
+    pub fn blocking_stop_iroh_listener(&self) -> Result<(), NetworkError> {
+        self.blocking_stop_listener(TransportKind::Iroh)
+    }
+
+    /// Stops the transport listener for the specified transport kind.
+    pub async fn stop_listener(&self, transport: TransportKind) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::StopListener {
+                transport,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously stops the transport listener for the specified transport kind.
+    pub fn blocking_stop_listener(&self, transport: TransportKind) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::StopListener {
+                transport,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
     }
 
     /// Configures the Iroh endpoint used for outgoing peer connections.

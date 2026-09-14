@@ -9,8 +9,7 @@ use crate::controller::{spawn_controller, Controller, ControllerEvent, Controlle
 use crate::network::{NetworkHandle, NetworkSupervisor, RouterState};
 use crate::server::bot_driver::spawn_bot_driver;
 use anyhow::{Context, Result};
-use iroh_tickets::endpoint::EndpointTicket;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 
 const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
 
@@ -81,12 +80,10 @@ impl Drop for NetworkTasks {
 
 struct RunningNetwork {
     network: NetworkHandle,
-    local_ticket: Arc<RwLock<Option<EndpointTicket>>>,
     network_tasks: Arc<NetworkTasks>,
 }
 
 fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork {
-    let local_ticket = Arc::new(RwLock::new(None));
     let (controller_tx, controller_rx) =
         mpsc::channel::<ControllerEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
     let supervisor = NetworkSupervisor::new(controller_tx.clone());
@@ -108,7 +105,6 @@ fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork
 
     RunningNetwork {
         network,
-        local_ticket,
         network_tasks: Arc::new(NetworkTasks {
             controller_handle,
             supervisor: Mutex::new(Some(supervisor_task)),
@@ -122,7 +118,6 @@ pub fn build_router(config: Config, config_path: Option<PathBuf>) -> Router {
     let RunningNetwork {
         network,
         network_tasks,
-        ..
     } = start_network(config, config_path);
     let router_state = RouterState::new(network).with_task_guard(network_tasks);
     crate::network::build_router(router_state)
@@ -135,9 +130,7 @@ pub async fn run_server(
 ) -> Result<()> {
     let RunningNetwork {
         network,
-        local_ticket,
         network_tasks,
-        ..
     } = start_network(config.clone(), config_path.clone());
     let router_state = RouterState::new(network.clone());
     let app = crate::network::build_router(router_state);
@@ -163,11 +156,11 @@ pub async fn run_server(
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .with_context(|| format!("Failed to bind to {}", display_addr))?;
-    // The owned task starts Iroh concurrently and is shut down after Axum stops.
-    let iroh_listener =
-        crate::network::spawn_iroh_listener(config, config_path, local_ticket, network.clone());
+    network
+        .start_iroh_listener(config, config_path)
+        .await
+        .context("starting Iroh listener")?;
     let server_result = axum::serve(listener, app).await;
-    iroh_listener.shutdown().await;
     if let Err(error) = network.shutdown().await {
         tracing::warn!(%error, "network supervisor stopped before server shutdown");
     }

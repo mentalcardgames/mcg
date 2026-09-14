@@ -4,9 +4,11 @@ mod handle;
 mod tests;
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use iroh::endpoint::Endpoint;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::{JoinHandle, JoinSet};
 
@@ -15,8 +17,12 @@ pub use self::handle::NetworkHandle;
 use iroh_tickets::endpoint::EndpointTicket;
 
 use self::handle::{IrohConnectResult, SupervisorRequest};
+use crate::config::Config;
 use crate::controller::ControllerEvent;
-use crate::network::iroh::{IrohConnectError, IrohConnector};
+use crate::network::iroh::{
+    build_iroh_endpoint, load_or_generate_iroh_secret, run_iroh_accept_loop,
+    run_iroh_listener_task, IrohConnectError, IrohConnector, IrohEndpointConnector,
+};
 use crate::network::types::ActorEvent;
 pub use crate::network::types::NetworkError;
 use crate::network::{ConnectionId, NetworkEvent, PeerConnectionDirection, PeerId, TransportKind};
@@ -29,6 +35,7 @@ const DEFAULT_IROH_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct NetworkSupervisor {
     /// Sender for supervisor requests, transferred to `NetworkHandle` when the supervisor task is started.
     request_tx: Option<mpsc::Sender<SupervisorRequest>>,
+    weak_request_tx: Option<mpsc::WeakSender<SupervisorRequest>>,
     /// Output for connection actors to report internal events.
     pub(crate) actor_event_tx: mpsc::Sender<ActorEvent>,
     /// Input of internal connection actor events.
@@ -42,6 +49,10 @@ pub struct NetworkSupervisor {
     iroh_connect_result_rx: mpsc::Receiver<IrohConnectResult>,
     /// Endpoint-backed connector for outgoing Iroh connections.
     iroh_connector: Option<Arc<dyn IrohConnector>>,
+    /// Active listener shutdown sender, signaled on supervisor shutdown or explicit stop.
+    iroh_listener_shutdown_tx: Option<oneshot::Sender<()>>,
+    /// Receiver awaiting clean completion of listener task.
+    iroh_listener_stopped_rx: Option<oneshot::Receiver<()>>,
     /// Connection actors and in-progress outgoing connection attempts.
     pub(crate) tasks: JoinSet<()>,
     /// Container with all connections with other peers or with frontends.
@@ -63,12 +74,15 @@ impl NetworkSupervisor {
             mpsc::channel(DEFAULT_CONTROL_CHANNEL_CAPACITY);
         Self {
             request_tx: Some(request_tx),
+            weak_request_tx: None,
             request_rx,
             actor_event_tx,
             actor_event_rx,
             iroh_connect_result_tx,
             iroh_connect_result_rx,
             iroh_connector: None,
+            iroh_listener_shutdown_tx: None,
+            iroh_listener_stopped_rx: None,
             tasks: JoinSet::new(),
             application_event_tx,
             connections: HashMap::new(),
@@ -94,9 +108,24 @@ impl NetworkSupervisor {
             .request_tx
             .take()
             .expect("network supervisor request sender already taken");
+        self.weak_request_tx = Some(request_tx.downgrade());
         let handle = NetworkHandle::new(request_tx);
         let task = tokio::spawn(self.run());
         (handle, task)
+    }
+
+    /// Returns a [`NetworkHandle`] for interacting with this supervisor.
+    pub fn handle(&self) -> NetworkHandle {
+        if let Some(tx) = &self.request_tx {
+            NetworkHandle::new(tx.clone())
+        } else if let Some(weak) = &self.weak_request_tx {
+            NetworkHandle::new(
+                weak.upgrade()
+                    .expect("network supervisor handle cannot be upgraded because channel closed"),
+            )
+        } else {
+            panic!("supervisor has neither strong nor weak request sender");
+        }
     }
 
     #[cfg(test)]
@@ -144,8 +173,19 @@ impl NetworkSupervisor {
                     if let Some(Err(error)) = task {
                         tracing::error!(%error, "network child task failed");
                     }
+                    if let Some(shutdown_tx) = &self.iroh_listener_shutdown_tx {
+                        if shutdown_tx.is_closed() {
+                            tracing::warn!("supervised Iroh listener task terminated");
+                            self.iroh_listener_shutdown_tx = None;
+                            self.iroh_listener_stopped_rx = None;
+                            self.iroh_connector = None;
+                        }
+                    }
                 }
             }
+        }
+        if let Some(shutdown_tx) = self.iroh_listener_shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
         }
         self.tasks.shutdown().await;
         tracing::info!(
@@ -159,6 +199,28 @@ impl NetworkSupervisor {
             SupervisorRequest::Shutdown { response_tx } => {
                 let _ = response_tx.send(());
                 return false;
+            }
+            SupervisorRequest::StartIrohListener {
+                config,
+                config_path,
+                response_tx,
+            } => {
+                let result = self.start_iroh_listener(config, config_path).await;
+                let _ = response_tx.send(result);
+            }
+            SupervisorRequest::StartIrohEndpointListener {
+                endpoint,
+                response_tx,
+            } => {
+                let result = self.start_iroh_endpoint_listener(endpoint).await;
+                let _ = response_tx.send(result);
+            }
+            SupervisorRequest::StopListener {
+                transport,
+                response_tx,
+            } => {
+                let result = self.stop_listener(transport).await;
+                let _ = response_tx.send(result);
             }
             SupervisorRequest::ConfigureIroh {
                 connector,
@@ -253,6 +315,109 @@ impl NetworkSupervisor {
             }
         }
         true
+    }
+
+    /// Starts an Iroh QUIC listener supervised by this supervisor.
+    pub async fn start_iroh_listener(
+        &mut self,
+        config: Config,
+        config_path: Option<PathBuf>,
+    ) -> Result<(), NetworkError> {
+        if self.iroh_connector.is_some() || self.iroh_listener_shutdown_tx.is_some() {
+            return Err(NetworkError::ListenerAlreadyRunning(TransportKind::Iroh));
+        }
+
+        let secret_key = load_or_generate_iroh_secret(&config, config_path.as_deref()).await;
+        let endpoint = build_iroh_endpoint(secret_key).await.map_err(|error| {
+            NetworkError::ListenerSetupFailed {
+                transport: TransportKind::Iroh,
+                message: error.to_string(),
+            }
+        })?;
+
+        self.configure_iroh_connector(Arc::new(IrohEndpointConnector::new(endpoint.clone())))?;
+
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let (stopped_tx, stopped_rx) = oneshot::channel();
+        self.iroh_listener_shutdown_tx = Some(shutdown_tx);
+        self.iroh_listener_stopped_rx = Some(stopped_rx);
+        let network = self.handle();
+
+        self.tasks.spawn(async move {
+            run_iroh_listener_task(
+                endpoint,
+                config_path,
+                network,
+                shutdown_rx,
+                Some(stopped_tx),
+            )
+            .await;
+        });
+
+        Ok(())
+    }
+
+    /// Starts a listener for an already-instantiated Iroh endpoint, supervised by this supervisor.
+    pub async fn start_iroh_endpoint_listener(
+        &mut self,
+        endpoint: Endpoint,
+    ) -> Result<(), NetworkError> {
+        if self.iroh_connector.is_some() || self.iroh_listener_shutdown_tx.is_some() {
+            return Err(NetworkError::ListenerAlreadyRunning(TransportKind::Iroh));
+        }
+
+        self.configure_iroh_connector(Arc::new(IrohEndpointConnector::new(endpoint.clone())))?;
+
+        let ticket = EndpointTicket::new(endpoint.addr());
+        self.local_peer_id = Some(ticket.endpoint_addr().id);
+        let _ = self
+            .application_event_tx
+            .send(ControllerEvent::Network(NetworkEvent::LocalTicketReady(
+                ticket,
+            )))
+            .await;
+
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let (stopped_tx, stopped_rx) = oneshot::channel();
+        self.iroh_listener_shutdown_tx = Some(shutdown_tx);
+        self.iroh_listener_stopped_rx = Some(stopped_rx);
+        let network = self.handle();
+
+        self.tasks.spawn(async move {
+            run_iroh_accept_loop(endpoint, network, shutdown_rx, Some(stopped_tx)).await;
+        });
+
+        Ok(())
+    }
+
+    /// Stops the Iroh listener if one is currently running.
+    pub async fn stop_iroh_listener(&mut self) -> Result<(), NetworkError> {
+        self.stop_listener(TransportKind::Iroh).await
+    }
+
+    /// Stops the listener for the specified transport kind.
+    pub async fn stop_listener(&mut self, transport: TransportKind) -> Result<(), NetworkError> {
+        match transport {
+            TransportKind::Iroh => {
+                let Some(shutdown_tx) = self.iroh_listener_shutdown_tx.take() else {
+                    return Err(NetworkError::ListenerNotRunning(TransportKind::Iroh));
+                };
+                if shutdown_tx.is_closed() {
+                    self.iroh_listener_stopped_rx = None;
+                    self.iroh_connector = None;
+                    return Err(NetworkError::ListenerNotRunning(TransportKind::Iroh));
+                }
+                let _ = shutdown_tx.send(());
+                if let Some(stopped_rx) = self.iroh_listener_stopped_rx.take() {
+                    let _ = stopped_rx.await;
+                }
+                self.iroh_connector = None;
+                Ok(())
+            }
+            TransportKind::WebSocket => {
+                Err(NetworkError::ListenerNotRunning(TransportKind::WebSocket))
+            }
+        }
     }
 
     pub(crate) fn configure_iroh_connector(

@@ -160,6 +160,12 @@ pub enum NetworkError {
     ConnectionSetupTimedOut(TransportKind),
     DuplicatePeer(PeerId),
     LocalEndpoint(PeerId),
+    ListenerAlreadyRunning(TransportKind),
+    ListenerNotRunning(TransportKind),
+    ListenerSetupFailed {
+        transport: TransportKind,
+        message: String,
+    },
 }
 
 impl fmt::Display for NetworkError {
@@ -214,6 +220,18 @@ impl fmt::Display for NetworkError {
             }
             Self::LocalEndpoint(peer_id) => {
                 write!(formatter, "cannot connect to local endpoint {peer_id}")
+            }
+            Self::ListenerAlreadyRunning(transport) => {
+                write!(formatter, "{transport:?} listener is already running")
+            }
+            Self::ListenerNotRunning(transport) => {
+                write!(formatter, "{transport:?} listener is not running")
+            }
+            Self::ListenerSetupFailed { transport, message } => {
+                write!(
+                    formatter,
+                    "failed to start {transport:?} listener: {message}"
+                )
             }
         }
     }
@@ -286,6 +304,21 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "connection 12 has role Peer, expected Frontend"
+        );
+
+        let err = NetworkError::ListenerAlreadyRunning(TransportKind::Iroh);
+        assert_eq!(err.to_string(), "Iroh listener is already running");
+
+        let err = NetworkError::ListenerNotRunning(TransportKind::Iroh);
+        assert_eq!(err.to_string(), "Iroh listener is not running");
+
+        let err = NetworkError::ListenerSetupFailed {
+            transport: TransportKind::Iroh,
+            message: "bind failed".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to start Iroh listener: bind failed"
         );
     }
 
