@@ -5,14 +5,16 @@
 //! [`ControllerEvent`] messages and communicates with the async network shell via
 //! [`NetworkHandle`].
 
+mod builder;
 mod core;
 mod handle;
 mod runner;
 mod types;
 
 pub use self::core::{Controller, Lobby, PeerInfo};
+pub use builder::ControllerBuilder;
 pub use handle::ControllerHandle;
-pub use runner::{spawn_controller, start_controller};
+pub use runner::spawn_controller;
 pub use types::{ControllerError, ControllerEvent};
 
 #[cfg(test)]
@@ -28,13 +30,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn dedicated_controller_thread_executes_sequential_loop() {
         let (network_event_tx, _network_event_rx) = mpsc::channel(16);
-        let supervisor = crate::network::NetworkSupervisor::new(network_event_tx);
-        let (network, supervisor_task) = supervisor.start();
+        let (network, supervisor_task) =
+            crate::network::NetworkSupervisor::builder(network_event_tx).spawn();
 
         let (state_watch_tx, mut state_watch_rx) = tokio::sync::watch::channel(None);
-        let controller = Controller::new(Config::default(), None).with_state_watch(state_watch_tx);
-
-        let (thread_handle, handle) = start_controller(controller, 16, network.clone());
+        let (handle, thread_handle) = Controller::builder(Config::default())
+            .with_state_watch(state_watch_tx)
+            .with_network(network.clone())
+            .with_channel_capacity(16)
+            .spawn();
 
         // Send network event to start game
         handle

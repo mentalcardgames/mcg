@@ -157,7 +157,7 @@ fn pick_delay(min_ms: u64, max_ms: u64) -> u64 {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::controller::{start_controller, Controller};
+    use crate::controller::Controller;
     use crate::network::{ConnectionId, NetworkEvent, NetworkSupervisor};
     use mcg_shared::{Frontend2BackendMsg, PlayerAction, PlayerConfig};
     use tokio::sync::mpsc;
@@ -165,12 +165,14 @@ mod tests {
     #[tokio::test]
     async fn bot_driver_drives_bot_turns_automatically() {
         let (network_event_tx, _network_event_rx) = mpsc::channel(16);
-        let supervisor = NetworkSupervisor::new(network_event_tx);
-        let (network, supervisor_task) = supervisor.start();
+        let (network, supervisor_task) = NetworkSupervisor::builder(network_event_tx).spawn();
 
         let (state_watch_tx, mut state_watch_rx) = watch::channel(None);
-        let controller = Controller::new(Config::default(), None).with_state_watch(state_watch_tx);
-        let (thread_handle, controller_handle) = start_controller(controller, 16, network.clone());
+        let (controller_handle, thread_handle) = Controller::builder(Config::default())
+            .with_state_watch(state_watch_tx)
+            .with_network(network.clone())
+            .with_channel_capacity(16)
+            .spawn();
 
         let bot_driver_task = spawn_bot_driver(
             controller_handle.clone(),

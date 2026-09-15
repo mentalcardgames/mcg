@@ -1,170 +1,30 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
+use anyhow::Result;
 use axum::Router;
 
+use crate::backend::BackendBuilder;
 use crate::config::Config;
-use crate::controller::{spawn_controller, Controller, ControllerEvent, ControllerHandle};
-use crate::network::{NetworkHandle, NetworkSupervisor, RouterState};
-use crate::server::bot_driver::spawn_bot_driver;
-use anyhow::{Context, Result};
-use tokio::sync::mpsc;
 
-const NETWORK_EVENT_CHANNEL_CAPACITY: usize = 256;
-
-struct NetworkTasks {
-    controller_handle: ControllerHandle,
-    supervisor: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    bot_driver: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    controller_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
-}
-
-impl NetworkTasks {
-    async fn shutdown(&self) {
-        let _ = self.controller_handle.shutdown().await;
-
-        let bot_driver = self
-            .bot_driver
-            .lock()
-            .expect("bot driver task lock poisoned")
-            .take();
-        if let Some(bot_driver) = bot_driver {
-            bot_driver.abort();
-        }
-
-        let supervisor = self
-            .supervisor
-            .lock()
-            .expect("network supervisor task lock poisoned")
-            .take();
-        if let Some(supervisor) = supervisor {
-            if let Err(error) = supervisor.await {
-                tracing::error!(%error, "network supervisor task failed during shutdown");
-            }
-        }
-
-        let controller_thread = self
-            .controller_thread
-            .lock()
-            .expect("controller thread lock poisoned")
-            .take();
-        if let Some(controller_thread) = controller_thread {
-            if let Err(error) = controller_thread.join() {
-                tracing::error!(?error, "controller thread panicked during shutdown");
-            }
-        }
-    }
-}
-
-impl Drop for NetworkTasks {
-    fn drop(&mut self) {
-        if let Some(bot_driver) = self
-            .bot_driver
-            .get_mut()
-            .expect("bot driver task lock poisoned")
-            .take()
-        {
-            bot_driver.abort();
-        }
-        if let Some(supervisor) = self
-            .supervisor
-            .get_mut()
-            .expect("network supervisor task lock poisoned")
-            .take()
-        {
-            supervisor.abort();
-        }
-    }
-}
-
-struct RunningNetwork {
-    network: NetworkHandle,
-    network_tasks: Arc<NetworkTasks>,
-}
-
-fn start_network(config: Config, config_path: Option<PathBuf>) -> RunningNetwork {
-    let (controller_tx, controller_rx) =
-        mpsc::channel::<ControllerEvent>(NETWORK_EVENT_CHANNEL_CAPACITY);
-    let supervisor = NetworkSupervisor::new(controller_tx.clone());
-    let (network, supervisor_task) = supervisor.start();
-
-    let (state_watch_tx, state_watch_rx) = tokio::sync::watch::channel(None);
-    let controller =
-        Controller::new(config.clone(), config_path.clone()).with_state_watch(state_watch_tx);
-    let controller_thread = spawn_controller(controller, controller_rx, network.clone());
-    let controller_handle = ControllerHandle::new(controller_tx);
-
-    let bot_delay_range = config.bot_delay_range();
-    let bot_driver = spawn_bot_driver(
-        controller_handle.clone(),
-        state_watch_rx,
-        crate::bot::BotManager::new(),
-        bot_delay_range,
-    );
-
-    RunningNetwork {
-        network,
-        network_tasks: Arc::new(NetworkTasks {
-            controller_handle,
-            supervisor: Mutex::new(Some(supervisor_task)),
-            bot_driver: Mutex::new(Some(bot_driver)),
-            controller_thread: Mutex::new(Some(controller_thread)),
-        }),
-    }
-}
-
+/// Convenience function to build an Axum [`Router`] for the given configuration.
 pub fn build_router(config: Config, config_path: Option<PathBuf>) -> Router {
-    let RunningNetwork {
-        network,
-        network_tasks,
-    } = start_network(config, config_path);
-    let router_state = RouterState::new(network).with_task_guard(network_tasks);
-    crate::network::build_router(router_state)
+    BackendBuilder::new(config)
+        .with_config_path_opt(config_path)
+        .build()
+        .expect("building backend for router")
+        .router()
 }
 
+/// Convenience function to run the full server for the given address and configuration.
 pub async fn run_server(
     addr: SocketAddr,
     config: Config,
     config_path: Option<PathBuf>,
 ) -> Result<()> {
-    let RunningNetwork {
-        network,
-        network_tasks,
-    } = start_network(config.clone(), config_path.clone());
-    let router_state = RouterState::new(network.clone());
-    let app = crate::network::build_router(router_state);
-
-    let display_addr = if addr.ip().is_loopback() {
-        format!("localhost:{}", addr.port())
-    } else {
-        addr.to_string()
-    };
-
-    tracing::info!(display_addr = %display_addr, "MCG Server running");
-
-    // Nice clickable banner for the Web UI
-    println!("\n\x1b[1;36m=== Web UI Available ===\x1b[0m");
-    println!(
-        "\x1b[1mURL:\x1b[0m       \x1b[4;34mhttp://{}\x1b[0m",
-        display_addr
-    );
-    println!("\x1b[1;36m========================\x1b[0m\n");
-
-    tracing::info!("open your browser and navigate to the above URL");
-    tracing::debug!("blank line");
-    let listener = tokio::net::TcpListener::bind(addr)
+    BackendBuilder::new(config)
+        .with_config_path_opt(config_path)
+        .build()?
+        .run(addr)
         .await
-        .with_context(|| format!("Failed to bind to {}", display_addr))?;
-    network
-        .start_iroh_listener(config, config_path)
-        .await
-        .context("starting Iroh listener")?;
-    let server_result = axum::serve(listener, app).await;
-    if let Err(error) = network.shutdown().await {
-        tracing::warn!(%error, "network supervisor stopped before server shutdown");
-    }
-    network_tasks.shutdown().await;
-    server_result.context("running HTTP/WebSocket server")?;
-    Ok(())
 }

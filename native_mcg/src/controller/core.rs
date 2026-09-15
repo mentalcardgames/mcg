@@ -77,6 +77,11 @@ pub struct Controller {
 }
 
 impl Controller {
+    /// Returns a [`ControllerBuilder`](super::ControllerBuilder) initialized with the given configuration.
+    pub fn builder(config: Config) -> super::builder::ControllerBuilder {
+        super::builder::ControllerBuilder::new(config)
+    }
+
     /// Creates a new Controller instance with the specified configuration.
     pub fn new(config: Config, config_path: Option<PathBuf>) -> Self {
         Self {

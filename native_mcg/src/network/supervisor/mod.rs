@@ -33,9 +33,8 @@ const DEFAULT_IROH_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Owns active connection handles and routes commands and actor events.
 pub struct NetworkSupervisor {
-    /// Sender for supervisor requests, transferred to `NetworkHandle` when the supervisor task is started.
-    request_tx: Option<mpsc::Sender<SupervisorRequest>>,
-    weak_request_tx: Option<mpsc::WeakSender<SupervisorRequest>>,
+    /// Weak sender for obtaining handles to this supervisor without preventing shutdown.
+    weak_request_tx: mpsc::WeakSender<SupervisorRequest>,
     /// Output for connection actors to report internal events.
     pub(crate) actor_event_tx: mpsc::Sender<ActorEvent>,
     /// Input of internal connection actor events.
@@ -65,72 +64,142 @@ pub struct NetworkSupervisor {
     pub(crate) pending_outgoing: HashSet<PeerId>,
 }
 
-impl NetworkSupervisor {
-    /// Creates a supervisor with the provided application event sender.
+/// Builder for configuring and instantiating a [`NetworkSupervisor`] and [`NetworkHandle`].
+pub struct NetworkSupervisorBuilder {
+    application_event_tx: mpsc::Sender<ControllerEvent>,
+    control_channel_capacity: usize,
+    connection_channel_capacity: usize,
+    iroh_connect_timeout: Duration,
+    local_peer_id: Option<PeerId>,
+    iroh_connector: Option<Arc<dyn IrohConnector>>,
+}
+
+impl NetworkSupervisorBuilder {
+    /// Creates a new builder with the target application event sender.
     pub fn new(application_event_tx: mpsc::Sender<ControllerEvent>) -> Self {
-        let (request_tx, request_rx) = mpsc::channel(DEFAULT_CONTROL_CHANNEL_CAPACITY);
-        let (actor_event_tx, actor_event_rx) = mpsc::channel(DEFAULT_CONTROL_CHANNEL_CAPACITY);
-        let (iroh_connect_result_tx, iroh_connect_result_rx) =
-            mpsc::channel(DEFAULT_CONTROL_CHANNEL_CAPACITY);
         Self {
-            request_tx: Some(request_tx),
-            weak_request_tx: None,
-            request_rx,
-            actor_event_tx,
-            actor_event_rx,
-            iroh_connect_result_tx,
-            iroh_connect_result_rx,
-            iroh_connector: None,
-            iroh_listener_shutdown_tx: None,
-            iroh_listener_stopped_rx: None,
-            tasks: JoinSet::new(),
             application_event_tx,
-            connections: HashMap::new(),
-            next_connection_id: 0,
+            control_channel_capacity: DEFAULT_CONTROL_CHANNEL_CAPACITY,
             connection_channel_capacity: DEFAULT_CONNECTION_CHANNEL_CAPACITY,
             iroh_connect_timeout: DEFAULT_IROH_CONNECT_TIMEOUT,
             local_peer_id: None,
-            peers: HashMap::new(),
-            pending_outgoing: HashSet::new(),
+            iroh_connector: None,
         }
     }
 
-    /// Explicitly sets the local peer identity for deduplication and testing.
-    pub fn set_local_peer_id(&mut self, peer_id: PeerId) {
+    /// Sets the buffer capacity for the internal supervisor control channel.
+    pub fn with_control_channel_capacity(mut self, capacity: usize) -> Self {
+        self.control_channel_capacity = capacity;
+        self
+    }
+
+    /// Sets the buffer capacity for per-connection frame channels.
+    pub fn with_connection_channel_capacity(mut self, capacity: usize) -> Self {
+        self.connection_channel_capacity = capacity;
+        self
+    }
+
+    /// Sets the timeout for outgoing Iroh connection establishment.
+    pub fn with_iroh_connect_timeout(mut self, timeout: Duration) -> Self {
+        self.iroh_connect_timeout = timeout;
+        self
+    }
+
+    /// Sets the local peer identity for deduplication and testing.
+    pub fn with_local_peer_id(mut self, peer_id: PeerId) -> Self {
         self.local_peer_id = Some(peer_id);
+        self
+    }
+
+    /// Sets the local peer identity for deduplication and testing (mutable reference helper).
+    pub fn set_local_peer_id(&mut self, peer_id: PeerId) -> &mut Self {
+        self.local_peer_id = Some(peer_id);
+        self
+    }
+
+    /// Sets the timeout for outgoing Iroh connection establishment (mutable reference helper).
+    pub fn set_iroh_connect_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.iroh_connect_timeout = timeout;
+        self
+    }
+
+    /// Sets a custom connector for Iroh endpoint connections.
+    #[allow(dead_code)]
+    pub(crate) fn with_iroh_connector(mut self, connector: Arc<dyn IrohConnector>) -> Self {
+        self.iroh_connector = Some(connector);
+        self
+    }
+
+    /// Builds the [`NetworkSupervisor`] and [`NetworkHandle`] without starting a background task.
+    pub fn build(self) -> (NetworkSupervisor, NetworkHandle) {
+        let (request_tx, request_rx) = mpsc::channel(self.control_channel_capacity);
+        let (actor_event_tx, actor_event_rx) = mpsc::channel(self.control_channel_capacity);
+        let (iroh_connect_result_tx, iroh_connect_result_rx) =
+            mpsc::channel(self.control_channel_capacity);
+
+        let weak_request_tx = request_tx.downgrade();
+        let handle = NetworkHandle::new(request_tx);
+
+        let supervisor = NetworkSupervisor {
+            weak_request_tx,
+            actor_event_tx,
+            actor_event_rx,
+            application_event_tx: self.application_event_tx,
+            request_rx,
+            iroh_connect_result_tx,
+            iroh_connect_result_rx,
+            iroh_connector: self.iroh_connector,
+            iroh_listener_shutdown_tx: None,
+            iroh_listener_stopped_rx: None,
+            tasks: JoinSet::new(),
+            connections: HashMap::new(),
+            next_connection_id: 0,
+            connection_channel_capacity: self.connection_channel_capacity,
+            iroh_connect_timeout: self.iroh_connect_timeout,
+            local_peer_id: self.local_peer_id,
+            peers: HashMap::new(),
+            pending_outgoing: HashSet::new(),
+        };
+
+        (supervisor, handle)
     }
 
     /// Spawns the supervisor as an asynchronous Tokio task.
     ///
     /// Returns the [`NetworkHandle`] for interacting with the supervisor and the task's [`JoinHandle`].
-    pub fn start(mut self) -> (NetworkHandle, JoinHandle<()>) {
-        let request_tx = self
-            .request_tx
-            .take()
-            .expect("network supervisor request sender already taken");
-        self.weak_request_tx = Some(request_tx.downgrade());
-        let handle = NetworkHandle::new(request_tx);
-        let task = tokio::spawn(self.run());
+    pub fn spawn(self) -> (NetworkHandle, JoinHandle<()>) {
+        let (supervisor, handle) = self.build();
+        let task = tokio::spawn(supervisor.run());
         (handle, task)
+    }
+
+    /// Alias for [`spawn`](Self::spawn) to maintain compatibility.
+    pub fn start(self) -> (NetworkHandle, JoinHandle<()>) {
+        self.spawn()
+    }
+}
+
+impl NetworkSupervisor {
+    /// Returns a [`NetworkSupervisorBuilder`] with default configuration.
+    pub fn builder(
+        application_event_tx: mpsc::Sender<ControllerEvent>,
+    ) -> NetworkSupervisorBuilder {
+        NetworkSupervisorBuilder::new(application_event_tx)
+    }
+
+    /// Creates a [`NetworkSupervisorBuilder`] with default configuration.
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(application_event_tx: mpsc::Sender<ControllerEvent>) -> NetworkSupervisorBuilder {
+        NetworkSupervisorBuilder::new(application_event_tx)
     }
 
     /// Returns a [`NetworkHandle`] for interacting with this supervisor.
     pub fn handle(&self) -> NetworkHandle {
-        if let Some(tx) = &self.request_tx {
-            NetworkHandle::new(tx.clone())
-        } else if let Some(weak) = &self.weak_request_tx {
-            NetworkHandle::new(
-                weak.upgrade()
-                    .expect("network supervisor handle cannot be upgraded because channel closed"),
-            )
-        } else {
-            panic!("supervisor has neither strong nor weak request sender");
-        }
-    }
-
-    #[cfg(test)]
-    pub fn set_iroh_connect_timeout(&mut self, timeout: Duration) {
-        self.iroh_connect_timeout = timeout;
+        let tx = self
+            .weak_request_tx
+            .upgrade()
+            .expect("network supervisor handle cannot be upgraded because channel closed");
+        NetworkHandle::new(tx)
     }
 
     /// Runs until every [`NetworkHandle`] has been dropped or the application

@@ -1,6 +1,6 @@
 //! Main entry point for the MCG poker server.
 
-use native_mcg::{config, server};
+use native_mcg::config;
 
 use clap::Parser;
 use config::ServerCli;
@@ -56,7 +56,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Run the server
-    server::run_server(addr, cfg, Some(config_path)).await?;
+    native_mcg::backend::BackendBuilder::new(cfg)
+        .with_config_path(config_path)
+        .build()?
+        .run(addr)
+        .await?;
     Ok(())
 }
 

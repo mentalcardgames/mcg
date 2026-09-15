@@ -4,7 +4,6 @@ use tokio::sync::mpsc;
 use crate::network::NetworkHandle;
 
 use super::core::Controller;
-use super::handle::ControllerHandle;
 use super::types::ControllerEvent;
 
 /// Spawns the Controller in a dedicated standard OS thread and returns its thread [`JoinHandle`].
@@ -27,16 +26,4 @@ pub fn spawn_controller(
             tracing::info!("synchronous controller thread stopped");
         })
         .expect("spawning controller OS thread")
-}
-
-/// Helper function to create an event channel, spawn the controller thread, and return both the thread [`JoinHandle`] and a cloneable [`ControllerHandle`].
-pub fn start_controller(
-    controller: Controller,
-    channel_capacity: usize,
-    network: NetworkHandle,
-) -> (JoinHandle<()>, ControllerHandle) {
-    let (event_tx, event_rx) = mpsc::channel(channel_capacity);
-    let handle = ControllerHandle::new(event_tx);
-    let thread_handle = spawn_controller(controller, event_rx, network);
-    (thread_handle, handle)
 }
