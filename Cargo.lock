@@ -2795,6 +2795,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mcg-poker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "mcg-shared",
+ "rand 0.9.5",
+ "serde",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "mcg-shared"
 version = "0.1.0"
 dependencies = [
@@ -2973,6 +2986,7 @@ dependencies = [
  "iroh",
  "iroh-tickets",
  "local_ipaddress",
+ "mcg-poker",
  "mcg-shared",
  "owo-colors",
  "rand 0.9.5",

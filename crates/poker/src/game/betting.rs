@@ -1,6 +1,6 @@
 //! Betting and action handling for Game.
 
-use crate::game::Game;
+use super::Game;
 use anyhow::{bail, Result};
 use mcg_shared::{ActionEvent, ActionKind, PlayerAction};
 
@@ -65,10 +65,6 @@ impl Game {
             self.players[actor].stack -= pay;
             self.round_bets[actor] += pay;
             self.pot += pay;
-            // distinct from "pay < need" check elsewhere: if pay consumes entire stack, they are all-in?
-            // "pay < need" implies they didn't have enough to cover the bet.
-            // If they had exactly enough, stack becomes 0, are they all-in?
-            // Usually yes if stack is 0.
             if self.players[actor].stack == 0 {
                 self.players[actor].all_in = true;
             }

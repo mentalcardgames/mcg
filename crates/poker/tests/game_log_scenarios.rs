@@ -1,7 +1,7 @@
 //! Test for the specific hand evaluation scenarios from the game log
 
+use mcg_poker::eval::{evaluate_best_hand, pick_best_five};
 use mcg_shared::{Card, CardRank, CardSuit, HandRankCategory};
-use native_mcg::poker::evaluation::{evaluate_best_hand, pick_best_five};
 
 #[test]
 fn test_game_log_scenario() {

@@ -7,8 +7,9 @@ members = [
     "crates/lsp_server",
     "crates/code_gen",
     "crates/engine",
+    "crates/poker",
 ]
-default-members = ["native_mcg", "shared"]
+default-members = ["native_mcg", "shared", "crates/poker"]
 resolver = "3"
 exclude = ["frontend"]
 

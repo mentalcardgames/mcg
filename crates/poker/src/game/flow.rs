@@ -1,7 +1,7 @@
 use anyhow::Result;
 use mcg_shared::{ActionEvent, GameAction, Stage};
 
-use crate::game::Game;
+use super::Game;
 
 impl Game {
     /// After an action is applied, update the game flow (next actor, stage changes, etc).
@@ -30,7 +30,7 @@ impl Game {
         // Check for end-of-hand conditions (e.g. only one player left).
         if self.active_players().len() <= 1 {
             self.stage = mcg_shared::Stage::Showdown;
-            crate::game::showdown::finish_showdown(self);
+            super::showdown::finish_showdown(self);
             return Ok(());
         }
 
@@ -39,7 +39,7 @@ impl Game {
             self.advance_stage()?;
             // Advancing might have led to showdown.
             if self.stage == mcg_shared::Stage::Showdown {
-                crate::game::showdown::finish_showdown(self);
+                super::showdown::finish_showdown(self);
                 return Ok(());
             }
             // Initialize the next round's betting state.
@@ -197,7 +197,7 @@ impl Game {
 
 #[cfg(test)]
 mod tests {
-    use crate::game::Game;
+    use super::Game;
     use mcg_shared::{PlayerAction, Stage};
 
     #[test]

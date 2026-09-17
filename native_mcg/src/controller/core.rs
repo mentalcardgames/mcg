@@ -12,10 +12,10 @@ use mcg_shared::{
 };
 use tokio::sync::watch;
 
-use crate::bot::BotManager;
 use crate::config::{path_for_config, Config, PublicInfo};
-use crate::game::{Game, Player};
 use crate::network::{ConnectionId, NetworkEvent, NetworkHandle, PeerConnectionDirection, PeerId};
+use mcg_poker::bot::BotManager;
+use mcg_poker::game::{Game, Player};
 use mcg_shared::pretty;
 
 use super::types::ControllerEvent;

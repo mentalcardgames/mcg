@@ -1,7 +1,7 @@
 //! Tests for hand evaluation logic, especially tiebreaker scenarios
 
+use mcg_poker::eval::*;
 use mcg_shared::{Card, CardRank, CardSuit, HandRankCategory};
-use native_mcg::poker::evaluation::*;
 
 /// Test that pair tiebreakers work correctly
 #[test]

@@ -12,6 +12,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rand = "0.9"
 mcg-shared = { path = "../shared" }
+mcg-poker = { path = "../crates/poker" }
 tower-http = { version = "0.6", features = ["fs"] }
 clap = { version = "4.5.45", features = ["derive"] }
 tokio-tungstenite = { version = "0.24.0", default-features = false }

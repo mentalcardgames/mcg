@@ -55,3 +55,16 @@ impl ControllerHandle {
         self.send_event(ControllerEvent::Shutdown).await
     }
 }
+
+#[async_trait::async_trait]
+impl mcg_poker::driver::BotActionSink for ControllerHandle {
+    async fn send_bot_action(
+        &self,
+        player_id: PlayerId,
+        action: PlayerAction,
+    ) -> anyhow::Result<()> {
+        self.send_bot_action(player_id, action)
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))
+    }
+}

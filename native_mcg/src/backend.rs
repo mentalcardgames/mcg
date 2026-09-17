@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::controller::{ControllerBuilder, ControllerHandle};
 use crate::network::{NetworkBuilder, NetworkHandle};
-use crate::server::bot_driver::spawn_bot_driver;
+use mcg_poker::driver::spawn_bot_driver;
 
 /// Holds task handles for the background supervisor, bot driver, and controller thread.
 pub struct BackendTasks {
@@ -215,7 +215,7 @@ impl BackendBuilder {
             let driver_task = spawn_bot_driver(
                 controller_handle.clone(),
                 state_watch_rx,
-                crate::bot::BotManager::new(),
+                mcg_poker::bot::BotManager::new(),
                 bot_delay_range,
             );
             Some(driver_task)

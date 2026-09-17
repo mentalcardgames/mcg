@@ -211,8 +211,8 @@ impl Game {
 
 #[cfg(test)]
 mod tests {
+    use super::super::dealing;
     use super::*;
-    use crate::game::dealing;
     use anyhow::Result;
     use std::collections::VecDeque;
 

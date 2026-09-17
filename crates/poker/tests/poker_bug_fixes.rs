@@ -1,8 +1,8 @@
 //! Integration tests for poker bug fixes
 
 use anyhow::Result;
+use mcg_poker::game::{Game, Player};
 use mcg_shared::{Card, CardRank, CardSuit, PlayerAction};
-use native_mcg::game::{Game, Player};
 
 // Helper function to calculate total chips (since total_chips is private)
 fn total_chips(game: &Game) -> u32 {
@@ -114,8 +114,8 @@ fn test_all_in_detection() -> Result<()> {
 #[test]
 fn test_hand_evaluation_accuracy() -> Result<()> {
     // Test the specific scenario from the game log
+    use mcg_poker::eval::{evaluate_best_hand, pick_best_five};
     use mcg_shared::HandRankCategory;
-    use native_mcg::poker::evaluation::{evaluate_best_hand, pick_best_five};
 
     // "You" hand: J♣, 7♥ with board K♥, T♠, 9♥, 9♣, 4♣
     let hole = [
@@ -172,8 +172,8 @@ fn test_hole_card_visibility() -> Result<()> {
 // Helper function to test the bot AI logic directly
 #[test]
 fn test_bot_ai_minimum_bet_enforcement() {
+    use mcg_poker::bot::{BotContext, SimpleBot};
     use mcg_shared::{PlayerAction, Stage};
-    use native_mcg::bot::{BotContext, SimpleBot};
 
     let bot = SimpleBot::default();
 

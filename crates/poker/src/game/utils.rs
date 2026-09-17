@@ -1,5 +1,5 @@
-use crate::game::engine::MAX_RECENT_ACTIONS;
-use crate::game::Game;
+use super::engine::MAX_RECENT_ACTIONS;
+use super::Game;
 
 pub(crate) fn cap_logs(game: &mut Game) {
     if game.recent_actions.len() > MAX_RECENT_ACTIONS {
