@@ -117,9 +117,19 @@ pub(crate) async fn run_iroh_listener_task(
 
     let ticket = EndpointTicket::new(addr);
     println!("{ticket}");
-    tracing::info!(ticket = %ticket);
-    if let Err(error) = network.publish_local_ticket(ticket).await {
-        tracing::warn!(%error, "failed to publish local ticket to network supervisor");
+    tokio::select! {
+        _ = &mut shutdown_rx => {
+            endpoint.close().await;
+            if let Some(tx) = stopped_tx {
+                let _ = tx.send(());
+            }
+            return;
+        }
+        res = network.publish_local_ticket(ticket) => {
+            if let Err(error) = res {
+                tracing::warn!(%error, "failed to publish local ticket to network supervisor");
+            }
+        }
     }
 
     let public_path = path_for_config(config_path.as_deref());

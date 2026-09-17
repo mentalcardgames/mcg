@@ -138,6 +138,7 @@ pub async fn watch_iroh(peer_uri: &str, json: bool) -> anyhow::Result<()> {
 
     // Try to finish/close the send side politely if available
     let _ = send.finish();
+    endpoint.close().await;
 
     Ok(())
 }

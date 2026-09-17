@@ -441,3 +441,41 @@ async fn integrated_iroh_listener_accepts_and_shuts_down_cleanly() -> Result<()>
     close_endpoint(&client_endpoint).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn backend_shutdown_closes_iroh_listener_cleanly() -> Result<()> {
+    let backend = native_mcg::BackendBuilder::new(native_mcg::config::Config::default()).build()?;
+    backend
+        .network()
+        .start_iroh_listener(native_mcg::config::Config::default(), None)
+        .await?;
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    backend.shutdown().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn running_backend_run_until_shuts_down_cleanly() -> Result<()> {
+    let backend = native_mcg::BackendBuilder::new(native_mcg::config::Config::default()).build()?;
+    let addr = "127.0.0.1:0".parse()?;
+    let (signal_tx, signal_rx) = tokio::sync::oneshot::channel();
+
+    let run_task = tokio::spawn(async move {
+        backend
+            .run_until(addr, async move {
+                let _ = signal_rx.await;
+            })
+            .await
+    });
+
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let _ = signal_tx.send(());
+
+    tokio::time::timeout(TEST_TIMEOUT, run_task)
+        .await
+        .context("run_until shutdown timed out")??
+        .context("run_until failed")?;
+    Ok(())
+}

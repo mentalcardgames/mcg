@@ -244,12 +244,9 @@ impl NetworkSupervisor {
                 }
             }
         }
-        if let Some(shutdown_tx) = self.axum_listener_shutdown_tx.take() {
-            let _ = shutdown_tx.send(());
-        }
-        if let Some(shutdown_tx) = self.iroh_listener_shutdown_tx.take() {
-            let _ = shutdown_tx.send(());
-        }
+        let _ = self.stop_listener(TransportKind::Iroh).await;
+        let _ = self.stop_listener(TransportKind::WebSocket).await;
+        self.iroh_connector = None;
         self.tasks.shutdown().await;
         tracing::info!(
             connections = self.connections.len(),
@@ -260,6 +257,9 @@ impl NetworkSupervisor {
     async fn handle_request(&mut self, request: SupervisorRequest) -> bool {
         match request {
             SupervisorRequest::Shutdown { response_tx } => {
+                let _ = self.stop_listener(TransportKind::Iroh).await;
+                let _ = self.stop_listener(TransportKind::WebSocket).await;
+                self.iroh_connector = None;
                 let _ = response_tx.send(());
                 return false;
             }
@@ -514,6 +514,7 @@ impl NetworkSupervisor {
         match transport {
             TransportKind::Iroh => {
                 let Some(shutdown_tx) = self.iroh_listener_shutdown_tx.take() else {
+                    self.iroh_connector = None;
                     return Err(NetworkError::ListenerNotRunning(TransportKind::Iroh));
                 };
                 if shutdown_tx.is_closed() {

@@ -112,6 +112,7 @@ pub async fn run_once_iroh(
 
     // Try to finish/close the send side politely if available
     let _ = send.finish();
+    endpoint.close().await;
 
     Ok(())
 }
