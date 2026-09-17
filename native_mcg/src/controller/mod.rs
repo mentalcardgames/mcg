@@ -8,13 +8,11 @@
 mod builder;
 mod core;
 mod handle;
-mod runner;
 mod types;
 
 pub use self::core::{Controller, Lobby, PeerInfo};
 pub use builder::ControllerBuilder;
 pub use handle::ControllerHandle;
-pub use runner::spawn_controller;
 pub use types::{ControllerError, ControllerEvent};
 
 #[cfg(test)]
@@ -31,10 +29,10 @@ mod tests {
     async fn dedicated_controller_thread_executes_sequential_loop() {
         let (network_event_tx, _network_event_rx) = mpsc::channel(16);
         let (network, supervisor_task) =
-            crate::network::NetworkSupervisor::builder(network_event_tx).spawn();
+            crate::network::NetworkBuilder::new(ControllerHandle::new(network_event_tx)).spawn();
 
         let (state_watch_tx, mut state_watch_rx) = tokio::sync::watch::channel(None);
-        let (handle, thread_handle) = Controller::builder(Config::default())
+        let (handle, thread_handle) = ControllerBuilder::new(Config::default())
             .with_state_watch(state_watch_tx)
             .with_network(network.clone())
             .with_channel_capacity(16)
@@ -78,16 +76,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn controller_wires_with_network_supervisor() {
-        use crate::network::NetworkSupervisor;
+        use crate::network::NetworkBuilder;
         use tokio::io::{duplex, split, AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-        let (controller_tx, controller_rx) = mpsc::channel(16);
-        let supervisor = NetworkSupervisor::new(controller_tx.clone());
-        let (network, supervisor_task) = supervisor.start();
-
-        let controller = Controller::new(Config::default(), None);
-        let thread_handle = spawn_controller(controller, controller_rx, network.clone());
-        let controller_handle = ControllerHandle::new(controller_tx);
+        let controller_builder =
+            ControllerBuilder::new(Config::default()).with_channel_capacity(16);
+        let controller_handle = controller_builder.handle();
+        let (network, supervisor_task) = NetworkBuilder::new(controller_handle.clone()).spawn();
+        let (_, thread_handle) = controller_builder.with_network(network.clone()).spawn();
 
         // Register a frontend stream
         let (frontend_stream, frontend_remote) = duplex(4096);

@@ -18,11 +18,6 @@ impl ControllerHandle {
         Self { event_tx }
     }
 
-    /// Returns a clone of the underlying event sender channel.
-    pub fn sender(&self) -> mpsc::Sender<ControllerEvent> {
-        self.event_tx.clone()
-    }
-
     /// Asynchronously sends a raw `ControllerEvent` to the Controller.
     pub async fn send_event(&self, event: ControllerEvent) -> Result<(), ControllerError> {
         self.event_tx

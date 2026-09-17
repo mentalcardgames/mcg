@@ -5,9 +5,9 @@ use anyhow::{Context, Result};
 use iroh::endpoint::{Endpoint, RelayMode};
 use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
-use native_mcg::controller::ControllerEvent;
+use native_mcg::controller::{ControllerEvent, ControllerHandle};
 use native_mcg::network::{
-    ConnectionCloseReason, ConnectionId, NetworkEvent, NetworkHandle, NetworkSupervisor,
+    ConnectionCloseReason, ConnectionId, NetworkBuilder, NetworkEvent, NetworkHandle,
     PeerConnectionDirection, TransportKind, IROH_FRONTEND_ALPN, IROH_PEER_ALPN,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -50,8 +50,7 @@ fn start_supervisor() -> (
     JoinHandle<()>,
 ) {
     let (event_tx, event_rx) = mpsc::channel(32);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, task) = supervisor.start();
+    let (network, task) = NetworkBuilder::new(ControllerHandle::new(event_tx)).spawn();
     (network, event_rx, task)
 }
 

@@ -77,11 +77,6 @@ pub struct Controller {
 }
 
 impl Controller {
-    /// Returns a [`ControllerBuilder`](super::ControllerBuilder) initialized with the given configuration.
-    pub fn builder(config: Config) -> super::builder::ControllerBuilder {
-        super::builder::ControllerBuilder::new(config)
-    }
-
     /// Creates a new Controller instance with the specified configuration.
     pub fn new(config: Config, config_path: Option<PathBuf>) -> Self {
         Self {
@@ -785,14 +780,15 @@ impl Controller {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::network::{NetworkSupervisor, PeerConnectionDirection, TransportKind};
+    use crate::controller::ControllerHandle;
+    use crate::network::{NetworkBuilder, PeerConnectionDirection, TransportKind};
     use tokio::sync::mpsc;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn controller_creates_game_and_applies_player_actions() {
         let (event_tx, _event_rx) = mpsc::channel(16);
-        let supervisor = NetworkSupervisor::new(event_tx);
-        let (network, supervisor_task) = supervisor.start();
+        let (network, supervisor_task) =
+            NetworkBuilder::new(ControllerHandle::new(event_tx)).spawn();
 
         let (state_watch_tx, state_watch_rx) = watch::channel(None);
         let net = network.clone();
@@ -853,8 +849,8 @@ mod tests {
         use tokio::io::{duplex, split, AsyncBufReadExt, BufReader};
 
         let (event_tx, _event_rx) = mpsc::channel(16);
-        let supervisor = NetworkSupervisor::new(event_tx);
-        let (network, supervisor_task) = supervisor.start();
+        let (network, supervisor_task) =
+            NetworkBuilder::new(ControllerHandle::new(event_tx)).spawn();
 
         let (peer_stream, peer_remote) = duplex(4096);
         let (peer_r, peer_w) = split(peer_stream);
@@ -933,8 +929,8 @@ mod tests {
         use tokio::io::{duplex, split, AsyncBufReadExt, BufReader};
 
         let (event_tx, _event_rx) = mpsc::channel(16);
-        let supervisor = NetworkSupervisor::new(event_tx);
-        let (network, supervisor_task) = supervisor.start();
+        let (network, supervisor_task) =
+            NetworkBuilder::new(ControllerHandle::new(event_tx)).spawn();
 
         let (peer_stream, peer_remote) = duplex(4096);
         let (peer_r, peer_w) = split(peer_stream);
@@ -983,8 +979,8 @@ mod tests {
         use iroh_tickets::Ticket;
 
         let (event_tx, _event_rx) = mpsc::channel(16);
-        let supervisor = NetworkSupervisor::new(event_tx);
-        let (network, supervisor_task) = supervisor.start();
+        let (network, supervisor_task) =
+            NetworkBuilder::new(ControllerHandle::new(event_tx)).spawn();
 
         let endpoint_id = iroh::SecretKey::from_bytes(&[3; 32]).public();
         let local_ticket =

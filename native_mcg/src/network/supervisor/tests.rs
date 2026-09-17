@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, oneshot, Mutex as TokioMutex};
 use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 
 use super::*;
-use crate::controller::ControllerEvent;
+use crate::controller::{ControllerEvent, ControllerHandle};
 use iroh_tickets::endpoint::EndpointTicket;
 
 use crate::network::iroh::{IrohConnectError, IrohConnector, IrohReader, IrohWriter};
@@ -96,8 +96,8 @@ async fn test_ws_handler(
 #[tokio::test]
 async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
     let app = Router::new()
         .route("/ws", get(test_ws_handler))
         .with_state(network.clone());
@@ -196,8 +196,8 @@ async fn supervisor_registers_routes_closes_and_removes_websocket() -> Result<()
 #[tokio::test]
 async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
     let (actor_stream, remote_stream) = duplex(4096);
     let (actor_reader, actor_writer) = split(actor_stream);
     let (remote_reader, mut remote_writer) = split(remote_stream);
@@ -309,9 +309,9 @@ async fn supervisor_registers_routes_closes_and_removes_iroh_peer() -> Result<()
 #[tokio::test]
 async fn supervisor_times_out_pending_iroh_connections() -> Result<()> {
     let (event_tx, _event_rx) = mpsc::channel(16);
-    let mut supervisor = NetworkSupervisor::new(event_tx);
+    let mut supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
     supervisor.set_iroh_connect_timeout(Duration::from_millis(10));
-    let (network, supervisor_task) = supervisor.start();
+    let (network, supervisor_task) = supervisor.spawn();
     network
         .configure_iroh_connector(Arc::new(PendingIrohConnector))
         .await?;
@@ -329,8 +329,8 @@ async fn supervisor_times_out_pending_iroh_connections() -> Result<()> {
 #[tokio::test]
 async fn supervisor_shutdown_cancels_pending_iroh_connections() -> Result<()> {
     let (event_tx, _event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
     let (started_tx, started_rx) = oneshot::channel();
     network
         .configure_iroh_connector(Arc::new(SignalingPendingIrohConnector {
@@ -353,8 +353,8 @@ async fn supervisor_shutdown_cancels_pending_iroh_connections() -> Result<()> {
 #[tokio::test]
 async fn supervisor_broadcasts_to_all_peers_and_frontends() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
 
     // Setup 2 peer connections using duplex streams
     let (peer1_stream, peer1_remote) = duplex(4096);
@@ -407,8 +407,8 @@ async fn supervisor_broadcasts_to_all_peers_and_frontends() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn blocking_methods_work_from_synchronous_thread() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
 
     // Setup 1 peer connection
     let (peer_stream, peer_remote) = duplex(4096);
@@ -473,9 +473,9 @@ async fn supervisor_rejects_self_connection_and_duplicate_connect() -> Result<()
     let local_ticket = EndpointTicket::new(iroh::EndpointAddr::new(local_id));
 
     let (event_tx, _event_rx) = mpsc::channel(16);
-    let mut supervisor = NetworkSupervisor::new(event_tx);
+    let mut supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
     supervisor.set_local_peer_id(local_id);
-    let (network, supervisor_task) = supervisor.start();
+    let (network, supervisor_task) = supervisor.spawn();
 
     // 1. Connecting to own ticket must be rejected immediately
     assert_eq!(
@@ -528,9 +528,9 @@ async fn supervisor_resolves_simultaneous_connections_deterministically() -> Res
 
     // Node 1 (lower peer id): Outgoing direction is preferred
     let (lower_tx, mut lower_rx) = mpsc::channel(16);
-    let mut lower_sup = NetworkSupervisor::new(lower_tx);
+    let mut lower_sup = NetworkBuilder::new(ControllerHandle::new(lower_tx));
     lower_sup.set_local_peer_id(lower_id);
-    let (lower_net, lower_task) = lower_sup.start();
+    let (lower_net, lower_task) = lower_sup.spawn();
 
     let (in_s1, _in_r1) = duplex(4096);
     let (in_r, in_w) = split(in_s1);
@@ -573,9 +573,9 @@ async fn supervisor_resolves_simultaneous_connections_deterministically() -> Res
 
     // Node 2 (higher peer id): Incoming direction is preferred
     let (higher_tx, mut higher_rx) = mpsc::channel(16);
-    let mut higher_sup = NetworkSupervisor::new(higher_tx);
+    let mut higher_sup = NetworkBuilder::new(ControllerHandle::new(higher_tx));
     higher_sup.set_local_peer_id(higher_id);
-    let (higher_net, higher_task) = higher_sup.start();
+    let (higher_net, higher_task) = higher_sup.spawn();
 
     let (in_s2, _in_r2) = duplex(4096);
     let (in_r2, in_w2) = split(in_s2);
@@ -601,8 +601,8 @@ async fn supervisor_resolves_simultaneous_connections_deterministically() -> Res
 #[tokio::test]
 async fn supervisor_publishes_local_ticket_as_network_event() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
 
     let local_id = test_peer_id(42);
     let ticket = EndpointTicket::new(iroh::EndpointAddr::new(local_id));
@@ -643,8 +643,8 @@ async fn supervisor_starts_and_supervises_iroh_endpoint_listener() -> Result<()>
     use crate::network::IROH_FRONTEND_ALPN;
 
     let (event_tx, mut event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
 
     let listener_endpoint = test_local_endpoint().await?;
     let listener_addr = listener_endpoint.addr();
@@ -697,8 +697,8 @@ async fn supervisor_starts_and_supervises_iroh_endpoint_listener() -> Result<()>
 #[tokio::test]
 async fn supervisor_rejects_duplicate_iroh_listener_and_invalid_stops() -> Result<()> {
     let (event_tx, _event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
 
     assert_eq!(
         network.stop_iroh_listener().await,
@@ -729,8 +729,8 @@ async fn supervisor_rejects_duplicate_iroh_listener_and_invalid_stops() -> Resul
 #[tokio::test(flavor = "multi_thread")]
 async fn blocking_listener_methods_work_from_sync_thread() -> Result<()> {
     let (event_tx, _event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
 
     let endpoint = test_local_endpoint().await?;
 
@@ -751,8 +751,8 @@ async fn blocking_listener_methods_work_from_sync_thread() -> Result<()> {
 #[tokio::test]
 async fn supervisor_cascading_shutdown_aborts_active_listeners() -> Result<()> {
     let (event_tx, _event_rx) = mpsc::channel(16);
-    let supervisor = NetworkSupervisor::new(event_tx);
-    let (network, supervisor_task) = supervisor.start();
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
 
     let endpoint = test_local_endpoint().await?;
     network.start_iroh_endpoint_listener(endpoint).await?;

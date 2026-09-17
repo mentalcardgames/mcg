@@ -18,7 +18,7 @@ use iroh_tickets::endpoint::EndpointTicket;
 
 use self::handle::{IrohConnectResult, SupervisorRequest};
 use crate::config::Config;
-use crate::controller::ControllerEvent;
+use crate::controller::ControllerHandle;
 use crate::network::iroh::{
     build_iroh_endpoint, load_or_generate_iroh_secret, run_iroh_accept_loop,
     run_iroh_listener_task, IrohConnectError, IrohConnector, IrohEndpointConnector,
@@ -39,8 +39,8 @@ pub struct NetworkSupervisor {
     pub(crate) actor_event_tx: mpsc::Sender<ActorEvent>,
     /// Input of internal connection actor events.
     actor_event_rx: mpsc::Receiver<ActorEvent>,
-    /// Output for forwarding NetworkEvents from actors towards Controller.
-    application_event_tx: mpsc::Sender<ControllerEvent>,
+    /// Controller handle for forwarding network events.
+    pub(crate) controller: ControllerHandle,
     /// Requests from NetworkHandles.
     request_rx: mpsc::Receiver<SupervisorRequest>,
     /// Completed outgoing Iroh connection attempts.
@@ -65,8 +65,8 @@ pub struct NetworkSupervisor {
 }
 
 /// Builder for configuring and instantiating a [`NetworkSupervisor`] and [`NetworkHandle`].
-pub struct NetworkSupervisorBuilder {
-    application_event_tx: mpsc::Sender<ControllerEvent>,
+pub struct NetworkBuilder {
+    controller: ControllerHandle,
     control_channel_capacity: usize,
     connection_channel_capacity: usize,
     iroh_connect_timeout: Duration,
@@ -74,11 +74,11 @@ pub struct NetworkSupervisorBuilder {
     iroh_connector: Option<Arc<dyn IrohConnector>>,
 }
 
-impl NetworkSupervisorBuilder {
-    /// Creates a new builder with the target application event sender.
-    pub fn new(application_event_tx: mpsc::Sender<ControllerEvent>) -> Self {
+impl NetworkBuilder {
+    /// Creates a new builder with the target controller handle.
+    pub fn new(controller: ControllerHandle) -> Self {
         Self {
-            application_event_tx,
+            controller,
             control_channel_capacity: DEFAULT_CONTROL_CHANNEL_CAPACITY,
             connection_channel_capacity: DEFAULT_CONNECTION_CHANNEL_CAPACITY,
             iroh_connect_timeout: DEFAULT_IROH_CONNECT_TIMEOUT,
@@ -144,7 +144,7 @@ impl NetworkSupervisorBuilder {
             weak_request_tx,
             actor_event_tx,
             actor_event_rx,
-            application_event_tx: self.application_event_tx,
+            controller: self.controller,
             request_rx,
             iroh_connect_result_tx,
             iroh_connect_result_rx,
@@ -172,27 +172,9 @@ impl NetworkSupervisorBuilder {
         let task = tokio::spawn(supervisor.run());
         (handle, task)
     }
-
-    /// Alias for [`spawn`](Self::spawn) to maintain compatibility.
-    pub fn start(self) -> (NetworkHandle, JoinHandle<()>) {
-        self.spawn()
-    }
 }
 
 impl NetworkSupervisor {
-    /// Returns a [`NetworkSupervisorBuilder`] with default configuration.
-    pub fn builder(
-        application_event_tx: mpsc::Sender<ControllerEvent>,
-    ) -> NetworkSupervisorBuilder {
-        NetworkSupervisorBuilder::new(application_event_tx)
-    }
-
-    /// Creates a [`NetworkSupervisorBuilder`] with default configuration.
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(application_event_tx: mpsc::Sender<ControllerEvent>) -> NetworkSupervisorBuilder {
-        NetworkSupervisorBuilder::new(application_event_tx)
-    }
-
     /// Returns a [`NetworkHandle`] for interacting with this supervisor.
     pub fn handle(&self) -> NetworkHandle {
         let tx = self
@@ -222,12 +204,7 @@ impl NetworkSupervisor {
                         break;
                     };
                     if let Some(event) = self.handle_actor_event(event) {
-                        if self
-                            .application_event_tx
-                            .send(ControllerEvent::Network(event))
-                            .await
-                            .is_err()
-                        {
+                        if self.controller.send_network_event(event).await.is_err() {
                             break;
                         }
                     }
@@ -375,10 +352,8 @@ impl NetworkSupervisor {
             } => {
                 self.local_peer_id = Some(ticket.endpoint_addr().id);
                 let send_res = self
-                    .application_event_tx
-                    .send(ControllerEvent::Network(NetworkEvent::LocalTicketReady(
-                        ticket,
-                    )))
+                    .controller
+                    .send_network_event(NetworkEvent::LocalTicketReady(ticket))
                     .await;
                 let _ = response_tx.send(send_res.map_err(|_| NetworkError::SupervisorStopped));
             }
@@ -440,10 +415,8 @@ impl NetworkSupervisor {
         let ticket = EndpointTicket::new(endpoint.addr());
         self.local_peer_id = Some(ticket.endpoint_addr().id);
         let _ = self
-            .application_event_tx
-            .send(ControllerEvent::Network(NetworkEvent::LocalTicketReady(
-                ticket,
-            )))
+            .controller
+            .send_network_event(NetworkEvent::LocalTicketReady(ticket))
             .await;
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
