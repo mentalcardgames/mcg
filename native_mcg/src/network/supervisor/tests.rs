@@ -761,3 +761,74 @@ async fn supervisor_cascading_shutdown_aborts_active_listeners() -> Result<()> {
     tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
     Ok(())
 }
+
+#[tokio::test]
+async fn supervisor_starts_stops_and_rejects_duplicate_axum_listener() -> Result<()> {
+    let (event_tx, _event_rx) = mpsc::channel(16);
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
+
+    assert_eq!(
+        network.stop_axum_listener().await,
+        Err(NetworkError::ListenerNotRunning(TransportKind::WebSocket))
+    );
+
+    let bound_addr = network.start_axum_listener("127.0.0.1:0".parse()?).await?;
+    assert_ne!(bound_addr.port(), 0);
+
+    assert_eq!(
+        network.start_axum_listener(bound_addr).await,
+        Err(NetworkError::ListenerAlreadyRunning(
+            TransportKind::WebSocket
+        ))
+    );
+
+    // Verify /health endpoint works
+    let resp = reqwest::get(format!("http://{}/health", bound_addr)).await?;
+    assert!(resp.status().is_success());
+
+    network.stop_axum_listener().await?;
+    assert_eq!(
+        network.stop_axum_listener().await,
+        Err(NetworkError::ListenerNotRunning(TransportKind::WebSocket))
+    );
+
+    network.shutdown().await?;
+    tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blocking_axum_listener_methods_work_from_sync_thread() -> Result<()> {
+    let (event_tx, _event_rx) = mpsc::channel(16);
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
+
+    let thread_network = network.clone();
+    let thread = std::thread::spawn(move || -> Result<(), NetworkError> {
+        let addr = thread_network.blocking_start_axum_listener("127.0.0.1:0".parse().unwrap())?;
+        assert_ne!(addr.port(), 0);
+        thread_network.blocking_stop_axum_listener()?;
+        Ok(())
+    });
+
+    thread.join().expect("thread join")?;
+
+    network.shutdown().await?;
+    tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn supervisor_cascading_shutdown_aborts_active_axum_listener() -> Result<()> {
+    let (event_tx, _event_rx) = mpsc::channel(16);
+    let supervisor = NetworkBuilder::new(ControllerHandle::new(event_tx));
+    let (network, supervisor_task) = supervisor.spawn();
+
+    let bound_addr = network.start_axum_listener("127.0.0.1:0".parse()?).await?;
+    assert_ne!(bound_addr.port(), 0);
+
+    network.shutdown().await?;
+    tokio::time::timeout(Duration::from_secs(1), supervisor_task).await??;
+    Ok(())
+}

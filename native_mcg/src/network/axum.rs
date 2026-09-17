@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use axum::{
-    extract::{ws::WebSocketUpgrade, FromRef, State},
+    extract::{ws::WebSocketUpgrade, State},
     http::{header::SEC_WEBSOCKET_PROTOCOL, HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::get,
@@ -10,33 +8,6 @@ use axum::{
 use tower_http::services::ServeDir;
 
 use super::{NetworkHandle, WEBSOCKET_FRONTEND_PROTOCOL};
-
-/// Shared state container for the Axum router and handlers.
-#[derive(Clone)]
-pub struct RouterState {
-    pub network: NetworkHandle,
-    pub _task_guard: Option<Arc<dyn std::any::Any + Send + Sync>>,
-}
-
-impl RouterState {
-    pub fn new(network: NetworkHandle) -> Self {
-        Self {
-            network,
-            _task_guard: None,
-        }
-    }
-
-    pub fn with_task_guard(mut self, guard: Arc<dyn std::any::Any + Send + Sync>) -> Self {
-        self._task_guard = Some(guard);
-        self
-    }
-}
-
-impl FromRef<RouterState> for NetworkHandle {
-    fn from_ref(state: &RouterState) -> Self {
-        state.network.clone()
-    }
-}
 
 #[derive(Clone, Copy)]
 enum WebSocketRole {
@@ -120,7 +91,7 @@ pub async fn spa_handler(uri: Uri) -> impl IntoResponse {
 }
 
 /// Constructs the Axum application router with all HTTP, WebSocket, static assets, and SPA fallback routes.
-pub fn build_router(state: RouterState) -> Router {
+pub fn build_router(network: NetworkHandle) -> Router {
     // Serve static files from the project root. Assumes process CWD is repo root.
     let serve_dir = ServeDir::new("pkg").append_index_html_on_directories(true);
     let serve_media = ServeDir::new("media").append_index_html_on_directories(true);
@@ -135,7 +106,7 @@ pub fn build_router(state: RouterState) -> Router {
         .route("/", get(serve_index))
         // Fallback handler for SPA routing - serve index.html for all other routes
         .fallback(spa_handler)
-        .with_state(state)
+        .with_state(network)
 }
 
 #[cfg(test)]

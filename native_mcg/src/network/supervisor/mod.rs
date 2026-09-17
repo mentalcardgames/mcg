@@ -4,6 +4,7 @@ mod handle;
 mod tests;
 
 use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -52,6 +53,10 @@ pub struct NetworkSupervisor {
     iroh_listener_shutdown_tx: Option<oneshot::Sender<()>>,
     /// Receiver awaiting clean completion of listener task.
     iroh_listener_stopped_rx: Option<oneshot::Receiver<()>>,
+    /// Active Axum HTTP/WebSocket listener shutdown sender.
+    axum_listener_shutdown_tx: Option<oneshot::Sender<()>>,
+    /// Receiver awaiting clean completion of Axum listener task.
+    axum_listener_stopped_rx: Option<oneshot::Receiver<()>>,
     /// Connection actors and in-progress outgoing connection attempts.
     pub(crate) tasks: JoinSet<()>,
     /// Container with all connections with other peers or with frontends.
@@ -151,6 +156,8 @@ impl NetworkBuilder {
             iroh_connector: self.iroh_connector,
             iroh_listener_shutdown_tx: None,
             iroh_listener_stopped_rx: None,
+            axum_listener_shutdown_tx: None,
+            axum_listener_stopped_rx: None,
             tasks: JoinSet::new(),
             connections: HashMap::new(),
             next_connection_id: 0,
@@ -227,8 +234,18 @@ impl NetworkSupervisor {
                             self.iroh_connector = None;
                         }
                     }
+                    if let Some(shutdown_tx) = &self.axum_listener_shutdown_tx {
+                        if shutdown_tx.is_closed() {
+                            tracing::warn!("supervised Axum listener task terminated");
+                            self.axum_listener_shutdown_tx = None;
+                            self.axum_listener_stopped_rx = None;
+                        }
+                    }
                 }
             }
+        }
+        if let Some(shutdown_tx) = self.axum_listener_shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
         }
         if let Some(shutdown_tx) = self.iroh_listener_shutdown_tx.take() {
             let _ = shutdown_tx.send(());
@@ -245,6 +262,10 @@ impl NetworkSupervisor {
             SupervisorRequest::Shutdown { response_tx } => {
                 let _ = response_tx.send(());
                 return false;
+            }
+            SupervisorRequest::StartAxumListener { addr, response_tx } => {
+                let result = self.start_axum_listener(addr).await;
+                let _ = response_tx.send(result);
             }
             SupervisorRequest::StartIrohListener {
                 config,
@@ -432,6 +453,57 @@ impl NetworkSupervisor {
         Ok(())
     }
 
+    /// Starts an Axum HTTP/WebSocket listener on the given address, supervised by this supervisor.
+    pub async fn start_axum_listener(
+        &mut self,
+        addr: SocketAddr,
+    ) -> Result<SocketAddr, NetworkError> {
+        if self.axum_listener_shutdown_tx.is_some() {
+            return Err(NetworkError::ListenerAlreadyRunning(
+                TransportKind::WebSocket,
+            ));
+        }
+
+        let listener = tokio::net::TcpListener::bind(addr).await.map_err(|error| {
+            NetworkError::ListenerSetupFailed {
+                transport: TransportKind::WebSocket,
+                message: error.to_string(),
+            }
+        })?;
+
+        let bound_addr =
+            listener
+                .local_addr()
+                .map_err(|error| NetworkError::ListenerSetupFailed {
+                    transport: TransportKind::WebSocket,
+                    message: error.to_string(),
+                })?;
+
+        let app = crate::network::build_router(self.handle());
+
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let (stopped_tx, stopped_rx) = oneshot::channel();
+        self.axum_listener_shutdown_tx = Some(shutdown_tx);
+        self.axum_listener_stopped_rx = Some(stopped_rx);
+
+        self.tasks.spawn(async move {
+            let server = axum::serve(listener, app).with_graceful_shutdown(async move {
+                let _ = shutdown_rx.await;
+            });
+            if let Err(error) = server.await {
+                tracing::error!(%error, "Axum HTTP/WebSocket server error");
+            }
+            let _ = stopped_tx.send(());
+        });
+
+        Ok(bound_addr)
+    }
+
+    /// Stops the Axum HTTP/WebSocket listener if one is currently running.
+    pub async fn stop_axum_listener(&mut self) -> Result<(), NetworkError> {
+        self.stop_listener(TransportKind::WebSocket).await
+    }
+
     /// Stops the Iroh listener if one is currently running.
     pub async fn stop_iroh_listener(&mut self) -> Result<(), NetworkError> {
         self.stop_listener(TransportKind::Iroh).await
@@ -457,7 +529,18 @@ impl NetworkSupervisor {
                 Ok(())
             }
             TransportKind::WebSocket => {
-                Err(NetworkError::ListenerNotRunning(TransportKind::WebSocket))
+                let Some(shutdown_tx) = self.axum_listener_shutdown_tx.take() else {
+                    return Err(NetworkError::ListenerNotRunning(TransportKind::WebSocket));
+                };
+                if shutdown_tx.is_closed() {
+                    self.axum_listener_stopped_rx = None;
+                    return Err(NetworkError::ListenerNotRunning(TransportKind::WebSocket));
+                }
+                let _ = shutdown_tx.send(());
+                if let Some(stopped_rx) = self.axum_listener_stopped_rx.take() {
+                    let _ = stopped_rx.await;
+                }
+                Ok(())
             }
         }
     }

@@ -6,22 +6,10 @@ use std::time::Duration;
 #[tokio::test]
 async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
     let backend = native_mcg::BackendBuilder::new(native_mcg::config::Config::default()).build()?;
-    let app = backend.router();
-
-    // Bind to port 0 so the OS chooses an available port.
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-
-    // Spawn the server in background
-    let server_handle = tokio::spawn(async move {
-        let result = axum::serve(listener, app).await;
-        if let Err(e) = result {
-            eprintln!("server error: {}", e);
-        }
-    });
-
-    // Give server a moment to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    let addr = backend
+        .network()
+        .start_axum_listener("127.0.0.1:0".parse()?)
+        .await?;
 
     let ws_url = format!("ws://127.0.0.1:{}/ws", addr.port());
 
@@ -97,7 +85,6 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
     );
 
     // Clean up server
-    server_handle.abort();
     backend.shutdown().await;
     Ok(())
 }

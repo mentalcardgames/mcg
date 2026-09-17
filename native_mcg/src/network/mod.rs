@@ -11,7 +11,7 @@ pub mod supervisor;
 pub mod types;
 pub mod websocket;
 
-pub use axum::{build_router, health_handler, serve_index, spa_handler, ws_handler, RouterState};
+pub use axum::{build_router, health_handler, serve_index, spa_handler, ws_handler};
 pub use iroh::{IROH_FRONTEND_ALPN, IROH_PEER_ALPN};
 pub use supervisor::{NetworkBuilder, NetworkHandle, NetworkSupervisor};
 pub use types::{

@@ -3,11 +3,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use axum::Router;
 
 use crate::config::Config;
 use crate::controller::{ControllerBuilder, ControllerHandle};
-use crate::network::{NetworkBuilder, NetworkHandle, RouterState};
+use crate::network::{NetworkBuilder, NetworkHandle};
 use crate::server::bot_driver::spawn_bot_driver;
 
 /// Holds task handles for the background supervisor, bot driver, and controller thread.
@@ -58,21 +57,22 @@ impl RunningBackend {
         self.controller_handle.clone()
     }
 
-    /// Constructs the Axum [`Router`] wired with the backend's [`NetworkHandle`] and task guard.
-    pub fn router(&self) -> Router {
-        let router_state =
-            RouterState::new(self.network.clone()).with_task_guard(self.tasks.clone());
-        crate::network::build_router(router_state)
-    }
+    /// Runs the HTTP/WebSocket server on `addr` and supervises the Iroh listener until `shutdown_signal` completes.
+    pub async fn run_until(
+        self,
+        addr: SocketAddr,
+        shutdown_signal: impl std::future::Future<Output = ()>,
+    ) -> Result<()> {
+        let bound_addr = self
+            .network
+            .start_axum_listener(addr)
+            .await
+            .context("starting Axum HTTP/WebSocket listener")?;
 
-    /// Runs the HTTP/WebSocket server on `addr` and supervises the Iroh listener until shutdown.
-    pub async fn run(self, addr: SocketAddr) -> Result<()> {
-        let app = self.router();
-
-        let display_addr = if addr.ip().is_loopback() {
-            format!("localhost:{}", addr.port())
+        let display_addr = if bound_addr.ip().is_loopback() {
+            format!("localhost:{}", bound_addr.port())
         } else {
-            addr.to_string()
+            bound_addr.to_string()
         };
 
         tracing::info!(display_addr = %display_addr, "MCG Server running");
@@ -87,19 +87,24 @@ impl RunningBackend {
 
         tracing::info!("open your browser and navigate to the above URL");
         tracing::debug!("blank line");
-        let listener = tokio::net::TcpListener::bind(addr)
-            .await
-            .with_context(|| format!("Failed to bind to {}", display_addr))?;
 
         self.network
             .start_iroh_listener(self.config.clone(), self.config_path.clone())
             .await
             .context("starting Iroh listener")?;
 
-        let server_result = axum::serve(listener, app).await;
+        shutdown_signal.await;
+        tracing::info!("Shutdown signal received, shutting down backend...");
         self.shutdown().await;
-        server_result.context("running HTTP/WebSocket server")?;
         Ok(())
+    }
+
+    /// Runs the HTTP/WebSocket server on `addr` and supervises the Iroh listener until a Ctrl+C signal is received.
+    pub async fn run(self, addr: SocketAddr) -> Result<()> {
+        self.run_until(addr, async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await
     }
 
     /// Gracefully shuts down all backend tasks.

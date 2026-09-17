@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -18,6 +19,10 @@ use crate::network::{ConnectionId, NetworkError, PeerId, TransportKind};
 pub(crate) enum SupervisorRequest {
     Shutdown {
         response_tx: oneshot::Sender<()>,
+    },
+    StartAxumListener {
+        addr: SocketAddr,
+        response_tx: oneshot::Sender<Result<SocketAddr, NetworkError>>,
     },
     StartIrohListener {
         config: Config,
@@ -124,6 +129,32 @@ impl NetworkHandle {
             .map_err(|_| NetworkError::SupervisorStopped)
     }
 
+    /// Starts an Axum HTTP/WebSocket listener supervised by the network subsystem.
+    pub async fn start_axum_listener(&self, addr: SocketAddr) -> Result<SocketAddr, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::StartAxumListener { addr, response_tx })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously starts an Axum HTTP/WebSocket listener supervised by the network subsystem.
+    pub fn blocking_start_axum_listener(
+        &self,
+        addr: SocketAddr,
+    ) -> Result<SocketAddr, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::StartAxumListener { addr, response_tx })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
     /// Starts an Iroh QUIC listener supervised by the network subsystem.
     pub async fn start_iroh_listener(
         &self,
@@ -206,6 +237,16 @@ impl NetworkHandle {
     /// Synchronously stops the Iroh listener if one is currently running.
     pub fn blocking_stop_iroh_listener(&self) -> Result<(), NetworkError> {
         self.blocking_stop_listener(TransportKind::Iroh)
+    }
+
+    /// Stops the Axum HTTP/WebSocket listener if one is currently running.
+    pub async fn stop_axum_listener(&self) -> Result<(), NetworkError> {
+        self.stop_listener(TransportKind::WebSocket).await
+    }
+
+    /// Synchronously stops the Axum HTTP/WebSocket listener if one is currently running.
+    pub fn blocking_stop_axum_listener(&self) -> Result<(), NetworkError> {
+        self.blocking_stop_listener(TransportKind::WebSocket)
     }
 
     /// Stops the transport listener for the specified transport kind.
