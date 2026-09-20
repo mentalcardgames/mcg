@@ -1,8 +1,10 @@
-# Card Game DSL (CGDSL) Architecture & Documentation
+---
+outline: deep
+---
+
+# Card Game Description Language (CGDL)
 
 This document describes the design and architecture of the `front_end` and `code_gen` crates within the Card Game Domain-Specific Language (CGDSL) workspace. It provides an overview of the Abstract Syntax Tree (AST), the Finite State Machine (FSM) representation, the core module structure, and how code generation reduces boilerplate for the compiler.
-
----
 
 ## Code Generation (`code_gen` crate)
 
@@ -18,8 +20,6 @@ When applied to a module containing pure AST definitions, the macro automaticall
 4. **Stripping Trait Derives**: It intelligently scrubs testing traits (like `Arbitrary` or `proptest`) from the generated spanned nodes to keep the generated code clean and ensure traits are only applied where appropriate.
 
 **Why this helps:** Defining a language grammar inherently leads to a deeply nested, bulky AST. Manually mirroring dozens of struct definitions the spanned versions and hand-writing recursive traversal patterns for every single node type are notoriously error-prone and tedious. The `#[spanned_ast]` macro automates this lifecycle entirely, allowing language grammar iteration with zero friction.
-
----
 
 ## Front End (`front_end` crate)
 
@@ -38,8 +38,6 @@ The `front_end` crate is structured into several key functional modules:
 - **`arbitrary`**: Defines utilities and strategies for generating randomized AST constructions, heavily used for fuzz testing and validation.
 - **`fmt_ast` & `fsm_to_dot`**: Presentation utilities. `fmt_ast` implements user-friendly representation formats for AST nodes, while `fsm_to_dot` generates visualizing graphs (Graphviz DOT format) for the parsed memory/state machine paths.
 
----
-
 ### Abstract Syntax Tree (AST)
 
 The AST acts as the hierarchical syntax representation. When the user specifies rules (such as *"move >= 3 and <= 10 from ExampleLocation to ExampleLocation1"*), parsing transforms this unstructured text into strict rust enums and structs natively defined in `front_end/src/ast.rs`. 
@@ -50,8 +48,6 @@ The AST enforces properties like:
 - **Scope Definitions:** Capturing contexts like `OutOf::CurrentStage` to identify how logic branches inside looping stages or card actions.
 
 The codebase interacts heavily with the *Spanned AST* (such as `SGame`), retaining contextual bounds for accurate tracebacks.
-
----
 
 ### Intermediate Representation (IR / FSM)
 
@@ -64,7 +60,6 @@ To evaluate game loops natively and deterministically, the AST is lowered into a
 
 By mapping `SGame.to_graph()`, the procedural DSL script unravels completely. The resulting map guarantees paths between operations can be validated, checked for strict connectivity (e.g., verifying `reachable_from_entry()`), and easily serialized for arbitrary runtime systems simulating the game via state transitions.
 
----
 
 ## Usage: Parsing and Generating Data Structures
 
