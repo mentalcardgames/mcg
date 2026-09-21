@@ -25,12 +25,9 @@ pub struct PokerOnlineScreen {
 }
 
 impl PokerOnlineScreen {
-    /// Default server address for the poker client.
-    const DEFAULT_SERVER_ADDRESS: &'static str = "127.0.0.1:3000";
-
     pub fn new() -> Self {
         Self {
-            connection_manager: ConnectionManager::new(Self::DEFAULT_SERVER_ADDRESS.to_string()),
+            connection_manager: ConnectionManager::new(crate::utils::default_server_address()),
             player_manager: PlayerManager::new(),
             betting_controls: BettingControls::default(),
             game_state: None,

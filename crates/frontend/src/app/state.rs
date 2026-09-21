@@ -22,7 +22,7 @@ impl FrontendState {
         let dpi = calculate_dpi_scale();
         FrontendState {
             name: "Player".to_string(),
-            server_address: "127.0.0.1:3000".to_string(),
+            server_address: crate::utils::default_server_address(),
             dpi,
             applied_dpi: dpi,
             dark_mode: true,

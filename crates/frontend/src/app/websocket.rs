@@ -47,7 +47,7 @@ impl WebSocketConnection {
     pub fn connect(&mut self, server_address: &str) {
         self.close();
 
-        let ws_url = format!("ws://{}/ws", server_address);
+        let ws_url = crate::utils::format_websocket_url(server_address);
         match WebSocket::new(&ws_url) {
             Ok(ws) => {
                 let message_sender = self.message_sender.clone();

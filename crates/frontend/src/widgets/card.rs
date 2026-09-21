@@ -1,3 +1,4 @@
+use crate::utils::get_origin;
 use egui::{Image, Vec2};
 #[allow(unused_imports)]
 use std::cell::RefCell;
@@ -6,7 +7,6 @@ use std::hash::Hash;
 #[allow(unused_imports)]
 use std::rc::Rc;
 use std::slice::Iter;
-use web_sys;
 
 /// Natural size for card display in the UI
 pub const CARD_NATURAL_SIZE: Vec2 = Vec2::new(140.0, 190.0);
@@ -48,14 +48,6 @@ impl CardEncoding for SimpleCard {
 pub enum SimpleCard {
     Open(usize),
     Masked(Option<usize>),
-}
-
-fn get_origin() -> String {
-    let window = web_sys::window().expect("should have a window in this context");
-    let location = window.location();
-    location
-        .origin()
-        .expect("should have an origin in this context")
 }
 
 #[allow(non_snake_case)]
