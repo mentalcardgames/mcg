@@ -9,6 +9,14 @@ pub struct ServerCli {
     #[arg(long, default_value = "mcg-server.toml")]
     pub config: PathBuf,
 
+    /// Port to listen on (overrides config.port)
+    #[arg(short, long)]
+    pub port: Option<u16>,
+
+    /// Require exact port without searching for next available port
+    #[arg(long, default_value_t = false)]
+    pub strict_port: bool,
+
     /// Iroh key as hex (overrides config.iroh_key)
     #[arg(long)]
     pub iroh_key: Option<String>,

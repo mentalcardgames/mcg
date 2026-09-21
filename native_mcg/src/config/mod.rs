@@ -16,6 +16,14 @@ pub fn init_server_config(cli: &ServerCli) -> Result<(Config, PathBuf)> {
     let mut cfg = Config::load_or_create(&config_path)
         .with_context(|| format!("loading or creating config '{}'", config_path.display()))?;
 
+    if let Some(port) = cli.port {
+        cfg.port = port;
+    }
+
+    if cli.strict_port {
+        cfg.strict_port = true;
+    }
+
     if let Some(ref k) = cli.iroh_key {
         cfg.iroh_key = Some(k.clone());
     }

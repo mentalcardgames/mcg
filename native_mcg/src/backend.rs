@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -44,6 +44,7 @@ pub struct RunningBackend {
     network: NetworkHandle,
     controller_handle: ControllerHandle,
     tasks: Arc<BackendTasks>,
+    bind_addr: SocketAddr,
 }
 
 impl RunningBackend {
@@ -57,31 +58,27 @@ impl RunningBackend {
         self.controller_handle.clone()
     }
 
-    /// Runs the HTTP/WebSocket server on `addr` and supervises the Iroh listener until `shutdown_signal` completes.
+    /// Returns the resolved bind address for the HTTP/WebSocket listener.
+    pub fn bind_addr(&self) -> SocketAddr {
+        self.bind_addr
+    }
+
+    /// Runs the HTTP/WebSocket server on the configured address and supervises the Iroh listener until `shutdown_signal` completes.
     pub async fn run_until(
         self,
-        addr: SocketAddr,
         shutdown_signal: impl std::future::Future<Output = ()>,
     ) -> Result<()> {
         let bound_addr = self
             .network
-            .start_axum_listener(addr)
+            .start_axum_listener(self.bind_addr)
             .await
             .context("starting Axum HTTP/WebSocket listener")?;
-
-        let display_addr = if bound_addr.ip().is_loopback() {
-            format!("localhost:{}", bound_addr.port())
-        } else {
-            bound_addr.to_string()
-        };
-
-        tracing::info!(display_addr = %display_addr, "MCG Server running");
 
         // Clickable banner for the Web UI
         println!("\n\x1b[1;36m=== Web UI Available ===\x1b[0m");
         println!(
             "\x1b[1mURL:\x1b[0m       \x1b[4;34mhttp://{}\x1b[0m",
-            display_addr
+            bound_addr.to_string()
         );
         println!("\x1b[1;36m========================\x1b[0m\n");
 
@@ -99,9 +96,9 @@ impl RunningBackend {
         Ok(())
     }
 
-    /// Runs the HTTP/WebSocket server on `addr` and supervises the Iroh listener until a Ctrl+C signal is received.
-    pub async fn run(self, addr: SocketAddr) -> Result<()> {
-        self.run_until(addr, async {
+    /// Runs the HTTP/WebSocket server on the configured address and supervises the Iroh listener until a Ctrl+C signal is received.
+    pub async fn run(self) -> Result<()> {
+        self.run_until(async {
             let _ = tokio::signal::ctrl_c().await;
         })
         .await
@@ -157,6 +154,10 @@ pub struct BackendBuilder {
     config_path: Option<PathBuf>,
     channel_capacity: usize,
     enable_bots: bool,
+    bind_host: IpAddr,
+    port: Option<u16>,
+    strict_port: Option<bool>,
+    bind_addr: Option<SocketAddr>,
 }
 
 impl BackendBuilder {
@@ -168,6 +169,10 @@ impl BackendBuilder {
             config_path: None,
             channel_capacity: 256,
             enable_bots,
+            bind_host: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            port: None,
+            strict_port: None,
+            bind_addr: None,
         }
     }
 
@@ -195,8 +200,39 @@ impl BackendBuilder {
         self
     }
 
+    /// Overrides the port to listen on.
+    pub fn with_port(mut self, port: u16) -> Self {
+        self.port = Some(port);
+        self
+    }
+
+    /// Sets whether to fail strictly if the port is unavailable instead of searching for the next free port.
+    pub fn with_strict_port(mut self, strict: bool) -> Self {
+        self.strict_port = Some(strict);
+        self
+    }
+
+    /// Overrides the host IP address to bind to (defaults to 0.0.0.0).
+    pub fn with_bind_host(mut self, host: impl Into<IpAddr>) -> Self {
+        self.bind_host = host.into();
+        self
+    }
+
+    /// Explicitly sets the full bind address, bypassing port search.
+    pub fn with_bind_addr(mut self, addr: SocketAddr) -> Self {
+        self.bind_addr = Some(addr);
+        self
+    }
+
     /// Builds and starts all backend components, returning a [`RunningBackend`].
     pub fn build(self) -> Result<RunningBackend> {
+        let port = self.port.unwrap_or(self.config.port);
+        let strict_port = self.strict_port.unwrap_or(self.config.strict_port);
+        let bind_addr = match self.bind_addr {
+            Some(addr) => addr,
+            None => resolve_listen_addr(self.bind_host, port, strict_port)?,
+        };
+
         let (state_watch_tx, state_watch_rx) = tokio::sync::watch::channel(None);
 
         let controller_builder = ControllerBuilder::new(self.config.clone())
@@ -235,6 +271,45 @@ impl BackendBuilder {
             network,
             controller_handle,
             tasks,
+            bind_addr,
         })
+    }
+}
+
+/// Resolves the socket address to listen on, searching for the first available port if not in strict mode.
+fn resolve_listen_addr(host: IpAddr, start_port: u16, strict: bool) -> Result<SocketAddr> {
+    if start_port == 0 {
+        return Ok(SocketAddr::new(host, 0));
+    }
+
+    if strict {
+        match std::net::TcpListener::bind((host, start_port)) {
+            Ok(_) => Ok(SocketAddr::new(host, start_port)),
+            Err(e) => Err(anyhow::anyhow!(
+                "Port {} is already in use or cannot be bound (strict mode enabled): {}",
+                start_port,
+                e
+            )),
+        }
+    } else {
+        for port in start_port..start_port.saturating_add(100) {
+            if std::net::TcpListener::bind((host, port)).is_ok() {
+                if port != start_port {
+                    tracing::warn!(
+                        requested_port = start_port,
+                        selected_port = port,
+                        "Port {} was not available, using alternative port {}",
+                        start_port,
+                        port
+                    );
+                }
+                return Ok(SocketAddr::new(host, port));
+            }
+        }
+        Err(anyhow::anyhow!(
+            "No available ports found in range {}..{}",
+            start_port,
+            start_port.saturating_add(100)
+        ))
     }
 }

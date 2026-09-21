@@ -3,17 +3,27 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+fn default_port() -> u16 {
+    3000
+}
+
 /// Server configuration persisted as TOML.
 ///
 /// Fields:
 /// - bots: number of bot players to start with
 /// - iroh_key: optional iroh key stored as hex string of 32 bytes
 /// - bot_delay: average bot acting delay in milliseconds (default: 200)
+/// - port: HTTP/WebSocket listening port (default: 3000)
+/// - strict_port: fail instead of searching next available port if port is busy (default: false)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub bots: usize,
     pub iroh_key: Option<String>,
     pub bot_delay: u64,
+    #[serde(default = "default_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub strict_port: bool,
 }
 
 impl Default for Config {
@@ -22,6 +32,8 @@ impl Default for Config {
             bots: 1,
             iroh_key: None,
             bot_delay: 200, // Increased from 100ms to 200ms for better UX during bot turns
+            port: default_port(),
+            strict_port: false,
         }
     }
 }

@@ -458,13 +458,15 @@ async fn backend_shutdown_closes_iroh_listener_cleanly() -> Result<()> {
 
 #[tokio::test]
 async fn running_backend_run_until_shuts_down_cleanly() -> Result<()> {
-    let backend = native_mcg::BackendBuilder::new(native_mcg::config::Config::default()).build()?;
     let addr = "127.0.0.1:0".parse()?;
+    let backend = native_mcg::BackendBuilder::new(native_mcg::config::Config::default())
+        .with_bind_addr(addr)
+        .build()?;
     let (signal_tx, signal_rx) = tokio::sync::oneshot::channel();
 
     let run_task = tokio::spawn(async move {
         backend
-            .run_until(addr, async move {
+            .run_until(async move {
                 let _ = signal_rx.await;
             })
             .await

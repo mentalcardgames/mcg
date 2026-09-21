@@ -4,7 +4,6 @@ use native_mcg::config;
 
 use clap::Parser;
 use config::ServerCli;
-use std::net::{SocketAddr, TcpListener};
 
 /// Minimal server entrypoint: parse CLI args and run the server.
 ///
@@ -45,36 +44,11 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!(config = %config_path.display(), bots);
 
-    // Find first available port starting from 3000
-    let port = find_available_port(3000)
-        .map_err(|e| anyhow::anyhow!("Could not find an available port: {}", e))?;
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-
-    tracing::info!(port, "starting server");
-    if port != 3000 {
-        tracing::warn!(port, "port 3000 was not available, using alternative port");
-    }
-
     // Run the server
     native_mcg::backend::BackendBuilder::new(cfg)
         .with_config_path(config_path)
         .build()?
-        .run(addr)
+        .run()
         .await?;
     Ok(())
-}
-
-/// Find the first available port starting from the given port number
-fn find_available_port(start_port: u16) -> anyhow::Result<u16> {
-    for port in start_port..start_port + 100 {
-        match TcpListener::bind(("0.0.0.0", port)) {
-            Ok(_) => return Ok(port),
-            Err(_) => continue,
-        }
-    }
-    Err(anyhow::anyhow!(
-        "No available ports found in range {}..{}",
-        start_port,
-        start_port + 100
-    ))
 }
