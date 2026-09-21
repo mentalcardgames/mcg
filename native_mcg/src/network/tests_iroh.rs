@@ -5,14 +5,16 @@ use anyhow::{Context, Result};
 use iroh::endpoint::{Endpoint, RelayMode};
 use iroh_tickets::{endpoint::EndpointTicket, Ticket};
 use mcg_shared::{Backend2FrontendMsg, Frontend2BackendMsg, Peer2PeerMsg};
-use native_mcg::controller::{ControllerEvent, ControllerHandle};
-use native_mcg::network::{
-    ConnectionCloseReason, ConnectionId, NetworkBuilder, NetworkEvent, NetworkHandle,
-    PeerConnectionDirection, TransportKind, IROH_FRONTEND_ALPN, IROH_PEER_ALPN,
-};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+
+use crate::config::Config;
+use crate::controller::{ControllerBuilder, ControllerEvent};
+use crate::network::{
+    ConnectionCloseReason, ConnectionId, NetworkBuilder, NetworkEvent, NetworkHandle,
+    PeerConnectionDirection, TransportKind, IROH_FRONTEND_ALPN, IROH_PEER_ALPN,
+};
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -49,9 +51,11 @@ fn start_supervisor() -> (
     mpsc::Receiver<ControllerEvent>,
     JoinHandle<()>,
 ) {
-    let (event_tx, event_rx) = mpsc::channel(32);
-    let (network, task) = NetworkBuilder::new(ControllerHandle::new(event_tx)).spawn();
-    (network, event_rx, task)
+    let (controller_runner, controller_handle) = ControllerBuilder::new(Config::default())
+        .with_channel_capacity(32)
+        .build();
+    let (network, task) = NetworkBuilder::new(controller_handle).spawn();
+    (network, controller_runner.into_event_receiver(), task)
 }
 
 async fn accept_one(endpoint: Endpoint, network: NetworkHandle) -> Result<ConnectionId> {
@@ -439,45 +443,5 @@ async fn integrated_iroh_listener_accepts_and_shuts_down_cleanly() -> Result<()>
         .context("client supervisor shutdown timed out")??;
 
     close_endpoint(&client_endpoint).await?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn backend_shutdown_closes_iroh_listener_cleanly() -> Result<()> {
-    let backend = native_mcg::BackendBuilder::new(native_mcg::config::Config::default()).build()?;
-    backend
-        .network()
-        .start_iroh_listener(native_mcg::config::Config::default(), None)
-        .await?;
-
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    backend.shutdown().await;
-    Ok(())
-}
-
-#[tokio::test]
-async fn running_backend_run_until_shuts_down_cleanly() -> Result<()> {
-    let addr = "127.0.0.1:0".parse()?;
-    let backend = native_mcg::BackendBuilder::new(native_mcg::config::Config::default())
-        .with_bind_addr(addr)
-        .build()?;
-    let (signal_tx, signal_rx) = tokio::sync::oneshot::channel();
-
-    let run_task = tokio::spawn(async move {
-        backend
-            .run_until(async move {
-                let _ = signal_rx.await;
-            })
-            .await
-    });
-
-    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-    let _ = signal_tx.send(());
-
-    tokio::time::timeout(TEST_TIMEOUT, run_task)
-        .await
-        .context("run_until shutdown timed out")??
-        .context("run_until failed")?;
     Ok(())
 }

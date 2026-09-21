@@ -102,7 +102,7 @@ pub struct NetworkHandle {
 }
 
 impl NetworkHandle {
-    pub(crate) fn new(request_tx: mpsc::Sender<SupervisorRequest>) -> Self {
+    pub(super) fn new(request_tx: mpsc::Sender<SupervisorRequest>) -> Self {
         Self { request_tx }
     }
 

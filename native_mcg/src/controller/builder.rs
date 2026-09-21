@@ -13,29 +13,24 @@ use super::types::ControllerEvent;
 
 const DEFAULT_CONTROLLER_CHANNEL_CAPACITY: usize = 256;
 
-/// Builder for configuring and spawning the synchronous [`Controller`].
+/// Builder for configuring the synchronous [`Controller`].
 pub struct ControllerBuilder {
     config: Config,
     config_path: Option<PathBuf>,
     network: Option<NetworkHandle>,
     state_watch_tx: Option<watch::Sender<Option<PokerStatePublic>>>,
     channel_capacity: usize,
-    handle: ControllerHandle,
-    rx: Option<mpsc::Receiver<ControllerEvent>>,
 }
 
 impl ControllerBuilder {
     /// Creates a new builder with the specified configuration.
     pub fn new(config: Config) -> Self {
-        let (tx, rx) = mpsc::channel(DEFAULT_CONTROLLER_CHANNEL_CAPACITY);
         Self {
             config,
             config_path: None,
             network: None,
             state_watch_tx: None,
             channel_capacity: DEFAULT_CONTROLLER_CHANNEL_CAPACITY,
-            handle: ControllerHandle::new(tx),
-            rx: Some(rx),
         }
     }
 
@@ -69,43 +64,90 @@ impl ControllerBuilder {
     /// Sets the capacity of the [`ControllerEvent`] mpsc channel.
     pub fn with_channel_capacity(mut self, capacity: usize) -> Self {
         self.channel_capacity = capacity;
-        let (tx, rx) = mpsc::channel(capacity);
-        self.handle = ControllerHandle::new(tx);
-        self.rx = Some(rx);
         self
     }
 
-    /// Returns the [`ControllerHandle`] for sending events to the Controller.
-    pub fn handle(&self) -> ControllerHandle {
-        self.handle.clone()
+    /// Builds the controller runner and its corresponding [`ControllerHandle`].
+    ///
+    /// This step sets up the event channel without starting any background threads.
+    pub fn build(self) -> (ControllerRunner, ControllerHandle) {
+        let (tx, rx) = mpsc::channel(self.channel_capacity);
+        let handle = ControllerHandle::new(tx);
+        let mut controller = Controller::new(self.config, self.config_path);
+        if let Some(watch_tx) = self.state_watch_tx {
+            controller = controller.with_state_watch(watch_tx);
+        }
+        let runner = ControllerRunner {
+            controller,
+            rx,
+            network: self.network,
+        };
+        (runner, handle)
     }
 
-    /// Spawns the dedicated `mcg-controller` OS thread and returns both the [`ControllerHandle`] and thread [`JoinHandle`].
+    /// Spawns the dedicated `mcg-controller` OS thread directly.
+    ///
+    /// Requires [`Self::with_network`] to have been called.
     pub fn spawn(mut self) -> (ControllerHandle, JoinHandle<()>) {
         let network = self
             .network
             .take()
             .expect("NetworkHandle must be provided to spawn Controller thread");
-        let handle = self.handle();
-        let mut rx = self.rx.take().expect("Controller already spawned");
-        let mut controller = Controller::new(self.config, self.config_path);
-        if let Some(watch_tx) = self.state_watch_tx {
-            controller = controller.with_state_watch(watch_tx);
-        }
-        let thread_handle = std::thread::Builder::new()
+        let (runner, handle) = self.build();
+        let thread_handle = runner.spawn(network);
+        (handle, thread_handle)
+    }
+}
+
+/// Unstarted runner owning the [`Controller`] and event receiver.
+pub struct ControllerRunner {
+    controller: Controller,
+    rx: mpsc::Receiver<ControllerEvent>,
+    network: Option<NetworkHandle>,
+}
+
+impl ControllerRunner {
+    /// Spawns the dedicated `mcg-controller` OS thread with the given [`NetworkHandle`].
+    pub fn spawn(mut self, network: NetworkHandle) -> JoinHandle<()> {
+        self.network = Some(network);
+        self.spawn_thread()
+    }
+
+    /// Spawns the dedicated `mcg-controller` OS thread using the pre-configured [`NetworkHandle`].
+    pub fn spawn_with_network(self) -> JoinHandle<()> {
+        self.spawn_thread()
+    }
+
+    fn spawn_thread(mut self) -> JoinHandle<()> {
+        let network = self
+            .network
+            .take()
+            .expect("NetworkHandle must be set to spawn Controller thread");
+        std::thread::Builder::new()
             .name("mcg-controller".into())
             .spawn(move || {
-                tracing::info!("synchronous controller thread started");
-                while let Some(event) = rx.blocking_recv() {
-                    let is_shutdown = matches!(event, ControllerEvent::Shutdown);
-                    controller.handle_event(event, &network);
-                    if is_shutdown {
-                        break;
-                    }
-                }
-                tracing::info!("synchronous controller thread stopped");
+                self.run(&network);
             })
-            .expect("spawning controller OS thread");
-        (handle, thread_handle)
+            .expect("spawning controller OS thread")
+    }
+
+    /// Runs the controller loop synchronously on the current thread.
+    pub fn run(&mut self, network: &NetworkHandle) {
+        tracing::info!("synchronous controller thread started");
+        while let Some(event) = self.rx.blocking_recv() {
+            let is_shutdown = matches!(event, ControllerEvent::Shutdown);
+            self.controller.handle_event(event, network);
+            if is_shutdown {
+                break;
+            }
+        }
+        tracing::info!("synchronous controller thread stopped");
+    }
+
+    /// Consumes the runner and returns the underlying event receiver.
+    ///
+    /// Useful for testing network supervisor behavior in isolation.
+    pub fn into_event_receiver(self) -> mpsc::Receiver<ControllerEvent> {
+        self.rx
     }
 }

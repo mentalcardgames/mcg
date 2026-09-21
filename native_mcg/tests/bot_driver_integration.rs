@@ -4,23 +4,21 @@ use mcg_poker::bot::BotManager;
 use mcg_poker::driver::spawn_bot_driver;
 use mcg_shared::{Frontend2BackendMsg, PlayerAction, PlayerConfig, PlayerId, Stage};
 use native_mcg::config::Config;
-use native_mcg::controller::{ControllerBuilder, ControllerHandle};
+use native_mcg::controller::ControllerBuilder;
 use native_mcg::network::{ConnectionId, NetworkBuilder, NetworkEvent};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::watch;
 use tokio::time::sleep;
 
 #[tokio::test]
 async fn bot_driver_drives_bot_turns_automatically() {
-    let (network_event_tx, _network_event_rx) = mpsc::channel(16);
-    let (network, supervisor_task) =
-        NetworkBuilder::new(ControllerHandle::new(network_event_tx)).spawn();
-
     let (state_watch_tx, mut state_watch_rx) = watch::channel(None);
-    let (controller_handle, thread_handle) = ControllerBuilder::new(Config::default())
+    let (controller_runner, controller_handle) = ControllerBuilder::new(Config::default())
         .with_state_watch(state_watch_tx)
-        .with_network(network.clone())
         .with_channel_capacity(16)
-        .spawn();
+        .build();
+
+    let (network, supervisor_task) = NetworkBuilder::new(controller_handle.clone()).spawn();
+    let thread_handle = controller_runner.spawn(network.clone());
 
     let bot_driver_task = spawn_bot_driver(
         controller_handle.clone(),

@@ -14,7 +14,7 @@ pub struct ControllerHandle {
 
 impl ControllerHandle {
     /// Creates a new controller handle wrapping an event sender channel.
-    pub fn new(event_tx: mpsc::Sender<ControllerEvent>) -> Self {
+    pub(super) fn new(event_tx: mpsc::Sender<ControllerEvent>) -> Self {
         Self { event_tx }
     }
 

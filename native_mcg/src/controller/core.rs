@@ -33,6 +33,7 @@ pub struct Lobby {
     pub game: Option<Game>,
     pub last_printed_log_len: usize,
     pub bots: Vec<PlayerId>,
+    #[allow(dead_code)]
     pub bot_manager: BotManager,
     pub max_players: usize,
     pub lobby_open: bool,
@@ -101,6 +102,7 @@ impl Controller {
     }
 
     /// Sets or updates the public state watch sender for bot observation.
+    #[allow(dead_code)]
     pub fn set_state_watch_tx(&mut self, state_watch_tx: watch::Sender<Option<PokerStatePublic>>) {
         self.state_watch_tx = Some(state_watch_tx);
     }

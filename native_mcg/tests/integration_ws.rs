@@ -5,8 +5,9 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
-    let backend = native_mcg::BackendBuilder::new(native_mcg::config::Config::default()).build()?;
-    let addr = backend
+    let (backend_handle, _tasks) =
+        native_mcg::BackendBuilder::new(native_mcg::config::Config::default()).spawn()?;
+    let addr = backend_handle
         .network()
         .start_axum_listener("127.0.0.1:0".parse()?)
         .await?;
@@ -85,6 +86,6 @@ async fn ws_broadcasts_state_to_other_clients() -> Result<()> {
     );
 
     // Clean up server
-    backend.shutdown().await;
+    backend_handle.shutdown().await;
     Ok(())
 }

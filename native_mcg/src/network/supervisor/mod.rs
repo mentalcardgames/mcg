@@ -183,7 +183,7 @@ impl NetworkBuilder {
 
 impl NetworkSupervisor {
     /// Returns a [`NetworkHandle`] for interacting with this supervisor.
-    pub fn handle(&self) -> NetworkHandle {
+    fn handle(&self) -> NetworkHandle {
         let tx = self
             .weak_request_tx
             .upgrade()
