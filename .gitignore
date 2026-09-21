@@ -1,5 +1,5 @@
 /target/
-/frontend/target/
+/crates/frontend/target/
 **/*.rs.bk
 *.swp
 *.swo
@@ -8,7 +8,7 @@ wasm-pack.log
 node_modules/
 dist/
 .DS_Store
-.vscode/
+/.vscode/
 .idea/
 node_modules
 dist

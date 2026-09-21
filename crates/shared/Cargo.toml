@@ -1,0 +1,12 @@
+[package]
+name = "mcg-shared"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+num-bigint = "0.4"
+owo-colors = { workspace = true }

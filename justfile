@@ -1,3 +1,4 @@
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 set shell := ["bash", "-uc"]
 
 # Ensure `wasm-pack` exists in PATH, aborts if missing
@@ -10,25 +11,9 @@ default:
 # Build the WASM package for the frontend crate into root ./pkg
 # Usage: just build [PROFILE]
 # PROFILE: "release" (default), "profiling", or "dev"
-[working-directory: 'frontend']
+[working-directory: 'crates/frontend']
 build PROFILE="release":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    wasm_pack="{{wasm_pack}}"
-    profile="{{PROFILE}}"
-    case "$profile" in
-      release)
-        CARGO_PROFILE_RELEASE_OPT_LEVEL=3 "$wasm_pack" build --target web --out-dir ../pkg --features wasm
-        ;;
-      profiling)
-        # Profiling build (same as debug for now since --profiling flag is not supported)
-        "$wasm_pack" build --target web --out-dir ../pkg --features wasm
-        ;;
-      *)
-        # dev (debug) build
-        "$wasm_pack" build --target web --dev --out-dir ../pkg --features wasm
-        ;;
-    esac
+    wasm-pack build --target web {{ if PROFILE == "dev" { "--dev" } else { "" } }} --out-dir ../../pkg --features wasm
 
 # Build then serve using the Rust backend in one step
 # Usage: just start [PROFILE]
@@ -47,12 +32,22 @@ backend:
     cargo run -p native_mcg --bin native_mcg
 
 # Run the backend in the background for AI agent testing
+[unix]
 backend-bg:
     cargo run -p native_mcg --bin native_mcg &
 
+[windows]
+backend-bg:
+    powershell -NoLogo -Command "Start-Process cargo -ArgumentList 'run -p native_mcg --bin native_mcg' -WindowStyle Hidden"
+
 # Kill the background backend process
+[unix]
 kill-backend:
     pkill -f "native_mcg" || true
+
+[windows]
+kill-backend:
+    powershell -NoLogo -Command "Stop-Process -Name native_mcg -ErrorAction SilentlyContinue"
 
 # Run the headless CLI with arbitrary arguments
 # Usage examples:

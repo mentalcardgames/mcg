@@ -10,13 +10,13 @@ default = ["driver"]
 driver = ["dep:tokio", "dep:async-trait"]
 
 [dependencies]
-mcg-shared = { path = "../../shared" }
-rand = "0.9"
-serde = { version = "1", features = ["derive"] }
-anyhow = "1.0"
-tracing = "0.1"
-tokio = { version = "1", features = ["sync", "time", "rt", "macros"], optional = true }
-async-trait = { version = "0.1", optional = true }
+mcg-shared = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full", "macros"] }
+tokio = { workspace = true }

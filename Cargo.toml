@@ -1,17 +1,17 @@
 [workspace]
 members = [
-    "native_mcg",
-    "shared",
+    "crates/native_mcg",
+    "crates/shared",
     "crates/qr_comm",
-    "crates/front_end",
-    "crates/lsp_server",
-    "crates/code_gen",
+    "crates/cardgame_dsl/front_end",
+    "crates/cardgame_dsl/lsp_server",
+    "crates/cardgame_dsl/code_gen",
     "crates/engine",
     "crates/poker",
 ]
-default-members = ["native_mcg", "shared", "crates/poker"]
+default-members = ["crates/native_mcg", "crates/shared", "crates/poker"]
 resolver = "3"
-exclude = ["frontend"]
+exclude = ["crates/frontend"]
 
 [workspace.package]
 license = "MIT OR Apache-2.0"
@@ -20,3 +20,37 @@ authors = [
     "Jan Christian Cichosz",
     "Colin Duchilio",
 ]
+
+[workspace.dependencies]
+# Internal crates
+mcg-shared = { path = "crates/shared" }
+mcg-poker = { path = "crates/poker" }
+mcg_qr_comm = { path = "crates/qr_comm" }
+front_end = { path = "crates/cardgame_dsl/front_end" }
+code_gen = { path = "crates/cardgame_dsl/code_gen" }
+
+# External dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rand = "0.9"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+anyhow = "1.0"
+hex = "0.4"
+owo-colors = "4.2"
+async-trait = "0.1"
+pest = "2.8"
+pest_derive = "2.8"
+pest_consume = "1.1.3"
+proptest = "1.10"
+image = "0.25.6"
+qrcode = "0.14.1"
+rqrr = "0.9.3"
+quote = "1.0"
+tower-http = { version = "0.6", features = ["fs"] }
+clap = { version = "4.5", features = ["derive"] }
+tokio-tungstenite = { version = "0.24.0", default-features = false }
+futures-util = "0.3"
+url = "2.5"
+toml = "0.7"

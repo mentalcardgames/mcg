@@ -406,15 +406,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
-name = "bincode"
-version = "1.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -446,9 +437,6 @@ name = "bitflags"
 version = "2.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
-dependencies = [
- "serde_core",
-]
 
 [[package]]
 name = "bitstream-io"
@@ -588,7 +576,7 @@ dependencies = [
  "crossbeam-channel",
  "crossterm",
  "front_end",
- "rand 0.8.7",
+ "rand 0.9.5",
  "ratatui",
  "thiserror 2.0.19",
  "tracing",
@@ -1364,7 +1352,6 @@ name = "front_end"
 version = "0.1.0"
 dependencies = [
  "arbitrary",
- "bincode",
  "code_gen",
  "layout-rs",
  "pest",
@@ -1375,7 +1362,6 @@ dependencies = [
  "proptest-arbitrary-interop",
  "quote",
  "regex",
- "ron",
  "serde",
  "serde_json",
 ]
@@ -1495,15 +1481,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fuzzy-matcher"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54614a3312934d066701a80f20f15fa3b56d67ac7722b39eea5b4c9dd1d66c94"
-dependencies = [
- "thread_local",
-]
-
-[[package]]
 name = "g2gen"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1530,12 +1507,6 @@ name = "g2poly"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "312d2295c7302019c395cfb90dacd00a82a2eabd700429bba9c7a3f38dbbe11b"
-
-[[package]]
-name = "galois_2p8"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4baa93b0a0a0b56873b40f7a8b53fb531eb7ed85688634c9218ebde6a177490"
 
 [[package]]
 name = "generator"
@@ -2751,12 +2722,9 @@ dependencies = [
  "arc-swap",
  "dashmap 6.2.1",
  "front_end",
- "fuzzy-matcher",
  "lsp-types 0.97.0",
  "pest",
  "pest_consume",
- "pest_derive",
- "proptest",
  "ropey",
  "serde_json",
  "tokio",
@@ -2821,7 +2789,6 @@ dependencies = [
 name = "mcg_qr_comm"
 version = "0.1.0"
 dependencies = [
- "galois_2p8",
  "image",
  "qrcode",
  "rand 0.9.5",
@@ -2981,21 +2948,16 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.17",
  "hex",
- "hyper 1.11.0",
- "hyper-util",
  "iroh",
  "iroh-tickets",
  "local_ipaddress",
  "mcg-poker",
  "mcg-shared",
- "owo-colors",
  "rand 0.9.5",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
  "tokio",
- "tokio-stream",
- "tokio-test",
  "tokio-tungstenite",
  "toml",
  "tower-http",
@@ -4292,20 +4254,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ron"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81116b9531d61eabc41aeb228e4b6b2435bcca3233b98cf3b3077d4e6e9debb3"
-dependencies = [
- "bitflags 2.13.1",
- "once_cell",
- "serde",
- "serde_derive",
- "typeid",
- "unicode-ident",
-]
-
-[[package]]
 name = "ropey"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5268,17 +5216,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-test"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f6d24790a10a7af737693a3e8f1d03faef7e6ca0cc99aae5066f533766de545"
-dependencies = [
- "futures-core",
- "tokio",
- "tokio-stream",
-]
-
-[[package]]
 name = "tokio-tungstenite"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5580,12 +5517,6 @@ dependencies = [
  "thiserror 1.0.69",
  "utf-8",
 ]
-
-[[package]]
-name = "typeid"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
 
 [[package]]
 name = "typenum"
