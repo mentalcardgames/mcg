@@ -69,3 +69,10 @@ downcast-rs = "2.0.2"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.50"
+
+# Optimize for size in release mode
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+
