@@ -1,13 +1,16 @@
 # MCG
 
-A Rust workspace for a browser-based card game. The frontend (crate: `frontend`) compiles
-to WebAssembly (WASM) and renders with eframe/egui. The native node (crate: `native_mcg`) provides
-an HTTP/WebSocket backend that serves the SPA and provides the real-time poker demo. A shared
-crate contains the serialized message types and supporting structures.
+A Rust workspace for a browser-based card game.
+The frontend (crate: `frontend`) compiles to WebAssembly (WASM) and renders
+with eframe/egui.
+The native node (crate: `native_mcg`) provides an HTTP/WebSocket backend that
+serves the SPA and provides the real-time poker demo.
+A shared crate contains the serialized message types and supporting structures.
 
 ## Quick start
 
-- Prerequisites: Rust (stable toolchain), `wasm-pack` in PATH, and the `just` task runner.
+- Prerequisites:
+Rust (stable toolchain), `wasm-pack` in PATH, and the `just` task runner.
 
 - Build the WASM bundle (outputs to repo-root ./pkg):
   - `just build`              # release (optimized)
@@ -20,14 +23,33 @@ crate contains the serialized message types and supporting structures.
 - Build then run together:
   - `just start`              # release build + backend
 
-Notes
-- The server binds to the first available port starting at 3000 and logs the chosen URL (e.g., http://localhost:3000). Open that URL in the browser.
-- The native node assumes current working directory is the repo root to serve ./pkg and ./media.
-- wasm-pack builds are run from the `frontend/` crate and emit to ../pkg (repo root). If a `frontend/pkg` directory exists, prefer the root `pkg` output.
+## Multi-Backend Ports & Configuration
+
+By default, `native_mcg` searches for an available port starting at port `3000`.
+If port 3000 is occupied by another running instance, it automatically binds to
+the next free port (`3001`, `3002`, etc.).
+
+If you want to test running multiple independent backend instances on the
+same machine, you can also explicitly specify a listening port via CLI argument:
+
+```shell
+cargo run -p native_mcg --bin native_mcg -- --port 3001
+```
+
+## Documentation
+
+The official project documentation is published at [https://mentalcardgames.github.io/](https://mentalcardgames.github.io/).
+
+Its source files are located in the `docs/` submodule.
+For instructions on installing documentation dependencies, compiling markdown
+to HTML, and running the local VitePress preview server, see
+[`docs/README.md`](docs/README.md).
 
 ## Headless CLI (for automation and testing)
 
-A minimal CLI is provided to exercise the same WebSocket protocol as the GUI client. It is useful for smoke tests and AI agents.
+A minimal CLI is provided to exercise the same WebSocket protocol as the GUI
+client.
+It is useful for smoke tests and AI agents.
 
 - Run directly:
   - `cargo run -p native_mcg --bin mcg-cli -- [GLOBAL-OPTS] <COMMAND> [ARGS]`
@@ -35,14 +57,19 @@ A minimal CLI is provided to exercise the same WebSocket protocol as the GUI cli
   - `just cli -- [GLOBAL-OPTS] <COMMAND> [ARGS]`
 
 Global options
-- `--server` Base server URL (default: `http://localhost:3000`). Accepts http(s):// or ws(s)://; the CLI normalizes to ws(s) and forces path `/ws`.
+- `--server` Base server URL (default: `http://localhost:3000`).
+Accepts http(s):// or ws(s)://; the CLI normalizes to ws(s) and forces path `/ws`.
 - `--name`   Join name to use (default: `CLI`).
-- `--wait-ms` How long to wait for state updates after a command (default: 1200ms). Useful to capture bot activity.
+- `--wait-ms` How long to wait for state updates after a command
+(default: 1200ms).
+Useful to capture bot activity.
 - `--json` Output JSON instead of a colorful, human-readable summary.
 
 Commands (examples)
 - Join and print first State:
-  - `just cli join` (the CLI will connect, wait for `Backend2FrontendMsg::Welcome` and the initial `State`, then it may send follow-up `Frontend2BackendMsg` commands)
+  - `just cli join`
+  (the CLI will connect, wait for `Backend2FrontendMsg::Welcome` and the
+  initial `State`, then it may send follow-up `Frontend2BackendMsg` commands)
 - Request latest State:
   - `just cli -- state`
 - Send actions:
@@ -55,16 +82,9 @@ Commands (examples)
   - `just cli -- reset --bots 3`
 
 Output
-- Default: a concise, colorized summary with stage, pot, players (including whose turn), board and your cards (if available), and a readable action log.
+- Default: a concise, colorized summary with stage, pot, players (including
+whose turn), board and your cards (if available), and a readable action log.
 - With `--json`: pretty-printed `PokerStatePublic` JSON.
-
-## Workspace layout
-
-- `frontend/`: WASM/egui frontend and all UI/game/screen code (previously `client/`)
-- `native_mcg/`: Native node containing the backend (HTTP + WebSocket + iroh), CLI, and native-only helpers (previously `server/`)
-- `shared/`: Types shared between frontend and native_mcg (serde-serializable protocol and game data)
-- `pkg/`: wasm-pack output (mcg.js, mcg_bg.wasm, mcg.d.ts) loaded by `index.html`
-- `index.html`: loads `pkg/mcg.js` and starts the game on a full-screen canvas
 
 ## Adding new screens (frontend)
 
