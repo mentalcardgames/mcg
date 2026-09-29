@@ -437,6 +437,22 @@ impl ScreenWidget for PokerOnlineScreen {
         // Check for button clicks
         let mut connection_actions = (false, false);
         let connected = app_interface.is_connected();
+
+        // If we don't have game state yet, check app_state cache or request from server
+        if self.game_state.is_none() {
+            let (cached_state, our_name) = {
+                let state = app_interface.state();
+                (state.last_poker_state.clone(), state.name.clone())
+            };
+            if let Some(ref state) = cached_state {
+                self.player_manager
+                    .sync_from_game_state_with_name(state, &our_name);
+                self.game_state = Some(state.clone());
+            } else if connected {
+                app_interface.send_msg(mcg_shared::Frontend2BackendMsg::RequestState);
+            }
+        }
+
         if connected && !self.setup_requested {
             app_interface.send_msg(mcg_shared::Frontend2BackendMsg::RequestPlayerSetup);
             self.setup_requested = true;
@@ -480,9 +496,14 @@ impl ScreenWidget for PokerOnlineScreen {
         match message {
             Backend2FrontendMsg::PlayerSetup(players) => {
                 self.player_manager.sync_from_player_configs(&players);
+                let our_name = app_interface.state().name.clone();
+                self.player_manager
+                    .ensure_valid_preferred_player_with_name(&our_name);
             }
             Backend2FrontendMsg::UpdatePokerState(game_state) => {
-                self.player_manager.sync_from_game_state(&game_state);
+                let our_name = app_interface.state().name.clone();
+                self.player_manager
+                    .sync_from_game_state_with_name(&game_state, &our_name);
                 self.game_state = Some(game_state);
                 self.connection_manager.last_error = None;
                 self.connection_manager.last_info = None;
@@ -491,7 +512,8 @@ impl ScreenWidget for PokerOnlineScreen {
                 self.connection_manager.last_error = Some(error);
             }
             Backend2FrontendMsg::OurName(name) => {
-                app_interface.state_mut().name = name;
+                app_interface.state_mut().name = name.clone();
+                self.player_manager.set_preferred_by_name(&name);
             }
             _ => {}
         }

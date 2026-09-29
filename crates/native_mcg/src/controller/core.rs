@@ -25,6 +25,7 @@ use super::types::ControllerEvent;
 pub struct PeerInfo {
     pub name: String,
     pub ticket: EndpointTicket,
+    pub ready: bool,
 }
 
 /// Lobby and game session state owned exclusively by the Controller.
@@ -37,11 +38,13 @@ pub struct Lobby {
     pub bot_manager: BotManager,
     pub max_players: usize,
     pub lobby_open: bool,
+    pub is_host: bool,
     pub our_name: String,
     pub ready: bool,
     pub game_type: String,
     pub game_running: bool,
     pub player_setup: Vec<PlayerConfig>,
+    pub last_poker_state: Option<PokerStatePublic>,
 }
 
 impl Default for Lobby {
@@ -53,11 +56,13 @@ impl Default for Lobby {
             bot_manager: BotManager::new(),
             max_players: 2,
             lobby_open: false,
+            is_host: false,
             our_name: String::new(),
             ready: false,
             game_type: String::new(),
             game_running: false,
             player_setup: Vec::new(),
+            last_poker_state: None,
         }
     }
 }
@@ -117,6 +122,7 @@ impl Controller {
             PeerInfo {
                 name: self.lobby.our_name.clone(),
                 ticket,
+                ready: self.lobby.ready,
             },
         );
 
@@ -166,7 +172,10 @@ impl Controller {
             } => {
                 tracing::debug!(%connection_id, ?transport, "frontend connection registered in controller");
                 // Immediately synchronize the current poker state with the new frontend if active.
-                if let Some(state) = self.current_state_public() {
+                if let Some(state) = self
+                    .current_state_public()
+                    .or_else(|| self.lobby.last_poker_state.clone())
+                {
                     if let Err(error) = network.blocking_unicast_frontend(
                         connection_id,
                         Backend2FrontendMsg::UpdatePokerState(state),
@@ -251,19 +260,37 @@ impl Controller {
     ) -> Option<Backend2FrontendMsg> {
         match msg {
             Frontend2BackendMsg::Action { player_id, action } => {
-                match self.validate_and_apply_action(player_id, action) {
-                    Ok(()) => {
-                        self.print_latest_changes();
-                        self.broadcast_state(network);
+                if self.lobby.is_host {
+                    match self.validate_and_apply_action(player_id, action) {
+                        Ok(()) => {
+                            self.print_latest_changes();
+                            self.broadcast_state(network);
+                            None
+                        }
+                        Err(e) => Some(Backend2FrontendMsg::Error(e)),
+                    }
+                } else {
+                    tracing::info!(%player_id, ?action, "Forwarding poker action to host via P2P");
+                    if let Err(error) = network
+                        .blocking_broadcast_peer(Peer2PeerMsg::PokerAction { player_id, action })
+                    {
+                        tracing::warn!(%error, "failed to forward poker action to host");
+                        Some(Backend2FrontendMsg::Error("Failed to reach host".into()))
+                    } else {
                         None
                     }
-                    Err(e) => Some(Backend2FrontendMsg::Error(e)),
                 }
             }
             Frontend2BackendMsg::RequestState => {
-                if let Some(gs) = self.current_state_public() {
+                if let Some(gs) = self
+                    .current_state_public()
+                    .or_else(|| self.lobby.last_poker_state.clone())
+                {
                     Some(Backend2FrontendMsg::UpdatePokerState(gs))
                 } else {
+                    if !self.lobby.is_host {
+                        let _ = network.blocking_broadcast_peer(Peer2PeerMsg::RequestPokerState);
+                    }
                     Some(Backend2FrontendMsg::Error(
                         "No active game. Please start a new game first.".into(),
                     ))
@@ -273,20 +300,34 @@ impl Controller {
                 tracing::info!("received ping from client");
                 Some(Backend2FrontendMsg::Pong)
             }
-            Frontend2BackendMsg::NextHand => match self.advance_to_next_hand() {
-                Ok(()) => {
-                    self.print_latest_changes();
-                    self.broadcast_state(network);
+            Frontend2BackendMsg::NextHand => {
+                if self.lobby.is_host {
+                    match self.advance_to_next_hand() {
+                        Ok(()) => {
+                            self.print_latest_changes();
+                            self.broadcast_state(network);
+                            None
+                        }
+                        Err(e) => Some(Backend2FrontendMsg::Error(e)),
+                    }
+                } else {
+                    tracing::info!("Forwarding NextHand request to host via P2P");
+                    if let Err(error) = network.blocking_broadcast_peer(Peer2PeerMsg::PokerNextHand)
+                    {
+                        tracing::warn!(%error, "failed to forward NextHand to host");
+                    }
                     None
                 }
-                Err(e) => Some(Backend2FrontendMsg::Error(e)),
-            },
+            }
             Frontend2BackendMsg::RequestPlayerSetup => {
                 if !self.lobby.player_setup.is_empty() {
                     Some(Backend2FrontendMsg::PlayerSetup(
                         self.lobby.player_setup.clone(),
                     ))
-                } else if let Some(gs) = self.current_state_public() {
+                } else if let Some(gs) = self
+                    .current_state_public()
+                    .or_else(|| self.lobby.last_poker_state.clone())
+                {
                     let configs = gs
                         .players
                         .into_iter()
@@ -311,6 +352,7 @@ impl Controller {
                 None
             }
             Frontend2BackendMsg::NewGame { players } => {
+                self.lobby.is_host = true;
                 self.lobby.player_setup = players.clone();
                 match self.create_game_session(players) {
                     Ok(()) => {
@@ -329,6 +371,10 @@ impl Controller {
                 }
                 Err(e) => Some(Backend2FrontendMsg::Error(e)),
             },
+            Frontend2BackendMsg::StartLobbyGame => {
+                self.maybe_start_lobby_poker_game(network);
+                None
+            }
             Frontend2BackendMsg::QrValue(ticket_str) => {
                 let ticket = match EndpointTicket::decode_string(&ticket_str) {
                     Ok(ticket) => Some(ticket),
@@ -386,8 +432,9 @@ impl Controller {
             }
             Frontend2BackendMsg::LobbyOpen(game_type) => {
                 self.lobby.lobby_open = true;
+                self.lobby.is_host = true;
                 self.lobby.game_type = game_type.clone();
-                tracing::info!("Lobby opened for game type: {}", game_type);
+                tracing::info!("Lobby opened for game type: {} (host mode)", game_type);
                 Some(Backend2FrontendMsg::Error("Lobby is now open".to_string()))
             }
             Frontend2BackendMsg::PlayerName(name) => {
@@ -416,8 +463,11 @@ impl Controller {
                 }
 
                 self.lobby.lobby_open = false;
+                self.lobby.is_host = false;
                 self.lobby.game_running = false;
                 self.lobby.game_type = String::new();
+                self.lobby.game = None;
+                self.lobby.last_poker_state = None;
                 let our_name = self.lobby.our_name.clone();
                 self.peers.retain(|_, p| p.name == our_name);
                 tracing::info!("Lobby closed.");
@@ -426,12 +476,24 @@ impl Controller {
             }
             Frontend2BackendMsg::ReadyUpdate(ready) => {
                 self.lobby.ready = ready;
+                for peer in self.peers.values_mut() {
+                    if peer.name == self.lobby.our_name {
+                        peer.ready = ready;
+                        break;
+                    }
+                }
                 if let Err(error) = network.blocking_broadcast_peer(Peer2PeerMsg::PeerReady(
                     self.lobby.our_name.clone(),
                     ready,
                 )) {
                     tracing::warn!(%error, "failed to broadcast peer message from controller");
                 }
+                if let Err(error) = network.blocking_broadcast_frontend(
+                    Backend2FrontendMsg::PlayerReady(self.lobby.our_name.clone(), ready),
+                ) {
+                    tracing::warn!(%error, "failed to broadcast frontend message from controller");
+                }
+                self.maybe_start_lobby_poker_game(network);
                 Some(Backend2FrontendMsg::Error(format!(
                     "Ready status updated: {}",
                     ready
@@ -439,10 +501,19 @@ impl Controller {
             }
             Frontend2BackendMsg::GetPlayers => {
                 for peer in self.peers.values() {
-                    if let Err(error) = network.blocking_broadcast_frontend(
-                        Backend2FrontendMsg::NewPlayer(peer.name.clone()),
-                    ) {
-                        tracing::warn!(%error, "failed to broadcast frontend message from controller");
+                    if !peer.name.is_empty() {
+                        if let Err(error) = network.blocking_broadcast_frontend(
+                            Backend2FrontendMsg::NewPlayer(peer.name.clone()),
+                        ) {
+                            tracing::warn!(%error, "failed to broadcast frontend message from controller");
+                        }
+                        if peer.ready {
+                            if let Err(error) = network.blocking_broadcast_frontend(
+                                Backend2FrontendMsg::PlayerReady(peer.name.clone(), true),
+                            ) {
+                                tracing::warn!(%error, "failed to broadcast frontend message from controller");
+                            }
+                        }
                     }
                 }
                 if let Err(error) = network.blocking_broadcast_peer(Peer2PeerMsg::RequestReady) {
@@ -553,6 +624,7 @@ impl Controller {
                     PeerInfo {
                         name: assigned_name.clone(),
                         ticket,
+                        ready: false,
                     },
                 );
                 if let Err(error) = network
@@ -594,6 +666,7 @@ impl Controller {
                         PeerInfo {
                             name: name.clone(),
                             ticket: ticket.clone(),
+                            ready: false,
                         },
                     );
                     if let Err(error) =
@@ -629,6 +702,7 @@ impl Controller {
             }
             Peer2PeerMsg::LobbyAccept(max_players, game_type) => {
                 self.lobby.lobby_open = true;
+                self.lobby.is_host = false;
                 self.lobby.max_players = max_players;
                 self.lobby.game_type = game_type;
                 if let Err(error) = network.blocking_broadcast_frontend(Backend2FrontendMsg::Pong) {
@@ -643,10 +717,87 @@ impl Controller {
                 }
             }
             Peer2PeerMsg::PeerReady(name, ready) => {
+                for peer in self.peers.values_mut() {
+                    if peer.name == name {
+                        peer.ready = ready;
+                        break;
+                    }
+                }
                 if let Err(error) = network
                     .blocking_broadcast_frontend(Backend2FrontendMsg::PlayerReady(name, ready))
                 {
                     tracing::warn!(%error, "failed to broadcast frontend message from controller");
+                }
+                self.maybe_start_lobby_poker_game(network);
+            }
+            Peer2PeerMsg::PokerState(gs) => {
+                tracing::info!(
+                    "Peer received PokerState update (stage: {:?}, to_act: {})",
+                    gs.stage,
+                    gs.to_act
+                );
+                self.lobby.game_running = true;
+                self.lobby.last_poker_state = Some(gs.clone());
+                if let Some(ref tx) = self.state_watch_tx {
+                    let _ = tx.send_replace(Some(gs.clone()));
+                }
+                if let Err(error) =
+                    network.blocking_broadcast_frontend(Backend2FrontendMsg::UpdatePokerState(gs))
+                {
+                    tracing::warn!(%error, "failed to broadcast poker state to frontend");
+                }
+            }
+            Peer2PeerMsg::PokerAction { player_id, action } => {
+                if !self.lobby.is_host {
+                    tracing::warn!("Received PokerAction on non-host peer");
+                    return;
+                }
+                let peer_name = self.peers.get(&peer_id).map(|p| p.name.as_str());
+                let matches_player = self.lobby.game.as_ref().and_then(|g| {
+                    g.players
+                        .iter()
+                        .find(|p| p.id == player_id)
+                        .map(|p| p.name.as_str())
+                });
+                if peer_name.is_none() || peer_name != matches_player {
+                    tracing::warn!(?peer_name, ?matches_player, %player_id, "Peer attempted action for unauthorized player");
+                    return;
+                }
+
+                match self.validate_and_apply_action(player_id, action) {
+                    Ok(()) => {
+                        self.print_latest_changes();
+                        self.broadcast_state(network);
+                    }
+                    Err(e) => {
+                        tracing::warn!(%player_id, %e, "Invalid action from peer");
+                    }
+                }
+            }
+            Peer2PeerMsg::PokerNextHand => {
+                if !self.lobby.is_host {
+                    tracing::warn!("Received PokerNextHand on non-host peer");
+                    return;
+                }
+                match self.advance_to_next_hand() {
+                    Ok(()) => {
+                        self.print_latest_changes();
+                        self.broadcast_state(network);
+                    }
+                    Err(e) => {
+                        tracing::warn!(%e, "Failed to advance next hand on peer request");
+                    }
+                }
+            }
+            Peer2PeerMsg::RequestPokerState => {
+                if self.lobby.is_host {
+                    if let Some(gs) = self.current_state_public() {
+                        if let Err(error) = network
+                            .blocking_unicast_peer(connection_id, Peer2PeerMsg::PokerState(gs))
+                        {
+                            tracing::warn!(%connection_id, %error, "failed to send poker state to requesting peer");
+                        }
+                    }
                 }
             }
             Peer2PeerMsg::Reject(reason) => {
@@ -706,7 +857,7 @@ impl Controller {
         }
     }
 
-    /// Broadcasts the current game state to all frontends and updates the state watch channel.
+    /// Broadcasts the current game state to all frontends, peers, and updates the state watch channel.
     pub fn broadcast_state(&self, network: &NetworkHandle) {
         if let Some(gs) = self.current_state_public() {
             let current_player_name = mcg_shared::PlayerPublic::name_of(&gs.players, gs.to_act);
@@ -718,12 +869,95 @@ impl Controller {
             if let Some(ref tx) = self.state_watch_tx {
                 let _ = tx.send_replace(Some(gs.clone()));
             }
-            if let Err(error) =
-                network.blocking_broadcast_frontend(Backend2FrontendMsg::UpdatePokerState(gs))
+            if let Err(error) = network
+                .blocking_broadcast_frontend(Backend2FrontendMsg::UpdatePokerState(gs.clone()))
             {
                 tracing::warn!(%error, "failed to broadcast frontend message from controller");
             }
+            if let Err(error) = network.blocking_broadcast_peer(Peer2PeerMsg::PokerState(gs)) {
+                tracing::warn!(%error, "failed to broadcast peer poker state from controller");
+            }
         }
+    }
+
+    /// Checks if a lobby poker game can be started immediately.
+    /// If all players (host and peers, at least 2 total) are ready, immediately starts the game without bots.
+    pub fn maybe_start_lobby_poker_game(&mut self, network: &NetworkHandle) {
+        if !self.lobby.is_host {
+            return;
+        }
+        if !self.lobby.lobby_open || self.lobby.game_running {
+            return;
+        }
+        if !self.lobby.game_type.eq_ignore_ascii_case("poker") {
+            return;
+        }
+        if !self.lobby.ready {
+            return;
+        }
+
+        let our_name = &self.lobby.our_name;
+        let remote_peers: Vec<_> = self
+            .peers
+            .values()
+            .filter(|p| !p.name.is_empty() && &p.name != our_name)
+            .collect();
+
+        // Must have at least 1 remote peer (at least 2 players total: host + remote peer)
+        if remote_peers.is_empty() {
+            return;
+        }
+
+        // All remote peers must be ready
+        if !remote_peers.iter().all(|p| p.ready) {
+            return;
+        }
+
+        self.start_lobby_poker_game(network);
+    }
+
+    /// Starts a poker game from the lobby with only human players and no bots.
+    pub fn start_lobby_poker_game(&mut self, network: &NetworkHandle) {
+        let mut players = Vec::new();
+        // Host is Player 0
+        players.push(PlayerConfig {
+            id: PlayerId(0),
+            name: self.lobby.our_name.clone(),
+            is_bot: false,
+        });
+
+        // Remote peers get PlayerId 1, 2, ...
+        let our_name = &self.lobby.our_name;
+        let mut remote_peers: Vec<_> = self
+            .peers
+            .values()
+            .filter(|p| !p.name.is_empty() && &p.name != our_name)
+            .cloned()
+            .collect();
+        remote_peers.sort_by(|a, b| a.name.cmp(&b.name));
+
+        for (idx, peer) in remote_peers.iter().enumerate() {
+            players.push(PlayerConfig {
+                id: PlayerId(idx + 1),
+                name: peer.name.clone(),
+                is_bot: false,
+            });
+        }
+
+        tracing::info!(
+            player_count = players.len(),
+            "Starting poker lobby game without bots"
+        );
+
+        if let Err(e) = self.create_game_session(players) {
+            tracing::error!(%e, "Failed to create poker lobby game session");
+            let _ = network.blocking_broadcast_frontend(Backend2FrontendMsg::Error(e));
+            return;
+        }
+
+        self.lobby.game_running = true;
+        self.print_latest_changes();
+        self.broadcast_state(network);
     }
 
     /// Executes a player action, validating turns and advancing game progression.
@@ -806,6 +1040,7 @@ impl Controller {
             Ok(game) => {
                 self.lobby.game = Some(game);
                 self.lobby.last_printed_log_len = 0;
+                self.lobby.game_running = true;
                 Ok(())
             }
             Err(e) => Err(format!("Failed to create new game: {e}")),
@@ -1054,6 +1289,133 @@ mod tests {
         })
         .await
         .expect("blocking task ok");
+
+        network.shutdown().await.expect("network shutdown");
+        supervisor_task.await.expect("supervisor task ok");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn controller_starts_poker_game_when_all_lobby_players_ready() {
+        use tokio::io::{duplex, split, AsyncBufReadExt, BufReader};
+
+        let (event_tx, _event_rx) = mpsc::channel(16);
+        let (network, supervisor_task) =
+            NetworkBuilder::new(ControllerHandle::new(event_tx)).spawn();
+
+        let (peer_stream, peer_remote) = duplex(4096);
+        let (peer_r, peer_w) = split(peer_stream);
+        let (peer_rem_r, mut _peer_rem_w) = split(peer_remote);
+        let mut peer_reader = BufReader::new(peer_rem_r);
+
+        let endpoint_id = iroh::SecretKey::from_bytes(&[4; 32]).public();
+        let peer_id = endpoint_id;
+        let bob_ticket = EndpointTicket::new(iroh::EndpointAddr::new(endpoint_id)).encode_string();
+
+        let connection_id = network
+            .register_iroh_peer(peer_id, peer_r, peer_w)
+            .await
+            .expect("peer registered");
+
+        let net = network.clone();
+        let p_id = peer_id;
+        tokio::task::spawn_blocking(move || {
+            let mut controller = Controller::new(Config::default(), None);
+
+            // 1. Host sets our name and opens Poker lobby
+            controller.handle_frontend_message(
+                None,
+                Frontend2BackendMsg::PlayerName("Alice".into()),
+                &net,
+            );
+            controller.handle_frontend_message(
+                None,
+                Frontend2BackendMsg::LobbyOpen("Poker".into()),
+                &net,
+            );
+            assert!(controller.lobby.is_host);
+            assert!(controller.lobby.lobby_open);
+
+            // 2. Peer connects
+            controller.handle_event(
+                ControllerEvent::Network(NetworkEvent::PeerConnected {
+                    connection_id,
+                    peer_id: p_id,
+                    transport: TransportKind::Iroh,
+                    direction: PeerConnectionDirection::Incoming,
+                }),
+                &net,
+            );
+            controller.handle_peer_message(
+                connection_id,
+                p_id,
+                Peer2PeerMsg::Connect("Bob".into(), bob_ticket),
+                &net,
+            );
+
+            // 3. Peer readies up
+            controller.handle_peer_message(
+                connection_id,
+                p_id,
+                Peer2PeerMsg::PeerReady("Bob".into(), true),
+                &net,
+            );
+            // Game shouldn't start yet because host is not ready
+            assert!(!controller.lobby.game_running);
+            assert!(controller.lobby.game.is_none());
+
+            // 4. Host readies up -> all players ready -> game starts immediately!
+            controller.handle_frontend_message(None, Frontend2BackendMsg::ReadyUpdate(true), &net);
+
+            assert!(controller.lobby.game_running);
+            let state = controller.current_state_public().expect("game active");
+            assert_eq!(state.players.len(), 2);
+            assert_eq!(state.players[0].name, "Alice");
+            assert_eq!(state.players[1].name, "Bob");
+            assert!(!state.players[0].is_bot);
+            assert!(!state.players[1].is_bot);
+
+            // 5. Test P2P action forwarding:
+            let to_act = state.to_act;
+            if to_act == PlayerId(1) {
+                // Bob's turn: Bob forwards action over P2P
+                controller.handle_peer_message(
+                    connection_id,
+                    p_id,
+                    Peer2PeerMsg::PokerAction {
+                        player_id: PlayerId(1),
+                        action: PlayerAction::CheckCall,
+                    },
+                    &net,
+                );
+            } else {
+                // Alice's turn: Alice acts directly
+                controller.handle_frontend_message(
+                    None,
+                    Frontend2BackendMsg::Action {
+                        player_id: PlayerId(0),
+                        action: PlayerAction::CheckCall,
+                    },
+                    &net,
+                );
+            }
+        })
+        .await
+        .expect("blocking task ok");
+
+        // Verify that PokerState was sent over the peer connection
+        let mut found_poker_state = false;
+        for _ in 0..5 {
+            let mut line = String::new();
+            if peer_reader.read_line(&mut line).await.is_ok() && !line.trim().is_empty() {
+                if let Ok(msg) = serde_json::from_str::<Peer2PeerMsg>(line.trim()) {
+                    if matches!(msg, Peer2PeerMsg::PokerState(_)) {
+                        found_poker_state = true;
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(found_poker_state, "Peer received PokerState over P2P");
 
         network.shutdown().await.expect("network shutdown");
         supervisor_task.await.expect("supervisor task ok");

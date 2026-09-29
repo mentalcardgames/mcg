@@ -1,4 +1,5 @@
 use crate::app::FrontendInterface;
+use crate::screens::PokerOnlineScreen;
 use crate::sprintln;
 use crate::widgets::screen::{ScreenDef, ScreenMetadata, ScreenWidget};
 use egui::{RichText, TextureOptions};
@@ -14,6 +15,7 @@ pub struct LobbyScreen {
     initialized: bool,
     setup: bool,
     ready_sync: Rc<RefCell<bool>>,
+    game_started: Rc<RefCell<bool>>,
 }
 
 impl Default for LobbyScreen {
@@ -25,6 +27,7 @@ impl Default for LobbyScreen {
             initialized: false,
             setup: false,
             ready_sync: Rc::new(RefCell::new(false)),
+            game_started: Rc::new(RefCell::new(false)),
         }
     }
 }
@@ -36,6 +39,11 @@ impl ScreenWidget for LobbyScreen {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
+        if *self.game_started.borrow() {
+            app_interface.change_screen::<PokerOnlineScreen>();
+            return;
+        }
+
         // Lazy init: connect through the application-owned WebSocket.
         if !self.initialized {
             let server = app_interface.state().server_address.clone();
@@ -139,7 +147,8 @@ impl ScreenWidget for LobbyScreen {
             // All players are ready, can start the game
             ui.add_space(12.0);
             if ui.button("Start Game").clicked() {
-                //TODO
+                let msg = Frontend2BackendMsg::StartLobbyGame;
+                app_interface.send_msg(msg);
             }
             ui.add_space(4.0);
             ui.label(
@@ -175,13 +184,21 @@ impl ScreenWidget for LobbyScreen {
     }
 
     fn on_exit(&mut self, app_interface: &mut FrontendInterface) {
-        // Tell others we wish to disconnect
-        let msg = Frontend2BackendMsg::Disconnect;
-        app_interface.send_msg(msg);
+        // Only disconnect if the game hasn't started and we're leaving the lobby
+        if !*self.game_started.borrow() {
+            let msg = Frontend2BackendMsg::Disconnect;
+            app_interface.send_msg(msg);
+        }
     }
 
-    fn on_message(&mut self, _app_interface: &mut FrontendInterface, message: Backend2FrontendMsg) {
+    fn on_message(&mut self, app_interface: &mut FrontendInterface, message: Backend2FrontendMsg) {
         match message {
+            Backend2FrontendMsg::UpdatePokerState(state) => {
+                sprintln!("Game started, received UpdatePokerState in lobby");
+                app_interface.state_mut().last_poker_state = Some(state);
+                *self.game_started.borrow_mut() = true;
+                app_interface.change_screen::<PokerOnlineScreen>();
+            }
             Backend2FrontendMsg::TicketValue(ticket) => {
                 sprintln!("Got a ticket value:\n\t- {:?}", ticket);
                 *self.qr_payload.borrow_mut() = Some(ticket);

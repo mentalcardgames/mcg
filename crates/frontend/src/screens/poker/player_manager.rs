@@ -230,6 +230,40 @@ impl PlayerManager {
         self.sync_from_player_configs(&configs);
     }
 
+    pub fn sync_from_game_state_with_name(&mut self, state: &PokerStatePublic, our_name: &str) {
+        let configs: Vec<PlayerConfig> = state
+            .players
+            .iter()
+            .map(|p| PlayerConfig {
+                id: p.id,
+                name: p.name.clone(),
+                is_bot: p.is_bot,
+            })
+            .collect();
+        self.players = configs;
+        let max_id = self.players.iter().map(|p| p.id.0).max().unwrap_or(0);
+        self.next_player_id = max_id + 1;
+        self.ensure_valid_preferred_player_with_name(our_name);
+    }
+
+    pub fn set_preferred_by_name(&mut self, our_name: &str) {
+        if !our_name.trim().is_empty() {
+            if let Some(player) = self.players.iter().find(|p| p.name == our_name) {
+                self.preferred_player = player.id;
+            }
+        }
+    }
+
+    pub fn ensure_valid_preferred_player_with_name(&mut self, our_name: &str) {
+        if !our_name.trim().is_empty() {
+            if let Some(player) = self.players.iter().find(|p| p.name == our_name) {
+                self.preferred_player = player.id;
+                return;
+            }
+        }
+        self.ensure_valid_preferred_player();
+    }
+
     pub fn ensure_valid_preferred_player(&mut self) {
         let is_valid_human = self
             .players

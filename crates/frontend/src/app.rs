@@ -39,7 +39,7 @@ impl<'a> FrontendInterface<'a> {
             ws: websocket,
         }
     }
-    pub fn state(&mut self) -> &FrontendState {
+    pub fn state(&self) -> &FrontendState {
         self.app_state
     }
     pub fn state_mut(&mut self) -> &mut FrontendState {
@@ -194,6 +194,9 @@ impl FrontendApp {
             FrontendInterface::new(events, &mut self.app_state, &mut self.ws_connection);
         while let Ok(msg) = self.message_receiver.try_recv() {
             // Keep application-owned state independent of screen lifetime.
+            if let Backend2FrontendMsg::UpdatePokerState(ref state) = msg {
+                app_interface.state_mut().last_poker_state = Some(state.clone());
+            }
             // Screens still receive every message for their screen-specific behavior.
             screen.on_message(&mut app_interface, msg);
         }

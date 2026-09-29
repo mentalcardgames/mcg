@@ -63,6 +63,7 @@ pub enum Frontend2BackendMsg {
     ReadyUpdate(bool),
     UpdatePlayerSetup(Vec<PlayerConfig>),
     RequestPlayerSetup,
+    StartLobbyGame,
 }
 
 /// Messages that the backend sends to the frontend
@@ -97,6 +98,17 @@ pub enum Peer2PeerMsg {
     NewName(String), // New name for the peer (after a rename due to being a duplicated name)
     PeerReady(String, bool), // Peer name and ready status
     RequestReady, // Request the peer's ready status for the anti-race condition redundancy code when we scan a QR code
+    /// Host syncs the poker game state to peers
+    PokerState(PokerStatePublic),
+    /// Peer forwards a player action to the host
+    PokerAction {
+        player_id: PlayerId,
+        action: PlayerAction,
+    },
+    /// Peer requests advancing to next hand (showdown -> next hand)
+    PokerNextHand,
+    /// Peer requests current poker state from host
+    RequestPokerState,
 }
 
 #[cfg(test)]
@@ -172,11 +184,56 @@ mod tests {
                 player_id: PlayerId(0),
                 action: PlayerAction::Fold,
             },
+            Frontend2BackendMsg::StartLobbyGame,
         ];
 
         for msg in msgs {
             let json = serde_json::to_string(&msg).expect("serialize failed");
             let deserialized: Frontend2BackendMsg =
+                serde_json::from_str(&json).expect("deserialize failed");
+            let json2 = serde_json::to_string(&deserialized).expect("reserialize failed");
+            assert_eq!(json, json2);
+        }
+    }
+
+    #[test]
+    fn test_peer2peer_roundtrip() {
+        let msgs = vec![
+            Peer2PeerMsg::Ping,
+            Peer2PeerMsg::Pong,
+            Peer2PeerMsg::Connect("Alice".into(), "ticket123".into()),
+            Peer2PeerMsg::Disconnect("Alice".into()),
+            Peer2PeerMsg::Reject("Lobby is full".into()),
+            Peer2PeerMsg::Payload("data".into()),
+            Peer2PeerMsg::LobbyAccept(2, "Poker".into()),
+            Peer2PeerMsg::Peers(HashMap::new()),
+            Peer2PeerMsg::NewName("Alice 2".into()),
+            Peer2PeerMsg::PeerReady("Alice".into(), true),
+            Peer2PeerMsg::RequestReady,
+            Peer2PeerMsg::PokerState(PokerStatePublic {
+                players: vec![],
+                community: vec![],
+                pot: 100,
+                sb: 5,
+                bb: 10,
+                to_act: PlayerId(0),
+                stage: Stage::Preflop,
+                winner_ids: vec![],
+                action_log: vec![],
+                current_bet: 10,
+                min_raise: 20,
+            }),
+            Peer2PeerMsg::PokerAction {
+                player_id: PlayerId(1),
+                action: PlayerAction::CheckCall,
+            },
+            Peer2PeerMsg::PokerNextHand,
+            Peer2PeerMsg::RequestPokerState,
+        ];
+
+        for msg in msgs {
+            let json = serde_json::to_string(&msg).expect("serialize failed");
+            let deserialized: Peer2PeerMsg =
                 serde_json::from_str(&json).expect("deserialize failed");
             let json2 = serde_json::to_string(&deserialized).expect("reserialize failed");
             assert_eq!(json, json2);

@@ -9,6 +9,7 @@ pub struct FrontendState {
     pub applied_dpi: f32,
     pub dark_mode: bool,
     pub screen_registry: ScreenRegistry,
+    pub last_poker_state: Option<mcg_shared::PokerStatePublic>,
 }
 
 impl Default for FrontendState {
@@ -27,6 +28,7 @@ impl FrontendState {
             applied_dpi: dpi,
             dark_mode: true,
             screen_registry: ScreenRegistry::new(),
+            last_poker_state: None,
         }
     }
 }

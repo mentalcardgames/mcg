@@ -68,7 +68,7 @@ impl ScreenWidget for LobbySelectionScreen {
             self.initialized = true;
         }
 
-        ui.heading("Host or Join Game");
+        ui.heading("Play or Host Game");
         ui.group(|ui| {
             // --- First dropdown: Game ---
             ComboBox::from_label("Select Game")
@@ -222,7 +222,7 @@ impl ScreenDef for LobbySelectionScreen {
     {
         ScreenMetadata {
             path: "/lobbyselect",
-            display_name: "Host or Join Game",
+            display_name: "Play or Host Game",
             icon: "⚙",
             description:
                 "Host your own lobby, or join another player's lobby by scanning a QR code.",
