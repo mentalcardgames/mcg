@@ -107,18 +107,12 @@ pub fn pest_error_to_diagnostic(pest_err: pest::error::Error<Rule>) -> Diagnosti
 
 /// Converts a symbol error (from the front_end) into a tower-lsp Diagnostic.
 pub fn symbol_error_to_diagnostics(symbol_error: &SymbolError) -> Diagnostic {
-    let value;
-    let message;
-    match symbol_error {
-        SymbolError::NotInitialized { var } => {
-            value = var;
-            message = format!("'{}' not initialized", &value.id);
-        }
+    let (value, message) = match symbol_error {
+        SymbolError::NotInitialized { var } => (var, format!("'{}' not initialized", var.id)),
         SymbolError::DefinedMultipleTimes { var } => {
-            value = var;
-            message = format!("'{}' is defined multiple times", &value.id);
+            (var, format!("'{}' is defined multiple times", var.id))
         }
-    }
+    };
 
     Diagnostic {
         range: to_range(&value.span),
@@ -135,22 +129,19 @@ pub fn symbol_error_to_diagnostics(symbol_error: &SymbolError) -> Diagnostic {
 
 /// Converts a semantic error (from the front_end) into a tower-lsp Diagnostic.
 pub fn semantic_error_to_diagnostics(semantic_error: &SemanticError) -> Diagnostic {
-    let spanned;
-    let message;
-    match semantic_error {
+    let (spanned, message) = match semantic_error {
         SemanticError::KeyNotFoundForType { ty, key } => {
-            message = format!("'{}' not found for '{}'", &key.id, ty);
-            spanned = key;
+            (key, format!("'{}' not found for '{}'", key.id, ty))
         }
-        SemanticError::NoCorrToType { ty, key } => {
-            message = format!("'{}' does not correspond to '{}'", &key.id, &ty.id);
-            spanned = key;
-        }
-        SemanticError::MemoryMismatch { memory } => {
-            message = format!("'{}' does not match initialized value", &memory.id);
-            spanned = memory;
-        }
-    }
+        SemanticError::NoCorrToType { ty, key } => (
+            key,
+            format!("'{}' does not correspond to '{}'", key.id, ty.id),
+        ),
+        SemanticError::MemoryMismatch { memory } => (
+            memory,
+            format!("'{}' does not match initialized value", memory.id),
+        ),
+    };
 
     Diagnostic {
         range: to_range(&spanned.span),
@@ -167,28 +158,16 @@ pub fn semantic_error_to_diagnostics(semantic_error: &SemanticError) -> Diagnost
 
 /// Converts a program error (from the front_end) into a tower-lsp Diagnostic.
 pub fn program_error_to_diagnostics(program_error: &GameFlowError) -> Diagnostic {
-    let spanned;
-    let message;
-    match program_error {
-        GameFlowError::Unreachable { span } => {
-            message = "Code is unreachable".to_string();
-            spanned = span;
-        }
-        GameFlowError::NoStageToEnd { span } => {
-            message = "There is no stage to end".to_string();
-            spanned = span;
-        }
-        GameFlowError::FlowNotConnected { span } => {
-            message = "The Game is not connected".to_string();
-            spanned = span;
-        }
+    let (spanned, message) = match program_error {
+        GameFlowError::Unreachable { span } => (span, "Code is unreachable".to_string()),
+        GameFlowError::NoStageToEnd { span } => (span, "There is no stage to end".to_string()),
+        GameFlowError::FlowNotConnected { span } => (span, "The Game is not connected".to_string()),
         GameFlowError::FlowNotConnectedWithControl => {
-            message = "The Game is heavily not connected".to_string();
             return Diagnostic {
                 severity: Some(DiagnosticSeverity::ERROR), // Defines the color/style
                 code: None,
                 source: Some("cgdsl-lsp".to_string()),
-                message,
+                message: "The Game is heavily not connected".to_string(),
                 related_information: None,
                 tags: None,
                 data: None,
@@ -196,7 +175,7 @@ pub fn program_error_to_diagnostics(program_error: &GameFlowError) -> Diagnostic
                 ..Default::default()
             };
         }
-    }
+    };
 
     Diagnostic {
         range: to_range(spanned),

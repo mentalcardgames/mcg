@@ -164,7 +164,9 @@ impl Backend {
 
         // Wrap the u32s into the SemanticToken struct required by the library
         let semantic_tokens: Vec<SemanticToken> = delta_u32s
-            .chunks_exact(5)
+            .as_chunks::<5>()
+            .0
+            .iter()
             .map(|c| SemanticToken {
                 delta_line: c[0],
                 delta_start: c[1],

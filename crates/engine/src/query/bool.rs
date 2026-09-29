@@ -202,11 +202,8 @@ impl Evaluator {
             } => {
                 let bool_result = Self::eval_bool(bool_expr, game_data)?;
                 let current = game_data.get_stage_counter(stage_name.to_string());
-                // evaluate target and handle error propagation
-                let rep_result = match Self::eval_int(&reps.times, game_data) {
-                    Ok(target) => current >= target as u32,
-                    Err(e) => return Err(e),
-                };
+                let target = Self::eval_int(&reps.times, game_data)?;
+                let rep_result = current >= target as u32;
                 match logic {
                     BoolOp::And => Ok(bool_result && rep_result),
                     BoolOp::Or => Ok(bool_result || rep_result),
