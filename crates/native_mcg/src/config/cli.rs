@@ -21,6 +21,10 @@ pub struct ServerCli {
     #[arg(long)]
     pub iroh_key: Option<String>,
 
+    /// Run with an ephemeral, non-persisted Iroh identity key (useful for local multi-instance testing)
+    #[arg(long, default_value_t = false)]
+    pub ephemeral: bool,
+
     /// Persist CLI overrides back to the config file
     #[arg(long, default_value_t = false)]
     pub persist: bool,

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const PUBLIC_FILE_NAME: &str = "mcg_server_public.toml";
+pub const PUBLIC_FILE_NAME: &str = "mcg-server-public.toml";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PublicInfo {
@@ -52,7 +52,43 @@ impl PublicInfo {
 
 pub fn path_for_config(config_path: Option<&Path>) -> PathBuf {
     match config_path {
-        Some(path) => path.with_file_name(PUBLIC_FILE_NAME),
+        Some(path) => {
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                path.with_file_name(format!("{stem}-public.toml"))
+            } else {
+                path.with_file_name(PUBLIC_FILE_NAME)
+            }
+        }
         None => PublicInfo::default_path(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_public_file_name_uses_hyphens() {
+        assert_eq!(PUBLIC_FILE_NAME, "mcg-server-public.toml");
+        assert_eq!(
+            PublicInfo::default_path(),
+            PathBuf::from("mcg-server-public.toml")
+        );
+    }
+
+    #[test]
+    fn test_path_for_config_derivation() {
+        assert_eq!(
+            path_for_config(None),
+            PathBuf::from("mcg-server-public.toml")
+        );
+        assert_eq!(
+            path_for_config(Some(Path::new("mcg-server.toml"))),
+            PathBuf::from("mcg-server-public.toml")
+        );
+        assert_eq!(
+            path_for_config(Some(Path::new("custom/mcg-server-2.toml"))),
+            PathBuf::from("custom/mcg-server-2-public.toml")
+        );
     }
 }

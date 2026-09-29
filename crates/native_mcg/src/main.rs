@@ -42,11 +42,17 @@ async fn main() -> anyhow::Result<()> {
 
     let bots = cfg.bots;
 
-    tracing::info!(config = %config_path.display(), bots);
+    tracing::info!(config = %config_path.display(), bots, ephemeral = cli.ephemeral);
+
+    let config_path_opt = if cli.ephemeral {
+        None
+    } else {
+        Some(config_path)
+    };
 
     // Run the server
     native_mcg::backend::BackendBuilder::new(cfg)
-        .with_config_path(config_path)
+        .with_config_path_opt(config_path_opt)
         .build()?
         .run()
         .await?;

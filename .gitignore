@@ -14,7 +14,7 @@ node_modules
 dist
 .crush
 server.log
-mcg-server.toml
+mcg-server*.toml
 tags
 mcg_server_public.toml
 *.log

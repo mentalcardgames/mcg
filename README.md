@@ -23,17 +23,52 @@ Rust (stable toolchain), `wasm-pack` in PATH, and the `just` task runner.
 - Build then run together:
   - `just start`              # release build + backend
 
-## Multi-Backend Ports & Configuration
+## Multi-Backend Ports & Configuration (Local Multi-Instance Testing)
 
 By default, `native_mcg` searches for an available port starting at port `3000`.
 If port 3000 is occupied by another running instance, it automatically binds to
 the next free port (`3001`, `3002`, etc.).
 
-If you want to test running multiple independent backend instances on the
-same machine, you can also explicitly specify a listening port via CLI argument:
+### Independent Iroh Identities (P2P Lobby & Pairing)
+
+Each backend instance runs an Iroh QUIC endpoint for peer-to-peer communication.
+By default, the server persists its identity key in `mcg-server.toml`.
+If you start two backend instances using the same `mcg-server.toml`, both will share
+the exact same Node ID and endpoint ticket. Attempting to connect them (e.g. by scanning
+the lobby QR code) will fail because an endpoint cannot connect to itself.
+
+To run multiple backends concurrently on the same machine, choose one of the following approaches:
+
+#### Approach 1: Ephemeral Key (Recommended for Quick Local Testing)
+Start the second instance (or both) with the `--ephemeral` flag. It generates a temporary,
+non-persisted Iroh identity in memory and automatically binds to the next free port:
 
 ```shell
-cargo run -p native_mcg --bin native_mcg -- --port 3001
+# Terminal 1 (Node 1 on port 3000):
+just backend
+
+# Terminal 2 (Node 2 on port 3001 with ephemeral identity):
+just backend --ephemeral
+```
+Or directly with cargo:
+```shell
+cargo run -p native_mcg --bin native_mcg -- --ephemeral
+```
+
+#### Approach 2: Separate Config Files
+Specify an independent config file for the second instance. If the file does not exist yet,
+a new unique Iroh key will be generated and saved to that file:
+
+```shell
+# Terminal 1:
+just backend --config mcg-server-1.toml --port 3000
+
+# Terminal 2:
+just backend --config mcg-server-2.toml --port 3001
+```
+Or directly with cargo:
+```shell
+cargo run -p native_mcg --bin native_mcg -- --config mcg-server-2.toml --port 3001
 ```
 
 ## Documentation

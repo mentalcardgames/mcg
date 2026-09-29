@@ -21,24 +21,28 @@ build PROFILE="release":
 #   just start                # release build
 #   just start dev            # dev build
 # Note: Bots are configured via mcg-server.toml config file
-start PROFILE="release":
+start PROFILE="release" *ARGS:
     just build {{PROFILE}}
-    just backend
+    just backend {{ARGS}}
 
 # Run the native backend (serves frontend + WebSocket backend)
-# Usage: just backend
+# Usage:
+#   just backend
+#   just backend --port 3001
+#   just backend --ephemeral
+#   just backend --config mcg-server-2.toml --port 3001
 # Note: Bots are configured via mcg-server.toml config file
-backend:
-    cargo run -p native_mcg --bin native_mcg
+backend *ARGS:
+    cargo run -p native_mcg --bin native_mcg -- {{ARGS}}
 
 # Run the backend in the background for AI agent testing
 [unix]
-backend-bg:
-    cargo run -p native_mcg --bin native_mcg &
+backend-bg *ARGS:
+    cargo run -p native_mcg --bin native_mcg -- {{ARGS}} &
 
 [windows]
-backend-bg:
-    powershell -NoLogo -Command "Start-Process cargo -ArgumentList 'run -p native_mcg --bin native_mcg' -WindowStyle Hidden"
+backend-bg *ARGS:
+    powershell -NoLogo -Command "Start-Process cargo -ArgumentList 'run -p native_mcg --bin native_mcg -- {{ARGS}}' -WindowStyle Hidden"
 
 # Kill the background backend process
 [unix]

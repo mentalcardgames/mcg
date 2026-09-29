@@ -118,9 +118,13 @@ impl Controller {
             },
         );
 
-        let public_path = path_for_config(self.config_path.as_deref());
-        if let Err(error) = PublicInfo::write_iroh_node_id(&public_path, endpoint_id.to_string()) {
-            tracing::warn!(%error, path = %public_path.display(), "failed to persist iroh node id");
+        if let Some(config_path) = self.config_path.as_deref() {
+            let public_path = path_for_config(Some(config_path));
+            if let Err(error) =
+                PublicInfo::write_iroh_node_id(&public_path, endpoint_id.to_string())
+            {
+                tracing::warn!(%error, path = %public_path.display(), "failed to persist iroh node id");
+            }
         }
     }
 
