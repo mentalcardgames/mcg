@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCG Project Presentation: Recent Architecture & Modernization Milestone</title>
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-surface: #111827;
+      --bg-surface-elevated: #1f2937;
+      --bg-surface-hover: #374151;
+      --border-subtle: #1f293d;
+      --border-bright: #374151;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --accent-cyan: #06b6d4;
+      --accent-cyan-glow: rgba(6, 182, 212, 0.25);
+      --accent-blue: #3b82f6;
+      --accent-indigo: #6366f1;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --code-bg: #0d1117;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Navigation Bar */
+    header.presentation-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: var(--text-main);
+      letter-spacing: -0.02em;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 800;
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .mode-switch-btn, .action-btn {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-bright);
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      transition: all 0.2s ease;
+    }
+
+    .mode-switch-btn:hover, .action-btn:hover {
+      background: var(--bg-surface-hover);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .action-btn.active {
+      background: rgba(6, 182, 212, 0.15);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    /* Progress bar */
+    .progress-track {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      z-index: 101;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue), var(--accent-indigo));
+      width: 0%;
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Main Container */
+    main.presentation-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* SLIDE MODE LAYOUT */
+    .slide-viewport {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem 1.5rem;
+      min-height: calc(100vh - 65px - 70px);
+    }
+
+    .slide {
+      display: none;
+      width: 100%;
+      max-width: 1160px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 2.75rem 3rem;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      animation: fadeInSlide 0.35s ease forwards;
+    }
+
+    .slide.active {
+      display: block;
+    }
+
+    @keyframes fadeInSlide {
+      from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.99);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* Bottom Slide Controls */
+    footer.slide-footer-nav {
+      position: sticky;
+      bottom: 0;
+      z-index: 90;
+      background: rgba(17, 24, 39, 0.9);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border-subtle);
+      padding: 0.85rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .slide-counter {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .slide-counter strong {
+      color: var(--text-main);
+      font-weight: 700;
+    }
+
+    .nav-button-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .nav-btn {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-bright);
+      padding: 0.55rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: var(--bg-surface-hover);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      transform: translateY(-1px);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .keyboard-hint {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    kbd {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-bright);
+      border-radius: 4px;
+      padding: 0.15rem 0.4rem;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+    }
+
+    /* Slide Content Typography & Styling */
+    .slide-header {
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 1.25rem;
+    }
+
+    .slide-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .category-tag {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    .category-tag.refactor { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); border-color: rgba(59, 130, 246, 0.3); }
+    .category-tag.feature { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border-color: rgba(16, 185, 129, 0.3); }
+    .category-tag.ci { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); border-color: rgba(245, 158, 11, 0.3); }
+    .category-tag.docs { background: rgba(99, 102, 241, 0.15); color: var(--accent-indigo); border-color: rgba(99, 102, 241, 0.3); }
+
+    .slide-title {
+      font-size: 2.15rem;
+      font-weight: 800;
+      color: var(--text-main);
+      letter-spacing: -0.03em;
+      line-height: 1.25;
+    }
+
+    .slide-subtitle {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      margin-top: 0.35rem;
+    }
+
+    /* Grid Layouts inside slides */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+    }
+
+    /* Cards */
+    .info-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1.5rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .info-card:hover {
+      border-color: var(--border-bright);
+      transform: translateY(-2px);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-main);
+    }
+
+    .card-title .icon {
+      font-size: 1.35rem;
+    }
+
+    .card-text {
+      font-size: 0.925rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    ul.bullet-list {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    ul.bullet-list li {
+      position: relative;
+      padding-left: 1.4rem;
+      margin-bottom: 0.65rem;
+      font-size: 0.925rem;
+      color: var(--text-muted);
+    }
+
+    ul.bullet-list li::before {
+      content: "▹";
+      position: absolute;
+      left: 0;
+      color: var(--accent-cyan);
+      font-weight: bold;
+    }
+
+    ul.bullet-list li strong {
+      color: var(--text-main);
+    }
+
+    /* Code Blocks */
+    .code-box {
+      background: var(--code-bg);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 1rem 0;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+    }
+
+    .code-box-header {
+      background: #161b22;
+      padding: 0.45rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #21262d;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border-bright);
+      color: var(--text-muted);
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+    }
+
+    pre code {
+      display: block;
+      padding: 1rem;
+      overflow-x: auto;
+      color: #e6edf3;
+      line-height: 1.5;
+    }
+
+    .kw { color: #ff7b72; font-weight: bold; }
+    .fn { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .cm { color: #8b949e; font-style: italic; }
+    .tp { color: #79c0ff; }
+    .num { color: #f2cc60; }
+
+    /* Metric Counters / Hero Banner */
+    .metric-badge {
+      display: inline-flex;
+      flex-direction: column;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      text-align: center;
+    }
+
+    .metric-num {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 0.35rem;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .metric-num.green {
+      background: linear-gradient(135deg, #34d399, #10b981);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .metric-num.rose {
+      background: linear-gradient(135deg, #fb7185, #f43f5e);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .metric-label {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Speaker Notes Panel (Toggled with N or button) */
+    .speaker-notes-drawer {
+      position: fixed;
+      bottom: 70px;
+      left: 0;
+      width: 100%;
+      max-height: 260px;
+      background: #0f172a;
+      border-top: 2px solid var(--accent-cyan);
+      box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.7);
+      padding: 1.25rem 2rem;
+      z-index: 95;
+      overflow-y: auto;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .speaker-notes-drawer.open {
+      transform: translateY(0);
+    }
+
+    .notes-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .notes-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .notes-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.1rem;
+    }
+
+    .notes-body {
+      font-size: 0.925rem;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+
+    .notes-body p {
+      margin-bottom: 0.5rem;
+    }
+
+    .notes-body strong {
+      color: var(--accent-amber);
+    }
+
+    /* OVERVIEW / DOCUMENT MODE STYLING */
+    .document-view {
+      display: none;
+      max-width: 1160px;
+      margin: 2rem auto;
+      padding: 0 1.5rem 4rem 1.5rem;
+    }
+
+    body.doc-mode .slide-viewport,
+    body.doc-mode .slide-footer-nav {
+      display: none !important;
+    }
+
+    body.doc-mode .document-view {
+      display: block;
+    }
+
+    .doc-section {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 2.25rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .doc-toc {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-bright);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .doc-toc h3 {
+      font-size: 1rem;
+      color: var(--accent-cyan);
+      margin-bottom: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .doc-toc ul {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 0.5rem 1.5rem;
+    }
+
+    .doc-toc a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: color 0.2s;
+    }
+
+    .doc-toc a:hover {
+      color: var(--accent-cyan);
+    }
+
+    /* SVG Architecture Visuals */
+    .diagram-container {
+      background: #0d1117;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 1.25rem 0;
+      overflow-x: auto;
+    }
+
+    svg.arch-diagram {
+      width: 100%;
+      height: auto;
+      min-width: 600px;
+      display: block;
+    }
+
+    /* Status Pill */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+
+    .comparison-table th, .comparison-table td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .comparison-table th {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      font-weight: 700;
+    }
+
+    .comparison-table td {
+      color: var(--text-muted);
+    }
+
+    .comparison-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Print styles */
+    @media print {
+      body {
+        background: #fff !important;
+        color: #000 !important;
+      }
+      .presentation-header, .slide-footer-nav, .speaker-notes-drawer, .nav-controls {
+        display: none !important;
+      }
+      .slide {
+        display: block !important;
+        page-break-after: always;
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        margin-bottom: 2rem !important;
+        color: #111 !important;
+        background: #fff !important;
+      }
+      .slide-title, .card-title {
+        color: #000 !important;
+      }
+      .code-box {
+        background: #f4f4f4 !important;
+        border: 1px solid #ddd !important;
+      }
+      pre code {
+        color: #111 !important;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .grid-2, .grid-3, .grid-4 {
+        grid-template-columns: 1fr;
+      }
+      .slide {
+        padding: 1.75rem 1.25rem;
+      }
+      .slide-title {
+        font-size: 1.6rem;
+      }
+      .keyboard-hint {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Progress Line -->
+  <div class="progress-track">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <!-- Header -->
+  <header class="presentation-header">
+    <div class="brand">
+      <span>🃏 MCG Project</span>
+      <span class="brand-badge">Sprint Release</span>
+    </div>
+
+    <div class="nav-controls">
+      <button class="action-btn" id="notesToggleBtn" onclick="toggleNotes()" title="Toggle Presenter Notes (N)">
+        <span>🎙️ Presenter Notes</span>
+        <kbd>N</kbd>
+      </button>
+
+      <button class="action-btn" id="fullscreenBtn" onclick="toggleFullscreen()" title="Fullscreen (F)">
+        <span>⛶ Fullscreen</span>
+        <kbd>F</kbd>
+      </button>
+
+      <button class="mode-switch-btn" id="modeSwitchBtn" onclick="toggleViewMode()">
+        <span id="modeIcon">📄</span>
+        <span id="modeLabel">Document View</span>
+        <kbd>Tab</kbd>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Presentation Container -->
+  <main class="presentation-container">
+
+    <!-- SLIDE VIEWPORT (Interactive Slides Mode) -->
+    <div class="slide-viewport" id="slideViewport">
+
+      <!-- SLIDE 1: Title Slide -->
+      <section class="slide active" data-slide="1">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag">Milestone Release</span>
+            <span class="status-pill">● PR #11 Merged to Main</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">September 2026</span>
+          </div>
+          <h1 class="slide-title">MCG Architecture Evolution & Real-Time Sync Milestone</h1>
+          <p class="slide-subtitle">Monorepo Modernization, Deterministic Concurrency, and Multi-Instance P2P Testing</p>
+        </div>
+
+        <div class="grid-4" style="margin-bottom: 2rem;">
+          <div class="metric-badge">
+            <span class="metric-num">55</span>
+            <span class="metric-label">Commits Merged</span>
+          </div>
+          <div class="metric-badge">
+            <span class="metric-num">219</span>
+            <span class="metric-label">Files Refactored</span>
+          </div>
+          <div class="metric-badge">
+            <span class="metric-num green">-285</span>
+            <span class="metric-label">Net Churn (Leaner!)</span>
+          </div>
+          <div class="metric-badge">
+            <span class="metric-num rose">0</span>
+            <span class="metric-label">Clippy Warnings</span>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="card-title">
+            <span class="icon">🎯</span>
+            <span>Presentation Objective</span>
+          </div>
+          <p class="card-text">
+            This presentation covers the major architectural leap in the Mental Card Games (MCG) codebase. 
+            We transitioned from a monolithic server state with coupled routing to a 
+            <strong>modular, deterministic hybrid execution model</strong>, extracted a standalone 
+            <strong><code>crates/poker</code></strong> library, enabled conflict-free <strong>local multi-backend P2P testing</strong>, 
+            and established real-time multi-client synchronization with a unified cross-platform CI/CD foundation.
+          </p>
+        </div>
+      </section>
+
+      <!-- SLIDE 2: Executive Summary & The 6 Pillars -->
+      <section class="slide" data-slide="2">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag">Overview</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Sprint Synthesis</span>
+          </div>
+          <h2 class="slide-title">The 6 Pillars of Recent Development</h2>
+          <p class="slide-subtitle">A comprehensive breakdown of structural and functional advancements</p>
+        </div>
+
+        <div class="grid-3">
+          <div class="info-card">
+            <div class="card-title"><span class="icon">⚙️</span> 1. Core Architecture</div>
+            <p class="card-text">
+              Replaced monolithic <code>AppState</code> with synchronous <code>Controller</code> thread and asynchronous <code>NetworkSupervisor</code>, structured with fluent <strong>Builder</strong> and <strong>Handle</strong> patterns.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div class="card-title"><span class="icon">📦</span> 2. Poker Crate Extraction</div>
+            <p class="card-text">
+              Isolated game rules, hand evaluation, betting rounds, and bot drivers into a dedicated <code>crates/poker</code> crate; standardized all workspace packages under <code>crates/</code>.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div class="card-title"><span class="icon">🌐</span> 3. Multi-Instance P2P</div>
+            <p class="card-text">
+              Implemented dynamic port discovery (3000, 3001, etc.) and the <code>--ephemeral</code> flag for conflict-free local P2P testing without shared Iroh identity collisions.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div class="card-title"><span class="icon">🔄</span> 4. Real-Time Sync</div>
+            <p class="card-text">
+              Dynamic WebSocket origin derivation from browser location, multi-window <code>PlayerSetup</code> protocol messages, and automatic human seat fallback.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div class="card-title"><span class="icon">🛠️</span> 5. Unified CI/CD & Justfile</div>
+            <p class="card-text">
+              Cross-platform <code>just</code> recipes with Windows PowerShell support, headless Chrome testing for WebAssembly frontend, and strict <code>-D warnings</code> linting.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div class="card-title"><span class="icon">📚</span> 6. Docs Submodule & Web</div>
+            <p class="card-text">
+              Migrated documentation to a Git submodule powering the VitePress site at <code>mentalcardgames.github.io</code>, featuring 5-player split-node ring diagrams.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 3: Deep Dive 1 - Core Architecture -->
+      <section class="slide" data-slide="3">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag refactor">Architecture</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Concurrency & Lifecycle</span>
+          </div>
+          <h2 class="slide-title">Builder & Handle Pattern in Backend Concurrency</h2>
+          <p class="slide-subtitle">Decoupling async network I/O from synchronous deterministic state updates</p>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <h3 style="font-size: 1.1rem; color: var(--accent-cyan); margin-bottom: 0.75rem;">Key Innovations</h3>
+            <ul class="bullet-list">
+              <li><strong>Synchronous Controller Thread:</strong> Game updates and poker logic run in a dedicated OS thread without mutex locking or async runtime starvation.</li>
+              <li><strong>Staged Lifecycle:</strong>
+                <code>build()</code> resolves ports, validates paths, and allocates channels without starting tasks.
+                <code>spawn()</code> launches Tokio background tasks and the Controller thread, returning handles.
+              </li>
+              <li><strong>Strongly Typed Handles:</strong> <code>ControllerHandle</code>, <code>NetworkHandle</code>, and <code>BackendHandle</code> act as cloneable MPSC message proxies across execution boundaries.</li>
+              <li><strong>Graceful Shutdown:</strong> Clean termination of Iroh QUIC endpoints, WebSocket listeners, bot tasks, and thread joining without orphan processes.</li>
+            </ul>
+          </div>
+
+          <div>
+            <div class="diagram-container">
+              <svg class="arch-diagram" viewBox="0 0 520 280">
+                <!-- Config Phase -->
+                <rect x="10" y="10" width="500" height="90" rx="8" fill="#161b22" stroke="#30363d" stroke-dasharray="4"/>
+                <text x="25" y="32" fill="#38bdf8" font-size="12" font-weight="700">1. CONFIGURATION & INSTANTIATION</text>
+                <rect x="25" y="45" width="140" height="40" rx="6" fill="#1f2937" stroke="#38bdf8"/>
+                <text x="45" y="69" fill="#fff" font-size="11" font-weight="600">BackendBuilder</text>
+                
+                <path d="M 165 65 L 205 65" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)"/>
+                
+                <rect x="210" y="45" width="130" height="40" rx="6" fill="#1f2937" stroke="#10b981"/>
+                <text x="230" y="69" fill="#fff" font-size="11" font-weight="600">Active Runtimes</text>
+
+                <path d="M 340 65 L 375 65" stroke="#10b981" stroke-width="2"/>
+
+                <rect x="380" y="45" width="115" height="40" rx="6" fill="#1f2937" stroke="#f59e0b"/>
+                <text x="395" y="69" fill="#fff" font-size="11" font-weight="600">Clone Handles</text>
+
+                <!-- Runtime Phase -->
+                <rect x="10" y="115" width="500" height="150" rx="8" fill="#161b22" stroke="#30363d"/>
+                <text x="25" y="137" fill="#34d399" font-size="12" font-weight="700">2. RUNTIME MESSAGE PASSING (LOCK-FREE)</text>
+                
+                <!-- Callers -->
+                <rect x="25" y="150" width="110" height="30" rx="4" fill="#1e293b" stroke="#475569"/>
+                <text x="38" y="170" fill="#94a3b8" font-size="10">Axum WS Route</text>
+
+                <rect x="25" y="188" width="110" height="30" rx="4" fill="#1e293b" stroke="#475569"/>
+                <text x="40" y="208" fill="#94a3b8" font-size="10">Bot Driver Task</text>
+
+                <rect x="25" y="226" width="110" height="30" rx="4" fill="#1e293b" stroke="#475569"/>
+                <text x="35" y="246" fill="#94a3b8" font-size="10">Iroh P2P Worker</text>
+
+                <!-- Middle Proxy -->
+                <rect x="180" y="170" width="140" height="65" rx="6" fill="#1e293b" stroke="#f59e0b"/>
+                <text x="195" y="195" fill="#f59e0b" font-size="11" font-weight="700">ControllerHandle</text>
+                <text x="193" y="215" fill="#94a3b8" font-size="9">Typed MPSC Sender</text>
+
+                <!-- Arrows -->
+                <path d="M 135 165 L 180 185" stroke="#64748b" stroke-width="1.5"/>
+                <path d="M 135 203 L 180 203" stroke="#64748b" stroke-width="1.5"/>
+                <path d="M 135 241 L 180 220" stroke="#64748b" stroke-width="1.5"/>
+
+                <!-- Target -->
+                <rect x="365" y="170" width="130" height="65" rx="6" fill="#1e293b" stroke="#34d399"/>
+                <text x="380" y="195" fill="#34d399" font-size="11" font-weight="700">Controller Core</text>
+                <text x="375" y="215" fill="#94a3b8" font-size="9">OS Thread (No Mutex)</text>
+
+                <path d="M 320 203 L 365 203" stroke="#34d399" stroke-width="2"/>
+              </svg>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-dim); text-align: center;">Figure: Staged Lifecycle & Lock-Free Handle Boundary</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 4: Deep Dive 2 - Monorepo Restructuring & crates/poker -->
+      <section class="slide" data-slide="4">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag refactor">Refactoring</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Modularity</span>
+          </div>
+          <h2 class="slide-title">Monorepo Restructuring & <code>crates/poker</code></h2>
+          <p class="slide-subtitle">Modular crate boundary separating game rules from node networking</p>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <div class="info-card" style="margin-bottom: 1.25rem;">
+              <div class="card-title"><span class="icon">📦</span> Dedicated <code>mcg-poker</code> Library</div>
+              <ul class="bullet-list">
+                <li>Extracted betting rules, game engine, flow, showdown, and hand evaluation.</li>
+                <li>Isolated event-driven bot runner & sink (<code>crates/poker/src/driver/</code>).</li>
+                <li>Zero dependencies on networking or native server types.</li>
+                <li>Enables standalone evaluation and game-tree simulation tests.</li>
+              </ul>
+            </div>
+
+            <div class="info-card">
+              <div class="card-title"><span class="icon">📂</span> Unified <code>crates/</code> Hierarchy</div>
+              <ul class="bullet-list">
+                <li>Relocated root <code>frontend/</code> to <code>crates/frontend/</code>.</li>
+                <li>Relocated root <code>shared/</code> to <code>crates/shared/</code>.</li>
+                <li>Moved root release profile to frontend crate; removed redundant root <code>.cargo/config.toml</code>.</li>
+                <li>Centralized workspace dependencies in top-level <code>Cargo.toml</code>.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div>
+            <h3 style="font-size: 1rem; color: var(--text-muted); margin-bottom: 0.5rem;">Crate Architecture Map</h3>
+            <div class="diagram-container" style="padding: 1rem;">
+              <svg class="arch-diagram" viewBox="0 0 460 270">
+                <!-- Shared -->
+                <rect x="150" y="15" width="160" height="42" rx="6" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+                <text x="180" y="40" fill="#e2e8f0" font-size="12" font-weight="700">crates/shared</text>
+                <text x="172" y="52" fill="#64748b" font-size="8">Messages, Cards, State</text>
+
+                <!-- Arrows from Shared -->
+                <path d="M 200 57 L 120 100" stroke="#38bdf8" stroke-width="1.5"/>
+                <path d="M 260 57 L 340 100" stroke="#38bdf8" stroke-width="1.5"/>
+
+                <!-- Poker & Engine -->
+                <rect x="40" y="100" width="150" height="42" rx="6" fill="#1e293b" stroke="#10b981" stroke-width="2"/>
+                <text x="75" y="125" fill="#e2e8f0" font-size="12" font-weight="700">crates/poker</text>
+                <text x="65" y="137" fill="#64748b" font-size="8">Rules, Eval, Bot Driver</text>
+
+                <rect x="270" y="100" width="150" height="42" rx="6" fill="#1e293b" stroke="#818cf8" stroke-width="2"/>
+                <text x="300" y="125" fill="#e2e8f0" font-size="12" font-weight="700">crates/engine</text>
+                <text x="295" y="137" fill="#64748b" font-size="8">FSM & CGDSL Runtime</text>
+
+                <!-- Arrow from Poker to Native & Frontend -->
+                <path d="M 115 142 L 115 185" stroke="#10b981" stroke-width="1.5"/>
+                <path d="M 140 142 L 320 185" stroke="#10b981" stroke-width="1.5"/>
+
+                <!-- Bottom Tier: Native Node & Frontend -->
+                <rect x="30" y="185" width="170" height="50" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-width="2"/>
+                <text x="55" y="210" fill="#e2e8f0" font-size="12" font-weight="700">crates/native_mcg</text>
+                <text x="45" y="224" fill="#94a3b8" font-size="8">Axum, Iroh P2P, CLI, Controller</text>
+
+                <rect x="260" y="185" width="170" height="50" rx="6" fill="#1e293b" stroke="#ec4899" stroke-width="2"/>
+                <text x="290" y="210" fill="#e2e8f0" font-size="12" font-weight="700">crates/frontend</text>
+                <text x="280" y="224" fill="#94a3b8" font-size="8">WASM / egui / eframe SPA</text>
+              </svg>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-dim); text-align: center;">Uniform hierarchy: All modules now live under <code>crates/</code></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 5: Deep Dive 3 - Multi-Instance Testing & Ephemeral P2P -->
+      <section class="slide" data-slide="5">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag feature">P2P Networking</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Local Multi-Node Testing</span>
+          </div>
+          <h2 class="slide-title">Multi-Instance P2P & Ephemeral Identities</h2>
+          <p class="slide-subtitle">Solving the local pairing obstacle: dynamic ports & non-persisted Iroh keys</p>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <h3 style="font-size: 1.1rem; color: var(--accent-cyan); margin-bottom: 0.75rem;">The Challenge & Solution</h3>
+            <p class="card-text" style="margin-bottom: 1rem;">
+              <strong>The Problem:</strong> An Iroh P2P endpoint cannot connect to itself. When testing locally, two server instances running on the same machine would collide on port 3000 and share the same persisted identity key in <code>mcg-server.toml</code>.
+            </p>
+
+            <ul class="bullet-list">
+              <li><strong>Dynamic Port Discovery:</strong> Backend scans from port <code>3000</code> upward (e.g. <code>3001</code>, <code>3002</code>), or honors <code>--port</code> and <code>--strict-port</code>.</li>
+              <li><strong><code>--ephemeral</code> CLI Flag:</strong> Generates a transient in-memory Iroh secret key, ensuring a unique Node ID without writing to disk.</li>
+              <li><strong>P2P Deduplication:</strong> <code>NetworkSupervisor</code> automatically resolves bidirectional connection races deterministically by Node ID comparison.</li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">Multi-Instance Testing Workflow</h4>
+            <div class="code-box">
+              <div class="code-box-header">
+                <span>Terminal 1: Node 1 (Port 3000)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre><code>just backend</code></pre>
+            </div>
+
+            <div class="code-box">
+              <div class="code-box-header">
+                <span>Terminal 2: Node 2 (Ephemeral Port 3001)</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre><code>just backend --ephemeral</code></pre>
+            </div>
+
+            <div class="info-card" style="margin-top: 1rem; padding: 1rem;">
+              <span style="font-size: 0.85rem; color: var(--accent-emerald); font-weight: 700;">✓ Result:</span>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+                Both nodes establish distinct Iroh endpoints and tickets. Developers can scan Node 1's QR code or paste its ticket into Node 2 on the same machine to verify the P2P lobby handshake instantly!
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 6: Deep Dive 4 - Real-Time Multi-Client Synchronization -->
+      <section class="slide" data-slide="6">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag feature">Frontend & Protocol</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Client Synchronization</span>
+          </div>
+          <h2 class="slide-title">Dynamic Origin & Real-Time Player Sync</h2>
+          <p class="slide-subtitle">Eliminating hardcoded origins & keeping multiple browser windows synchronized</p>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <h3 style="font-size: 1.1rem; color: var(--accent-cyan); margin-bottom: 0.75rem;">1. Dynamic WebSocket Detection</h3>
+            <p class="card-text" style="margin-bottom: 0.75rem;">
+              Previously, the WASM client was hardcoded to <code>127.0.0.1:3000</code>. Now it automatically inspects <code>web_sys::window().location()</code>:
+            </p>
+            <ul class="bullet-list">
+              <li>Derives host and port dynamically (e.g. works on <code>:3001</code>, LAN IPs, or custom domains).</li>
+              <li>Auto-detects scheme: switches between <code>ws://</code> and <code>wss://</code> (HTTPS).</li>
+              <li>Centralized in <code>crates/frontend/src/utils.rs</code>.</li>
+            </ul>
+
+            <h3 style="font-size: 1.1rem; color: var(--accent-emerald); margin-top: 1.5rem; margin-bottom: 0.75rem;">2. Player Setup Synchronization</h3>
+            <p class="card-text">
+              Added dedicated protocol messages in <code>crates/shared</code>:
+            </p>
+            <ul class="bullet-list">
+              <li><code>PlayerSetup(Vec&lt;PlayerConfig&gt;)</code></li>
+              <li><code>UpdatePlayerSetup(Vec&lt;PlayerConfig&gt;)</code></li>
+              <li><code>RequestPlayerSetup</code></li>
+            </ul>
+          </div>
+
+          <div>
+            <div class="info-card">
+              <div class="card-title"><span class="icon">🔄</span> Multi-Client State Flow</div>
+              <p class="card-text" style="margin-bottom: 1rem;">
+                When one client alters game settings or seats, all connected browser windows receive the update in real time.
+              </p>
+              <div class="code-box" style="margin: 0;">
+                <div class="code-box-header">
+                  <span>crates/frontend/src/screens/poker/screen.rs</span>
+                </div>
+                <pre><code><span class="cm">// Automatically synchronize player manager on update</span>
+<span class="kw">match</span> msg {
+    <span class="tp">Backend2FrontendMsg</span>::<span class="fn">PlayerSetup</span>(configs) => {
+        <span class="kw">self</span>.player_manager.sync_from_configs(&configs);
+        <span class="kw">self</span>.ensure_active_playable_human();
+    }
+    <span class="tp">Backend2FrontendMsg</span>::<span class="fn">UpdatePokerState</span>(state) => {
+        <span class="kw">self</span>.handle_state_update(state);
+    }
+}</code></pre>
+              </div>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-dim); margin-top: 0.75rem;">
+              Includes intelligent active-player fallback to guarantee human player interactions always map to an active seat.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 7: Deep Dive 5 - Cross-Platform Tooling & CI/CD -->
+      <section class="slide" data-slide="7">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag ci">Developer Experience</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Quality & Tooling</span>
+          </div>
+          <h2 class="slide-title">Cross-Platform Justfile & Unified CI/CD</h2>
+          <p class="slide-subtitle">Full Windows PowerShell parity, headless browser tests, and zero-warning gates</p>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <h3 style="font-size: 1.1rem; color: var(--accent-cyan); margin-bottom: 0.75rem;">Tooling Overhaul Highlights</h3>
+            <ul class="bullet-list">
+              <li><strong>Cross-Platform Parity:</strong> Recipes annotated with <code>[windows]</code> and <code>[unix]</code>. Fixed quoting and command-chaining issues in Windows PowerShell.</li>
+              <li><strong>CLI Passthrough:</strong> Arguments forward cleanly via <code>*ARGS</code> (e.g. <code>just backend --ephemeral --port 3005</code>).</li>
+              <li><strong>Crate-Targeted CI:</strong> Run gates across everything or target individual modules (<code>just ci poker</code>, <code>just clippy frontend</code>).</li>
+              <li><strong>Headless Chrome WASM Tests:</strong> Frontend tests now execute automatically in CI via <code>wasm-pack test --headless --chrome</code>.</li>
+              <li><strong>Zero Clippy Warnings:</strong> Cleaned all linter warnings across LSP server, engine, frontend, shared, and native crates with <code>-D warnings</code>.</li>
+            </ul>
+          </div>
+
+          <div>
+            <table class="comparison-table">
+              <thead>
+                <tr>
+                  <th>Command</th>
+                  <th>Scope</th>
+                  <th>Target</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>just ci</code></td>
+                  <td>Full gate (Fmt + Clippy + Tests)</td>
+                  <td>All Crates + WASM</td>
+                </tr>
+                <tr>
+                  <td><code>just clippy frontend</code></td>
+                  <td>Clippy (<code>-D warnings</code>)</td>
+                  <td>wasm32-unknown</td>
+                </tr>
+                <tr>
+                  <td><code>just test poker</code></td>
+                  <td>Cargo test</td>
+                  <td><code>mcg-poker</code></td>
+                </tr>
+                <tr>
+                  <td><code>just fmt-check</code></td>
+                  <td>rustfmt check</td>
+                  <td>Workspace + Frontend</td>
+                </tr>
+                <tr>
+                  <td><code>just backend-bg</code></td>
+                  <td>Spawn background server</td>
+                  <td>PowerShell / Unix</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="code-box">
+              <div class="code-box-header">
+                <span>Run CI Gate Now</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre><code>just ci</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 8: Deep Dive 6 - Docs Submodule & Website -->
+      <section class="slide" data-slide="8">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag docs">Documentation</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Knowledge Base</span>
+          </div>
+          <h2 class="slide-title">Submodule Migration & Live Documentation</h2>
+          <p class="slide-subtitle">VitePress site deployment, split-node diagrams, and developer guides</p>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <div class="info-card" style="margin-bottom: 1.25rem;">
+              <div class="card-title"><span class="icon">🌐</span> Published Documentation Website</div>
+              <p class="card-text">
+                Converted the <code>docs/</code> folder to an independent Git submodule. The documentation is now publicly deployed and continuously integrated at:
+              </p>
+              <p style="margin-top: 0.5rem;">
+                <a href="https://mentalcardgames.github.io/" target="_blank" style="color: var(--accent-cyan); font-weight: 700; text-decoration: none;">
+                  🔗 https://mentalcardgames.github.io/
+                </a>
+              </p>
+            </div>
+
+            <div class="info-card">
+              <div class="card-title"><span class="icon">📐</span> New Architectural Specifications</div>
+              <ul class="bullet-list">
+                <li>Added the <strong>5-player split-node ring topology</strong> diagram.</li>
+                <li>Documented the <strong>Builder and Handle patterns</strong> in <code>system-design.md</code>.</li>
+                <li>Documented local multi-instance testing and ephemeral keys.</li>
+                <li>Restored CardGame DSL specifications and grammar references.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div>
+            <div class="info-card" style="height: 100%;">
+              <div class="card-title"><span class="icon">📖</span> Key Document Pointers</div>
+              <table class="comparison-table">
+                <tbody>
+                  <tr>
+                    <td><strong>System Design</strong></td>
+                    <td><code>docs/pages/project/system-design.md</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Components Layout</strong></td>
+                    <td><code>docs/pages/project/repository-components-layout.md</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Backend Engine</strong></td>
+                    <td><code>docs/pages/component/backend.md</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Frontend Client</strong></td>
+                    <td><code>docs/pages/component/frontend.md</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Contributing & CI</strong></td>
+                    <td><code>docs/pages/organisational/contribute.md</code></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="code-box" style="margin-top: 1rem;">
+                <div class="code-box-header">
+                  <span>Local Preview Server</span>
+                  <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>cd docs &amp;&amp; bun run docs:dev</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 9: Quality & Impact Scorecard -->
+      <section class="slide" data-slide="9">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag">Metrics</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Sprint Impact Scorecard</span>
+          </div>
+          <h2 class="slide-title">By the Numbers: Quality & Velocity</h2>
+          <p class="slide-subtitle">Measurable architectural transformation across the monorepo</p>
+        </div>
+
+        <div class="grid-3" style="margin-bottom: 2rem;">
+          <div class="info-card" style="text-align: center;">
+            <div class="metric-num">55</div>
+            <div style="font-weight: 700; color: var(--text-main); margin-bottom: 0.25rem;">Commits Integrated</div>
+            <p style="font-size: 0.85rem; color: var(--text-dim);">Cohesive development cycle from dev/jancc branch merged into main.</p>
+          </div>
+
+          <div class="info-card" style="text-align: center;">
+            <div class="metric-num green">219</div>
+            <div style="font-weight: 700; color: var(--text-main); margin-bottom: 0.25rem;">Files Improved</div>
+            <p style="font-size: 0.85rem; color: var(--text-dim);">Restructured crates, modernized modules, and unified build scripts.</p>
+          </div>
+
+          <div class="info-card" style="text-align: center;">
+            <div class="metric-num rose">-285</div>
+            <div style="font-weight: 700; color: var(--text-main); margin-bottom: 0.25rem;">Net Line Churn</div>
+            <p style="font-size: 0.85rem; color: var(--text-dim);">+9,236 / -9,521 lines. Eliminated massive boilerplate and legacy adapters.</p>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="info-card">
+            <div class="card-title"><span class="icon">🛡️</span> Structural Health & Safety</div>
+            <ul class="bullet-list">
+              <li><strong>Lock-free core:</strong> Eliminated error-prone <code>Arc&lt;Mutex&lt;AppState&gt;&gt;</code> contention.</li>
+              <li><strong>Zero Clippy Warnings:</strong> Passed strict <code>-D warnings</code> on all workspace crates and WASM.</li>
+              <li><strong>Clean Shutdown:</strong> Eliminated zombie background tasks and unclosed Iroh QUIC sockets.</li>
+            </ul>
+          </div>
+
+          <div class="info-card">
+            <div class="card-title"><span class="icon">🚀</span> Developer Ergonomics</div>
+            <ul class="bullet-list">
+              <li><strong>Single-command build & run:</strong> <code>just start dev</code> builds WASM & launches backend.</li>
+              <li><strong>Local P2P unblocked:</strong> <code>--ephemeral</code> enables instantaneous multi-backend pairing.</li>
+              <li><strong>Reliable on Windows:</strong> First-class PowerShell support without bash/WSL friction.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- SLIDE 10: Future Roadmap & Next Milestones -->
+      <section class="slide" data-slide="10">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag">Vision</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">What's Next</span>
+          </div>
+          <h2 class="slide-title">Roadmap: The Path Ahead</h2>
+          <p class="slide-subtitle">Building on top of our new modular foundation</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="info-card">
+            <div class="card-title"><span class="icon">🔐</span> 1. Mental Poker Cryptography</div>
+            <p class="card-text">
+              Implement commutative encryption (SRA protocol) for trustless, dealer-less card shuffling and zero-knowledge card dealing across peer-to-peer nodes.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div class="card-title"><span class="icon">📱</span> 2. Mobile Client & QR Pairing</div>
+            <p class="card-text">
+              Optimize camera QR-code capture with fountain codes on smartphone browsers for seamless offline/ad-hoc pairing between physical devices.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div class="card-title"><span class="icon">📜</span> 3. CGDSL Engine Integration</div>
+            <p class="card-text">
+              Connect the Card Game Domain Specific Language AST and bytecode compiler directly to the engine runtime, enabling arbitrary community card games.
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div class="card-title"><span class="icon">🌐</span> 4. Distributed P2P Consensus</div>
+            <p class="card-text">
+              Transition from local multi-client WebSocket lobbies to fully decentralized state consensus across the 5-player split-node ring topology.
+            </p>
+          </div>
+        </div>
+
+        <div class="info-card" style="margin-top: 1.5rem; background: linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(99, 102, 241, 0.08));">
+          <div class="card-title" style="color: var(--accent-cyan);"><span class="icon">💡</span> Presenter Takeaway</div>
+          <p class="card-text">
+            "With this release, the architecture is no longer a prototype backend tied to a single GUI screen. It is now a resilient, modular engine equipped with clean execution boundaries, ready for cryptography and decentralized protocols."
+          </p>
+        </div>
+      </section>
+
+      <!-- SLIDE 11: Demo Playbook & Cheatsheet -->
+      <section class="slide" data-slide="11">
+        <div class="slide-header">
+          <div class="slide-meta">
+            <span class="category-tag">Live Demo</span>
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Interactive Session</span>
+          </div>
+          <h2 class="slide-title">Live Demo Playbook & Q&amp;A</h2>
+          <p class="slide-subtitle">Commands and talking points for live demonstration</p>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <h3 style="font-size: 1.1rem; color: var(--accent-cyan); margin-bottom: 0.75rem;">Live Demonstration Script</h3>
+            <ol style="padding-left: 1.25rem; font-size: 0.925rem; color: var(--text-muted); line-height: 1.8;">
+              <li><strong>Build & Start:</strong> Run <code>just start dev</code>. Show dynamic port binding and open browser.</li>
+              <li><strong>Multi-Backend Pairing:</strong> Open second terminal and execute <code>just backend --ephemeral</code>. Point out distinct Node IDs and next port selection.</li>
+              <li><strong>Headless CLI:</strong> In terminal 3, run <code>just cli join</code> then <code>just cli -- action check-call</code> to illustrate bot integration.</li>
+              <li><strong>Multi-Tab Sync:</strong> Open two browser windows side by side to prove real-time player seat synchronization.</li>
+              <li><strong>Verification Gate:</strong> Run <code>just ci</code> to show tests and clippy completing cleanly.</li>
+            </ol>
+          </div>
+
+          <div>
+            <h3 style="font-size: 1.1rem; color: var(--accent-emerald); margin-bottom: 0.75rem;">Quick Command Cheatsheet</h3>
+            <div class="code-box">
+              <div class="code-box-header">
+                <span>Start Dev Environment</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre><code>just start dev</code></pre>
+            </div>
+
+            <div class="code-box">
+              <div class="code-box-header">
+                <span>Run Second Node with Ephemeral Key</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre><code>just backend --ephemeral</code></pre>
+            </div>
+
+            <div class="code-box">
+              <div class="code-box-header">
+                <span>CLI Automation Check</span>
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+              </div>
+              <pre><code>just cli join</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- BOTTOM SLIDE NAVIGATION CONTROLS -->
+    <footer class="slide-footer-nav" id="slideFooterNav">
+      <div class="slide-counter">
+        Slide <strong id="currentSlideNum">1</strong> of <span id="totalSlidesNum">11</span>
+      </div>
+
+      <div class="nav-button-group">
+        <button class="nav-btn" id="prevSlideBtn" onclick="prevSlide()">
+          <span>← Previous</span>
+        </button>
+        <button class="nav-btn" id="nextSlideBtn" onclick="nextSlide()">
+          <span>Next →</span>
+        </button>
+      </div>
+
+      <div class="keyboard-hint">
+        <span>Navigate:</span>
+        <kbd>←</kbd>
+        <kbd>→</kbd>
+        <kbd>Space</kbd>
+        <span style="margin-left: 0.5rem;">Notes:</span>
+        <kbd>N</kbd>
+      </div>
+    </footer>
+
+    <!-- SPEAKER NOTES DRAWER (Toggled by 'N' key or button) -->
+    <aside class="speaker-notes-drawer" id="speakerNotesDrawer">
+      <div class="notes-header">
+        <div class="notes-title">
+          <span>🎙️ Presenter Talking Points &amp; Context</span>
+        </div>
+        <button class="notes-close-btn" onclick="toggleNotes()" title="Close notes">✕</button>
+      </div>
+      <div class="notes-body" id="speakerNotesContent">
+        <!-- Dynamically populated based on active slide -->
+      </div>
+    </aside>
+
+    <!-- DOCUMENT / EXECUTIVE SUMMARY VIEW (Toggled with Tab / Button) -->
+    <div class="document-view" id="documentView">
+      <div class="doc-toc">
+        <h3>📑 Executive Summary Table of Contents</h3>
+        <ul>
+          <li><a href="#doc-overview">1. Executive Overview & Metrics</a></li>
+          <li><a href="#doc-arch">2. Core Architecture (Builder & Handle Pattern)</a></li>
+          <li><a href="#doc-poker">3. Monorepo Reorganization & crates/poker</a></li>
+          <li><a href="#doc-p2p">4. Multi-Instance Testing & Ephemeral P2P</a></li>
+          <li><a href="#doc-sync">5. Dynamic Origin & Real-Time Sync</a></li>
+          <li><a href="#doc-ci">6. Cross-Platform Tooling & CI/CD</a></li>
+          <li><a href="#doc-docs">7. Documentation Submodule & Website</a></li>
+          <li><a href="#doc-roadmap">8. Strategic Roadmap & Live Playbook</a></li>
+        </ul>
+      </div>
+
+      <article class="doc-section" id="doc-overview">
+        <span class="category-tag">Section 1</span>
+        <h2 style="font-size: 1.8rem; margin: 0.5rem 0 1rem 0;">Executive Overview: The MCG Transformation</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.25rem;">
+          Over the past sprint, the Mental Card Game (MCG) repository underwent a foundational architectural modernization, culminating in the successful merge of PR #11. Spanning 55 commits and refactoring 219 files, the codebase eliminated legacy monolithic bottlenecks, established deterministic execution boundaries, and unlocked seamless multi-instance local peer-to-peer testing.
+        </p>
+
+        <div class="grid-4" style="margin-bottom: 1.5rem;">
+          <div class="metric-badge">
+            <span class="metric-num">55</span>
+            <span class="metric-label">Commits Merged</span>
+          </div>
+          <div class="metric-badge">
+            <span class="metric-num">219</span>
+            <span class="metric-label">Files Modified</span>
+          </div>
+          <div class="metric-badge">
+            <span class="metric-num green">-285</span>
+            <span class="metric-label">Net Lines (Refactored)</span>
+          </div>
+          <div class="metric-badge">
+            <span class="metric-num rose">0</span>
+            <span class="metric-label">Clippy Warnings</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="doc-section" id="doc-arch">
+        <span class="category-tag refactor">Section 2</span>
+        <h2 style="font-size: 1.8rem; margin: 0.5rem 0 1rem 0;">Core Architecture: The Builder &amp; Handle Pattern</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          In previous iterations, the backend maintained a shared monolithic <code>AppState</code> protected by coarse-grained mutexes. This created contention between incoming WebSocket connections, internal bot drivers, and the card game engine.
+        </p>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          The new architecture separates execution into two distinct environments:
+        </p>
+        <ul class="bullet-list" style="margin-bottom: 1.5rem;">
+          <li><strong>Synchronous Controller Core:</strong> Executes on a dedicated OS thread. It processes game state changes deterministically without async task starvation or locks.</li>
+          <li><strong>Asynchronous NetworkSupervisor:</strong> Runs on the Tokio runtime, managing Axum HTTP/WebSocket listeners, Iroh QUIC connections, and peer deduplication.</li>
+          <li><strong>Builder Pattern (<code>build()</code> vs <code>spawn()</code>):</strong> Separates resource discovery (port scanning, channel allocation) from runtime execution.</li>
+          <li><strong>Handles:</strong> <code>ControllerHandle</code>, <code>NetworkHandle</code>, and <code>BackendHandle</code> provide cloneable, typed MPSC communication channels across thread boundaries.</li>
+        </ul>
+      </article>
+
+      <article class="doc-section" id="doc-poker">
+        <span class="category-tag refactor">Section 3</span>
+        <h2 style="font-size: 1.8rem; margin: 0.5rem 0 1rem 0;">Monorepo Restructuring &amp; <code>crates/poker</code> Extraction</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          Game logic, betting structures, and bot simulations were previously coupled directly to the native server executable. This sprint cleanly extracted all poker-specific algorithms into <strong><code>crates/poker</code> (<code>mcg-poker</code>)</strong>.
+        </p>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          Furthermore, the workspace folder structure was completely normalized: all packages now reside under the top-level <code>crates/</code> directory (including <code>crates/frontend</code>, <code>crates/native_mcg</code>, <code>crates/shared</code>, <code>crates/qr_comm</code>, <code>crates/engine</code>, and <code>crates/cardgame_dsl</code>). Root configuration files were cleaned up, moving package-specific release profiles directly into their respective crates.
+        </p>
+      </article>
+
+      <article class="doc-section" id="doc-p2p">
+        <span class="category-tag feature">Section 4</span>
+        <h2 style="font-size: 1.8rem; margin: 0.5rem 0 1rem 0;">Multi-Instance Testing &amp; Ephemeral Identities</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          A major bottleneck for local peer-to-peer development was identity collision. Because Iroh QUIC nodes cannot connect to themselves, running two local instances previously caused connection aborts because both loaded the same secret key from <code>mcg-server.toml</code>.
+        </p>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          Two key features solved this:
+        </p>
+        <ul class="bullet-list" style="margin-bottom: 1rem;">
+          <li><strong>Dynamic Port Hunting:</strong> If port 3000 is taken, the backend automatically binds to 3001, 3002, etc. Strict port binding can be enforced via <code>--strict-port</code>.</li>
+          <li><strong>The <code>--ephemeral</code> CLI Flag:</strong> Generates a disposable, in-memory Iroh keypair without touching disk files. Developers can now run <code>just backend</code> in Terminal 1 and <code>just backend --ephemeral</code> in Terminal 2, allowing immediate local QR/ticket connection testing.</li>
+        </ul>
+      </article>
+
+      <article class="doc-section" id="doc-sync">
+        <span class="category-tag feature">Section 5</span>
+        <h2 style="font-size: 1.8rem; margin: 0.5rem 0 1rem 0;">Dynamic Origin &amp; Real-Time Client Synchronization</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          The WebAssembly frontend previously hardcoded its backend connection to <code>127.0.0.1:3000</code>. This prevented seamless access across mobile devices, alternate ports, or secure HTTPS origins. The frontend now inspects <code>web_sys::window().location()</code> at runtime to dynamically derive the host and correctly select <code>ws://</code> or <code>wss://</code>.
+        </p>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          Additionally, new protocol messages (<code>PlayerSetup</code>, <code>UpdatePlayerSetup</code>, and <code>RequestPlayerSetup</code>) were added. When any player or server updates game configurations, all open browser tabs reflect the updated active player, seat configuration, and state immediately.
+        </p>
+      </article>
+
+      <article class="doc-section" id="doc-ci">
+        <span class="category-tag ci">Section 6</span>
+        <h2 style="font-size: 1.8rem; margin: 0.5rem 0 1rem 0;">Cross-Platform Tooling &amp; Unified CI/CD</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          The repository's <code>justfile</code> was overhauled with dedicated <code>[windows]</code> and <code>[unix]</code> implementations. Windows users can now run background tasks (<code>just backend-bg</code>) and pass arbitrary CLI arguments without escaping errors.
+        </p>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          A unified CI suite provides single-command verification:
+        </p>
+        <ul class="bullet-list">
+          <li><code>just ci</code>: Executes format checking, clippy (with strict <code>-D warnings</code>), and tests across all crates, including headless Chrome tests for WebAssembly.</li>
+          <li>Crate-level filters: <code>just test poker</code>, <code>just clippy frontend</code>, <code>just fmt-check shared</code>.</li>
+        </ul>
+      </article>
+
+      <article class="doc-section" id="doc-docs">
+        <span class="category-tag docs">Section 7</span>
+        <h2 style="font-size: 1.8rem; margin: 0.5rem 0 1rem 0;">Documentation Submodule &amp; Live Site</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          The documentation was decoupled into an independent Git submodule, enabling continuous deployment of the official documentation website at <a href="https://mentalcardgames.github.io/" target="_blank" style="color: var(--accent-cyan);">https://mentalcardgames.github.io/</a>.
+        </p>
+        <p style="color: var(--text-muted);">
+          Key documentation additions include the 5-player split-node ring topology diagram, comprehensive developer onboarding instructions, local multi-instance testing guides, and detailed specifications of the Builder and Handle concurrency models.
+        </p>
+      </article>
+
+      <article class="doc-section" id="doc-roadmap">
+        <span class="category-tag">Section 8</span>
+        <h2 style="font-size: 1.8rem; margin: 0.5rem 0 1rem 0;">Strategic Roadmap &amp; Live Demo Script</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          With the core architecture stabilized, the project moves to its next high-value milestones:
+        </p>
+        <ol style="padding-left: 1.25rem; font-size: 0.95rem; color: var(--text-muted); line-height: 1.8; margin-bottom: 1.5rem;">
+          <li><strong>Mental Poker Cryptography:</strong> Integrating commutative SRA encryption for trustless card distribution.</li>
+          <li><strong>Mobile Camera Pairing:</strong> Implementing fountain code scanning via smartphone cameras.</li>
+          <li><strong>CGDSL Integration:</strong> Running generic card games through the Card Game DSL compiler and engine runtime.</li>
+          <li><strong>P2P Ring Consensus:</strong> Fully decentralized game state reconciliation across independent nodes.</li>
+        </ol>
+      </article>
+    </div>
+
+  </main>
+
+  <script>
+    // Slide Data & Speaker Notes Store
+    const speakerNotes = {
+      1: `
+        <p><strong>Opening remarks:</strong> Welcome everyone. Today we are presenting a landmark milestone in the Mental Card Games (MCG) project.</p>
+        <p><strong>Context:</strong> With the recent merge of Pull Request #11, we closed out 55 commits and touched over 219 files. Notably, we actually removed more lines of boilerplate than we added, arriving at a leaner, significantly more reliable codebase.</p>
+        <p><strong>Roadmap of this talk:</strong> We will walk through the core architectural rebuild, monorepo reorganization, multi-instance P2P capabilities, real-time client sync, and our unified CI/CD tooling.</p>
+      `,
+      2: `
+        <p><strong>High-Level Summary:</strong> This slide presents the six main pillars of this sprint.</p>
+        <p><strong>Emphasize:</strong> These aren't just isolated tweaks; they work together. Decoupling the controller and network supervisor laid the groundwork for multi-instance P2P testing, which in turn required dynamic origin detection and player synchronization in the frontend.</p>
+        <p><strong>Transition:</strong> Let's look first at the deepest architectural change: our concurrency and lifecycle model.</p>
+      `,
+      3: `
+        <p><strong>Architectural Problem:</strong> Previously, our backend had a classic Rust concurrency antipattern: a monolithic AppState wrapped in Arc<Mutex<...>> shared across Axum routes and async tasks. This led to lock contention and complex shutdown races.</p>
+        <p><strong>The Solution:</strong> We cleanly bifurcated execution. The game controller runs synchronously in a dedicated OS thread. It has zero mutex overhead and executes state transitions deterministically. The NetworkSupervisor runs on Tokio and handles I/O.</p>
+        <p><strong>Builder & Handle Pattern:</strong> Point to the diagram. Builders handle discovery (like finding free ports) without starting threads. Once spawn() is called, cloneable handles (ControllerHandle, NetworkHandle) pass strongly typed MPSC messages across runtime boundaries without locks.</p>
+      `,
+      4: `
+        <p><strong>Modularity Motivation:</strong> Previously, our poker evaluation, game flow, and bot logic were tangled inside the native_mcg crate. If someone wanted to run poker simulations or use the rules in another tool, they had to pull in the entire web server and Iroh networking stack.</p>
+        <p><strong>Outcome:</strong> We extracted crates/poker (mcg-poker). Now native_mcg is strictly a server/CLI node, and poker is a pure domain library.</p>
+        <p><strong>Filesystem cleanliness:</strong> Point out that all crates now reside uniformly under crates/ (including frontend), simplifying Cargo workspace management and release profiles.</p>
+      `,
+      5: `
+        <p><strong>The P2P Testing Problem:</strong> Here is a practical win for developer experience. Iroh P2P nodes cannot connect to themselves. If a developer wanted to test lobby pairing on a single laptop, both nodes collided on port 3000 and loaded the exact same Node ID from mcg-server.toml, causing connection aborts.</p>
+        <p><strong>The Solution:</strong> First, dynamic port scanning: if 3000 is occupied, the second node automatically picks 3001. Second, the --ephemeral flag: it creates an in-memory, temporary Iroh identity without writing to disk. Now you can spin up two nodes side-by-side and test pairing in seconds.</p>
+      `,
+      6: `
+        <p><strong>Frontend Flexibility:</strong> In the past, the WebAssembly frontend always connected to 127.0.0.1:3000. If you hosted it on a LAN IP, used another port, or ran HTTPS, it would fail.</p>
+        <p><strong>Dynamic Resolution:</strong> The client now interrogates window.location to determine the host, port, and whether to use ws:// or wss://.</p>
+        <p><strong>State Synchronization:</strong> Highlight the new PlayerSetup messages. When multiple browser windows connect, changes to active seats and player configs propagate in real time across all open tabs.</p>
+      `,
+      7: `
+        <p><strong>Developer Experience & CI:</strong> We take developer ergonomics seriously. The justfile was completely rewritten with native Windows PowerShell and Unix bash recipes.</p>
+        <p><strong>Quality Gate:</strong> Point to the table. Developers can run 'just ci' to verify formatting, clippy with strict -D warnings, and automated tests. We also added headless Chrome browser testing for the WASM frontend with wasm-pack.</p>
+        <p><strong>Zero Warnings:</strong> All workspace crates currently pass with zero warnings.</p>
+      `,
+      8: `
+        <p><strong>Documentation:</strong> Documentation is now managed via a Git submodule, decoupled from the main code repository.</p>
+        <p><strong>Live Deployment:</strong> Point to the URL: mentalcardgames.github.io. It is powered by VitePress and features interactive search, component architecture deep dives, and split-node ring diagrams.</p>
+      `,
+      9: `
+        <p><strong>Sprint Scorecard:</strong> Take a moment to celebrate the quantitative results. 55 commits, 219 files touched, and a net deletion of 285 lines.</p>
+        <p><strong>Key Message:</strong> Good refactoring deletes code. We replaced bloated state wrappers and legacy adapters with crisp, idiomatic Rust patterns.</p>
+      `,
+      10: `
+        <p><strong>The Horizon:</strong> Now that our architectural foundation is clean and deterministic, what comes next?</p>
+        <p><strong>Vision:</strong> Mental poker commutative cryptography (SRA) for dealer-less shuffling; mobile camera fountain codes; CardGame DSL integration; and fully distributed consensus across P2P split nodes.</p>
+      `,
+      11: `
+        <p><strong>Live Demo / Q&A:</strong> Transition into the interactive portion of your presentation.</p>
+        <p><strong>Tips:</strong> Run 'just start dev' to show the server picking up port 3000. Open a second terminal with 'just backend --ephemeral' to demonstrate port 3001 and ephemeral ticket generation. Finally, trigger 'just cli join' to prove headless automation.</p>
+        <p><strong>Open floor for questions.</strong></p>
+      `
+    };
+
+    // State Variables
+    let currentSlide = 1;
+    const totalSlides = 11;
+    let isNotesOpen = false;
+    let isDocMode = false;
+
+    // DOM Elements
+    const slideViewport = document.getElementById('slideViewport');
+    const slideFooterNav = document.getElementById('slideFooterNav');
+    const documentView = document.getElementById('documentView');
+    const progressFill = document.getElementById('progressFill');
+    const currentSlideNum = document.getElementById('currentSlideNum');
+    const totalSlidesNum = document.getElementById('totalSlidesNum');
+    const prevSlideBtn = document.getElementById('prevSlideBtn');
+    const nextSlideBtn = document.getElementById('nextSlideBtn');
+    const speakerNotesDrawer = document.getElementById('speakerNotesDrawer');
+    const speakerNotesContent = document.getElementById('speakerNotesContent');
+    const notesToggleBtn = document.getElementById('notesToggleBtn');
+    const modeSwitchBtn = document.getElementById('modeSwitchBtn');
+    const modeIcon = document.getElementById('modeIcon');
+    const modeLabel = document.getElementById('modeLabel');
+
+    // Initialize Presentation
+    function initPresentation() {
+      totalSlidesNum.textContent = totalSlides;
+      showSlide(1);
+      setupKeyboardListeners();
+    }
+
+    // Show a specific slide
+    function showSlide(index) {
+      if (index < 1) index = 1;
+      if (index > totalSlides) index = totalSlides;
+
+      currentSlide = index;
+
+      // Update slide visibility
+      document.querySelectorAll('.slide').forEach((slide, idx) => {
+        if (idx + 1 === currentSlide) {
+          slide.classList.add('active');
+        } else {
+          slide.classList.remove('active');
+        }
+      });
+
+      // Update progress bar & counter
+      const progressPercent = ((currentSlide) / totalSlides) * 100;
+      progressFill.style.width = `${progressPercent}%`;
+      currentSlideNum.textContent = currentSlide;
+
+      // Update button states
+      prevSlideBtn.disabled = (currentSlide === 1);
+      nextSlideBtn.disabled = (currentSlide === totalSlides);
+
+      // Update speaker notes
+      if (speakerNotes[currentSlide]) {
+        speakerNotesContent.innerHTML = speakerNotes[currentSlide];
+      } else {
+        speakerNotesContent.innerHTML = "<p>No notes for this slide.</p>";
+      }
+
+      // Smooth scroll to top of slide container
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides) {
+        showSlide(currentSlide + 1);
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 1) {
+        showSlide(currentSlide - 1);
+      }
+    }
+
+    function toggleNotes() {
+      isNotesOpen = !isNotesOpen;
+      if (isNotesOpen) {
+        speakerNotesDrawer.classList.add('open');
+        notesToggleBtn.classList.add('active');
+      } else {
+        speakerNotesDrawer.classList.remove('open');
+        notesToggleBtn.classList.remove('active');
+      }
+    }
+
+    function toggleViewMode() {
+      isDocMode = !isDocMode;
+      if (isDocMode) {
+        document.body.classList.add('doc-mode');
+        modeIcon.textContent = '📽️';
+        modeLabel.textContent = 'Slides View';
+        progressFill.style.width = '100%';
+      } else {
+        document.body.classList.remove('doc-mode');
+        modeIcon.textContent = '📄';
+        modeLabel.textContent = 'Document View';
+        showSlide(currentSlide);
+      }
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    function copyCode(btn) {
+      const codeBox = btn.closest('.code-box');
+      const code = codeBox.querySelector('pre code').innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.style.color = '#10b981';
+        btn.style.borderColor = '#10b981';
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.color = '';
+          btn.style.borderColor = '';
+        }, 2000);
+      });
+    }
+
+    // Keyboard Shortcuts
+    function setupKeyboardListeners() {
+      document.addEventListener('keydown', (e) => {
+        // If typing in an input, ignore
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        switch (e.key) {
+          case 'ArrowRight':
+          case 'PageDown':
+          case ' ':
+            if (!isDocMode) {
+              e.preventDefault();
+              nextSlide();
+            }
+            break;
+          case 'ArrowLeft':
+          case 'PageUp':
+            if (!isDocMode) {
+              e.preventDefault();
+              prevSlide();
+            }
+            break;
+          case 'n':
+          case 'N':
+            e.preventDefault();
+            toggleNotes();
+            break;
+          case 'Tab':
+            e.preventDefault();
+            toggleViewMode();
+            break;
+          case 'f':
+          case 'F':
+            e.preventDefault();
+            toggleFullscreen();
+            break;
+          case 'Home':
+            if (!isDocMode) {
+              e.preventDefault();
+              showSlide(1);
+            }
+            break;
+          case 'End':
+            if (!isDocMode) {
+              e.preventDefault();
+              showSlide(totalSlides);
+            }
+            break;
+        }
+      });
+    }
+
+    // Start
+    initPresentation();
+  </script>
+</body>
+</html>
