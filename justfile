@@ -2,7 +2,7 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 set shell := ["bash", "-uc"]
 
 # Ensure `wasm-pack` exists in PATH, aborts if missing
-wasm_pack := require("wasm-pack")
+wasm_pack := require(if os() == "windows" { "wasm-pack.exe" } else { "wasm-pack" })
 
 # List available recipes by default
 default:
@@ -139,22 +139,23 @@ alias format := fmt
 # Internal CI dispatch & execution helpers
 [private]
 _run ACTION CRATE:
-    @{{ if CRATE == "all" { "just _" + ACTION + "-ws\njust _" + ACTION + "-fe" }
-     else if CRATE == "frontend" { "just _" + ACTION + "-fe" }
-     else if CRATE == "fe" { "just _" + ACTION + "-fe" }
-     else if CRATE == "web" { "just _" + ACTION + "-fe" }
-     else if CRATE == "engine" { "just _" + ACTION + "-pkg cgdsl-engine" }
-     else if CRATE == "poker" { "just _" + ACTION + "-pkg mcg-poker" }
-     else if CRATE == "shared" { "just _" + ACTION + "-pkg mcg-shared" }
-     else if CRATE == "qr_comm" { "just _" + ACTION + "-pkg mcg_qr_comm" }
-     else if CRATE == "qr-comm" { "just _" + ACTION + "-pkg mcg_qr_comm" }
-     else if CRATE == "backend" { "just _" + ACTION + "-pkg native_mcg" }
-     else if CRATE == "native" { "just _" + ACTION + "-pkg native_mcg" }
-     else if CRATE == "front-end" { "just _" + ACTION + "-pkg front_end" }
-     else if CRATE == "code-gen" { "just _" + ACTION + "-pkg code_gen" }
-     else if CRATE == "lsp" { "just _" + ACTION + "-pkg lsp_server" }
-     else if CRATE == "lsp-server" { "just _" + ACTION + "-pkg lsp_server" }
-     else { "just _" + ACTION + "-pkg " + CRATE } }}
+    @{{ if CRATE == "all" { "just _" + ACTION + "-ws" } \
+      else if CRATE == "frontend" { "just _" + ACTION + "-fe" } \
+      else if CRATE == "fe" { "just _" + ACTION + "-fe" } \
+      else if CRATE == "web" { "just _" + ACTION + "-fe" } \
+      else if CRATE == "engine" { "just _" + ACTION + "-pkg cgdsl-engine" } \
+      else if CRATE == "poker" { "just _" + ACTION + "-pkg mcg-poker" } \
+      else if CRATE == "shared" { "just _" + ACTION + "-pkg mcg-shared" } \
+      else if CRATE == "qr_comm" { "just _" + ACTION + "-pkg mcg_qr_comm" } \
+      else if CRATE == "qr-comm" { "just _" + ACTION + "-pkg mcg_qr_comm" } \
+      else if CRATE == "backend" { "just _" + ACTION + "-pkg native_mcg" } \
+      else if CRATE == "native" { "just _" + ACTION + "-pkg native_mcg" } \
+      else if CRATE == "front-end" { "just _" + ACTION + "-pkg front_end" } \
+      else if CRATE == "code-gen" { "just _" + ACTION + "-pkg code_gen" } \
+      else if CRATE == "lsp" { "just _" + ACTION + "-pkg lsp_server" } \
+      else if CRATE == "lsp-server" { "just _" + ACTION + "-pkg lsp_server" } \
+      else { "just _" + ACTION + "-pkg " + CRATE } }}
+    @{{ if CRATE == "all" { "just _" + ACTION + "-fe" } else { "" } }}
 [private]
 _clippy-ws:
     cargo clippy --workspace --all-targets -- -D warnings
