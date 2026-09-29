@@ -17,7 +17,7 @@ impl<E: CardEncoding, C: CardConfig> FieldWidget for SimpleField<E, C> {
         move |ui: &mut egui::Ui| -> egui::Response {
             frame::Frame::new()
                 .inner_margin(egui::Margin::same(self.margin))
-                .stroke(egui::Stroke::new(2.0, Color32::DEBUG_COLOR))
+                .stroke(egui::Stroke::new(2.0_f32, Color32::DEBUG_COLOR))
                 .fill(Color32::DARK_GREEN)
                 .corner_radius(egui::CornerRadius::same(self.margin.unsigned_abs()))
                 .show(ui, |ui| match self.kind {

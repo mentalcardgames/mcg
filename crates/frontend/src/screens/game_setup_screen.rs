@@ -80,7 +80,7 @@ impl ScreenWidget for GameSetupScreen {
                         ui.label("Card Pack:");
                         match &self.card_config {
                             None => ui.label("Deck not loaded"),
-                            Some(config) => ui.label(format!("Using {}", &config.path)),
+                            Some(config) => ui.label(format!("Using {}", config.path)),
                         };
                     });
 
