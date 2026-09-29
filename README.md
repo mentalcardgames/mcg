@@ -322,14 +322,34 @@ Please share your solution if you find out how to get it running.
 
 ## Testing and linting
 
-- Tests (if present):
+We provide unified `just` recipes to format, lint, and test all crates (both the root Cargo workspace and the standalone `crates/frontend`), or individual crates specified by name or alias:
+
+- **Full CI suite** (format check + clippy + tests):
+  - `just ci`                 # runs full gate across all crates including frontend
+  - `just ci frontend`        # runs full gate for frontend only
+  - `just ci poker`           # runs full gate for mcg-poker (supports aliases)
+
+- **Clippy** (fail on warnings with `-D warnings`):
+  - `just clippy`             # lints all workspace crates + frontend (wasm32)
+  - `just clippy frontend`    # lints frontend for wasm32-unknown-unknown
+  - `just clippy engine`      # lints cgdsl-engine (aliases: engine, poker, shared, etc.)
+
+- **Format checking and formatting**:
+  - `just fmt-check`          # checks rustfmt across workspace and frontend (alias: check-fmt)
+  - `just fmt`                # formats workspace and frontend (alias: format)
+  - `just fmt-check frontend` # checks formatting on frontend only
+
+- **Tests**:
+  - `just test`               # runs workspace tests + frontend tests in headless Chrome
+  - `just test frontend`      # runs frontend tests with wasm-pack test
+  - `just test poker`         # runs cargo test -p mcg-poker
+
+- **Manual Cargo commands**:
   - `cargo test --workspace`
-  - `cargo test -p shared`
-  - `cargo test -p native_mcg game::state::tests::your_test_name`
-- Lint with Clippy (fail on warnings):
   - `cargo clippy --workspace --all-targets -- -D warnings`
-- Format:
-  - `cargo fmt --all`
+  - `cargo fmt --all -- --check`
+  - `cargo clippy --manifest-path crates/frontend/Cargo.toml --target wasm32-unknown-unknown --all-targets -- -D warnings`
+  - `wasm-pack test --headless --chrome crates/frontend`
 
 ## License
 
