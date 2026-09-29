@@ -1,0 +1,149 @@
+use std::time::Duration;
+
+use mcg_shared::{PlayerAction, PlayerId, PokerStatePublic, Stage};
+use rand::random;
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
+use tokio::time::sleep;
+
+use super::sink::BotActionSink;
+use crate::bot::{BotContext, BotManager};
+
+/// Spawns the bot driver background task that reacts to public state changes.
+pub fn spawn_bot_driver<S: BotActionSink + Clone>(
+    action_sink: S,
+    state_rx: watch::Receiver<Option<PokerStatePublic>>,
+    bot_manager: BotManager,
+    delay_range: (u64, u64),
+) -> JoinHandle<()> {
+    tokio::spawn(run_bot_driver(
+        action_sink,
+        state_rx,
+        bot_manager,
+        delay_range,
+    ))
+}
+
+/// Continuously drives bots whenever it is their turn based on public poker state updates.
+pub async fn run_bot_driver<S: BotActionSink>(
+    action_sink: S,
+    mut state_rx: watch::Receiver<Option<PokerStatePublic>>,
+    bot_manager: BotManager,
+    delay_range: (u64, u64),
+) {
+    let mut last_logged_bot: Option<PlayerId> = None;
+
+    loop {
+        // Wait for a state change notification
+        if state_rx.changed().await.is_err() {
+            tracing::debug!("state receiver closed; stopping bot driver");
+            break;
+        }
+
+        let state = match *state_rx.borrow_and_update() {
+            Some(ref s) => s.clone(),
+            None => {
+                last_logged_bot = None;
+                continue;
+            }
+        };
+
+        if state.stage == Stage::Showdown || state.players.is_empty() {
+            last_logged_bot = None;
+            continue;
+        }
+
+        let to_act_id = state.to_act;
+        let Some((actor_idx, player)) = state
+            .players
+            .iter()
+            .enumerate()
+            .find(|(_, p)| p.id == to_act_id)
+        else {
+            continue;
+        };
+
+        if !player.is_bot {
+            last_logged_bot = None;
+            continue;
+        }
+
+        if last_logged_bot != Some(player.id) {
+            tracing::debug!(player = %player.name, player_id = ?player.id, "Bot driver: bot turn detected");
+            last_logged_bot = Some(player.id);
+        }
+
+        let delay_ms = pick_delay(delay_range.0, delay_range.1);
+        tracing::trace!(delay_ms, "Bot driver: sleeping before bot action");
+
+        // Sleep for the randomized delay, but abort sleep if game state changes in the meantime
+        tokio::select! {
+            _ = sleep(Duration::from_millis(delay_ms)) => {}
+            change = state_rx.changed() => {
+                if change.is_err() {
+                    break;
+                }
+                // Loop back to evaluate the newest state
+                continue;
+            }
+        }
+
+        // Re-verify that the bot is still expected to act
+        let current = state_rx.borrow().clone();
+        let Some(current_state) = current else {
+            continue;
+        };
+        if current_state.stage == Stage::Showdown
+            || current_state.to_act != to_act_id
+            || current_state.stage != state.stage
+        {
+            tracing::debug!("Game state changed while bot was thinking; skipping stale action");
+            continue;
+        }
+
+        let need = current_state
+            .current_bet
+            .saturating_sub(player.bet_this_round);
+        let context = BotContext {
+            stack: player.stack,
+            call_amount: need,
+            current_bet: current_state.current_bet,
+            big_blind: current_state.bb,
+            stage: current_state.stage,
+            position: actor_idx,
+            total_players: current_state.players.len(),
+        };
+
+        let action = match bot_manager.generate_action(&context) {
+            Ok(action) => action,
+            Err(e) => {
+                tracing::error!("Bot manager failed to generate action: {}", e);
+                if need == 0 {
+                    PlayerAction::CheckCall
+                } else {
+                    PlayerAction::Fold
+                }
+            }
+        };
+
+        tracing::info!(
+            "🤖 Bot {} took action: {:?} (stack: {})",
+            player.name,
+            action,
+            player.stack
+        );
+
+        if let Err(e) = action_sink.send_bot_action(player.id, action).await {
+            tracing::warn!(%e, "failed to submit bot action");
+        }
+    }
+}
+
+pub fn pick_delay(min_ms: u64, max_ms: u64) -> u64 {
+    if max_ms <= min_ms {
+        return min_ms;
+    }
+    let span = max_ms - min_ms;
+    let jitter = random::<u64>() % (span + 1);
+    min_ms + jitter
+}

@@ -1,0 +1,17 @@
+[package]
+name = "lsp_server"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true  # This pulls the license from the root
+
+[dependencies]
+front_end = { workspace = true }
+pest_consume = { workspace = true }
+tower-lsp = "0.20"
+lsp-types = "0.97.0"
+tokio = { workspace = true }
+pest = { workspace = true }
+arc-swap = "1.7"
+ropey = "1"
+dashmap = "6.0"
+serde_json = { workspace = true }

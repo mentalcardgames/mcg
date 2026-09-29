@@ -87,14 +87,14 @@ impl RandomPlayer {
                 .clone()
                 .unwrap_or_else(|| "P1".to_string());
             let mut r = rng.lock().unwrap();
-            let invalid: bool = r.gen_bool(INVALID_ANSWER_CHANCE);
+            let invalid: bool = r.random_bool(INVALID_ANSWER_CHANCE);
 
             match it {
                 InputType::Choice { max_index, .. } => {
                     let idx = if invalid {
-                        max_index + 1 + r.gen_range(0..3)
+                        max_index + 1 + r.random_range(0..3)
                     } else {
-                        r.gen_range(0..=max_index)
+                        r.random_range(0..=max_index)
                     };
                     Input {
                         player_id: who,
@@ -103,7 +103,7 @@ impl RandomPlayer {
                 }
                 InputType::Optional { .. } => Input {
                     player_id: who,
-                    kind: if r.gen_bool(0.5) {
+                    kind: if r.random_bool(0.5) {
                         InputKind::OptionalAccept
                     } else {
                         InputKind::OptionalDecline
@@ -111,11 +111,11 @@ impl RandomPlayer {
                 },
                 InputType::ChoosePlayer { candidates, .. } => {
                     let idx = if invalid {
-                        candidates.len() + r.gen_range(0..3)
+                        candidates.len() + r.random_range(0..3)
                     } else if candidates.is_empty() {
                         0
                     } else {
-                        r.gen_range(0..candidates.len())
+                        r.random_range(0..candidates.len())
                     };
                     Input {
                         player_id: who,
@@ -132,7 +132,7 @@ impl RandomPlayer {
                                 selected: vec![display.len() + 5],
                             },
                         }
-                    } else if r.gen_bool(0.5) {
+                    } else if r.random_bool(0.5) {
                         // Half the time submit nothing: valid as a "skip" for
                         // combo prompts (min = 0); rejected + re-prompted for
                         // prompts with min >= 1 (the next roll may succeed).
@@ -142,7 +142,7 @@ impl RandomPlayer {
                         }
                     } else {
                         let count = if max > min {
-                            r.gen_range(min..=max)
+                            r.random_range(min..=max)
                         } else {
                             min
                         };
@@ -160,9 +160,9 @@ impl RandomPlayer {
                     let low = min.unwrap_or(-1000);
                     let high = max.unwrap_or(1000);
                     let value = if invalid || high <= low {
-                        high + 1 + r.gen_range(0..5)
+                        high + 1 + r.random_range(0..5)
                     } else {
-                        r.gen_range(low..=high)
+                        r.random_range(low..=high)
                     };
                     Input {
                         player_id: who,

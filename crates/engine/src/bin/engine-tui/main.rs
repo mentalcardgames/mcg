@@ -130,7 +130,7 @@ fn driver() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     tui_state.choose_cursor = 0;
                     tui_state.choose_selected = vec![false; display.len()];
                 }
-                InputType::ChoosePlayer { candidates: _, .. } | InputType::Choice { .. } => {
+                InputType::ChoosePlayer { .. } | InputType::Choice { .. } => {
                     tui_state.choose_cursor = 0;
                     tui_state.choose_selected = Vec::new();
                 }

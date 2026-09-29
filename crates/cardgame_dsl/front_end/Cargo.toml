@@ -1,0 +1,29 @@
+[package]
+name = "front_end"
+version = "0.1.0"
+edition = "2024"
+# Points cargo to your build script
+build = "build.rs"
+license.workspace = true  # This pulls the license from the root
+
+[dependencies]
+code_gen = { workspace = true }
+pest = { workspace = true }
+pest_derive = { workspace = true }
+pest_consume = { workspace = true }
+quote = { workspace = true }
+regex = "1.12.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+proptest = { workspace = true }
+proptest-arbitrary-interop = "0.1"
+arbitrary = { version = "1.3", features = ["derive"] }
+layout-rs = "0.1.1"
+
+[build-dependencies]
+# Dependencies EXCLUSIVELY for build.rs
+pest_meta = "2.8"
+
+[[bin]]
+name = "cgdsl2json"
+path = "src/main.rs"

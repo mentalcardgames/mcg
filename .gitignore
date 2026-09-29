@@ -1,5 +1,5 @@
 /target/
-/frontend/target/
+/crates/frontend/target/
 **/*.rs.bk
 *.swp
 *.swo
@@ -8,13 +8,13 @@ wasm-pack.log
 node_modules/
 dist/
 .DS_Store
-.vscode/
+/.vscode/
 .idea/
 node_modules
 dist
 .crush
 server.log
-mcg-server.toml
+mcg-server*.toml
 tags
 mcg_server_public.toml
 *.log
@@ -25,3 +25,4 @@ mcg_server_public.toml
 CLAUDE.md
 CRUSH.md
 WARP.md
+OPENCODE.md

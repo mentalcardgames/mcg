@@ -1,0 +1,705 @@
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use axum::extract::ws::WebSocket;
+use iroh::endpoint::Endpoint;
+use iroh_tickets::endpoint::EndpointTicket;
+use mcg_shared::{Backend2FrontendMsg, Peer2PeerMsg};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::sync::{mpsc, oneshot};
+
+use crate::config::Config;
+use crate::network::iroh::{
+    IrohConnectError, IrohConnector, IrohEndpointConnector, IrohReader, IrohWriter,
+};
+use crate::network::{ConnectionId, NetworkError, PeerId, TransportKind};
+
+/// Internal request contract sent from [`NetworkHandle`] to [`super::NetworkSupervisor`].
+pub(crate) enum SupervisorRequest {
+    Shutdown {
+        response_tx: oneshot::Sender<()>,
+    },
+    StartAxumListener {
+        addr: SocketAddr,
+        response_tx: oneshot::Sender<Result<SocketAddr, NetworkError>>,
+    },
+    StartIrohListener {
+        config: Config,
+        config_path: Option<PathBuf>,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    StartIrohEndpointListener {
+        endpoint: Endpoint,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    StopListener {
+        transport: TransportKind,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    ConfigureIroh {
+        connector: Arc<dyn IrohConnector>,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    EstablishIrohPeerConnection {
+        ticket: EndpointTicket,
+        response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
+    },
+    RegisterFrontendWebSocket {
+        socket: Box<WebSocket>,
+        response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
+    },
+    RegisterIrohPeer {
+        peer_id: PeerId,
+        reader: Box<dyn AsyncRead + Unpin + Send>,
+        writer: Box<dyn AsyncWrite + Unpin + Send>,
+        response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
+    },
+    RegisterIrohFrontend {
+        reader: Box<dyn AsyncRead + Unpin + Send>,
+        writer: Box<dyn AsyncWrite + Unpin + Send>,
+        response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
+    },
+    UnicastFrontend {
+        connection_id: ConnectionId,
+        message: Backend2FrontendMsg,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    UnicastPeer {
+        connection_id: ConnectionId,
+        message: Peer2PeerMsg,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    BroadcastFrontend {
+        message: Backend2FrontendMsg,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    BroadcastPeer {
+        message: Peer2PeerMsg,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    CloseConnection {
+        connection_id: ConnectionId,
+        reason: String,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+    PublishLocalTicket {
+        ticket: EndpointTicket,
+        response_tx: oneshot::Sender<Result<(), NetworkError>>,
+    },
+}
+
+pub(crate) struct IrohConnectResult {
+    pub(crate) peer_id: PeerId,
+    pub(crate) result: Result<(PeerId, IrohReader, IrohWriter), IrohConnectError>,
+    pub(crate) response_tx: oneshot::Sender<Result<ConnectionId, NetworkError>>,
+}
+
+/// Cloneable interface used by transports and application logic.
+#[derive(Clone)]
+pub struct NetworkHandle {
+    pub(crate) request_tx: mpsc::Sender<SupervisorRequest>,
+}
+
+impl NetworkHandle {
+    pub(super) fn new(request_tx: mpsc::Sender<SupervisorRequest>) -> Self {
+        Self { request_tx }
+    }
+
+    /// Requests an orderly shutdown of the supervisor and all owned child tasks.
+    pub async fn shutdown(&self) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::Shutdown { response_tx })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)
+    }
+
+    /// Synchronously requests an orderly shutdown of the supervisor and all owned child tasks.
+    pub fn blocking_shutdown(&self) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::Shutdown { response_tx })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)
+    }
+
+    /// Starts an Axum HTTP/WebSocket listener supervised by the network subsystem.
+    pub async fn start_axum_listener(&self, addr: SocketAddr) -> Result<SocketAddr, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::StartAxumListener { addr, response_tx })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously starts an Axum HTTP/WebSocket listener supervised by the network subsystem.
+    pub fn blocking_start_axum_listener(
+        &self,
+        addr: SocketAddr,
+    ) -> Result<SocketAddr, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::StartAxumListener { addr, response_tx })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Starts an Iroh QUIC listener supervised by the network subsystem.
+    pub async fn start_iroh_listener(
+        &self,
+        config: Config,
+        config_path: Option<PathBuf>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::StartIrohListener {
+                config,
+                config_path,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously starts an Iroh QUIC listener supervised by the network subsystem.
+    pub fn blocking_start_iroh_listener(
+        &self,
+        config: Config,
+        config_path: Option<PathBuf>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::StartIrohListener {
+                config,
+                config_path,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Starts a listener for an already-instantiated Iroh endpoint, supervised by the network subsystem.
+    pub async fn start_iroh_endpoint_listener(
+        &self,
+        endpoint: Endpoint,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::StartIrohEndpointListener {
+                endpoint,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously starts a listener for an already-instantiated Iroh endpoint.
+    pub fn blocking_start_iroh_endpoint_listener(
+        &self,
+        endpoint: Endpoint,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::StartIrohEndpointListener {
+                endpoint,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Stops the Iroh listener if one is currently running.
+    pub async fn stop_iroh_listener(&self) -> Result<(), NetworkError> {
+        self.stop_listener(TransportKind::Iroh).await
+    }
+
+    /// Synchronously stops the Iroh listener if one is currently running.
+    pub fn blocking_stop_iroh_listener(&self) -> Result<(), NetworkError> {
+        self.blocking_stop_listener(TransportKind::Iroh)
+    }
+
+    /// Stops the Axum HTTP/WebSocket listener if one is currently running.
+    pub async fn stop_axum_listener(&self) -> Result<(), NetworkError> {
+        self.stop_listener(TransportKind::WebSocket).await
+    }
+
+    /// Synchronously stops the Axum HTTP/WebSocket listener if one is currently running.
+    pub fn blocking_stop_axum_listener(&self) -> Result<(), NetworkError> {
+        self.blocking_stop_listener(TransportKind::WebSocket)
+    }
+
+    /// Stops the transport listener for the specified transport kind.
+    pub async fn stop_listener(&self, transport: TransportKind) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::StopListener {
+                transport,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously stops the transport listener for the specified transport kind.
+    pub fn blocking_stop_listener(&self, transport: TransportKind) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::StopListener {
+                transport,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Configures the Iroh endpoint used for outgoing peer connections.
+    pub async fn configure_iroh_endpoint(&self, endpoint: Endpoint) -> Result<(), NetworkError> {
+        self.configure_iroh_connector(Arc::new(IrohEndpointConnector::new(endpoint)))
+            .await
+    }
+
+    /// Synchronously configures the Iroh endpoint used for outgoing peer connections.
+    pub fn blocking_configure_iroh_endpoint(&self, endpoint: Endpoint) -> Result<(), NetworkError> {
+        self.blocking_configure_iroh_connector(Arc::new(IrohEndpointConnector::new(endpoint)))
+    }
+
+    pub(crate) async fn configure_iroh_connector(
+        &self,
+        connector: Arc<dyn IrohConnector>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::ConfigureIroh {
+                connector,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    pub(crate) fn blocking_configure_iroh_connector(
+        &self,
+        connector: Arc<dyn IrohConnector>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::ConfigureIroh {
+                connector,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Publishes the local ticket to the supervisor and the controller.
+    pub async fn publish_local_ticket(&self, ticket: EndpointTicket) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::PublishLocalTicket {
+                ticket,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously publishes the local ticket to the supervisor and the controller.
+    pub fn blocking_publish_local_ticket(
+        &self,
+        ticket: EndpointTicket,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::PublishLocalTicket {
+                ticket,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Establishes and registers an outgoing Iroh peer connection.
+    pub async fn establish_iroh_peer_connection(
+        &self,
+        ticket: EndpointTicket,
+    ) -> Result<ConnectionId, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::EstablishIrohPeerConnection {
+                ticket,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously establishes and registers an outgoing Iroh peer connection.
+    pub fn blocking_establish_iroh_peer_connection(
+        &self,
+        ticket: EndpointTicket,
+    ) -> Result<ConnectionId, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::EstablishIrohPeerConnection {
+                ticket,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Registers an upgraded frontend WebSocket with the supervisor.
+    pub async fn register_frontend_websocket(
+        &self,
+        socket: WebSocket,
+    ) -> Result<ConnectionId, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::RegisterFrontendWebSocket {
+                socket: Box::new(socket),
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously registers an upgraded frontend WebSocket with the supervisor.
+    pub fn blocking_register_frontend_websocket(
+        &self,
+        socket: WebSocket,
+    ) -> Result<ConnectionId, NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::RegisterFrontendWebSocket {
+                socket: Box::new(socket),
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Registers an established Iroh peer stream with the supervisor.
+    pub async fn register_iroh_peer<R, W>(
+        &self,
+        peer_id: PeerId,
+        reader: R,
+        writer: W,
+    ) -> Result<ConnectionId, NetworkError>
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::RegisterIrohPeer {
+                peer_id,
+                reader: Box::new(reader),
+                writer: Box::new(writer),
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously registers an established Iroh peer stream with the supervisor.
+    pub fn blocking_register_iroh_peer<R, W>(
+        &self,
+        peer_id: PeerId,
+        reader: R,
+        writer: W,
+    ) -> Result<ConnectionId, NetworkError>
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::RegisterIrohPeer {
+                peer_id,
+                reader: Box::new(reader),
+                writer: Box::new(writer),
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Registers an established Iroh frontend stream with the supervisor.
+    pub async fn register_iroh_frontend<R, W>(
+        &self,
+        reader: R,
+        writer: W,
+    ) -> Result<ConnectionId, NetworkError>
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::RegisterIrohFrontend {
+                reader: Box::new(reader),
+                writer: Box::new(writer),
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously registers an established Iroh frontend stream with the supervisor.
+    pub fn blocking_register_iroh_frontend<R, W>(
+        &self,
+        reader: R,
+        writer: W,
+    ) -> Result<ConnectionId, NetworkError>
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::RegisterIrohFrontend {
+                reader: Box::new(reader),
+                writer: Box::new(writer),
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Sends a targeted message to a single registered frontend connection.
+    pub async fn unicast_frontend(
+        &self,
+        connection_id: ConnectionId,
+        message: Backend2FrontendMsg,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::UnicastFrontend {
+                connection_id,
+                message,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously sends a targeted message to a single registered frontend connection.
+    pub fn blocking_unicast_frontend(
+        &self,
+        connection_id: ConnectionId,
+        message: Backend2FrontendMsg,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::UnicastFrontend {
+                connection_id,
+                message,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Sends a targeted message to a single registered peer connection.
+    pub async fn unicast_peer(
+        &self,
+        connection_id: ConnectionId,
+        message: Peer2PeerMsg,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::UnicastPeer {
+                connection_id,
+                message,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously sends a targeted message to a single registered peer connection.
+    pub fn blocking_unicast_peer(
+        &self,
+        connection_id: ConnectionId,
+        message: Peer2PeerMsg,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::UnicastPeer {
+                connection_id,
+                message,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Broadcasts a typed message across all registered frontend connections.
+    pub async fn broadcast_frontend(
+        &self,
+        message: Backend2FrontendMsg,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::BroadcastFrontend {
+                message,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously broadcasts a typed message across all registered frontend connections.
+    pub fn blocking_broadcast_frontend(
+        &self,
+        message: Backend2FrontendMsg,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::BroadcastFrontend {
+                message,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Broadcasts a typed message across all registered peer connections.
+    pub async fn broadcast_peer(&self, message: Peer2PeerMsg) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::BroadcastPeer {
+                message,
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously broadcasts a typed message across all registered peer connections.
+    pub fn blocking_broadcast_peer(&self, message: Peer2PeerMsg) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::BroadcastPeer {
+                message,
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Requests closing a concrete connection with a diagnostic reason.
+    pub async fn close_connection(
+        &self,
+        connection_id: ConnectionId,
+        reason: impl Into<String>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .send(SupervisorRequest::CloseConnection {
+                connection_id,
+                reason: reason.into(),
+                response_tx,
+            })
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .await
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+
+    /// Synchronously requests closing a concrete connection with a diagnostic reason.
+    pub fn blocking_close_connection(
+        &self,
+        connection_id: ConnectionId,
+        reason: impl Into<String>,
+    ) -> Result<(), NetworkError> {
+        let (response_tx, response_rx) = oneshot::channel();
+        self.request_tx
+            .blocking_send(SupervisorRequest::CloseConnection {
+                connection_id,
+                reason: reason.into(),
+                response_tx,
+            })
+            .map_err(|_| NetworkError::SupervisorStopped)?;
+        response_rx
+            .blocking_recv()
+            .map_err(|_| NetworkError::SupervisorStopped)?
+    }
+}

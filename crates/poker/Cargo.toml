@@ -1,0 +1,22 @@
+[package]
+name = "mcg-poker"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = ["driver"]
+driver = ["dep:tokio", "dep:async-trait"]
+
+[dependencies]
+mcg-shared = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

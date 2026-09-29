@@ -6,8 +6,8 @@
 	],
 	"settings": {
 		"rust-analyzer.linkedProjects": [
-			"Cargo.toml",           // The root workspace (Native)
-			"frontend/Cargo.toml"   // The frontend (WASM)
+			"Cargo.toml",                  // The root workspace (Native)
+			"crates/frontend/Cargo.toml"   // The frontend (WASM)
 		]
 	}
 }

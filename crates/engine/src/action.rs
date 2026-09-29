@@ -92,7 +92,7 @@ pub fn execute_setup_rule(payload: SetUpRule, game_data: &mut GameData) -> Resul
             use rand::seq::SliceRandom;
             let mut indices =
                 crate::query::Evaluator::resolve_player_collection(&player_collection, game_data)?;
-            indices.shuffle(&mut rand::thread_rng());
+            indices.shuffle(&mut rand::rng());
             game_data.turn_order = indices;
             Ok(())
         }
@@ -309,11 +309,11 @@ pub(crate) fn execute_action_rule(
                             .map(|(i, _)| i)
                             .collect();
                         if positions.len() == loc.cards.len() {
-                            loc.cards.shuffle(&mut rand::thread_rng());
+                            loc.cards.shuffle(&mut rand::rng());
                         } else if positions.len() > 1 {
                             let mut shuffled: Vec<usize> =
                                 positions.iter().map(|&i| loc.cards[i]).collect();
-                            shuffled.shuffle(&mut rand::thread_rng());
+                            shuffled.shuffle(&mut rand::rng());
                             for (slot, id) in positions.into_iter().zip(shuffled) {
                                 loc.cards[slot] = id;
                             }

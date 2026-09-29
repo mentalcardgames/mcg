@@ -245,88 +245,86 @@ pub(super) fn handle_key(code: KeyCode, state: &mut TuiState) -> bool {
                 state.number_buffer.pop();
             }
         }
-        KeyCode::Enter => {
-            if state.waiting_for_input && is_current_player(state) {
-                let player_name = state
-                    .current_state
-                    .as_ref()
-                    .and_then(|gd| gd.players.get(state.perspective_idx))
-                    .map(|p| p.name.clone())
-                    .unwrap_or_else(|| format!("Player{}", state.perspective_idx));
-                match &state.pending_input {
-                    Some(InputType::Number { min, max, .. }) => {
-                        if let Ok(value) = state.number_buffer.trim().parse::<i32>() {
-                            if min.is_none_or(|m| value >= m) && max.is_none_or(|x| value <= x) {
-                                if let Some(ref tx) = state.input_tx {
-                                    let _ = tx.send(Input {
-                                        player_id: player_name,
-                                        kind: InputKind::Number { value },
-                                    });
-                                    state.waiting_for_input = false;
-                                    state.pending_input = None;
-                                    state.number_buffer.clear();
-                                }
-                            }
-                        }
-                    }
-                    Some(InputType::ChooseCards { min, max, .. }) => {
-                        let selected: Vec<usize> = state
-                            .choose_selected
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, &s)| s)
-                            .map(|(i, _)| i)
-                            .collect();
-                        if selected.len() >= *min && selected.len() <= *max {
+        KeyCode::Enter if state.waiting_for_input && is_current_player(state) => {
+            let player_name = state
+                .current_state
+                .as_ref()
+                .and_then(|gd| gd.players.get(state.perspective_idx))
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| format!("Player{}", state.perspective_idx));
+            match &state.pending_input {
+                Some(InputType::Number { min, max, .. }) => {
+                    if let Ok(value) = state.number_buffer.trim().parse::<i32>() {
+                        if min.is_none_or(|m| value >= m) && max.is_none_or(|x| value <= x) {
                             if let Some(ref tx) = state.input_tx {
                                 let _ = tx.send(Input {
                                     player_id: player_name,
-                                    kind: InputKind::ChooseCards { selected },
+                                    kind: InputKind::Number { value },
                                 });
                                 state.waiting_for_input = false;
                                 state.pending_input = None;
+                                state.number_buffer.clear();
                             }
                         }
                     }
-                    Some(InputType::ChoosePlayer { .. }) => {
-                        if let Some(ref tx) = state.input_tx {
-                            let _ = tx.send(Input {
-                                player_id: player_name,
-                                kind: InputKind::ChoosePlayer {
-                                    idx: state.choose_cursor,
-                                },
-                            });
-                            state.waiting_for_input = false;
-                            state.pending_input = None;
-                        }
-                    }
-                    Some(InputType::Choice { .. }) => {
-                        if let Some(ref tx) = state.input_tx {
-                            let _ = tx.send(Input {
-                                player_id: player_name,
-                                kind: InputKind::Choice {
-                                    idx: state.choose_cursor,
-                                },
-                            });
-                            state.waiting_for_input = false;
-                            state.pending_input = None;
-                        }
-                    }
-                    Some(InputType::Optional(_)) => {
-                        // Enter = accept (y/n remain the explicit
-                        // controls; sending a non-Optional Input
-                        // here would error the engine).
-                        if let Some(ref tx) = state.input_tx {
-                            let _ = tx.send(Input {
-                                player_id: player_name,
-                                kind: InputKind::OptionalAccept,
-                            });
-                            state.waiting_for_input = false;
-                            state.pending_input = None;
-                        }
-                    }
-                    _ => {}
                 }
+                Some(InputType::ChooseCards { min, max, .. }) => {
+                    let selected: Vec<usize> = state
+                        .choose_selected
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, &s)| s)
+                        .map(|(i, _)| i)
+                        .collect();
+                    if selected.len() >= *min && selected.len() <= *max {
+                        if let Some(ref tx) = state.input_tx {
+                            let _ = tx.send(Input {
+                                player_id: player_name,
+                                kind: InputKind::ChooseCards { selected },
+                            });
+                            state.waiting_for_input = false;
+                            state.pending_input = None;
+                        }
+                    }
+                }
+                Some(InputType::ChoosePlayer { .. }) => {
+                    if let Some(ref tx) = state.input_tx {
+                        let _ = tx.send(Input {
+                            player_id: player_name,
+                            kind: InputKind::ChoosePlayer {
+                                idx: state.choose_cursor,
+                            },
+                        });
+                        state.waiting_for_input = false;
+                        state.pending_input = None;
+                    }
+                }
+                Some(InputType::Choice { .. }) => {
+                    if let Some(ref tx) = state.input_tx {
+                        let _ = tx.send(Input {
+                            player_id: player_name,
+                            kind: InputKind::Choice {
+                                idx: state.choose_cursor,
+                            },
+                        });
+                        state.waiting_for_input = false;
+                        state.pending_input = None;
+                    }
+                }
+                Some(InputType::Optional(_)) => {
+                    // Enter = accept (y/n remain the explicit
+                    // controls; sending a non-Optional Input
+                    // here would error the engine).
+                    if let Some(ref tx) = state.input_tx {
+                        let _ = tx.send(Input {
+                            player_id: player_name,
+                            kind: InputKind::OptionalAccept,
+                        });
+                        state.waiting_for_input = false;
+                        state.pending_input = None;
+                    }
+                }
+                _ => {}
             }
         }
         _ => {}

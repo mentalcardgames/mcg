@@ -48,8 +48,8 @@ impl FrameFactor {
         let participant_idx = idx / FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
         let factor_idx = idx % FRAGMENTS_PER_PARTICIPANT_PER_EPOCH;
         let factor_idx_shifted = factor_idx.checked_sub(self.offsets[participant_idx] as usize)?;
-        (self.widths[participant_idx] as usize * 2).checked_sub(factor_idx_shifted)?;
-        if self.widths[participant_idx] == 0 {
+        let max_width = self.widths[participant_idx] as usize * 2;
+        if factor_idx_shifted >= max_width || max_width == 0 {
             return None;
         }
         Some(
@@ -183,7 +183,7 @@ impl WideFactor {
                 {
                     continue;
                 }
-                width[participant] = (factor as u16 - offsets[participant]).div_ceil(2) as u8;
+                width[participant] = (factor as u16 - offsets[participant] + 1).div_ceil(2) as u8;
                 break;
             }
         }

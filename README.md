@@ -1,13 +1,16 @@
 # MCG
 
-A Rust workspace for a browser-based card game. The frontend (crate: `frontend`) compiles
-to WebAssembly (WASM) and renders with eframe/egui. The native node (crate: `native_mcg`) provides
-an HTTP/WebSocket backend that serves the SPA and provides the real-time poker demo. A shared
-crate contains the serialized message types and supporting structures.
+A Rust workspace for a browser-based card game.
+The frontend (crate: `frontend`) compiles to WebAssembly (WASM) and renders
+with eframe/egui.
+The native node (crate: `native_mcg`) provides an HTTP/WebSocket backend that
+serves the SPA and provides the real-time poker demo.
+A shared crate contains the serialized message types and supporting structures.
 
 ## Quick start
 
-- Prerequisites: Rust (stable toolchain), `wasm-pack` in PATH, and the `just` task runner.
+- Prerequisites:
+Rust (stable toolchain), `wasm-pack` in PATH, and the `just` task runner.
 
 - Build the WASM bundle (outputs to repo-root ./pkg):
   - `just build`              # release (optimized)
@@ -20,14 +23,68 @@ crate contains the serialized message types and supporting structures.
 - Build then run together:
   - `just start`              # release build + backend
 
-Notes
-- The server binds to the first available port starting at 3000 and logs the chosen URL (e.g., http://localhost:3000). Open that URL in the browser.
-- The native node assumes current working directory is the repo root to serve ./pkg and ./media.
-- wasm-pack builds are run from the `frontend/` crate and emit to ../pkg (repo root). If a `frontend/pkg` directory exists, prefer the root `pkg` output.
+## Multi-Backend Ports & Configuration (Local Multi-Instance Testing)
+
+By default, `native_mcg` searches for an available port starting at port `3000`.
+If port 3000 is occupied by another running instance, it automatically binds to
+the next free port (`3001`, `3002`, etc.).
+
+### Independent Iroh Identities (P2P Lobby & Pairing)
+
+Each backend instance runs an Iroh QUIC endpoint for peer-to-peer communication.
+By default, the server persists its identity key in `mcg-server.toml`.
+If you start two backend instances using the same `mcg-server.toml`, both will share
+the exact same Node ID and endpoint ticket. Attempting to connect them (e.g. by scanning
+the lobby QR code) will fail because an endpoint cannot connect to itself.
+
+To run multiple backends concurrently on the same machine, choose one of the following approaches:
+
+#### Approach 1: Ephemeral Key (Recommended for Quick Local Testing)
+Start the second instance (or both) with the `--ephemeral` flag. It generates a temporary,
+non-persisted Iroh identity in memory and automatically binds to the next free port:
+
+```shell
+# Terminal 1 (Node 1 on port 3000):
+just backend
+
+# Terminal 2 (Node 2 on port 3001 with ephemeral identity):
+just backend --ephemeral
+```
+Or directly with cargo:
+```shell
+cargo run -p native_mcg --bin native_mcg -- --ephemeral
+```
+
+#### Approach 2: Separate Config Files
+Specify an independent config file for the second instance. If the file does not exist yet,
+a new unique Iroh key will be generated and saved to that file:
+
+```shell
+# Terminal 1:
+just backend --config mcg-server-1.toml --port 3000
+
+# Terminal 2:
+just backend --config mcg-server-2.toml --port 3001
+```
+Or directly with cargo:
+```shell
+cargo run -p native_mcg --bin native_mcg -- --config mcg-server-2.toml --port 3001
+```
+
+## Documentation
+
+The official project documentation is published at [https://mentalcardgames.github.io/](https://mentalcardgames.github.io/).
+
+Its source files are located in the `docs/` submodule.
+For instructions on installing documentation dependencies, compiling markdown
+to HTML, and running the local VitePress preview server, see
+[`docs/README.md`](docs/README.md).
 
 ## Headless CLI (for automation and testing)
 
-A minimal CLI is provided to exercise the same WebSocket protocol as the GUI client. It is useful for smoke tests and AI agents.
+A minimal CLI is provided to exercise the same WebSocket protocol as the GUI
+client.
+It is useful for smoke tests and AI agents.
 
 - Run directly:
   - `cargo run -p native_mcg --bin mcg-cli -- [GLOBAL-OPTS] <COMMAND> [ARGS]`
@@ -35,14 +92,19 @@ A minimal CLI is provided to exercise the same WebSocket protocol as the GUI cli
   - `just cli -- [GLOBAL-OPTS] <COMMAND> [ARGS]`
 
 Global options
-- `--server` Base server URL (default: `http://localhost:3000`). Accepts http(s):// or ws(s)://; the CLI normalizes to ws(s) and forces path `/ws`.
+- `--server` Base server URL (default: `http://localhost:3000`).
+Accepts http(s):// or ws(s)://; the CLI normalizes to ws(s) and forces path `/ws`.
 - `--name`   Join name to use (default: `CLI`).
-- `--wait-ms` How long to wait for state updates after a command (default: 1200ms). Useful to capture bot activity.
+- `--wait-ms` How long to wait for state updates after a command
+(default: 1200ms).
+Useful to capture bot activity.
 - `--json` Output JSON instead of a colorful, human-readable summary.
 
 Commands (examples)
 - Join and print first State:
-  - `just cli join` (the CLI will connect, wait for `Backend2FrontendMsg::Welcome` and the initial `State`, then it may send follow-up `Frontend2BackendMsg` commands)
+  - `just cli join`
+  (the CLI will connect, wait for `Backend2FrontendMsg::Welcome` and the
+  initial `State`, then it may send follow-up `Frontend2BackendMsg` commands)
 - Request latest State:
   - `just cli -- state`
 - Send actions:
@@ -55,16 +117,9 @@ Commands (examples)
   - `just cli -- reset --bots 3`
 
 Output
-- Default: a concise, colorized summary with stage, pot, players (including whose turn), board and your cards (if available), and a readable action log.
+- Default: a concise, colorized summary with stage, pot, players (including
+whose turn), board and your cards (if available), and a readable action log.
 - With `--json`: pretty-printed `PokerStatePublic` JSON.
-
-## Workspace layout
-
-- `frontend/`: WASM/egui frontend and all UI/game/screen code (previously `client/`)
-- `native_mcg/`: Native node containing the backend (HTTP + WebSocket + iroh), CLI, and native-only helpers (previously `server/`)
-- `shared/`: Types shared between frontend and native_mcg (serde-serializable protocol and game data)
-- `pkg/`: wasm-pack output (mcg.js, mcg_bg.wasm, mcg.d.ts) loaded by `index.html`
-- `index.html`: loads `pkg/mcg.js` and starts the game on a full-screen canvas
 
 ## Adding new screens (frontend)
 
@@ -267,14 +322,34 @@ Please share your solution if you find out how to get it running.
 
 ## Testing and linting
 
-- Tests (if present):
+We provide unified `just` recipes to format, lint, and test all crates (both the root Cargo workspace and the standalone `crates/frontend`), or individual crates specified by name or alias:
+
+- **Full CI suite** (format check + clippy + tests):
+  - `just ci`                 # runs full gate across all crates including frontend
+  - `just ci frontend`        # runs full gate for frontend only
+  - `just ci poker`           # runs full gate for mcg-poker (supports aliases)
+
+- **Clippy** (fail on warnings with `-D warnings`):
+  - `just clippy`             # lints all workspace crates + frontend (wasm32)
+  - `just clippy frontend`    # lints frontend for wasm32-unknown-unknown
+  - `just clippy engine`      # lints cgdsl-engine (aliases: engine, poker, shared, etc.)
+
+- **Format checking and formatting**:
+  - `just fmt-check`          # checks rustfmt across workspace and frontend (alias: check-fmt)
+  - `just fmt`                # formats workspace and frontend (alias: format)
+  - `just fmt-check frontend` # checks formatting on frontend only
+
+- **Tests**:
+  - `just test`               # runs workspace tests + frontend tests in headless Chrome
+  - `just test frontend`      # runs frontend tests with wasm-pack test
+  - `just test poker`         # runs cargo test -p mcg-poker
+
+- **Manual Cargo commands**:
   - `cargo test --workspace`
-  - `cargo test -p shared`
-  - `cargo test -p native_mcg game::state::tests::your_test_name`
-- Lint with Clippy (fail on warnings):
   - `cargo clippy --workspace --all-targets -- -D warnings`
-- Format:
-  - `cargo fmt --all`
+  - `cargo fmt --all -- --check`
+  - `cargo clippy --manifest-path crates/frontend/Cargo.toml --target wasm32-unknown-unknown --all-targets -- -D warnings`
+  - `wasm-pack test --headless --chrome crates/frontend`
 
 ## License
 
