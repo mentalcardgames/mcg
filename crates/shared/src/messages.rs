@@ -61,6 +61,8 @@ pub enum Frontend2BackendMsg {
     GetPlayers,
     Disconnect,
     ReadyUpdate(bool),
+    UpdatePlayerSetup(Vec<PlayerConfig>),
+    RequestPlayerSetup,
 }
 
 /// Messages that the backend sends to the frontend
@@ -68,6 +70,7 @@ pub enum Frontend2BackendMsg {
 #[serde(tag = "type", content = "data")]
 pub enum Backend2FrontendMsg {
     UpdatePokerState(PokerStatePublic),
+    PlayerSetup(Vec<PlayerConfig>),
     Error(String),
     Pong,
     TicketValue(String),
@@ -112,6 +115,11 @@ mod tests {
             Backend2FrontendMsg::OurName("Bob".into()),
             Backend2FrontendMsg::RemovePlayer("Charlie".into()),
             Backend2FrontendMsg::PlayerReady("Dave".into(), true),
+            Backend2FrontendMsg::PlayerSetup(vec![PlayerConfig {
+                id: PlayerId(0),
+                name: "Alice".into(),
+                is_bot: false,
+            }]),
             Backend2FrontendMsg::UpdatePokerState(PokerStatePublic {
                 players: vec![],
                 community: vec![],
@@ -153,6 +161,12 @@ mod tests {
             Frontend2BackendMsg::QrValue("ticket".into()),
             Frontend2BackendMsg::QrReq("req".into()),
             Frontend2BackendMsg::RequestState,
+            Frontend2BackendMsg::RequestPlayerSetup,
+            Frontend2BackendMsg::UpdatePlayerSetup(vec![PlayerConfig {
+                id: PlayerId(0),
+                name: "Alice".into(),
+                is_bot: false,
+            }]),
             Frontend2BackendMsg::NewGame { players: vec![] },
             Frontend2BackendMsg::Action {
                 player_id: PlayerId(0),

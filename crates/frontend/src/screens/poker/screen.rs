@@ -22,6 +22,7 @@ pub struct PokerOnlineScreen {
     player_manager: PlayerManager,
     betting_controls: BettingControls,
     game_state: Option<PokerStatePublic>,
+    setup_requested: bool,
 }
 
 impl PokerOnlineScreen {
@@ -31,6 +32,7 @@ impl PokerOnlineScreen {
             player_manager: PlayerManager::new(),
             betting_controls: BettingControls::default(),
             game_state: None,
+            setup_requested: false,
         }
     }
 
@@ -74,17 +76,17 @@ impl PokerOnlineScreen {
         render_player_setup(ui, ctx);
 
         // Add the player table and controls
-        self.render_players_table(ui);
+        self.render_players_table(ui, sender, connected);
         ui.add_space(8.0);
 
-        self.render_add_player_section(ui);
+        self.render_add_player_section(ui, sender, connected);
         ui.add_space(16.0);
 
         self.render_start_game_button(ui, ctx, sender, connected);
         self.add_game_instructions(ui);
     }
 
-    fn render_players_table(&mut self, ui: &mut Ui) {
+    fn render_players_table(&mut self, ui: &mut Ui, sender: &dyn MessageSender, connected: bool) {
         ui.group(|ui| {
             ui.label(RichText::new("Players:").strong());
             ui.add_space(4.0);
@@ -95,7 +97,7 @@ impl PokerOnlineScreen {
                 .striped(true)
                 .show(ui, |ui| {
                     self.render_players_table_header(ui);
-                    self.render_players_table_rows(ui);
+                    self.render_players_table_rows(ui, sender, connected);
                 });
         });
     }
@@ -108,7 +110,12 @@ impl PokerOnlineScreen {
         ui.end_row();
     }
 
-    fn render_players_table_rows(&mut self, ui: &mut Ui) {
+    fn render_players_table_rows(
+        &mut self,
+        ui: &mut Ui,
+        sender: &dyn MessageSender,
+        connected: bool,
+    ) {
         let mut edits = PlayerTableEdits::default();
 
         let players_snapshot = self.player_manager.get_players().clone();
@@ -116,7 +123,7 @@ impl PokerOnlineScreen {
             self.render_player_row(ui, player, idx, &mut edits);
         }
 
-        self.apply_player_updates(edits);
+        self.apply_player_updates(edits, sender, connected);
     }
 
     fn render_player_row(
@@ -197,11 +204,21 @@ impl PokerOnlineScreen {
         }
     }
 
-    fn apply_player_updates(&mut self, edits: PlayerTableEdits) {
+    fn apply_player_updates(
+        &mut self,
+        edits: PlayerTableEdits,
+        sender: &dyn MessageSender,
+        connected: bool,
+    ) {
+        let mut changed = false;
+
         // Apply bot status updates after iteration
         for (idx, is_bot) in edits.bot_updates {
             if let Some(p) = self.player_manager.get_players_mut().get_mut(idx) {
-                p.is_bot = is_bot;
+                if p.is_bot != is_bot {
+                    p.is_bot = is_bot;
+                    changed = true;
+                }
             }
         }
 
@@ -209,6 +226,8 @@ impl PokerOnlineScreen {
         if let Some(idx) = edits.to_remove {
             if idx < self.player_manager.get_players().len() {
                 self.player_manager.get_players_mut().remove(idx);
+                self.player_manager.ensure_valid_preferred_player();
+                changed = true;
             }
         }
 
@@ -222,12 +241,27 @@ impl PokerOnlineScreen {
         // Apply or cancel rename
         if edits.apply_rename {
             self.player_manager.apply_rename();
+            changed = true;
         } else if edits.cancel_rename {
             self.player_manager.cancel_rename();
         }
+
+        if changed {
+            self.player_manager.ensure_valid_preferred_player();
+            if connected {
+                sender.send(mcg_shared::Frontend2BackendMsg::UpdatePlayerSetup(
+                    self.player_manager.get_players().clone(),
+                ));
+            }
+        }
     }
 
-    fn render_add_player_section(&mut self, ui: &mut Ui) {
+    fn render_add_player_section(
+        &mut self,
+        ui: &mut Ui,
+        sender: &dyn MessageSender,
+        connected: bool,
+    ) {
         ui.group(|ui| {
             ui.label(RichText::new("Add New Player:").strong());
             ui.add_space(4.0);
@@ -238,6 +272,12 @@ impl PokerOnlineScreen {
 
                 if ui.button("Add Player").clicked() {
                     self.player_manager.add_new_player();
+                    self.player_manager.ensure_valid_preferred_player();
+                    if connected {
+                        sender.send(mcg_shared::Frontend2BackendMsg::UpdatePlayerSetup(
+                            self.player_manager.get_players().clone(),
+                        ));
+                    }
                 }
             });
         });
@@ -397,6 +437,12 @@ impl ScreenWidget for PokerOnlineScreen {
         // Check for button clicks
         let mut connection_actions = (false, false);
         let connected = app_interface.is_connected();
+        if connected && !self.setup_requested {
+            app_interface.send_msg(mcg_shared::Frontend2BackendMsg::RequestPlayerSetup);
+            self.setup_requested = true;
+        } else if !connected {
+            self.setup_requested = false;
+        }
 
         {
             let sender = app_interface.message_sender();
@@ -432,7 +478,11 @@ impl ScreenWidget for PokerOnlineScreen {
     }
     fn on_message(&mut self, app_interface: &mut FrontendInterface, message: Backend2FrontendMsg) {
         match message {
+            Backend2FrontendMsg::PlayerSetup(players) => {
+                self.player_manager.sync_from_player_configs(&players);
+            }
             Backend2FrontendMsg::UpdatePokerState(game_state) => {
+                self.player_manager.sync_from_game_state(&game_state);
                 self.game_state = Some(game_state);
                 self.connection_manager.last_error = None;
                 self.connection_manager.last_info = None;

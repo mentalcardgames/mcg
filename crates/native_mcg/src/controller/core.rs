@@ -41,6 +41,7 @@ pub struct Lobby {
     pub ready: bool,
     pub game_type: String,
     pub game_running: bool,
+    pub player_setup: Vec<PlayerConfig>,
 }
 
 impl Default for Lobby {
@@ -56,6 +57,7 @@ impl Default for Lobby {
             ready: false,
             game_type: String::new(),
             game_running: false,
+            player_setup: Vec::new(),
         }
     }
 }
@@ -172,6 +174,14 @@ impl Controller {
                         tracing::warn!(%connection_id, %error, "failed to send frontend message from controller");
                     }
                 }
+                if !self.lobby.player_setup.is_empty() {
+                    if let Err(error) = network.blocking_unicast_frontend(
+                        connection_id,
+                        Backend2FrontendMsg::PlayerSetup(self.lobby.player_setup.clone()),
+                    ) {
+                        tracing::warn!(%connection_id, %error, "failed to send player setup to connected frontend");
+                    }
+                }
             }
             NetworkEvent::PeerConnected {
                 connection_id,
@@ -271,14 +281,46 @@ impl Controller {
                 }
                 Err(e) => Some(Backend2FrontendMsg::Error(e)),
             },
-            Frontend2BackendMsg::NewGame { players } => match self.create_game_session(players) {
-                Ok(()) => {
-                    self.print_latest_changes();
-                    self.broadcast_state(network);
+            Frontend2BackendMsg::RequestPlayerSetup => {
+                if !self.lobby.player_setup.is_empty() {
+                    Some(Backend2FrontendMsg::PlayerSetup(
+                        self.lobby.player_setup.clone(),
+                    ))
+                } else if let Some(gs) = self.current_state_public() {
+                    let configs = gs
+                        .players
+                        .into_iter()
+                        .map(|p| PlayerConfig {
+                            id: p.id,
+                            name: p.name,
+                            is_bot: p.is_bot,
+                        })
+                        .collect();
+                    Some(Backend2FrontendMsg::PlayerSetup(configs))
+                } else {
                     None
                 }
-                Err(e) => Some(Backend2FrontendMsg::Error(e)),
-            },
+            }
+            Frontend2BackendMsg::UpdatePlayerSetup(players) => {
+                self.lobby.player_setup = players.clone();
+                if let Err(error) =
+                    network.blocking_broadcast_frontend(Backend2FrontendMsg::PlayerSetup(players))
+                {
+                    tracing::warn!(%error, "failed to broadcast player setup to frontends");
+                }
+                None
+            }
+            Frontend2BackendMsg::NewGame { players } => {
+                self.lobby.player_setup = players.clone();
+                match self.create_game_session(players) {
+                    Ok(()) => {
+                        self.print_latest_changes();
+                        self.broadcast_state(network);
+                        None
+                    }
+                    Err(e) => Some(Backend2FrontendMsg::Error(e)),
+                }
+            }
             Frontend2BackendMsg::PushState { state } => match self.import_game_state(state) {
                 Ok(()) => {
                     self.print_latest_changes();
@@ -758,6 +800,7 @@ impl Controller {
             game_players.push(player);
         }
         self.lobby.bots = bot_ids;
+        self.lobby.player_setup = players;
 
         match Game::with_players(game_players) {
             Ok(game) => {

@@ -1,5 +1,5 @@
 use egui::{Context, Ui};
-use mcg_shared::{PlayerConfig, PlayerId};
+use mcg_shared::{PlayerConfig, PlayerId, PokerStatePublic};
 
 pub fn render_player_setup(ui: &mut Ui, _ctx: &Context) {
     ui.heading("Player Setup");
@@ -204,5 +204,45 @@ impl PlayerManager {
     }
     pub fn remove_player(&mut self, player_name: &str) {
         self.players.retain(|p| p.name != player_name);
+        self.ensure_valid_preferred_player();
+    }
+
+    pub fn sync_from_player_configs(&mut self, configs: &[PlayerConfig]) {
+        if configs.is_empty() {
+            return;
+        }
+        self.players = configs.to_vec();
+        let max_id = self.players.iter().map(|p| p.id.0).max().unwrap_or(0);
+        self.next_player_id = max_id + 1;
+        self.ensure_valid_preferred_player();
+    }
+
+    pub fn sync_from_game_state(&mut self, state: &PokerStatePublic) {
+        let configs: Vec<PlayerConfig> = state
+            .players
+            .iter()
+            .map(|p| PlayerConfig {
+                id: p.id,
+                name: p.name.clone(),
+                is_bot: p.is_bot,
+            })
+            .collect();
+        self.sync_from_player_configs(&configs);
+    }
+
+    pub fn ensure_valid_preferred_player(&mut self) {
+        let is_valid_human = self
+            .players
+            .iter()
+            .find(|p| p.id == self.preferred_player)
+            .is_some_and(|p| !p.is_bot);
+
+        if !is_valid_human {
+            if let Some(first_human) = self.players.iter().find(|p| !p.is_bot) {
+                self.preferred_player = first_human.id;
+            } else if let Some(first) = self.players.first() {
+                self.preferred_player = first.id;
+            }
+        }
     }
 }

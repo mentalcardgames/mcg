@@ -50,6 +50,15 @@ impl MessagePrinter {
             Backend2FrontendMsg::PlayerReady(name, ready) => {
                 println!("Player {} ready: {}", name, ready)
             }
+            Backend2FrontendMsg::PlayerSetup(players) => {
+                if self.json {
+                    if let Ok(json_str) = serde_json::to_string_pretty(players) {
+                        println!("{}", json_str);
+                    }
+                } else {
+                    println!("Player setup updated: {} players", players.len());
+                }
+            }
         }
     }
 
